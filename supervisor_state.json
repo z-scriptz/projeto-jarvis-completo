@@ -1,0 +1,66 @@
+{
+  "produtos": {
+    "mini_aspirador_de_teclado": {
+      "slug": "mini_aspirador_de_teclado",
+      "estado": "postado",
+      "iteracoes": 1,
+      "ultima_atualizacao": "2026-06-03T01:20:17",
+      "historico": [
+        {
+          "ts": "2026-06-03T00:32:47",
+          "de": "novo",
+          "para": "editado"
+        },
+        {
+          "ts": "2026-06-03T01:20:17",
+          "de": "editado",
+          "para": "postado"
+        }
+      ],
+      "ultimo_resultado": {
+        "sucesso": true,
+        "mensagem": "Marcado como postado manualmente",
+        "nota_humana": "primeiro vídeo do Jarvis postado",
+        "marcado_em": "2026-06-03T01:20:17"
+      },
+      "produto_nome": "Mini Aspirador de Teclado"
+    },
+    "cinto_modelador_slim_feminino": {
+      "slug": "cinto_modelador_slim_feminino",
+      "estado": "detalhes_preenchidos",
+      "iteracoes": 2,
+      "ultima_atualizacao": "2026-06-05T21:30:10",
+      "historico": [
+        {
+          "ts": "2026-06-04T18:07:53",
+          "de": "novo",
+          "para": "pronto_pra_editar"
+        },
+        {
+          "ts": "2026-06-04T18:12:12",
+          "de": "pronto_pra_editar",
+          "para": "editado"
+        },
+        {
+          "ts": "2026-06-05T21:30:10",
+          "de": "editado",
+          "para": "detalhes_preenchidos"
+        }
+      ],
+      "ultimo_resultado": {
+        "sucesso": true,
+        "mensagem": "Detalhes TikTok: aguardando você abrir o TikTok manualmente (v1 conservador)",
+        "duracao_s": 0.0,
+        "detalhes": {
+          "motivo": "supervisor v1 não controla PyAutoGUI"
+        }
+      },
+      "produto_nome": "Cinto Modelador Slim Feminino"
+    }
+  },
+  "iteracao": 5,
+  "ultima_acao": "upload_completo_tiktok:selecionar_arquivo_completo",
+  "pause": null,
+  "_migrado_de": "C:\\AgenteIA\\memory\\state.json",
+  "_migrado_em": "2026-06-03T01:20:17"
+}

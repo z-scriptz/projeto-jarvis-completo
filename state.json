@@ -1,0 +1,219 @@
+{
+  "estado_atual": "conteudo_planejado",
+  "produto_atual": "Mini Aspirador de Po Automotivo",
+  "plataforma_atual": "TikTok",
+  "linha_planilha": 34,
+  "etapa": "workflow_preparar_post_tiktok_completo_falhou",
+  "ultima_acao": "upload_completo_tiktok:selecionar_arquivo_completo",
+  "ultima_observacao": "",
+  "estado_tela": "",
+  "workflow_id": "",
+  "tentativas": 0,
+  "max_tentativas": 3,
+  "timestamp_inicio": "",
+  "timestamp_update": "2026-06-22 14:08:18",
+  "historico_etapas": [
+    {
+      "etapa": "workflow_preparar_post_tiktok_completo_iniciado",
+      "detalhe": "6 passos",
+      "quando": "2026-05-29 17:10:03"
+    },
+    {
+      "etapa": "passo_etapa_upload",
+      "detalhe": "executar_workflow",
+      "quando": "2026-05-29 17:10:03"
+    },
+    {
+      "etapa": "workflow_upload_completo_tiktok_iniciado",
+      "detalhe": "10 passos",
+      "quando": "2026-05-29 17:10:03"
+    },
+    {
+      "etapa": "passo_abrir_upload",
+      "detalhe": "abrir_site",
+      "quando": "2026-05-29 17:10:03"
+    },
+    {
+      "etapa": "passo_aguardar_carregamento",
+      "detalhe": "aguardar",
+      "quando": "2026-05-29 17:10:06"
+    },
+    {
+      "etapa": "passo_observar_pagina_upload",
+      "detalhe": "observar_tela",
+      "quando": "2026-05-29 17:10:18"
+    },
+    {
+      "etapa": "passo_screenshot_inicio",
+      "detalhe": "screenshot",
+      "quando": "2026-05-29 17:10:19"
+    },
+    {
+      "etapa": "passo_selecionar_arquivo_completo",
+      "detalhe": "selecionar_arquivo_upload_tiktok",
+      "quando": "2026-05-29 17:10:20"
+    },
+    {
+      "etapa": "workflow_upload_completo_tiktok_falhou",
+      "detalhe": "4/10 passos",
+      "quando": "2026-05-29 17:11:51"
+    },
+    {
+      "etapa": "workflow_preparar_post_tiktok_completo_falhou",
+      "detalhe": "0/6 passos",
+      "quando": "2026-05-29 17:11:51"
+    },
+    {
+      "etapa": "workflow_preparar_post_tiktok_completo_iniciado",
+      "detalhe": "6 passos",
+      "quando": "2026-05-29 17:15:06"
+    },
+    {
+      "etapa": "passo_etapa_upload",
+      "detalhe": "executar_workflow",
+      "quando": "2026-05-29 17:15:06"
+    },
+    {
+      "etapa": "workflow_upload_completo_tiktok_iniciado",
+      "detalhe": "10 passos",
+      "quando": "2026-05-29 17:15:06"
+    },
+    {
+      "etapa": "passo_abrir_upload",
+      "detalhe": "abrir_site",
+      "quando": "2026-05-29 17:15:06"
+    },
+    {
+      "etapa": "passo_aguardar_carregamento",
+      "detalhe": "aguardar",
+      "quando": "2026-05-29 17:15:09"
+    },
+    {
+      "etapa": "passo_observar_pagina_upload",
+      "detalhe": "observar_tela",
+      "quando": "2026-05-29 17:15:20"
+    },
+    {
+      "etapa": "passo_screenshot_inicio",
+      "detalhe": "screenshot",
+      "quando": "2026-05-29 17:15:21"
+    },
+    {
+      "etapa": "passo_selecionar_arquivo_completo",
+      "detalhe": "selecionar_arquivo_upload_tiktok",
+      "quando": "2026-05-29 17:15:22"
+    },
+    {
+      "etapa": "workflow_upload_completo_tiktok_falhou",
+      "detalhe": "4/10 passos",
+      "quando": "2026-05-29 17:16:04"
+    },
+    {
+      "etapa": "workflow_preparar_post_tiktok_completo_falhou",
+      "detalhe": "0/6 passos",
+      "quando": "2026-05-29 17:16:04"
+    }
+  ],
+  "ultimo_laudo_auditoria": {
+    "video_carregado": true,
+    "legenda_preenchida": true,
+    "hashtags_visiveis": true,
+    "descricao_legenda": "Adeus, tropeções no escuro! 💡 Essa lâmpada mágica acende sozinha e deixa sua casa mais segura e prática! Corre no link da bio! #casainteligente #seguranca #organize #decoracao #afiliados #achadinhos #tiktokmademebuyit #dicasdecasa",
+    "descricao_hashtags": "#casainteligente #seguranca #organize #decoracao #afiliados #achadinhos #tiktokmademebuyit #dicasdecasa",
+    "botao_publicar_visivel": true,
+    "captcha_detectado": false,
+    "login_necessario": false,
+    "erro_visivel": false,
+    "pronto_para_publicar": true,
+    "motivo": "Laudo combinado: conteúdo + botão avaliados separadamente",
+    "riscos": [],
+    "itens_confirmados": [
+      "Vídeo carregado",
+      "Legenda preenchida",
+      "Hashtags visíveis",
+      "Botão Publicar visível"
+    ],
+    "fonte": "laudo_combinado"
+  },
+  "ultimo_laudo_pronto": true,
+  "publish_guard_aprovado": false,
+  "publish_guard_motivo": "modo_autonomo_publicacao=false na planilha — publicação autônoma desativada pelo operador",
+  "nicho_atual": "Casa",
+  "video_path_sugerido": "C:\\AgenteIA\\videos\\mini_aspirador_de_po_automotivo.mp4",
+  "legenda_planejada": "Adeus, sujeira! 👋 Esse mini aspirador automotivo é a solução perfeita pro seu carro ficar sempre novinho! ✨ Link na bio! 🚗💨",
+  "hashtags_planejadas": "#miniaspirador #carro #limpezadecarro #automotivo #dicasautomotivas #vendaonline #afiliados #organização #casalimpa #tiktokpromocional",
+  "ultimo_pipeline_planejamento": "2026-06-22 14:08:18",
+  "etapa_atual": "Erro_Preparacao",
+  "ultimo_resultado_orquestrador": {
+    "sucesso": false,
+    "status_final": "Erro_Preparacao",
+    "motivo": "Workflow 'preparar_post_tiktok_completo' falhou em 'etapa_upload' (0/6 passos OK)",
+    "timestamp": "2026-05-28 15:49:32"
+  },
+  "video_path_atual": "C:\\AgenteIA\\videos\\mini_aspirador_de_teclado.mp4",
+  "ultimo_video_render": "2026-05-24 17:40:19",
+  "ultimo_render_provider": "local_moviepy",
+  "ultimo_laudo_conteudo": {
+    "video_carregado": true,
+    "legenda_preenchida": true,
+    "hashtags_visiveis": true,
+    "captcha_detectado": false,
+    "login_necessario": false,
+    "erro_visivel": false,
+    "descricao_legenda": "Adeus, tropeções no escuro! 💡 Essa lâmpada mágica acende sozinha e deixa sua casa mais segura e prática! Corre no link da bio! #casainteligente #seguranca #organize #decoracao #afiliados #achadinhos #tiktokmademebuyit #dicasdecasa",
+    "descricao_hashtags": "#casainteligente #seguranca #organize #decoracao #afiliados #achadinhos #tiktokmademebuyit #dicasdecasa",
+    "conteudo_pronto": true,
+    "motivo": "Conteúdo OK.",
+    "riscos": [],
+    "itens_confirmados": [
+      "Vídeo carregado",
+      "Legenda preenchida",
+      "Hashtags visíveis"
+    ]
+  },
+  "ultimo_laudo_botao": {
+    "botao_publicar_visivel": true,
+    "texto_botao": "Publicar",
+    "captcha_detectado": false,
+    "login_necessario": false,
+    "erro_visivel": false,
+    "botao_pronto": true,
+    "motivo": "Botão Publicar visível.",
+    "riscos": [],
+    "itens_confirmados": [
+      "Botão Publicar visível"
+    ]
+  },
+  "melhor_nicho": "",
+  "melhor_hook": "",
+  "melhor_produto": "",
+  "ultimo_score_medio": 0.0,
+  "hashtags_top_bons": [],
+  "nichos_fracos": [],
+  "performance_timestamp": "2026-05-24 17:05:05",
+  "gemini_quota_bloqueada": false,
+  "iteracao": 2,
+  "produtos": {
+    "mini_aspirador_de_teclado": {
+      "slug": "mini_aspirador_de_teclado",
+      "estado": "editado",
+      "iteracoes": 1,
+      "ultima_atualizacao": "2026-06-03T00:32:55",
+      "historico": [
+        {
+          "ts": "2026-06-03T00:32:47",
+          "de": "novo",
+          "para": "editado"
+        }
+      ],
+      "ultimo_resultado": {
+        "sucesso": true,
+        "mensagem": "Detalhes TikTok: aguardando você abrir o TikTok manualmente (v1 conservador)",
+        "duracao_s": 0.0,
+        "detalhes": {
+          "motivo": "supervisor v1 não controla PyAutoGUI"
+        }
+      }
+    }
+  }
+}

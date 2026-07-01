@@ -1,0 +1,328 @@
+# agents/meta_uploader.py
+# Uploader da Meta — posta no FACEBOOK e no INSTAGRAM via Graph API.
+#
+# Um módulo só cobre as duas plataformas porque ambas usam a mesma Graph API
+# da Meta (mesmo app, mesmo token). As diferenças:
+#
+#   FACEBOOK (Página) → aceita upload de ARQUIVO LOCAL direto (mais simples).
+#       Fluxo: POST /{page_id}/videos com o arquivo → pronto.
+#
+#   INSTAGRAM (Reels) → NÃO aceita arquivo direto no fluxo padrão; exige o
+#       vídeo numa URL pública OU o fluxo "resumable" (rupload.facebook.com),
+#       que aceita o binário direto sem hospedar nada. Usamos o resumable.
+#       Fluxo: cria container resumable → sobe o binário → poll status →
+#              publica o container.
+#
+# CREDENCIAIS (env vars — nunca no código):
+#   META_ACCESS_TOKEN       token de longa duração (User ou Page)
+#   FACEBOOK_PAGE_ID        ID numérico da Página do Facebook
+#   INSTAGRAM_USER_ID       ID da conta Instagram Business (ig-user-id)
+#
+# Contrato de retorno (igual ao publish_guard espera):
+#   {"sucesso": bool, "url"|"erro": str}
+#
+# Uso:
+#   from agents.meta_uploader import postar_facebook, postar_instagram
+#   r = postar_facebook(video_path, legenda)
+#   r = postar_instagram(video_path, legenda)
+
+import os
+import time
+from pathlib import Path
+from typing import Optional
+
+try:
+    from shared.logger import get_logger
+    log = get_logger(__name__)
+except Exception:
+    import logging
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+    log = logging.getLogger("meta_uploader")
+
+try:
+    import requests
+    _REQUESTS_OK = True
+except Exception:
+    _REQUESTS_OK = False
+
+GRAPH = "https://graph.facebook.com/v21.0"
+RUPLOAD = "https://rupload.facebook.com/ig-api-upload/v21.0"
+
+# Quanto esperar o container do Instagram processar antes de publicar
+IG_POLL_INTERVALO = 6      # segundos entre checagens
+IG_POLL_MAX = 60           # máx ~6min (60 x 6s) — vídeo grande demora
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# CREDENCIAIS
+# ══════════════════════════════════════════════════════════════════════════
+def _token() -> str:
+    return os.environ.get("META_ACCESS_TOKEN", "").strip()
+
+
+def _page_id() -> str:
+    return os.environ.get("FACEBOOK_PAGE_ID", "").strip()
+
+
+def _ig_user_id() -> str:
+    return os.environ.get("INSTAGRAM_USER_ID", "").strip()
+
+
+def _checar_base() -> Optional[str]:
+    """Retorna mensagem de erro se faltar algo essencial, senão None."""
+    if not _REQUESTS_OK:
+        return "lib 'requests' não instalada (pip install requests)"
+    if not _token():
+        return "META_ACCESS_TOKEN não configurado (env var)"
+    return None
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# FACEBOOK — upload de arquivo local direto (simples)
+# ══════════════════════════════════════════════════════════════════════════
+def _page_access_token() -> Optional[str]:
+    """
+    Busca o token DA PÁGINA a partir do token de usuário.
+    O Facebook exige o token da Página (não o de usuário) pra postar nela,
+    mesmo com pages_manage_posts. Este token é derivado via /me/accounts.
+    Retorna o token da página, ou None se não achar.
+    """
+    # 1) Se o usuário setou um token de página direto, usa ele
+    direto = os.environ.get("FACEBOOK_PAGE_TOKEN", "").strip()
+    if direto:
+        return direto
+
+    # 2) Deriva do token de usuário via /me/accounts
+    try:
+        r = requests.get(
+            f"{GRAPH}/me/accounts",
+            params={"access_token": _token(), "fields": "id,name,access_token"},
+            timeout=30,
+        )
+        dados = r.json()
+    except Exception as e:
+        log.warning(f"   ⚠️  erro buscando token da página: {e}")
+        return None
+
+    paginas = dados.get("data") or []
+    if not paginas:
+        err = (dados.get("error") or {}).get("message") or "nenhuma página retornada"
+        log.warning(f"   ⚠️  /me/accounts não retornou páginas: {err}")
+        return None
+
+    # Acha a página pelo FACEBOOK_PAGE_ID; se não bater, usa a primeira
+    alvo = _page_id()
+    for pag in paginas:
+        if str(pag.get("id")) == alvo:
+            tok = pag.get("access_token")
+            if tok:
+                log.info(f"   🔑 Token da página obtido ({pag.get('name', '?')})")
+                return tok
+    # fallback: primeira página
+    tok = paginas[0].get("access_token")
+    if tok:
+        log.info(f"   🔑 Usando token da 1ª página ({paginas[0].get('name', '?')})")
+    return tok
+
+
+def postar_facebook(video_path: str, legenda: str = "") -> dict:
+    """
+    Posta um vídeo na Página do Facebook (upload de arquivo local).
+    Usa o TOKEN DA PÁGINA (derivado do token de usuário automaticamente).
+    Retorna {"sucesso", "url"|"erro"}.
+    """
+    erro_base = _checar_base()
+    if erro_base:
+        return {"sucesso": False, "erro": erro_base}
+    if not _page_id():
+        return {"sucesso": False, "erro": "FACEBOOK_PAGE_ID não configurado"}
+
+    video = Path(video_path)
+    if not video.exists():
+        return {"sucesso": False, "erro": f"vídeo não encontrado: {video_path}"}
+
+    # O Facebook exige o token DA PÁGINA pra postar nela
+    page_token = _page_access_token()
+    if not page_token:
+        return {"sucesso": False,
+                "erro": "não consegui obter o token da página (confere se o "
+                        "token de usuário tem pages_show_list e se você é admin "
+                        "da página)"}
+
+    url = f"{GRAPH}/{_page_id()}/videos"
+    log.info(f"   📘 Facebook: subindo '{video.name}' ({video.stat().st_size // 1024}KB)")
+    try:
+        with open(video, "rb") as f:
+            files = {"source": f}
+            data = {"description": legenda, "access_token": page_token}
+            r = requests.post(url, data=data, files=files, timeout=300)
+        dados = r.json()
+    except Exception as e:
+        return {"sucesso": False, "erro": f"exceção no upload: {e}"}
+
+    # Sucesso = veio um id de vídeo
+    video_id = dados.get("id")
+    if video_id:
+        link = f"https://www.facebook.com/{video_id}"
+        return {"sucesso": True, "url": link}
+    # erro estruturado da Graph API
+    err = (dados.get("error") or {}).get("message") or str(dados)[:200]
+    return {"sucesso": False, "erro": f"Facebook recusou: {err}"}
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# INSTAGRAM — Reels via resumable upload (sem hospedar nada)
+# ══════════════════════════════════════════════════════════════════════════
+def postar_instagram(video_path: str, legenda: str = "") -> dict:
+    """
+    Posta um Reel no Instagram Business via fluxo resumable:
+      1. cria container (upload_type=resumable) → ig-container-id
+      2. sobe o binário do vídeo pro rupload.facebook.com
+      3. poll status do container até FINISHED
+      4. publica o container
+    Retorna {"sucesso", "url"|"erro"}.
+    """
+    erro_base = _checar_base()
+    if erro_base:
+        return {"sucesso": False, "erro": erro_base}
+    if not _ig_user_id():
+        return {"sucesso": False, "erro": "INSTAGRAM_USER_ID não configurado"}
+
+    video = Path(video_path)
+    if not video.exists():
+        return {"sucesso": False, "erro": f"vídeo não encontrado: {video_path}"}
+
+    ig = _ig_user_id()
+    tok = _token()
+
+    # ── 1. Cria o container resumable ────────────────────────────────────
+    try:
+        r1 = requests.post(
+            f"{GRAPH}/{ig}/media",
+            data={
+                "media_type": "REELS",
+                "upload_type": "resumable",
+                "caption": legenda,
+                "access_token": tok,
+            },
+            timeout=60,
+        )
+        d1 = r1.json()
+    except Exception as e:
+        return {"sucesso": False, "erro": f"exceção criando container: {e}"}
+
+    container_id = d1.get("id")
+    if not container_id:
+        err = (d1.get("error") or {}).get("message") or str(d1)[:200]
+        return {"sucesso": False, "erro": f"container não criado: {err}"}
+
+    log.info(f"   📸 Instagram: container {container_id} criado, subindo binário...")
+
+    # ── 2. Sobe o binário pro rupload ────────────────────────────────────
+    try:
+        tam = video.stat().st_size
+        with open(video, "rb") as f:
+            r2 = requests.post(
+                f"{RUPLOAD}/{container_id}",
+                headers={
+                    "Authorization": f"OAuth {tok}",
+                    "offset": "0",
+                    "file_size": str(tam),
+                },
+                data=f.read(),
+                timeout=600,
+            )
+        d2 = r2.json()
+    except Exception as e:
+        return {"sucesso": False, "erro": f"exceção no upload binário: {e}"}
+
+    if not d2.get("success"):
+        err = d2.get("message") or str(d2)[:200]
+        return {"sucesso": False, "erro": f"upload binário falhou: {err}"}
+
+    log.info("   📸 Instagram: binário enviado, aguardando processamento...")
+
+    # ── 3. Poll status até FINISHED ──────────────────────────────────────
+    pronto = False
+    for tentativa in range(IG_POLL_MAX):
+        time.sleep(IG_POLL_INTERVALO)
+        try:
+            rs = requests.get(
+                f"{GRAPH}/{container_id}",
+                params={"fields": "status_code", "access_token": tok},
+                timeout=30,
+            )
+            status = (rs.json() or {}).get("status_code", "")
+        except Exception:
+            continue
+        if status == "FINISHED":
+            pronto = True
+            break
+        if status == "ERROR":
+            return {"sucesso": False, "erro": "container deu ERROR no processamento"}
+        # IN_PROGRESS → continua esperando
+
+    if not pronto:
+        return {"sucesso": False, "erro": f"timeout esperando processar (container {container_id})"}
+
+    # ── 4. Publica o container ───────────────────────────────────────────
+    try:
+        r4 = requests.post(
+            f"{GRAPH}/{ig}/media_publish",
+            data={"creation_id": container_id, "access_token": tok},
+            timeout=60,
+        )
+        d4 = r4.json()
+    except Exception as e:
+        return {"sucesso": False, "erro": f"exceção publicando: {e}"}
+
+    media_id = d4.get("id")
+    if media_id:
+        return {"sucesso": True, "url": f"https://www.instagram.com/reel/{media_id}"}
+    err = (d4.get("error") or {}).get("message") or str(d4)[:200]
+    return {"sucesso": False, "erro": f"publish recusado: {err}"}
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# TESTE / DIAGNÓSTICO
+# ══════════════════════════════════════════════════════════════════════════
+def diagnostico() -> dict:
+    """Checa o que está configurado, sem postar nada."""
+    return {
+        "requests_instalado": _REQUESTS_OK,
+        "META_ACCESS_TOKEN":  "✅ ok" if _token() else "❌ faltando",
+        "FACEBOOK_PAGE_ID":   "✅ ok" if _page_id() else "❌ faltando",
+        "INSTAGRAM_USER_ID":  "✅ ok" if _ig_user_id() else "❌ faltando",
+        "facebook_pronto":    bool(_token() and _page_id()),
+        "instagram_pronto":   bool(_token() and _ig_user_id()),
+    }
+
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Meta Uploader — Facebook + Instagram")
+    parser.add_argument("--diagnostico", action="store_true",
+                        help="checa credenciais sem postar")
+    parser.add_argument("--facebook", help="caminho do vídeo pra postar no Facebook")
+    parser.add_argument("--instagram", help="caminho do vídeo pra postar no Instagram")
+    parser.add_argument("--legenda", default="Teste TopShop", help="legenda")
+    args = parser.parse_args()
+
+    print("=" * 60)
+    print("  📱 META UPLOADER")
+    print("=" * 60)
+
+    if args.diagnostico:
+        d = diagnostico()
+        print("\n🔍 Diagnóstico de credenciais:")
+        for k, v in d.items():
+            print(f"   {k}: {v}")
+    elif args.facebook:
+        print(f"\n📘 Postando no Facebook: {args.facebook}")
+        print(f"   → {postar_facebook(args.facebook, args.legenda)}")
+    elif args.instagram:
+        print(f"\n📸 Postando no Instagram: {args.instagram}")
+        print(f"   → {postar_instagram(args.instagram, args.legenda)}")
+    else:
+        print("\nUse --diagnostico, --facebook <video> ou --instagram <video>")
+    print("=" * 60)

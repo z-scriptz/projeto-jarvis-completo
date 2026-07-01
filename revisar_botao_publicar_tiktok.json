@@ -1,0 +1,33 @@
+{
+  "nome": "revisar_botao_publicar_tiktok",
+  "versao": "1.0",
+  "descricao": "Auditoria de BOTÃO: valida se botão Publicar está visível. Roda DEPOIS do scroll. Não verifica legenda/hashtags.",
+  "contexto_padrao": {},
+  "passos": [
+    {
+      "id": "observe_botao",
+      "acao": "observar_tela",
+      "contexto": "auditoria_botao_publicar",
+      "descricao": "Observar tela após scroll com botão Publicar visível",
+      "critico": true,
+      "retry": 2,
+      "delay_retry": 3
+    },
+    {
+      "id": "screenshot_botao",
+      "acao": "screenshot",
+      "contexto": "auditoria_botao_publicar",
+      "descricao": "Screenshot para registro da auditoria de botão",
+      "critico": false
+    },
+    {
+      "id": "auditoria_botao",
+      "acao": "auditar_botao_publicar_tiktok",
+      "contexto": "auditoria_botao_publicar",
+      "descricao": "Gemini Vision valida: botão Publicar visível, sem erros. Combina com laudo de conteúdo.",
+      "critico": true,
+      "retry": 2,
+      "delay_retry": 5
+    }
+  ]
+}

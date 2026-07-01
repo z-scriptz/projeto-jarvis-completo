@@ -1,0 +1,35 @@
+{
+  "nome": "teste_publicacao_real_controlada",
+  "versao": "1.0",
+  "descricao": "Teste de ponta a ponta: upload + detalhes + auditoria + guard + publicação. Todas as travas ativas. Se modo_autonomo_publicacao=false, para antes de publicar.",
+  "contexto_padrao": {
+    "video_path": "C:\\AgenteIA\\videos\\video_teste.mp4",
+    "legenda": "Teste automatizado do AgenteIA 🚀",
+    "hashtags": "#teste #agenteia #automacao"
+  },
+  "passos": [
+    {
+      "id": "etapa_preparacao",
+      "acao": "executar_workflow",
+      "workflow": "preparar_post_tiktok_completo",
+      "descricao": "Etapa 1/2 — Upload + preenchimento + auditoria visual (3 workflows internos)",
+      "critico": true,
+      "retry": 0
+    },
+    {
+      "id": "etapa_publicacao",
+      "acao": "executar_workflow",
+      "workflow": "publicar_tiktok_seguro",
+      "descricao": "Etapa 2/2 — Guard + publicação (só clica se modo_autonomo=true e auditoria 100%)",
+      "critico": true,
+      "retry": 0
+    },
+    {
+      "id": "log_resultado_final",
+      "acao": "aguardar",
+      "segundos": 1,
+      "descricao": "✅ TESTE COMPLETO — Verifique os logs acima para o resultado de cada etapa.",
+      "critico": false
+    }
+  ]
+}

@@ -1,0 +1,100 @@
+{
+  "nome": "upload_completo_tiktok",
+  "descricao": "Fluxo completo de upload no TikTok até a tela de publicação. NÃO publica. v3.1: aguarda_carregamento aumentado para 10s + usa selecionar_arquivo_upload_tiktok com estabilização interna.",
+  "versao": "3.1",
+  "contexto_padrao": {
+    "video_path": "C:\\AgenteIA\\videos\\video_teste.mp4"
+  },
+  "passos": [
+
+    {
+      "id": "abrir_upload",
+      "acao": "abrir_site",
+      "alvo": "https://www.tiktok.com/upload",
+      "critico": true,
+      "retry": 2,
+      "delay_retry": 4,
+      "descricao": "Abre a página de upload do TikTok"
+    },
+
+    {
+      "id": "aguardar_carregamento",
+      "acao": "aguardar",
+      "segundos": 10,
+      "descricao": "Aguarda a página de upload carregar (10s — antes era 7s; orquestrador chegava com loading ainda visível). selecionar_arquivo_upload_tiktok também tem sua própria espera de estabilização."
+    },
+
+    {
+      "id": "observar_pagina_upload",
+      "acao": "observar_tela",
+      "contexto": "pagina_upload_tiktok_aberta",
+      "critico": true,
+      "retry": 2,
+      "delay_retry": 4,
+      "descricao": "Gemini Vision confirma que a página de upload está pronta"
+    },
+
+    {
+      "id": "screenshot_inicio",
+      "acao": "screenshot",
+      "contexto": "upload_inicio",
+      "critico": false,
+      "descricao": "Captura estado inicial para logs"
+    },
+
+    {
+      "id": "selecionar_arquivo_completo",
+      "acao": "selecionar_arquivo_upload_tiktok",
+      "video_path": "{video_path}",
+      "critico": true,
+      "retry": 2,
+      "delay_retry": 5,
+      "descricao": "Ação robusta (v2): aguarda página estabilizar → clica Select file com até 3 estratégias → valida diálogo abriu → cola caminho via clipboard → Enter → valida upload iniciou."
+    },
+
+    {
+      "id": "aguardar_upload_processar",
+      "acao": "aguardar",
+      "segundos": 35,
+      "descricao": "Aguarda TikTok terminar de transcodificar o vídeo"
+    },
+
+    {
+      "id": "observar_tela_detalhes",
+      "acao": "observar_tela",
+      "contexto": "upload_finalizado_tela_detalhes",
+      "critico": false,
+      "retry": 3,
+      "delay_retry": 5,
+      "descricao": "Gemini Vision registra estado da tela pós-upload"
+    },
+
+    {
+      "id": "validar_tela_detalhes",
+      "acao": "localizar_elemento_por_texto",
+      "contexto": "validar_tela_detalhes_pos_upload",
+      "alvo": "campo de descrição do vídeo, legenda, hashtags ou botão Publicar",
+      "critico": true,
+      "retry": 5,
+      "delay_retry": 6,
+      "descricao": "⛔ GATE: Confirma que a tela de detalhes abriu. Se ainda estiver na tela de seleção, o workflow FALHA aqui."
+    },
+
+    {
+      "id": "screenshot_final",
+      "acao": "screenshot",
+      "contexto": "upload_final_tela_detalhes_confirmada",
+      "critico": false,
+      "descricao": "Screenshot da tela de detalhes confirmada"
+    },
+
+    {
+      "id": "parada_segura",
+      "acao": "aguardar",
+      "segundos": 1,
+      "critico": false,
+      "descricao": "Upload concluído e tela de detalhes confirmada — aguardando próximo workflow."
+    }
+
+  ]
+}

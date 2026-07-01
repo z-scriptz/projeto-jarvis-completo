@@ -1,0 +1,31 @@
+{
+  "nome": "postar_tiktok",
+  "descricao": "Abre TikTok Upload, observa tela e prepara postagem",
+  "versao": "1.0",
+  "passos": [
+    {
+      "id": "abrir_upload",
+      "acao": "abrir_site",
+      "alvo": "https://www.tiktok.com/upload",
+      "critico": true,
+      "retry": 2,
+      "delay_retry": 3,
+      "descricao": "Abre página de upload do TikTok"
+    },
+    {
+      "id": "aguardar_carregamento",
+      "acao": "aguardar",
+      "segundos": 6,
+      "descricao": "Aguarda página carregar completamente"
+    },
+    {
+      "id": "observar_upload",
+      "acao": "observar_tela",
+      "contexto": "apos_abrir_upload_tiktok",
+      "critico": true,
+      "retry": 2,
+      "delay_retry": 4,
+      "descricao": "Gemini Vision analisa se a página de upload abriu corretamente"
+    }
+  ]
+}

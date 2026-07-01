@@ -1,0 +1,33 @@
+{
+  "nome": "revisar_conteudo_tiktok",
+  "versao": "1.0",
+  "descricao": "Auditoria de CONTEÚDO: valida vídeo, legenda, hashtags. Roda ANTES do scroll. Não verifica botão Publicar.",
+  "contexto_padrao": {},
+  "passos": [
+    {
+      "id": "observe_conteudo",
+      "acao": "observar_tela",
+      "contexto": "auditoria_conteudo_tiktok",
+      "descricao": "Observar tela com legenda/hashtags visíveis",
+      "critico": true,
+      "retry": 2,
+      "delay_retry": 3
+    },
+    {
+      "id": "screenshot_conteudo",
+      "acao": "screenshot",
+      "contexto": "auditoria_conteudo_tiktok",
+      "descricao": "Screenshot para registro da auditoria de conteúdo",
+      "critico": false
+    },
+    {
+      "id": "auditoria_conteudo",
+      "acao": "auditar_conteudo_tiktok",
+      "contexto": "auditoria_conteudo_tiktok",
+      "descricao": "Gemini Vision valida: vídeo carregado, legenda preenchida, hashtags visíveis, sem erros",
+      "critico": true,
+      "retry": 2,
+      "delay_retry": 5
+    }
+  ]
+}

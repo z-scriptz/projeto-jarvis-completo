@@ -1,0 +1,47 @@
+{
+  "nome": "revisar_post_tiktok",
+  "versao": "1.0",
+  "descricao": "Revisão visual completa do post TikTok. Valida vídeo, legenda, hashtags e botão Publicar. NÃO publica.",
+  "contexto_padrao": {},
+  "passos": [
+    {
+      "id": "observe_inicial",
+      "acao": "observar_tela",
+      "contexto": "revisao_final_tiktok",
+      "descricao": "Observar estado atual da tela de publicação",
+      "critico": true,
+      "retry": 2,
+      "delay_retry": 3
+    },
+    {
+      "id": "screenshot_revisao",
+      "acao": "screenshot",
+      "contexto": "revisao_final_tiktok",
+      "descricao": "Screenshot para registro da revisão",
+      "critico": false
+    },
+    {
+      "id": "auditoria_gemini",
+      "acao": "auditar_post_tiktok",
+      "contexto": "revisao_final_tiktok",
+      "descricao": "Gemini Vision valida: vídeo, legenda, hashtags, botão Publicar, ausência de erros",
+      "critico": true,
+      "retry": 2,
+      "delay_retry": 5
+    },
+    {
+      "id": "screenshot_pos_auditoria",
+      "acao": "screenshot",
+      "contexto": "pos_auditoria_tiktok",
+      "descricao": "Screenshot final após auditoria — prova do estado revisado",
+      "critico": false
+    },
+    {
+      "id": "parada_segura",
+      "acao": "aguardar",
+      "segundos": 1,
+      "descricao": "⛔ PARADA DE SEGURANÇA — auditoria concluída, botão Publicar intocado. Aguardando aprovação humana.",
+      "critico": false
+    }
+  ]
+}

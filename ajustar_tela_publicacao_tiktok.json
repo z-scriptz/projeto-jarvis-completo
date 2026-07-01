@@ -1,0 +1,45 @@
+{
+  "nome": "ajustar_tela_publicacao_tiktok",
+  "versao": "1.0",
+  "descricao": "Ajusta a tela de publicação do TikTok para deixar o botão Publicar visível antes da auditoria/publicação.",
+  "contexto_padrao": {},
+  "passos": [
+    {
+      "id": "aguardar_interface",
+      "acao": "aguardar",
+      "segundos": 1,
+      "descricao": "Aguarda a interface estabilizar",
+      "critico": false
+    },
+    {
+      "id": "scroll_para_baixo",
+      "acao": "scroll",
+      "y": -5,
+      "descricao": "Rola a tela para baixo para deixar o botão Publicar visível",
+      "critico": false
+    },
+    {
+      "id": "aguardar_scroll",
+      "acao": "aguardar",
+      "segundos": 1,
+      "descricao": "Aguarda após rolagem",
+      "critico": false
+    },
+    {
+      "id": "observar_botao_publicar",
+      "acao": "observar_tela",
+      "contexto": "botao_publicar_visivel_check",
+      "descricao": "Observa se o botão Publicar ficou visível",
+      "critico": false,
+      "retry": 1,
+      "delay_retry": 2
+    },
+    {
+      "id": "screenshot_check",
+      "acao": "screenshot",
+      "contexto": "botao_publicar_visivel_check",
+      "descricao": "Screenshot do estado após ajuste de tela",
+      "critico": false
+    }
+  ]
+}

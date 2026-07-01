@@ -1,0 +1,119 @@
+{
+  "nome": "preencher_detalhes_tiktok",
+  "versao": "1.1",
+  "descricao": "Preenche legenda e hashtags na tela de detalhes do TikTok após upload. Para com segurança antes de publicar. v1.1: alvo mais específico (textarea editável), usar_cache=false no clique do campo (evita coordenada poluída de execução anterior), e validação semântica pós-digitação.",
+  "contexto_padrao": {
+    "legenda": "Teste de upload automatizado pelo AgenteIA 🚀",
+    "hashtags": "#teste #agenteia #automacao #tiktok"
+  },
+  "passos": [
+    {
+      "id": "observe_inicial",
+      "acao": "observar_tela",
+      "contexto": "antes_preencher_detalhes_tiktok",
+      "descricao": "Verificar se a tela de detalhes do TikTok está aberta",
+      "critico": true,
+      "retry": 2,
+      "delay_retry": 3
+    },
+    {
+      "id": "screenshot_inicial",
+      "acao": "screenshot",
+      "contexto": "antes_preencher_detalhes_tiktok",
+      "descricao": "Screenshot do estado inicial antes de preencher",
+      "critico": false
+    },
+    {
+      "id": "localizar_campo_legenda",
+      "acao": "clicar_elemento_por_texto",
+      "alvo": "textarea editável de descrição/caption do vídeo no TikTok — campo de TEXTO INPUT clicável onde o usuário digita a legenda (NÃO o nome do arquivo no painel lateral, NÃO o título do vídeo, NÃO área de preview). Procurar pelo campo grande retangular com placeholder ou borda de input, geralmente abaixo do título 'Descrição'.",
+      "contexto": "tela_detalhes_tiktok_apos_upload",
+      "confianca_minima": "alta",
+      "usar_cache": false,
+      "descricao": "Localizar e clicar no TEXTAREA editável de legenda. usar_cache=false porque cache anterior pegou nome do arquivo em vez do input real. Confiança ALTA mínima.",
+      "critico": true,
+      "retry": 3,
+      "delay_retry": 4
+    },
+    {
+      "id": "aguardar_foco",
+      "acao": "aguardar",
+      "segundos": 0.8,
+      "descricao": "Aguardar foco entrar no textarea antes de selecionar texto",
+      "critico": false
+    },
+    {
+      "id": "selecionar_tudo",
+      "acao": "atalho",
+      "teclas": ["ctrl", "a"],
+      "descricao": "Selecionar texto existente no campo (se houver)",
+      "critico": false,
+      "retry": 1,
+      "delay_retry": 1
+    },
+    {
+      "id": "aguardar_selecao",
+      "acao": "aguardar",
+      "segundos": 0.5,
+      "descricao": "Aguardar seleção ser aplicada",
+      "critico": false
+    },
+    {
+      "id": "digitar_legenda_hashtags",
+      "acao": "digitar",
+      "texto": "{legenda}\n\n{hashtags}",
+      "descricao": "Digitar legenda e hashtags no campo",
+      "critico": true,
+      "retry": 2,
+      "delay_retry": 3
+    },
+    {
+      "id": "aguardar_digitacao",
+      "acao": "aguardar",
+      "segundos": 2,
+      "descricao": "Aguardar texto ser processado pelo TikTok",
+      "critico": false
+    },
+    {
+      "id": "screenshot_pos_digitacao",
+      "acao": "screenshot",
+      "contexto": "pos_digitacao_para_validacao",
+      "descricao": "Screenshot crítico — usado pelo próximo passo pra validar que a digitação realmente apareceu",
+      "critico": false
+    },
+    {
+      "id": "validar_legenda_aparece",
+      "acao": "localizar_elemento_por_texto",
+      "alvo": "texto da legenda preenchido na tela contendo palavras-chave da legenda esperada (ex.: primeiras palavras visíveis no campo de descrição). Validar que o textarea NÃO está vazio.",
+      "contexto": "validar_legenda_pos_digitacao",
+      "confianca_minima": "media",
+      "descricao": "⛔ GATE: confirma que a digitação produziu efeito real. Se o textarea continuar vazio, o workflow FALHA aqui em vez de seguir com legenda fantasma.",
+      "critico": true,
+      "retry": 2,
+      "delay_retry": 3
+    },
+    {
+      "id": "observe_preenchido",
+      "acao": "observar_tela",
+      "contexto": "detalhes_tiktok_preenchidos",
+      "descricao": "Observar tela com detalhes preenchidos (para logs)",
+      "critico": false,
+      "retry": 2,
+      "delay_retry": 3
+    },
+    {
+      "id": "screenshot_final",
+      "acao": "screenshot",
+      "contexto": "detalhes_tiktok_final",
+      "descricao": "Screenshot final com detalhes preenchidos",
+      "critico": false
+    },
+    {
+      "id": "parada_segura",
+      "acao": "aguardar",
+      "segundos": 1,
+      "descricao": "⛔ PARADA DE SEGURANÇA — detalhes preenchidos E validados, botão Publicar intocado. Aguardando aprovação humana.",
+      "critico": false
+    }
+  ]
+}

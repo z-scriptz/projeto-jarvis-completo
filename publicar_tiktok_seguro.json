@@ -1,0 +1,85 @@
+{
+  "nome": "publicar_tiktok_seguro",
+  "versao": "2.0",
+  "descricao": "Publicação autônoma com auditoria em duas fases + regras operacionais. Só publica se tudo aprovado.",
+  "contexto_padrao": {},
+  "passos": [
+    {
+      "id": "revisar_conteudo",
+      "acao": "executar_workflow",
+      "workflow": "revisar_conteudo_tiktok",
+      "descricao": "Auditoria de conteúdo: vídeo, legenda, hashtags (ANTES do scroll)",
+      "critico": true,
+      "retry": 0
+    },
+    {
+      "id": "ajustar_tela",
+      "acao": "executar_workflow",
+      "workflow": "ajustar_tela_publicacao_tiktok",
+      "descricao": "Scroll para deixar botão Publicar visível",
+      "critico": false,
+      "retry": 0
+    },
+    {
+      "id": "revisar_botao",
+      "acao": "executar_workflow",
+      "workflow": "revisar_botao_publicar_tiktok",
+      "descricao": "Auditoria de botão: Publicar visível (DEPOIS do scroll). Combina laudo final.",
+      "critico": true,
+      "retry": 0
+    },
+    {
+      "id": "validar_guard",
+      "acao": "validar_publicacao_autonoma",
+      "descricao": "Publish Guard — lê laudo combinado + config planilha",
+      "critico": true,
+      "retry": 0
+    },
+    {
+      "id": "screenshot_pre_publicacao",
+      "acao": "screenshot",
+      "contexto": "pre_publicacao_tiktok",
+      "descricao": "Screenshot antes de clicar em Publicar",
+      "critico": false
+    },
+    {
+      "id": "clicar_publicar",
+      "acao": "clicar_publicar_tiktok",
+      "descricao": "Clicar no botão Publicar (somente se guard aprovou e confiança=alta)",
+      "critico": true,
+      "retry": 1,
+      "delay_retry": 5
+    },
+    {
+      "id": "aguardar_publicacao",
+      "acao": "aguardar",
+      "segundos": 5,
+      "descricao": "Aguardar TikTok confirmar a publicação",
+      "critico": false
+    },
+    {
+      "id": "observe_pos_publicacao",
+      "acao": "observar_tela",
+      "contexto": "pos_publicacao_tiktok",
+      "descricao": "Validar mensagem de sucesso",
+      "critico": false,
+      "retry": 2,
+      "delay_retry": 3
+    },
+    {
+      "id": "screenshot_pos_publicacao",
+      "acao": "screenshot",
+      "contexto": "pos_publicacao_tiktok",
+      "descricao": "Screenshot de confirmação",
+      "critico": false
+    },
+    {
+      "id": "registrar_postagem",
+      "acao": "registrar_postagem_sheets",
+      "descricao": "Registrar postagem na planilha com status Postado",
+      "critico": false,
+      "retry": 2,
+      "delay_retry": 3
+    }
+  ]
+}

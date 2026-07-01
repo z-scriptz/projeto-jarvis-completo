@@ -1,0 +1,59 @@
+{
+  "nome": "preparar_post_tiktok_completo",
+  "versao": "2.0",
+  "descricao": "Workflow mestre: upload → detalhes → auditoria conteúdo → scroll → auditoria botão. NÃO publica.",
+  "contexto_padrao": {
+    "video_path": "C:\\AgenteIA\\videos\\video_teste.mp4",
+    "legenda":    "Teste de upload automatizado pelo AgenteIA 🚀",
+    "hashtags":   "#teste #agenteia #automacao #tiktok"
+  },
+  "passos": [
+    {
+      "id": "etapa_upload",
+      "acao": "executar_workflow",
+      "workflow": "upload_completo_tiktok",
+      "descricao": "Etapa 1/5 — Upload do vídeo no TikTok",
+      "critico": true,
+      "retry": 0
+    },
+    {
+      "id": "etapa_detalhes",
+      "acao": "executar_workflow",
+      "workflow": "preencher_detalhes_tiktok",
+      "descricao": "Etapa 2/5 — Preencher legenda e hashtags",
+      "critico": true,
+      "retry": 0
+    },
+    {
+      "id": "etapa_revisar_conteudo",
+      "acao": "executar_workflow",
+      "workflow": "revisar_conteudo_tiktok",
+      "descricao": "Etapa 3/5 — Auditoria de conteúdo (vídeo, legenda, hashtags) ANTES do scroll",
+      "critico": true,
+      "retry": 0
+    },
+    {
+      "id": "etapa_ajustar_tela",
+      "acao": "executar_workflow",
+      "workflow": "ajustar_tela_publicacao_tiktok",
+      "descricao": "Etapa 4/5 — Scroll para deixar botão Publicar visível",
+      "critico": false,
+      "retry": 0
+    },
+    {
+      "id": "etapa_revisar_botao",
+      "acao": "executar_workflow",
+      "workflow": "revisar_botao_publicar_tiktok",
+      "descricao": "Etapa 5/5 — Auditoria de botão Publicar DEPOIS do scroll",
+      "critico": true,
+      "retry": 0
+    },
+    {
+      "id": "parada_final",
+      "acao": "aguardar",
+      "segundos": 1,
+      "descricao": "⛔ PARADA FINAL — Post preparado, preenchido e revisado em duas fases. Aguardando aprovação humana.",
+      "critico": false
+    }
+  ]
+}

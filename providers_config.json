@@ -1,0 +1,22 @@
+{
+  "image_provider": "placeholder",
+  "video_provider": "local_moviepy",
+  "fallback_enabled": true,
+  "usar_api_imagem": false,
+  "usar_api_video": false,
+
+  "video_settings": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "duracao_padrao": 12,
+    "bg_color": "#1a1a2e",
+    "text_color": "#ffffff",
+    "accent_color": "#ff2e63"
+  },
+
+  "providers_disponiveis": {
+    "image": ["placeholder", "gemini_image", "nano_banana"],
+    "video": ["local_moviepy", "invideo", "heygen", "runway", "pika", "kling", "capcut"]
+  }
+}

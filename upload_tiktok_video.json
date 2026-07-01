@@ -1,0 +1,41 @@
+{
+  "nome": "upload_tiktok_video",
+  "descricao": "Inicia o upload de vídeo no TikTok — para antes de publicar. Validação segura de visão.",
+  "versao": "1.0",
+  "passos": [
+    {
+      "id": "observar_antes_upload",
+      "acao": "observar_tela",
+      "contexto": "antes_upload_video",
+      "critico": true,
+      "retry": 2,
+      "delay_retry": 3,
+      "descricao": "Gemini Vision confirma que a página de upload está pronta"
+    },
+    {
+      "id": "clicar_select_file",
+      "acao": "clicar_imagem",
+      "imagem": "C:\\AgenteIA\\refs\\select_file.png",
+      "confidence": 0.8,
+      "critico": true,
+      "retry": 2,
+      "delay_retry": 3,
+      "descricao": "Localiza e clica no botão de seleção de arquivo por visão"
+    },
+    {
+      "id": "aguardar_dialogo",
+      "acao": "aguardar",
+      "segundos": 5,
+      "descricao": "Aguarda o diálogo de seleção de arquivo abrir"
+    },
+    {
+      "id": "observar_apos_clique",
+      "acao": "observar_tela",
+      "contexto": "apos_clique_select_file",
+      "critico": false,
+      "retry": 1,
+      "delay_retry": 2,
+      "descricao": "Gemini Vision registra o estado da tela após o clique — sem ação adicional"
+    }
+  ]
+}
