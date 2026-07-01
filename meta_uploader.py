@@ -54,6 +54,47 @@ IG_POLL_MAX = 60           # máx ~6min (60 x 6s) — vídeo grande demora
 
 
 # ══════════════════════════════════════════════════════════════════════════
+# SESSÃO HTTP — pooling de conexões + retry SÓ em GET (idempotente).
+#
+# IMPORTANTE: retry automático NÃO cobre POST de propósito. Reenviar um POST
+# de publicação (criar vídeo no FB / media_publish no IG) que já chegou ao
+# servidor mas cuja resposta se perdeu geraria POST DUPLICADO — dois vídeos.
+# Então só GET (buscar token da página, poll de status, permalink) tem retry;
+# os uploads/publish ficam com uma única tentativa, evitando duplicata.
+# ══════════════════════════════════════════════════════════════════════════
+def _build_session():
+    """requests.Session com retry/backoff restrito a GET (nunca POST)."""
+    if not _REQUESTS_OK:
+        return None
+    s = requests.Session()
+    try:
+        from requests.adapters import HTTPAdapter
+        from urllib3.util.retry import Retry
+        retry = Retry(
+            total=3,
+            connect=3,
+            backoff_factor=1.5,
+            status_forcelist=(429, 500, 502, 503, 504),
+            allowed_methods=frozenset(["GET"]),   # POST fora do retry: evita duplicar post
+            raise_on_status=False,
+        )
+        adapter = HTTPAdapter(max_retries=retry)
+        s.mount("https://", adapter)
+        s.mount("http://", adapter)
+    except Exception:
+        log.debug("Retry adapter indisponível; usando Session simples.")
+    return s
+
+
+_HTTP = _build_session()
+
+
+def _req():
+    """Retorna a Session compartilhada, ou o módulo requests como fallback."""
+    return _HTTP if _HTTP is not None else requests
+
+
+# ══════════════════════════════════════════════════════════════════════════
 # CREDENCIAIS
 # ══════════════════════════════════════════════════════════════════════════
 def _token() -> str:
@@ -90,7 +131,7 @@ def _buscar_permalink(obj_id: str, campo: str, token: str, fallback: str) -> str
     Se a consulta falhar por qualquer motivo, devolve o fallback informado.
     """
     try:
-        r = requests.get(
+        r = _req().get(
             f"{GRAPH}/{obj_id}",
             params={"fields": campo, "access_token": token},
             timeout=30,
@@ -121,7 +162,7 @@ def _page_access_token() -> Optional[str]:
 
     # 2) Deriva do token de usuário via /me/accounts
     try:
-        r = requests.get(
+        r = _req().get(
             f"{GRAPH}/me/accounts",
             params={"access_token": _token(), "fields": "id,name,access_token"},
             timeout=30,
@@ -182,7 +223,7 @@ def postar_facebook(video_path: str, legenda: str = "") -> dict:
         with open(video, "rb") as f:
             files = {"source": f}
             data = {"description": legenda, "access_token": page_token}
-            r = requests.post(url, data=data, files=files, timeout=300)
+            r = _req().post(url, data=data, files=files, timeout=300)
         dados = r.json()
     except Exception as e:
         return {"sucesso": False, "erro": f"exceção no upload: {e}"}
@@ -227,7 +268,7 @@ def postar_instagram(video_path: str, legenda: str = "") -> dict:
 
     # ── 1. Cria o container resumable ────────────────────────────────────
     try:
-        r1 = requests.post(
+        r1 = _req().post(
             f"{GRAPH}/{ig}/media",
             data={
                 "media_type": "REELS",
@@ -252,7 +293,7 @@ def postar_instagram(video_path: str, legenda: str = "") -> dict:
     try:
         tam = video.stat().st_size
         with open(video, "rb") as f:
-            r2 = requests.post(
+            r2 = _req().post(
                 f"{RUPLOAD}/{container_id}",
                 headers={
                     "Authorization": f"OAuth {tok}",
@@ -277,7 +318,7 @@ def postar_instagram(video_path: str, legenda: str = "") -> dict:
     for tentativa in range(IG_POLL_MAX):
         time.sleep(IG_POLL_INTERVALO)
         try:
-            rs = requests.get(
+            rs = _req().get(
                 f"{GRAPH}/{container_id}",
                 params={"fields": "status_code", "access_token": tok},
                 timeout=30,
@@ -297,7 +338,7 @@ def postar_instagram(video_path: str, legenda: str = "") -> dict:
 
     # ── 4. Publica o container ───────────────────────────────────────────
     try:
-        r4 = requests.post(
+        r4 = _req().post(
             f"{GRAPH}/{ig}/media_publish",
             data={"creation_id": container_id, "access_token": tok},
             timeout=60,
