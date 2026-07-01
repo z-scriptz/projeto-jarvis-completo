@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
 # integrations/telegram_repurpose_hunter.py
-# PEÇA-CHAVE JARVIS — rev 5 "Máquina de Comissões"
+# PEÇA-CHAVE JARVIS — rev 6 "Máquina de Comissões"
+# Correções sobre a rev 5 (alinhamento com o resto do projeto):
+#   [FIX-9]  Plano gravado agora usa as chaves CANÔNICAS "narracao" e "duracao"
+#            (lidas por autonomous_orchestrator / publicadores / finalizar_plano).
+#            Aliases "narracao_propria"/"duracao_video" mantidos por compat.
+#   [FIX-10] Varredura do Telegram passa a aceitar vídeo enviado como
+#            documento/arquivo (mime video/*), não só msg.video.
+#
 # Correções sobre a rev 4:
 #   [FIX-1] SyntaxError em _crop_clip (keyword `y1` repetido -> `y2`).
 #   [FIX-2] Efeitos de diferenciação (mirror/zoom/grade/vinheta/velocidade) agora
@@ -1055,6 +1062,11 @@ async def processar_mensagem_telegram(msg, sub_id: str = "hunter_radar"):
         "legenda":             legenda,
         "hashtags":            hashtags,
         "cta":                 (_HOOK[1](nome_produto) if _HOOK_OK else "Link na Bio!"),
+        # [FIX-9] chaves canônicas que o resto do projeto lê
+        # (autonomous_orchestrator, publicadores, finalizar_plano):
+        "narracao":            resultado.get("narracao", False),
+        "duracao":             resultado.get("duracao"),
+        # aliases descritivos mantidos por compatibilidade retroativa
         "narracao_propria":    resultado.get("narracao", False),
         "duracao_video":       resultado.get("duracao"),
         "categoria":           categoria,
@@ -1304,7 +1316,11 @@ async def varrer_canal_por_criativos(canal_username: str, limite: int = 50):
 
             count = 0
             async for msg in client.iter_messages(entidade, limit=limite):
-                if not msg.video:
+                # [FIX-10] aceita vídeo nativo E vídeo enviado como documento/arquivo
+                # (canais de achadinhos às vezes mandam o .mp4 "como arquivo",
+                # que não vem em msg.video mas tem mime_type video/*).
+                _mime = getattr(getattr(msg, "file", None), "mime_type", "") or ""
+                if not (msg.video or _mime.startswith("video/")):
                     continue
 
                 texto_analise = msg.text or ""
