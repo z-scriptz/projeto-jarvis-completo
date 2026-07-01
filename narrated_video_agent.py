@@ -44,8 +44,11 @@ from creative_engine.tts_edge import (
 )
 
 # Memória (best-effort)
+# [FIX] memory_agent NÃO expõe 'registrar_aprendizado' (só existe
+# 'registrar_memoria' / 'registrar_aprendizado_execucao'). O import antigo
+# falhava sempre → _MEM_OK=False → memória NUNCA era registrada em silêncio.
 try:
-    from agents.memory_agent import registrar_aprendizado
+    from agents.memory_agent import registrar_memoria
     _MEM_OK = True
 except Exception:
     _MEM_OK = False
@@ -1443,7 +1446,8 @@ def gerar_video_narrado(produto: str, voz: str = VOZ_PADRAO,
     # 6) Memória
     if _MEM_OK:
         try:
-            registrar_aprendizado(
+            registrar_memoria(
+                "aprendizado",
                 f"Vídeo narrado gerado pra '{produto}' (voz {voz}, "
                 f"{len(broll)} B-roll, {mont['duracao']}s)",
                 tags=["narrated", "video", slug, roteiro["categoria"]])
