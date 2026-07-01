@@ -321,37 +321,6 @@ def _cena_do_arquivo(caminho: Path) -> str:
     return ""
 
 
-def selecionar_broll_por_cena(broll: list, cena: str, usados: set) -> Optional[Path]:
-    """
-    Escolhe o melhor B-roll pra uma cena.
-
-    Prioridade:
-      1. arquivo da cena ({cena}_*) ainda NÃO usado
-      2. qualquer arquivo da cena (mesmo já usado)
-      3. qualquer arquivo ainda não usado (fallback)
-      4. qualquer arquivo (repete — loga warning no caller)
-
-    Returns: Path escolhido ou None se broll vazio.
-    """
-    if not broll:
-        return None
-
-    # 1) da cena, não usado
-    da_cena = [b for b in broll if _cena_do_arquivo(b) == cena]
-    da_cena_livres = [b for b in da_cena if b not in usados]
-    if da_cena_livres:
-        return da_cena_livres[0]
-    # 2) da cena, mesmo usado
-    if da_cena:
-        return da_cena[0]
-    # 3) qualquer não usado
-    livres = [b for b in broll if b not in usados]
-    if livres:
-        return livres[0]
-    # 4) repete qualquer
-    return broll[0]
-
-
 # =================================================================
 # MONTAGEM DO VÍDEO
 # =================================================================
@@ -569,45 +538,6 @@ def _resolver_fonte_textclip(TextClip):
     return None
 
 
-# Fontes de emoji por SO (renderizam letra normal E emoji).
-# Usadas no hook/CTA, que podem ter emoji. A legenda da fala fica no Arial.
-_FONTES_EMOJI_CANDIDATAS = [
-    "C:/Windows/Fonts/seguiemj.ttf",   # Segoe UI Emoji (Windows) — colorido
-    "C:/Windows/Fonts/segoeui.ttf",    # Segoe UI (tem muitos símbolos)
-    "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",  # Linux
-    "Segoe-UI-Emoji",                  # nome lógico
-]
-
-_FONTE_EMOJI_OK = "__nao_resolvida__"
-
-
-def _resolver_fonte_emoji(TextClip):
-    """
-    Descobre a fonte de EMOJI deste ambiente (Segoe UI Emoji no Windows).
-    Se nenhuma funcionar, retorna a fonte normal (Arial) como fallback —
-    o texto sai sem emoji, mas não quebra.
-    """
-    global _FONTE_EMOJI_OK
-    if _FONTE_EMOJI_OK != "__nao_resolvida__":
-        return _FONTE_EMOJI_OK
-    from pathlib import Path as _P
-    for fonte in _FONTES_EMOJI_CANDIDATAS:
-        if fonte and ("/" in fonte or "\\" in fonte) and not _P(fonte).exists():
-            continue
-        try:
-            kw = {"text": "Aa", "font_size": 40, "color": "white", "font": fonte}
-            _ = TextClip(**kw)
-            _FONTE_EMOJI_OK = fonte
-            log.info(f"   😊 Fonte de emoji (hook/CTA): {fonte}")
-            return _FONTE_EMOJI_OK
-        except Exception:
-            continue
-    # fallback: usa a fonte normal (sem emoji, mas funciona)
-    log.info("   ℹ️  Fonte de emoji não encontrada — hook/CTA sem emoji")
-    _FONTE_EMOJI_OK = _resolver_fonte_textclip(TextClip)
-    return _FONTE_EMOJI_OK
-
-
 def _textclip_robusto(TextClip, texto, font_size, color, stroke_width,
                        largura_frac, fonte, stroke_color="black", text_align=None):
     """
@@ -782,45 +712,6 @@ def _emoji_aparado(nome: str, tam: int) -> Optional[Path]:
     except Exception as e:
         log.warning(f"   ⚠️  Aparar emoji {nome} falhou ({e}) — usando original")
         return p
-
-
-def _emoji_do_hook(hook_txt: str) -> Optional[Path]:
-    """
-    O Jarvis DECIDE qual emoji combina com o hook, por palavra-chave + tom.
-    Lê o texto e escolhe entre olhos/choque/assustado (PNGs na pasta brand).
-
-    Lógica de decisão (contextual, como o Copy Adapter faz com categorias):
-      - pergunta / curiosidade (?, COMO, POR QUE, SERÁ)  → choque (espanto)
-      - alerta / urgência (CHEGA, PARE, NUNCA, CUIDADO)  → assustado
-      - chamada de atenção (OLHA, VEJA, ISSO, OLHA SÓ)   → olhos
-      - nenhuma palavra-chave → alterna determinístico pelo tamanho do texto
-        (espalha os 3 ao longo dos vídeos sem precisar de estado global)
-
-    Retorna o Path do PNG, ou None se nenhum existir na pasta.
-    """
-    t = (hook_txt or "").upper()
-
-    # mapa palavra-chave → arquivo
-    if any(p in t for p in ("?", "COMO", "POR QUE", "PORQUE", "SERÁ", "SERA", "QUAL")):
-        escolha = "choque.png"
-    elif any(p in t for p in ("CHEGA", "PARE", "NUNCA", "CUIDADO", "PARA DE", "ERRO")):
-        escolha = "assustado.png"
-    elif any(p in t for p in ("OLHA", "VEJA", "ISSO", "OLHA SÓ", "VEM VER")):
-        escolha = "olhos.png"
-    else:
-        # alterna determinístico: usa o comprimento do texto pra variar
-        alternativas = ["olhos.png", "choque.png", "assustado.png"]
-        escolha = alternativas[len(t) % 3]
-
-    p = _brand_asset(escolha)
-    if p is not None:
-        return p
-    # se o escolhido não existe, tenta qualquer um dos 3 que exista
-    for alt in ("olhos.png", "choque.png", "assustado.png"):
-        p = _brand_asset(alt)
-        if p is not None:
-            return p
-    return None
 
 
 def _textclip_justo(TextClip, texto, font_size, fonte):
