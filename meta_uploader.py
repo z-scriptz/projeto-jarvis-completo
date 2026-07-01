@@ -78,6 +78,33 @@ def _checar_base() -> Optional[str]:
 
 
 # ══════════════════════════════════════════════════════════════════════════
+# PERMALINK — resolve a URL pública REAL de um objeto publicado
+# ══════════════════════════════════════════════════════════════════════════
+def _buscar_permalink(obj_id: str, campo: str, token: str, fallback: str) -> str:
+    """
+    Busca a URL pública REAL de um objeto publicado via Graph API.
+
+    O id numérico que o publish retorna NÃO forma a URL pública: o Instagram
+    usa um shortcode (ex: /reel/CxYz.../), não o media-id. Então consultamos
+    o campo de permalink do objeto ('permalink' no IG, 'permalink_url' no FB).
+    Se a consulta falhar por qualquer motivo, devolve o fallback informado.
+    """
+    try:
+        r = requests.get(
+            f"{GRAPH}/{obj_id}",
+            params={"fields": campo, "access_token": token},
+            timeout=30,
+        )
+        val = ((r.json() or {}).get(campo) or "").strip()
+        if val:
+            # FB às vezes devolve caminho relativo (/pagina/videos/123/)
+            return val if val.startswith("http") else f"https://www.facebook.com{val}"
+    except Exception as e:
+        log.debug(f"   permalink ({campo}) indisponível: {e}")
+    return fallback
+
+
+# ══════════════════════════════════════════════════════════════════════════
 # FACEBOOK — upload de arquivo local direto (simples)
 # ══════════════════════════════════════════════════════════════════════════
 def _page_access_token() -> Optional[str]:
@@ -163,7 +190,10 @@ def postar_facebook(video_path: str, legenda: str = "") -> dict:
     # Sucesso = veio um id de vídeo
     video_id = dados.get("id")
     if video_id:
-        link = f"https://www.facebook.com/{video_id}"
+        # a URL pública real vem da permalink_url; fallback = watch?v= (válido
+        # pra vídeo de feed, ao contrário do id solto que nem sempre resolve)
+        link = _buscar_permalink(video_id, "permalink_url", page_token,
+                                 f"https://www.facebook.com/watch/?v={video_id}")
         return {"sucesso": True, "url": link}
     # erro estruturado da Graph API
     err = (dados.get("error") or {}).get("message") or str(dados)[:200]
@@ -278,7 +308,11 @@ def postar_instagram(video_path: str, legenda: str = "") -> dict:
 
     media_id = d4.get("id")
     if media_id:
-        return {"sucesso": True, "url": f"https://www.instagram.com/reel/{media_id}"}
+        # o media-id numérico NÃO forma a URL do Reel (IG usa shortcode) —
+        # busca a permalink real; fallback guarda ao menos o id de referência
+        link = _buscar_permalink(media_id, "permalink", tok,
+                                 f"https://www.instagram.com/reel/{media_id}")
+        return {"sucesso": True, "url": link}
     err = (d4.get("error") or {}).get("message") or str(d4)[:200]
     return {"sucesso": False, "erro": f"publish recusado: {err}"}
 
