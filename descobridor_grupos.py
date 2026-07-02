@@ -335,7 +335,22 @@ def _append_grupos_txt(usernames: list) -> int:
 
 def _append_hunter_canais(usernames: list) -> int:
     """Acrescenta @username novos ao hunter_canais do agendador_config.json."""
-    cfg = _carregar_config()
+    # SEGURANÇA: se o config EXISTE mas está corrompido, NÃO sobrescreve —
+    # senão perderíamos toda a config do usuário. Aborta e avisa.
+    if CONFIG_PATH.exists():
+        try:
+            cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+        except Exception as e:
+            log.error(f"   ⚠️  agendador_config.json ILEGÍVEL ({e}) — NÃO vou "
+                      f"sobrescrever pra não apagar sua config. Corrija o JSON "
+                      f"e rode de novo. (o grupos.txt do radar JÁ foi atualizado)")
+            return 0
+        if not isinstance(cfg, dict):
+            log.error("   ⚠️  agendador_config.json não é um objeto JSON — "
+                      "abortando promoção do hunter (config preservada).")
+            return 0
+    else:
+        cfg = {}
     canais = list(cfg.get("hunter_canais") or [])
     atuais_norm = {_norm_user(c) for c in canais}
     novos = [f"@{u.lstrip('@')}" for u in usernames if _norm_user(u) not in atuais_norm]
