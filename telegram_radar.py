@@ -25,6 +25,7 @@ import re
 import sys
 import json
 import time
+import asyncio
 import argparse
 from pathlib import Path
 
@@ -183,7 +184,7 @@ async def _ler_grupos(grupos: list, limite: int, pausa: float) -> list:
             except Exception as e:
                 log.warning(f"      ⚠️  erro lendo {grupo}: {str(e)[:60]}")
             if i < len(grupos) and pausa > 0:
-                time.sleep(pausa)
+                await asyncio.sleep(pausa)   # não bloqueia o event loop do Telethon
     return achados
 
 
