@@ -68,6 +68,12 @@ DEFAULTS = {
     "radar_grupos_arquivo":       "grupos.txt",
     "radar_limite":               30,
 
+    # ── Descoberta de grupos (auto-alimenta radar + hunter, manhã/noite) ──
+    "grupos_descoberta_ativa":    True,
+    "grupos_descoberta_horarios": ["08:30", "20:30"],      # manhã e noite
+    "grupos_descoberta_max":      2,                        # novos grupos por vez
+    "grupos_descoberta_auto_add": True,   # False = só sugere (grupos_descobertos.json)
+
     # ── Produção (teto de gasto Fal) ──
     "producao_max_videos_dia":    20,
     "producao_max_downloads":     10,        # assets baixados por produto (autopilot)
@@ -335,6 +341,75 @@ def ciclo_descoberta(cfg: dict, estado: dict, dry_run: bool) -> dict:
     estado["ciclo_descoberta"] = estado.get("ciclo_descoberta", 0) + 1
     estado["ultima_descoberta"] = datetime.now().isoformat()
     _salvar_estado(estado)
+
+    return resultado
+
+
+# =====================================================================
+# CICLO 1.5 — DESCOBERTA DE GRUPOS (auto-alimenta radar + hunter)
+# =====================================================================
+
+def _horario_devido_grupos(cfg: dict, estado: dict) -> "str | None":
+    """Horário de descoberta de grupos 'na hora' e ainda não feito hoje."""
+    if not cfg.get("grupos_descoberta_ativa", True):
+        return None
+    horarios = cfg.get("grupos_descoberta_horarios") or []
+    if not horarios:
+        return None
+    hoje = str(date.today())
+    reg = estado.get("grupos_desc_feitos") or {}
+    if reg.get("data") != hoje:
+        reg = {"data": hoje, "horarios": []}
+        estado["grupos_desc_feitos"] = reg
+    agora = _agora_min()
+    tol = cfg.get("tolerancia_min", 10)
+    for hhmm in horarios:
+        alvo = _hora_para_min(hhmm)
+        if alvo >= 0 and alvo <= agora <= alvo + tol and hhmm not in reg["horarios"]:
+            return hhmm
+    return None
+
+
+def ciclo_descoberta_grupos(cfg: dict, estado: dict, dry_run: bool,
+                            forcar: bool = False) -> dict:
+    """
+    Nos horários definidos (manhã/noite), acha novos canais de achadinhos e os
+    adiciona ao radar (grupos.txt) e ao hunter (hunter_canais). `forcar` ignora
+    o horário (uso manual via --so-grupos).
+    """
+    resultado = {"rodou": False}
+
+    horario = "manual" if forcar else _horario_devido_grupos(cfg, estado)
+    if not horario:
+        return resultado  # não é a hora ainda (silencioso)
+
+    log.info("─" * 60)
+    log.info(f"🛰️  CICLO DESCOBERTA DE GRUPOS — {horario}")
+
+    try:
+        from integrations.descobridor_grupos import descobrir_grupos
+    except Exception as e:
+        log.error(f"   ❌ descobridor indisponível: {e}")
+        resultado["erro"] = str(e)
+        return resultado
+
+    max_novos = int(cfg.get("grupos_descoberta_max", 2))
+    auto_add = bool(cfg.get("grupos_descoberta_auto_add", True))
+    try:
+        r = descobrir_grupos(max_novos=max_novos, auto_add=auto_add, dry_run=dry_run)
+        resultado.update(rodou=True, detalhe=r)
+    except Exception as e:
+        log.error(f"   ❌ descoberta de grupos falhou: {e}")
+        resultado["erro"] = str(e)
+
+    # marca o horário como feito hoje (mesmo sem achar nada) pra não repetir
+    if not forcar:
+        reg = estado.get("grupos_desc_feitos") or {"data": str(date.today()),
+                                                    "horarios": []}
+        if horario not in reg["horarios"]:
+            reg["horarios"].append(horario)
+        estado["grupos_desc_feitos"] = reg
+        _salvar_estado(estado)
 
     return resultado
 
@@ -619,6 +694,11 @@ def rodar_um_ciclo(cfg: dict, estado: dict, hist: dict, dry_run: bool,
     """
     resumo = {}
 
+    # 0) DESCOBERTA DE GRUPOS (manhã/noite) — auto-alimenta radar + hunter
+    if so in ("", "grupos"):
+        resumo["grupos"] = ciclo_descoberta_grupos(cfg, estado, dry_run,
+                                                   forcar=(so == "grupos"))
+
     # 1) DESCOBERTA (só se passou o intervalo)
     if so in ("", "descoberta"):
         if so == "descoberta" or _precisa_descobrir(cfg, estado):
@@ -672,6 +752,10 @@ def rodar_daemon(dry_run: bool = False):
              f"(premium ≥ R$ {cfg['producao_premium_comissao_min']})")
     log.info(f"   Postagem: {cfg['horarios']} ({cfg['plataformas']}, "
              f"{'público' if cfg['publico'] else 'privado'})")
+    if cfg.get("grupos_descoberta_ativa", True):
+        log.info(f"   Descoberta de grupos: {cfg.get('grupos_descoberta_horarios')} "
+                 f"(até {cfg.get('grupos_descoberta_max', 2)}/vez, "
+                 f"{'auto' if cfg.get('grupos_descoberta_auto_add', True) else 'só sugere'})")
     log.info(f"   Check a cada {cfg['intervalo_check_seg']}s")
     log.info("█" * 60)
 
@@ -772,6 +856,8 @@ def main():
                         help="roda só o ciclo de descoberta")
     parser.add_argument("--so-producao", action="store_true", dest="so_producao",
                         help="roda só o ciclo de produção")
+    parser.add_argument("--so-grupos", action="store_true", dest="so_grupos",
+                        help="roda só a descoberta de grupos (manual, ignora horário)")
     args = parser.parse_args()
 
     if args.status:
@@ -786,6 +872,8 @@ def main():
         so = "descoberta"
     elif args.so_producao:
         so = "producao"
+    elif args.so_grupos:
+        so = "grupos"
 
     if args.once or so:
         cfg = carregar_config()
