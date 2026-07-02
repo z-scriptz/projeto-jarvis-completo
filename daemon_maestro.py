@@ -70,6 +70,7 @@ DEFAULTS = {
 
     # ── Produção (teto de gasto Fal) ──
     "producao_max_videos_dia":    20,
+    "producao_max_downloads":     10,        # assets baixados por produto (autopilot)
     "producao_premium_campeoes":  True,
     "producao_premium_comissao_min": 15.0,   # R$ — acima disso vira premium
     "auto_repor":                 True,
@@ -411,16 +412,25 @@ def ciclo_producao(cfg: dict, estado: dict, dry_run: bool) -> dict:
 
 def _produzir_lote(cfg: dict, estado: dict, quantidade: int) -> int:
     """
-    Produz `quantidade` vídeos a partir dos produtos da fila.
-    Campeões (comissão >= limite) usam modo premium.
+    Produz `quantidade` vídeos a partir dos produtos da fila usando o pipeline
+    COMPLETO do production_runner: produz + arquiva + EMPACOTA em
+    pronto_para_postar/ (a esteira que o ciclo de postagem lê). O produzir()
+    cru gravava só em videos/ e não abastecia a esteira → o daemon nunca
+    postava. Campeões (comissão >= limite) usam premium (Kling 2.1).
     Retorna quantos foram produzidos com sucesso.
     """
-    from creative_engine.produzir_video import produzir
+    import os
+    from agents.production_runner_agent import (processar_produto,
+                                                _dir_saida_rodada)
 
     produtos = _carregar_produtos_para_produzir(quantidade)
     if not produtos:
         log.warning("   ⚠️  Nenhum produto disponível pra produzir")
         return 0
+
+    # Uma pasta de rodada por lote (mesma convenção do production_runner.main)
+    dir_rodada = _dir_saida_rodada()
+    max_downloads = int(cfg.get("producao_max_downloads", 10))
 
     produzidos = 0
     for p in produtos:
@@ -436,14 +446,30 @@ def _produzir_lote(cfg: dict, estado: dict, quantidade: int) -> int:
 
         tag = "💎 PREMIUM" if premium else "📹 standard"
         log.info(f"   {tag}: '{nome}' (comissão R$ {comissao:.2f})")
+
+        # PREMIUM via env: o production_runner roda as etapas como subprocess,
+        # que HERDA o os.environ — então setar FAL_MODEL aqui propaga o modelo
+        # premium pro gerador de cenas. Restauramos depois pra não vazar.
+        _fal_anterior = os.environ.get("FAL_MODEL")
+        if premium:
+            os.environ["FAL_MODEL"] = "fal-ai/kling-video/v2.1/master/text-to-video"
         try:
-            res = produzir(nome, premium=premium)
-            if res.get("ok"):
+            res = processar_produto(nome, max_downloads, dir_rodada)
+            status = (res or {}).get("status", "")
+            if status in ("video_gerado", "recuperado"):
                 produzidos += 1
+                log.info(f"      ✅ '{nome}': {status} → esteira: "
+                         f"{res.get('pronto_para_postar') or '?'}")
             else:
-                log.warning(f"      ⚠️  vídeo de '{nome}' não confirmou")
+                log.warning(f"      ⚠️  '{nome}': {status or 'sem status'} "
+                            f"(não entrou na esteira)")
         except Exception as e:
             log.error(f"      ❌ erro produzindo '{nome}': {e}")
+        finally:
+            if _fal_anterior is None:
+                os.environ.pop("FAL_MODEL", None)
+            else:
+                os.environ["FAL_MODEL"] = _fal_anterior
 
     return produzidos
 
