@@ -1,0 +1,37 @@
+{
+  "_comentario": "Config do daemon Jarvis. Chaves iniciando com _ sao ignoradas (viram comentario). Coloque este arquivo em shared/content_plans/agendador_config.json",
+
+  "_descoberta": "----- DESCOBERTA DE PRODUTOS (radar + hunter) -----",
+  "descoberta_intervalo_horas": 3,
+  "descoberta_fontes": ["radar", "hunter"],
+  "descoberta_lote": 3,
+  "hunter_canais": ["@achadinhos_da_shopee1", "@cupomdashopee", "@amigasdapromobr", "@achadinhosp"],
+  "radar_grupos_arquivo": "grupos.txt",
+  "radar_limite": 30,
+
+  "_grupos": "----- DESCOBERTA AUTOMATICA DE GRUPOS (manha/noite) -----",
+  "grupos_descoberta_ativa": true,
+  "grupos_descoberta_horarios": ["08:30", "20:30"],
+  "grupos_descoberta_max": 2,
+  "grupos_descoberta_auto_add": true,
+
+  "_producao": "----- PRODUCAO DE VIDEOS (teto de gasto) -----",
+  "producao_max_videos_dia": 20,
+  "producao_max_downloads": 10,
+  "producao_premium_campeoes": true,
+  "producao_premium_comissao_min": 15.0,
+  "auto_repor": true,
+  "repor_quando_sobrar": 2,
+  "repor_quantidade": 4,
+
+  "_postagem": "----- POSTAGEM (horarios e plataformas) -----",
+  "horarios": ["09:00", "14:00", "17:00", "21:00"],
+  "plataformas": ["youtube"],
+  "publico": true,
+  "tolerancia_min": 10,
+  "janela_inicio": "08:00",
+  "janela_fim": "23:00",
+
+  "_loop": "----- LOOP -----",
+  "intervalo_check_seg": 60
+}
