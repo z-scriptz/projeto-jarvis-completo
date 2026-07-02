@@ -1095,6 +1095,27 @@ async def processar_mensagem_telegram(msg, sub_id: str = "hunter_radar"):
     except Exception:
         log.exception("Falha ao persistir plano")
 
+    # 7) PONTE PRA ESTEIRA — copia o vídeo re-produzido pra
+    # pronto_para_postar/<slug>/ (mesmo slug do plano_<slug>.json), que é de
+    # onde o daemon posta. Sem isso o vídeo do hunter ficava só em
+    # assets/inbox e nunca era postado.
+    try:
+        import shutil
+        pp_dir = BASE_DIR / "pronto_para_postar" / slug
+        pp_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(str(video_final), str(pp_dir / "video.mp4"))
+        # IG/FB usam a legenda do plano; o YouTube lê estes .txt daqui:
+        _hashtags_txt = plano.get("hashtags", "") or ""
+        (pp_dir / "titulo_youtube.txt").write_text(
+            (f"{nome_produto} #shorts")[:100], encoding="utf-8")
+        (pp_dir / "descricao_youtube.txt").write_text(
+            ((plano.get("legenda", "") or "") + "\n\n" + _hashtags_txt).strip(),
+            encoding="utf-8")
+        (pp_dir / "hashtags.txt").write_text(_hashtags_txt, encoding="utf-8")
+        log.info(f"🚚 Esteira abastecida: {pp_dir / 'video.mp4'}")
+    except Exception:
+        log.exception("Falha ao abastecer pronto_para_postar")
+
     return plano
 
 
