@@ -171,7 +171,7 @@ SESSION_PATH  = BASE_DIR / "shared" / "jarvis_hunter_session"
 INBOX_VIDEOS  = BASE_DIR / "assets" / "inbox" / "videos"
 SHARED_PLANS  = BASE_DIR / "shared" / "content_plans"
 SEEN_DB       = BASE_DIR / "shared" / "hunter_seen.sqlite"   # sqlite (msg_id TEXT)
-VIDEO_TIMEOUT = 420   # narração + IA podem demorar mais que a rev 3
+VIDEO_TIMEOUT = 1200  # VPS de CPU fraco renderiza devagar; margem generosa
 
 # Facebook token (opcional) para Ad Library API
 FACEBOOK_ACCESS_TOKEN = os.environ.get("FACEBOOK_ACCESS_TOKEN", "")
@@ -886,7 +886,7 @@ def _reproduzir_video_sync(src: Path, dst: Path, produto: str,
         kwargs = dict(codec="libx264", audio_codec="aac", fps=30,
                       logger=None, ffmpeg_params=ffmpeg_params)
         try:
-            clip_final.write_videofile(str(dst), threads=4, preset="medium", **kwargs)
+            clip_final.write_videofile(str(dst), threads=4, preset="ultrafast", **kwargs)
         except TypeError:
             clip_final.write_videofile(str(dst), **kwargs)
 
