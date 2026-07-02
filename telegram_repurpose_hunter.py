@@ -828,16 +828,10 @@ def _reproduzir_video_sync(src: Path, dst: Path, produto: str,
             except Exception:
                 log.exception("Mixagem de áudio falhou; mantendo original.")
 
-        # 5) OVERLAYS: hook + legendas + cta ──────────────────────────────
+        # 5) OVERLAYS: legendas + TEMPLATE DE MARCA TopShop ────────────────
         overlays = []
+        # 5a) Legendas da fala (mantém — sincronizadas com a narração)
         try:
-            if CFG_HOOK_OVERLAY:
-                hook_txt = (_HOOK[0](nome_produto, plano=plano)
-                            if _HOOK_OK else "Olha isso!")
-                overlay_item = _overlay(ImageClip, _txt_png(hook_txt, "hook"), 0.0, min(CFG_HOOK_SEG, alvo))
-                if overlay_item:
-                    overlays.append(overlay_item)
-
             if CFG_LEGENDAS and frases and _TTS_OK:
                 _g, boundaries_para_blocos, _e = _TTS
                 blocos = boundaries_para_blocos(frases, wbounds, narr_dur or alvo)
@@ -851,15 +845,48 @@ def _reproduzir_video_sync(src: Path, dst: Path, produto: str,
                     overlay_item = _overlay(ImageClip, _txt_png(txt, "caption"), ini, max(0.4, fim - ini))
                     if overlay_item:
                         overlays.append(overlay_item)
-
-            if CFG_CTA_FINAL:
-                cta_txt = _HOOK[1](nome_produto) if _HOOK_OK else "Link na Bio! 🛒"
-                ini_cta = max(0.0, alvo - CFG_CTA_SEG)
-                overlay_item = _overlay(ImageClip, _txt_png(cta_txt, "cta"), ini_cta, alvo - ini_cta)
-                if overlay_item:
-                    overlays.append(overlay_item)
         except Exception:
-            log.exception("Overlays parcialmente ignorados")
+            log.exception("Legendas parcialmente ignoradas")
+
+        # 5b) TEMPLATE DE MARCA TopShop — reusa as camadas prontas do
+        # narrated_video_agent (logo TS + nome + @handle + selo + hook + CTA
+        # com emojis), pra o hunter ter a MESMA identidade fixa.
+        _marca_ok = False
+        try:
+            from agents.narrated_video_agent import (
+                _criar_camadas_topo, _criar_cta_fixo,
+                _import_moviepy as _brand_mp_import)
+            _mp_brand = _brand_mp_import()   # 7-tuple (inclui ColorClip, TextClip)
+            hook_txt = (_HOOK[0](nome_produto, plano=plano)
+                        if _HOOK_OK else "OLHA ISSO")
+            for camada in _criar_camadas_topo(alvo, hook_txt, _mp_brand):
+                if camada is not None:
+                    overlays.append(camada)
+            for camada in _criar_cta_fixo(alvo, _mp_brand):
+                if camada is not None:
+                    overlays.append(camada)
+            _marca_ok = True
+            log.info("🏷️  Template de marca TopShop aplicado no hunter")
+        except Exception:
+            log.exception("Template de marca falhou; caindo pro hook/CTA simples")
+
+        # 5c) Fallback: se a marca falhou, usa o hook/CTA simples (antigo)
+        if not _marca_ok:
+            try:
+                if CFG_HOOK_OVERLAY:
+                    _hk = (_HOOK[0](nome_produto, plano=plano)
+                           if _HOOK_OK else "Olha isso!")
+                    _oi = _overlay(ImageClip, _txt_png(_hk, "hook"), 0.0, min(CFG_HOOK_SEG, alvo))
+                    if _oi:
+                        overlays.append(_oi)
+                if CFG_CTA_FINAL:
+                    _ct = _HOOK[1](nome_produto) if _HOOK_OK else "Link na Bio! 🛒"
+                    _ini = max(0.0, alvo - CFG_CTA_SEG)
+                    _oi = _overlay(ImageClip, _txt_png(_ct, "cta"), _ini, alvo - _ini)
+                    if _oi:
+                        overlays.append(_oi)
+            except Exception:
+                log.exception("Overlays de fallback também falharam")
 
         clip_final = CompositeVideoClip([base, *overlays]) if overlays else base
         abertos.append(clip_final)
