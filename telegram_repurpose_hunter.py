@@ -972,7 +972,7 @@ async def processar_mensagem_telegram(msg, sub_id: str = "hunter_radar"):
     # A Shopee REJEITA sub_id com caractere especial (erro 11001 "invalid sub
     # id"). Limpa pra só alfanumérico (igual o radar faz), senão o link vem
     # vazio e o produto é descartado antes de virar vídeo.
-    _subs = [re.sub(r"\W+", "", s)[:16] for s in (sub_id, "telegramrepurpose") if s]
+    _subs = [re.sub(r"[^A-Za-z0-9]", "", s)[:16] for s in (sub_id, "telegramrepurpose") if s]
     _subs = [s for s in _subs if s] or ["hunter"]
     try:
         res_link = gerar_link_afiliado(url_shopee, sub_ids=_subs)
