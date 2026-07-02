@@ -1,0 +1,34 @@
+# Dependências do Jarvis para rodar o daemon 24/7 na VPS Linux.
+# Instale com:  pip install -r requirements.txt
+# (o ffmpeg NÃO é pip — instale pelo sistema: sudo apt install ffmpeg)
+#
+# NÃO inclui pyautogui de propósito: ele é só pra automação de TikTok no PC
+# (precisa de tela gráfica) e quebra em VPS headless. Não use "tiktok" em
+# plataformas na VPS.
+
+# --- Núcleo ---
+requests
+numpy
+Pillow
+moviepy
+
+# --- Telegram (radar, hunter, descobridor) ---
+telethon
+
+# --- Narração grátis (TTS) ---
+edge-tts
+
+# --- Scraping opcional (TikTok Creative Center do hunter) ---
+beautifulsoup4
+
+# --- YouTube (upload via API) ---
+google-api-python-client
+google-auth-oauthlib
+google-auth-httplib2
+
+# --- Google Sheets (se usar planilha de controle) ---
+gspread
+
+# --- Providers de vídeo/IA ---
+fal-client
+google-generativeai
