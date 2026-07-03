@@ -178,8 +178,8 @@ FACEBOOK_ACCESS_TOKEN = os.environ.get("FACEBOOK_ACCESS_TOKEN", "")
 
 # ──────────────────────────────────────────────────────────────────────────
 # Configurações do pipeline de diferenciação
-CFG_NARRACAO_NOVA      = True
-CFG_AUDIO_ORIGINAL_VOL = 0.0
+CFG_NARRACAO_NOVA      = False   # repost mantém o áudio original (sem narração própria)
+CFG_AUDIO_ORIGINAL_VOL = 1.0     # áudio original do vídeo no volume cheio
 CFG_MUSICA_FUNDO_VOL   = 0.12
 CFG_LEGENDAS           = True
 CFG_HOOK_OVERLAY       = True
