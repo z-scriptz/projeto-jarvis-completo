@@ -888,7 +888,40 @@ def _reproduzir_video_sync(src: Path, dst: Path, produto: str,
             except Exception:
                 log.exception("Overlays de fallback também falharam")
 
-        clip_final = CompositeVideoClip([base, *overlays]) if overlays else base
+        # 5.5) LAYOUT TopShop: reduz o vídeo pra 3:4 e centraliza num canvas
+        # 9:16 (fundo da marca), deixando faixa preta em cima (marca+hook) e
+        # embaixo (CTA) — igual aos vídeos do narrated_video_agent.
+        _narr_audio = base.audio
+        try:
+            from agents.narrated_video_agent import (
+                _import_moviepy as _brand_mp_import, _brand_asset)
+            _ColorClip = _brand_mp_import()[5]
+
+            # fundo: brand fundo.png se existir, senão quase-preto
+            _fp = _brand_asset("fundo.png")
+            if _fp is not None:
+                _fundo_bg = _resize_clip(ImageClip(str(_fp)), (LARGURA_ALVO, ALTURA_ALVO))
+            else:
+                _fundo_bg = _ColorClip(size=(LARGURA_ALVO, ALTURA_ALVO), color=(12, 12, 16))
+            _fundo_bg = _clip_timing(_fundo_bg, dur=alvo, start=0.0, pos=("center", "center"))
+            abertos.append(_fundo_bg)
+
+            # vídeo reduzido pra 3:4 (95% da largura), centralizado
+            _larg_v = int(LARGURA_ALVO * 0.95)                       # 1026
+            _alt_full = int(_larg_v * ALTURA_ALVO / LARGURA_ALVO)    # 9:16 escalado
+            _alt_v = int(_larg_v * 4 / 3)                            # 3:4
+            _vid = _resize_clip(base, (_larg_v, _alt_full))
+            _yc = max(0, (_alt_full - _alt_v) // 2)
+            _vid = _crop_clip(_vid, x1=0, x2=_larg_v, y1=_yc, y2=_yc + _alt_v)
+            _vid = _clip_timing(_vid, pos=("center", "center"))
+            abertos.append(_vid)
+
+            clip_final = CompositeVideoClip([_fundo_bg, _vid, *overlays],
+                                            size=(LARGURA_ALVO, ALTURA_ALVO))
+            clip_final = _set_audio(clip_final, _narr_audio)   # preserva a narração
+        except Exception:
+            log.exception("Layout 3:4 falhou; usando vídeo em tela cheia")
+            clip_final = CompositeVideoClip([base, *overlays]) if overlays else base
         abertos.append(clip_final)
 
         # 6) INTRO de IA opcional (prefixa) ────────────────────────────────
