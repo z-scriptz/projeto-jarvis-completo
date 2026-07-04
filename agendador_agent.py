@@ -136,8 +136,10 @@ def postar(slug: str, plataformas: list, publico: bool, dry_run: bool) -> bool:
                 log.info(f"   [DRY-RUN] postaria '{produto}' no YouTube")
                 algum_ok = True
                 continue
+            # passa o slug EXATO da pasta além do nome amigável — sem ele o
+            # uploader re-slugifica o nome completo e erra a pasta do hunter
             cmd = [sys.executable, "-m", "agents.youtube_uploader",
-                   "--produto", produto]
+                   "--produto", produto, "--slug", slug]
             if publico:
                 cmd.append("--publico")
             log.info(f"   📤 YouTube: subindo '{produto}'...")

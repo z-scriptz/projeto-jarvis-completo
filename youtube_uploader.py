@@ -69,6 +69,60 @@ def _slug(produto: str) -> str:
     return re.sub(r"[\s-]+", "_", s).strip("_")
 
 
+def _similaridade_slug(a: str, b: str) -> float:
+    """Similaridade simples entre dois slugs: prefixo + sobreposição de tokens."""
+    if not a or not b:
+        return 0.0
+    if a == b:
+        return 1.0
+    # um começa com o outro (caso clássico: pasta truncada vs nome completo)
+    if a.startswith(b) or b.startswith(a):
+        return 0.9
+    ta, tb = set(a.split("_")), set(b.split("_"))
+    if not ta or not tb:
+        return 0.0
+    inter, union = len(ta & tb), len(ta | tb)
+    return inter / union if union else 0.0
+
+
+def _resolver_pasta(produto: str, slug: str = None) -> Path:
+    """
+    Localiza a pasta pronto_para_postar/<slug>/ do produto de forma tolerante.
+
+    O hunter cria a pasta com _slugify(termo) TRUNCADO em 40 chars, enquanto o
+    plano guarda o nome campeão completo da Shopee. Slugificar aqui o nome
+    completo gera um slug diferente do da pasta → "Pasta não encontrada".
+    Tentamos, em ordem:
+      1. slug explícito passado pelo chamador (o mais confiável)
+      2. slug do nome do produto
+      3. o mesmo slug truncado em 40 chars (igual ao hunter)
+      4. melhor correspondência aproximada entre as pastas existentes
+    """
+    base = _slug(produto)
+    candidatos = [slug, base, base[:40]]  # (3) hunter trunca em 40
+    for c in candidatos:
+        if c and (PRONTO_DIR / c).is_dir():
+            return PRONTO_DIR / c
+
+    # (4) fallback aproximado — pasta cujo slug melhor casa com o do produto
+    if PRONTO_DIR.is_dir():
+        alvo = (slug or base)[:40]
+        melhor, melhor_score = None, 0.0
+        for pasta in PRONTO_DIR.iterdir():
+            if not pasta.is_dir():
+                continue
+            score = _similaridade_slug(alvo, pasta.name)
+            if score > melhor_score:
+                melhor, melhor_score = pasta, score
+        if melhor is not None and melhor_score >= 0.6:
+            log.warning(f"⚠️ Pasta exata não encontrada; usando aproximada "
+                        f"'{melhor.name}' (score={melhor_score:.2f})")
+            return melhor
+
+    # nada encontrado — devolve o caminho esperado pra mensagem de erro clara
+    return PRONTO_DIR / (slug or base)
+
+
 def _checar_dependencias() -> bool:
     if not _GOOGLE_OK:
         log.error("❌ Bibliotecas do Google não instaladas. Rode:")
@@ -111,13 +165,12 @@ def _autenticar():
     return build("youtube", "v3", credentials=creds)
 
 
-def _ler_pacote(produto: str) -> dict:
+def _ler_pacote(produto: str, slug: str = None) -> dict:
     """Lê video + titulo + descricao da pasta pronto_para_postar/<slug>/."""
-    slug = _slug(produto)
-    pasta = PRONTO_DIR / slug
+    pasta = _resolver_pasta(produto, slug)
     if not pasta.exists():
         raise FileNotFoundError(f"Pasta não encontrada: {pasta}. "
-                                f"Rode o production_runner antes.")
+                                f"Rode o production_runner/hunter antes.")
     video = pasta / "video.mp4"
     if not video.exists():
         raise FileNotFoundError(f"Vídeo não encontrado: {video}")
@@ -136,13 +189,18 @@ def _ler_pacote(produto: str) -> dict:
             "descricao": descricao, "hashtags": hashtags, "pasta": pasta}
 
 
-def subir_video(produto: str, publico: bool = False) -> dict:
-    """Sobe UM vídeo pro YouTube. Retorna dict com resultado."""
+def subir_video(produto: str, publico: bool = False, slug: str = None) -> dict:
+    """
+    Sobe UM vídeo pro YouTube. Retorna dict com resultado.
+
+    slug: quando o chamador já conhece a pasta exata (ex.: o slug do hunter),
+          passe-o aqui pra evitar o descasamento com o nome completo do produto.
+    """
     if not _checar_dependencias():
         return {"sucesso": False, "erro": "dependencias_ou_credencial"}
 
     try:
-        pacote = _ler_pacote(produto)
+        pacote = _ler_pacote(produto, slug)
     except Exception as e:
         log.error(f"❌ {e}")
         return {"sucesso": False, "erro": str(e)}
@@ -189,7 +247,8 @@ def subir_video(produto: str, publico: bool = False) -> dict:
         log.info(f"   ✅ Publicado! {url}")
 
         _atualizar_manifest(produto, video_id, url,
-                            "public" if publico else "private")
+                            "public" if publico else "private",
+                            slug=Path(pacote["pasta"]).name)
         return {"sucesso": True, "video_id": video_id, "url": url}
 
     except Exception as e:
@@ -197,9 +256,10 @@ def subir_video(produto: str, publico: bool = False) -> dict:
         return {"sucesso": False, "erro": str(e)}
 
 
-def _atualizar_manifest(produto: str, video_id: str, url: str, privacidade: str):
+def _atualizar_manifest(produto: str, video_id: str, url: str, privacidade: str,
+                        slug: str = None):
     """Marca youtube como postado no manifest do produto (se existir)."""
-    slug = _slug(produto)
+    slug = slug or _slug(produto)
     # procura o manifest mais recente em outputs/*/run_*/<slug>/manifest.json
     manifs = sorted((RAIZ / "outputs").glob(f"*/run_*/{slug}/manifest.json"),
                     reverse=True)
@@ -221,6 +281,8 @@ def _atualizar_manifest(produto: str, video_id: str, url: str, privacidade: str)
 def main():
     parser = argparse.ArgumentParser(description="Upload de YouTube Shorts via API")
     parser.add_argument("--produto", help="Nome do produto a subir")
+    parser.add_argument("--slug", help="Slug exato da pasta (opcional; evita "
+                        "descasamento com o nome completo do produto)")
     parser.add_argument("--publico", action="store_true",
                         help="Sobe como público (default: privado pra você revisar)")
     args = parser.parse_args()
@@ -229,11 +291,11 @@ def main():
     log.info("📺 YOUTUBE UPLOADER")
     log.info("=" * 60)
 
-    if not args.produto:
-        log.error("Forneça --produto 'Nome do Produto'")
+    if not args.produto and not args.slug:
+        log.error("Forneça --produto 'Nome do Produto' (ou --slug pasta_exata)")
         return 1
 
-    r = subir_video(args.produto, publico=args.publico)
+    r = subir_video(args.produto or args.slug, publico=args.publico, slug=args.slug)
     return 0 if r.get("sucesso") else 1
 
 
