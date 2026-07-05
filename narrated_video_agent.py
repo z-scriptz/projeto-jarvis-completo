@@ -736,6 +736,93 @@ def _textclip_justo(TextClip, texto, font_size, fonte):
     return None
 
 
+# ── EMOJI COLORIDO NO HOOK (Noto Color Emoji) ─────────────────────
+_NOTO_EMOJI = "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf"
+
+# emojis coloridos SEGUROS (1 codepoint) por palavra-chave do hook/produto
+_HOOK_EMOJI_MAPA = [
+    (("cozinha", "panela", "fog", "utensil", "copo", "garrafa", "talher",
+      "fatiad", "ralad", "descasc"), "🍳"),
+    (("beleza", "skincare", "makeup", "maquia", "batom", "perfume", "cabelo",
+      "unha", "pele", "hidrat"), "💄"),
+    (("pet", "cachorro", "gato", "aquari", "raç", "coleira"), "🐶"),
+    (("fone", "carregad", "cabo", "gadget", "led", "lumin", "eletron", "usb",
+      "bluetooth", "teclado"), "🔌"),
+    (("fitness", "treino", "academ", "yoga", "muscula", "corrida", "emagrec"),
+     "💪"),
+    (("organiz", "decor", "closet", "guarda", "banheiro", "quarto", "suporte",
+      "prateleira"), "🏠"),
+    (("bebe", "bebê", "infantil", "criança", "banheira", "fralda",
+      "mamadeira"), "🍼"),
+    (("roupa", "jaqueta", "camisa", "moda", "vestido", "calça", "tenis",
+      "tênis", "bota", "meia"), "👕"),
+    (("moto", "capacete", "carro", "automot", "bike", "bicicleta", "scooter"),
+     "🛵"),
+    (("limpeza", "limpa", "esponja", "vassoura", "mancha"), "🧽"),
+]
+
+
+def _char_eh_emoji(ch: str) -> bool:
+    o = ord(ch)
+    return (0x1F300 <= o <= 0x1FAFF or 0x2600 <= o <= 0x27BF
+            or 0x1F1E6 <= o <= 0x1F1FF or 0x2B00 <= o <= 0x2BFF
+            or o in (0x2705, 0x2714, 0x2764) or 0xFE00 <= o <= 0xFE0F
+            or o == 0x200D)
+
+
+def _separar_emoji_hook(hook_txt: str):
+    """Tira emojis do texto do hook (evita 'tofu' na fonte) e escolhe 1 emoji
+    colorido: o que já vinha no hook, ou por palavra-chave, ou fogo."""
+    achado = None
+    limpo = []
+    for ch in (hook_txt or ""):
+        if _char_eh_emoji(ch):
+            if achado is None and not (0xFE00 <= ord(ch) <= 0xFE0F) and ord(ch) != 0x200D:
+                achado = ch
+        else:
+            limpo.append(ch)
+    texto = "".join(limpo).strip()
+    while "  " in texto:
+        texto = texto.replace("  ", " ")
+    if achado is None:
+        t = texto.lower()
+        for chaves, emo in _HOOK_EMOJI_MAPA:
+            if any(k in t for k in chaves):
+                achado = emo
+                break
+        if achado is None:
+            achado = "🔥"
+    return achado, (texto or (hook_txt or ""))
+
+
+def _emoji_colorido_png(emoji_char: str, tam: int):
+    """Renderiza 1 emoji COLORIDO (Noto) num PNG aparado no tamanho pedido.
+    A Noto Color Emoji só carrega no tamanho 109 -> renderiza nele e reescala."""
+    try:
+        import os
+        from PIL import Image, ImageDraw, ImageFont
+        if not os.path.exists(_NOTO_EMOJI):
+            return None
+        fnt = ImageFont.truetype(_NOTO_EMOJI, 109)
+        img = Image.new("RGBA", (160, 160), (0, 0, 0, 0))
+        ImageDraw.Draw(img).text((8, 8), emoji_char, font=fnt, embedded_color=True)
+        bbox = img.getbbox()
+        if bbox:
+            img = img.crop(bbox)
+        w, h = img.size
+        escala = tam / max(w, h)
+        img = img.resize((max(1, int(w * escala)), max(1, int(h * escala))),
+                         Image.LANCZOS)
+        nome = "_".join(str(ord(c)) for c in emoji_char)
+        out = TMP_DIR / f"hookemoji_{nome}_{tam}.png"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        img.save(str(out))
+        return out
+    except Exception as e:
+        log.warning(f"   ⚠️  Emoji colorido '{emoji_char}' falhou: {e}")
+        return None
+
+
 def _criar_camadas_topo(dur_total: float, hook_txt: str, mp) -> list:
     """
     Monta a ZONA SUPERIOR do template topshop, fiel ao @topshop._:
@@ -822,7 +909,10 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp) -> list:
 
     # ── Hook com SOMBRA + texto branco — na faixa preta acima do vídeo ──
     hook_y = 198   # faixa preta de cima, abaixo da marca
-    sombra = _textclip_robusto(TextClip, hook_txt, font_size=38,
+    # separa 1 emoji do texto: o hook fica limpo (sem "tofu" da fonte) e o
+    # emoji vai COLORIDO à parte, ao final da frase (Noto Color Emoji).
+    _emoji_hook, hook_txt_limpo = _separar_emoji_hook(hook_txt)
+    sombra = _textclip_robusto(TextClip, hook_txt_limpo, font_size=38,
                                color="black", stroke_width=0, stroke_color="black",
                                largura_frac=0.9, fonte=fonte_bold)
     if sombra is not None:
@@ -831,7 +921,7 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp) -> list:
         sombra = _with_start(sombra, 0.0)
         sombra = _with_position(sombra, ("center", hook_y + 4))
         camadas.append(sombra)
-    hook = _textclip_robusto(TextClip, hook_txt, font_size=38,
+    hook = _textclip_robusto(TextClip, hook_txt_limpo, font_size=38,
                              color="white", stroke_width=3, stroke_color="black",
                              largura_frac=0.9, fonte=fonte_bold)
     if hook is not None:
@@ -839,8 +929,32 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp) -> list:
         hook = _with_start(hook, 0.0)
         hook = _with_position(hook, ("center", hook_y))
         camadas.append(hook)
-        log.info(f"   📌 Hook: \"{hook_txt}\"")
-        # (Emoji do hook removido — hook fica limpo, só o texto com sombra.)
+        log.info(f"   📌 Hook: \"{hook_txt_limpo}\"")
+        # ── Emoji COLORIDO ao final do hook (nunca quebra o vídeo se falhar) ──
+        if _emoji_hook:
+            try:
+                _etam = 48
+                _epath = _emoji_colorido_png(_emoji_hook, _etam)
+                if _epath is not None:
+                    _larg_txt = None
+                    _med = _textclip_justo(TextClip, hook_txt_limpo, 38, fonte_bold)
+                    if _med is not None:
+                        _larg_txt = _med.w
+                        try: _med.close()
+                        except Exception: pass
+                    if _larg_txt:
+                        _ex = int(LARGURA / 2 + _larg_txt / 2 + 14)
+                    else:
+                        _ex = int(LARGURA * 0.72)
+                    _ex = max(10, min(_ex, LARGURA - _etam - 10))
+                    _emo = ImageClip(str(_epath))
+                    _emo = _with_duration(_emo, dur_total)
+                    _emo = _with_start(_emo, 0.0)
+                    _emo = _with_position(_emo, (_ex, hook_y - 8))
+                    camadas.append(_emo)
+                    log.info(f"   ✨ Emoji do hook '{_emoji_hook}' em x={_ex}")
+            except Exception as e:
+                log.warning(f"   ⚠️  Emoji do hook falhou (segue sem ele): {e}")
 
     return camadas
 
