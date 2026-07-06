@@ -166,5 +166,78 @@
     "O final me surpreendeu.",
     "Confia em mim por 10 segundos.",
     "Isso resolveu um problema que eu tinha há anos."
-  ]
+  ],
+  "_sobre_gatilhos": "Hooks por GATILHO psicológico. O Jarvis pontua o produto (sinais_produto) e escolhe o gatilho mais forte, depois uma frase dele. Mais natural que sortear por nicho.",
+  "gatilhos": {
+    "curiosidade": [
+      "Eu não fazia ideia que isso existia...",
+      "Como ninguém me mostrou isso antes?",
+      "Como ninguém fala desse produto?",
+      "Pouquíssimas pessoas conhecem isso.",
+      "O segredo que quase ninguém conhece.",
+      "Pouca gente conhece isso."
+    ],
+    "dor": [
+      "Você provavelmente está fazendo isso do jeito difícil.",
+      "Você está fazendo isso do jeito mais difícil.",
+      "Isso resolveu um problema que eu tinha há anos.",
+      "Isso resolve um problema chato.",
+      "Depois que comprei isso, nunca mais passei raiva.",
+      "Como eu vivia sem isso?"
+    ],
+    "economia": [
+      "Não acredito que isso custa tão barato.",
+      "Isso parece caro, mas não é.",
+      "Isso custa menos do que parece.",
+      "Não acredito que pagava caro antes.",
+      "Vale cada centavo.",
+      "Vale muito mais do que custa."
+    ],
+    "transformacao": [
+      "Olha a diferença depois de usar isso.",
+      "O antes e depois impressiona.",
+      "Isso mudou minha rotina.",
+      "Isso muda completamente a experiência.",
+      "Depois disso, nada foi igual.",
+      "Nunca mais foi o mesmo depois disso."
+    ],
+    "prova_social": [
+      "Todo mundo está falando disso.",
+      "A internet está comprando isso.",
+      "Esse produto viralizou por um motivo.",
+      "A internet descobriu esse produto.",
+      "O TikTok me convenceu a comprar...",
+      "Todo mundo pergunta onde comprei."
+    ],
+    "surpresa": [
+      "Achei que era golpe até testar.",
+      "Achei que era propaganda... até testar.",
+      "Eu não esperava que fosse tão bom.",
+      "Isso parece mentira, mas funciona.",
+      "O final me surpreendeu.",
+      "Achei que era exagero... não era."
+    ],
+    "fomo": [
+      "Isso deveria ser obrigatório.",
+      "Confia em mim por 10 segundos.",
+      "Olha isso até o final.",
+      "Espera até ver o resultado.",
+      "Você vai querer um depois de ver isso.",
+      "Você vai se perguntar como viveu sem isso."
+    ]
+  },
+  "sinais_produto": {
+    "dor": ["organiz", "bagunca", "bagunça", "espaco", "espaço", "cabo", "cabos",
+            "problema", "dificil", "difícil", "perde", "sujeira", "aperta", "embola",
+            "vazamento", "entop", "protetor", "vedante"],
+    "economia": ["barato", "custa", "preco", "preço", "promo", "vale", "centavo",
+                 "economiza", "economico", "econômico", "kit", "combo"],
+    "transformacao": ["antes", "depois", "muda", "transforma", "renova", "glow",
+                      "resultado", "clareia", "modela", "reduz"],
+    "surpresa": ["surreal", "incrivel", "incrível", "impressiona", "futuro",
+                 "galaxy", "projetor", "rgb", "led", "brilha", "neon", "holog"],
+    "prova_social": ["viral", "tiktok", "famoso", "trend", "tendencia", "tendência",
+                     "queridinho"],
+    "curiosidade": ["secreto", "escondid", "oculto", "descobr", "inusitad", "raro"]
+  }
 }

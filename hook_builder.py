@@ -128,6 +128,30 @@ def _escolher_hook_biblioteca(pool: list, evitar_norm: str) -> Optional[str]:
     _registrar_recente(escolha)
     return escolha
 
+
+def _escolher_gatilho(produto: str, bib: dict) -> Optional[str]:
+    """Pontua o produto pelos 'sinais_produto' e escolhe o GATILHO psicológico
+    mais forte (com desempate aleatório). Sem sinal → gatilho aleatório.
+    É o que deixa o hook 'combinar' com o produto em vez de ser sorteado seco."""
+    gatilhos = bib.get("gatilhos") or {}
+    if not gatilhos:
+        return None
+    sinais = bib.get("sinais_produto") or {}
+    p = _normalizar(produto)
+    scores = {}
+    for gat, palavras in sinais.items():
+        if gat not in gatilhos:
+            continue
+        s = sum(1 for kw in palavras if kw in p)
+        if s:
+            scores[gat] = s
+    if scores:
+        topo = max(scores.values())
+        candidatos = [g for g, v in scores.items() if v == topo]
+        return random.choice(candidatos)
+    # sem sinal claro → sorteia um gatilho (mantém variedade)
+    return random.choice(list(gatilhos.keys()))
+
 # Fallback interno de detecção (não depende do copy_adapter).
 # Inclui famílias que o copy_adapter NÃO cobre (eletro, tech genérico) pra
 # essas pararem de cair no fallback fixo.
@@ -392,15 +416,20 @@ def construir_hook(produto: str,
     if isinstance(plano, dict):
         categoria_hint = str(plano.get("categoria") or "")
 
-    # 2) BIBLIOTECA de hooks (frases fortes) — nicho + universais, anti-repetição
+    # 2) BIBLIOTECA 2.0 — pontua o produto → escolhe o GATILHO → escolhe a frase
     bib = _carregar_biblioteca()
     if bib:
         nicho = _nicho_do_produto(produto, categoria_hint)
         universais = bib.get("universais", [])
+        pool = []
+        # 2a) gatilho psicológico (frases que "combinam" com o produto)
+        gat = _escolher_gatilho(produto, bib)
+        if gat:
+            pool += bib.get("gatilhos", {}).get(gat, [])
+        # 2b) tempera com o nicho (relevância do tema) + universais de reserva
         if nicho and nicho in bib.get("nichos", {}):
-            # peso pro nicho: entra 2x + universais, mais chance de casar o tema
-            pool = bib["nichos"][nicho] * 2 + universais
-        else:
+            pool += bib["nichos"][nicho]
+        if not pool:
             pool = list(universais)
         escolhido = _escolher_hook_biblioteca(pool, leg_norm)
         if escolhido:
