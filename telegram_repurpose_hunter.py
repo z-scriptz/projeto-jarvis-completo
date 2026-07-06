@@ -1032,6 +1032,23 @@ def _resolver_link_shopee(url: str):
     return None
 
 
+# Termos que são PROPAGANDA do próprio canal (não produto) — hunter ignora.
+_TERMOS_SPAM = (
+    "comiss", "ebook", "e-book", "achaflix", "mentoria", "cupom", "assinatura",
+    "sorteio", "grupo vip", "acesso vip", "canal ", "pagamento", "10 pins",
+    "entrar no grupo", "link na bio", "clique aqui", "afiliad",
+)
+
+
+def _termo_eh_spam(termo: str) -> bool:
+    """True se o termo é promo/spam do canal (comissão, ebook, grupo vip...)
+    em vez de um produto real."""
+    if not termo:
+        return True
+    t = termo.lower()
+    return any(s in t for s in _TERMOS_SPAM)
+
+
 async def processar_mensagem_telegram(msg, sub_id: str = "hunter_radar"):
     if not getattr(msg, "text", None):
         return None
@@ -1046,6 +1063,9 @@ async def processar_mensagem_telegram(msg, sub_id: str = "hunter_radar"):
     termo = extrair_termo_produto(texto_para_extracao)
     if not termo:
         log.warning("Nenhum termo de produto extraído. Ignorando.")
+        return None
+    if _termo_eh_spam(termo):
+        log.info(f"Termo ignorado (promo/spam do canal, não produto): {termo!r}")
         return None
     log.info(f"Termo do produto: {termo!r}")
     atualizar_produto(termo, status="processando", origem="telegram_hunter")
