@@ -22,7 +22,9 @@
 # Sem custo, sem IA. Reusa a detecção de categoria do Copy Adapter.
 
 import re
+import json
 import random
+from pathlib import Path
 from typing import Optional
 
 try:
@@ -30,6 +32,101 @@ try:
     _COPY_OK = True
 except Exception:
     _COPY_OK = False
+
+# ── Biblioteca de hooks (frases fortes) — arquivo JSON ao lado deste módulo ──
+_BIBLIOTECA_PATH = Path(__file__).resolve().parent / "hooks_biblioteca.json"
+# memória dos hooks usados recentemente (evita repetir no feed)
+_RECENTES_PATH = Path(__file__).resolve().parent.parent / "shared" / "content_plans" / "hooks_recentes.json"
+_RECENTES_MEMORIA = 40          # quantos hooks recentes lembrar
+_biblioteca_cache = None
+
+# Famílias que o detector atual reporta → nicho da biblioteca nova
+_FAMILIA_PARA_NICHO = {
+    "casa_utilidade": "casa", "iluminacao_led": "casa",
+    "cozinha_utensilio": "cozinha",
+    "tech_acessorio": "tech", "tech_limpeza": "tech",
+    "beleza_skincare": "beleza", "beleza_maquiagem": "beleza",
+    "pet_acessorio": "pets",
+    "fitness_geral": "academia", "fitness_moda": "moda",
+    # aliases diretos
+    "casa": "casa", "cozinha": "cozinha", "tech": "tech", "eletro": "tech",
+    "beleza": "beleza", "pet": "pets", "fitness": "academia", "moda": "moda",
+    "led": "casa", "iluminacao": "casa",
+}
+
+# Nichos novos que o detector de família NÃO cobre — detecção por palavra-chave
+_NICHO_KEYWORDS_EXTRA = [
+    (("carro", "moto ", "automot", "pneu", "volante", "farol", "garagem",
+      "veicul", "capacete", "carreta", "caminhon"), "auto"),
+    (("game", "gamer", "console", "xbox", "playstation", "ps5", "ps4",
+      "joystick", "headset gamer"), "games"),
+    (("celular", "smartphone", "iphone", "android", "capinha", "capa de celular",
+      "pelicula", "película", "suporte veicular"), "celular"),
+    (("presente", "gift", "aniversario", "aniversário", "namorad"), "presentes"),
+]
+
+
+def _carregar_biblioteca() -> Optional[dict]:
+    """Lê e cacheia a biblioteca de hooks (JSON). None se não existir/inválida."""
+    global _biblioteca_cache
+    if _biblioteca_cache is not None:
+        return _biblioteca_cache or None
+    try:
+        dados = json.loads(_BIBLIOTECA_PATH.read_text(encoding="utf-8"))
+        if isinstance(dados, dict) and dados.get("nichos"):
+            _biblioteca_cache = dados
+            return dados
+    except Exception:
+        pass
+    _biblioteca_cache = {}   # marca "já tentou" (não fica relendo)
+    return None
+
+
+def _ler_recentes() -> list:
+    try:
+        return json.loads(_RECENTES_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+
+
+def _registrar_recente(hook: str):
+    try:
+        recentes = _ler_recentes()
+        recentes.append(hook)
+        recentes = recentes[-_RECENTES_MEMORIA:]
+        _RECENTES_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _RECENTES_PATH.write_text(json.dumps(recentes, ensure_ascii=False),
+                                  encoding="utf-8")
+    except Exception:
+        pass   # memória é bônus; nunca quebra a geração do hook
+
+
+def _nicho_do_produto(produto: str, categoria_hint: str = "") -> Optional[str]:
+    """Descobre o nicho da biblioteca pro produto (auto/games/celular por
+    palavra-chave; senão mapeia a família detectada)."""
+    p = _normalizar(produto)
+    for kws, nicho in _NICHO_KEYWORDS_EXTRA:
+        if any(k in p for k in kws):
+            return nicho
+    fam = _detectar_categoria(produto, categoria_hint)
+    if fam and fam in _FAMILIA_PARA_NICHO:
+        return _FAMILIA_PARA_NICHO[fam]
+    return None
+
+
+def _escolher_hook_biblioteca(pool: list, evitar_norm: str) -> Optional[str]:
+    """Sorteia da lista evitando: (a) igual à legenda, (b) usados recentemente.
+    Se tudo estiver 'gasto', relaxa a regra de recentes."""
+    recentes = set(_ler_recentes())
+    frescos = [h for h in pool
+               if _normalizar(h) != evitar_norm and h not in recentes]
+    if not frescos:
+        frescos = [h for h in pool if _normalizar(h) != evitar_norm]
+    if not frescos:
+        return None
+    escolha = random.choice(frescos)
+    _registrar_recente(escolha)
+    return escolha
 
 # Fallback interno de detecção (não depende do copy_adapter).
 # Inclui famílias que o copy_adapter NÃO cobre (eletro, tech genérico) pra
@@ -295,14 +392,28 @@ def construir_hook(produto: str,
     if isinstance(plano, dict):
         categoria_hint = str(plano.get("categoria") or "")
 
-    # 2) categoria → sorteia
+    # 2) BIBLIOTECA de hooks (frases fortes) — nicho + universais, anti-repetição
+    bib = _carregar_biblioteca()
+    if bib:
+        nicho = _nicho_do_produto(produto, categoria_hint)
+        universais = bib.get("universais", [])
+        if nicho and nicho in bib.get("nichos", {}):
+            # peso pro nicho: entra 2x + universais, mais chance de casar o tema
+            pool = bib["nichos"][nicho] * 2 + universais
+        else:
+            pool = list(universais)
+        escolhido = _escolher_hook_biblioteca(pool, leg_norm)
+        if escolhido:
+            return escolhido
+
+    # 3) categoria → banco curto antigo (rede de segurança)
     categoria = _detectar_categoria(produto, categoria_hint)
     if categoria and categoria in HOOKS_CATEGORIA:
         escolhido = _escolher_diferente(HOOKS_CATEGORIA[categoria], leg_norm)
         if escolhido:
             return escolhido
 
-    # 3) fallback → sorteia (não mais o índice 0 fixo)
+    # 4) fallback geral → sorteia (não mais o índice 0 fixo)
     escolhido = _escolher_diferente(HOOK_FALLBACK, leg_norm)
     if escolhido:
         return escolhido
