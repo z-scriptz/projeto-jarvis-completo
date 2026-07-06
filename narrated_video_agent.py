@@ -991,10 +991,17 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp) -> list:
                 _emo = ImageClip(str(_epath))
                 _emo = _with_duration(_emo, dur_total)
                 _emo = _with_start(_emo, 0.0)
-                # alinha o emoji com a linha do texto (topo ~= topo do texto)
-                _emo = _with_position(_emo, (_ex, _y_ult + 2))
+                # centraliza o emoji NA ALTURA da linha (a caixa do texto tem
+                # respiro; colar no topo deixava o emoji "pra cima"). Usa a
+                # altura real do clip da última linha pra alinhar com o texto.
+                _alt_linha = getattr(_hk, "h", None) if _hk is not None else None
+                if _alt_linha:
+                    _ey = int(_y_ult + max(0, (_alt_linha - HK_EMOJI_TAM) / 2))
+                else:
+                    _ey = _y_ult + 8
+                _emo = _with_position(_emo, (_ex, _ey))
                 camadas.append(_emo)
-                log.info(f"   ✨ Emoji '{_emoji_hook}' na linha {_n} (x={_ex})")
+                log.info(f"   ✨ Emoji '{_emoji_hook}' na linha {_n} (x={_ex}, y={_ey})")
         except Exception as e:
             log.warning(f"   ⚠️  Emoji do hook falhou (segue sem ele): {e}")
 
