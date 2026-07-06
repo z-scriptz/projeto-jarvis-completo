@@ -932,7 +932,7 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp) -> list:
     # >>> Constantes tunáveis (ajuste fino olhando 1 vídeo de teste) <<<
     HK_FONT         = 38
     HK_Y_1LINHA     = 198     # y quando cabe em 1 linha
-    HK_Y_2LINHAS    = 158     # y da 1ª linha quando quebra em 2
+    HK_Y_2LINHAS    = 180     # y da 1ª linha quando quebra em 2 (abaixo do @)
     HK_ALTURA_LINHA = 52      # distância vertical entre as 2 linhas
     HK_MAX_LARG_1L  = int(LARGURA * 0.86)   # acima disso, quebra em 2 linhas
     HK_EMOJI_TAM    = 34     # ~= tamanho do texto (antes 48 = grandão demais)

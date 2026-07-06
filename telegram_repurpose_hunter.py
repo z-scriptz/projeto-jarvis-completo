@@ -192,7 +192,7 @@ CFG_GRANULADO          = 3
 CFG_LIMPAR_META        = True
 CFG_VELOCIDADE         = 1.01
 CFG_ZOOM_DIGITAL       = 0.01
-CFG_MIRROR_X           = True
+CFG_MIRROR_X           = False   # OFF: espelhar inverte o texto gravado no vídeo
 CFG_VINHETA            = True
 
 CFG_INTRO_IA           = False
