@@ -935,7 +935,7 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp) -> list:
     HK_Y_2LINHAS    = 158     # y da 1ª linha quando quebra em 2
     HK_ALTURA_LINHA = 52      # distância vertical entre as 2 linhas
     HK_MAX_LARG_1L  = int(LARGURA * 0.86)   # acima disso, quebra em 2 linhas
-    HK_EMOJI_TAM    = 48
+    HK_EMOJI_TAM    = 34     # ~= tamanho do texto (antes 48 = grandão demais)
 
     _emoji_hook, hook_txt_limpo = _separar_emoji_hook(hook_txt)
 
@@ -985,13 +985,14 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp) -> list:
                     _lw = _med2.w
                     try: _med2.close()
                     except Exception: pass
-                _ex = (int(LARGURA / 2 + _lw / 2 + 14) if _lw
+                _ex = (int(LARGURA / 2 + _lw / 2 + 8) if _lw
                        else int(LARGURA * 0.72))
                 _ex = max(10, min(_ex, LARGURA - HK_EMOJI_TAM - 10))
                 _emo = ImageClip(str(_epath))
                 _emo = _with_duration(_emo, dur_total)
                 _emo = _with_start(_emo, 0.0)
-                _emo = _with_position(_emo, (_ex, _y_ult - 8))
+                # alinha o emoji com a linha do texto (topo ~= topo do texto)
+                _emo = _with_position(_emo, (_ex, _y_ult + 2))
                 camadas.append(_emo)
                 log.info(f"   ✨ Emoji '{_emoji_hook}' na linha {_n} (x={_ex})")
         except Exception as e:
