@@ -859,7 +859,7 @@ def _reproduzir_video_sync(src: Path, dst: Path, produto: str,
             _mp_brand = _brand_mp_import()   # 7-tuple (inclui ColorClip, TextClip)
             hook_txt = (_HOOK[0](nome_produto, plano=plano)
                         if _HOOK_OK else "OLHA ISSO")
-            for camada in _criar_camadas_topo(alvo, hook_txt, _mp_brand):
+            for camada in _criar_camadas_topo(alvo, hook_txt, _mp_brand, produto=nome_produto):
                 if camada is not None:
                     overlays.append(camada)
             for camada in _criar_cta_fixo(alvo, _mp_brand):

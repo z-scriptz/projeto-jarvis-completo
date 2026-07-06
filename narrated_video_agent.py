@@ -842,7 +842,43 @@ def _quebrar_hook_2linhas(texto: str):
     return [l1, l2] if l2 else [l1]
 
 
-def _criar_camadas_topo(dur_total: float, hook_txt: str, mp) -> list:
+# Emoji colorido por NICHO do produto (1 codepoint = renderiza no Noto).
+_EMOJI_POR_PRODUTO = [
+    (("cozinha", "panela", "fritad", "air fryer", "utensil", "copo", "garrafa",
+      "talher", "fatiad", "ralad", "chaleira", "cafeteira", "liquidif",
+      "descasc", "jantar", "prato", "tigela", "faca"), "🍳"),
+    (("skincare", "beleza", "maquia", "batom", "perfume", "cabelo", "unha",
+      "pele", "hidrat", "serum", "sérum", "gloss", "corporal", "facial",
+      "labial"), "💄"),
+    (("pet", "cachorro", "gato", "aquari", "raç", "coleira", "comedouro"), "🐶"),
+    (("fone", "carregad", "cabo", "gadget", "led", "lumin", "eletron", "usb",
+      "bluetooth", "teclado", "mouse", "notebook", "smartwatch"), "🔌"),
+    (("fitness", "treino", "academ", "yoga", "muscula", "corrida", "emagrec",
+      "massage"), "💪"),
+    (("organiz", "closet", "guarda-roupa", "prateleira", "cabide", "gaveta",
+      "cesto"), "🧺"),
+    (("bebe", "bebê", "infantil", "criança", "banheira", "fralda", "mamadeira",
+      "brinquedo"), "🧸"),
+    (("roupa", "jaqueta", "camisa", "vestido", "calça", "tênis", "tamanco",
+      "chinelo", "bota", "meia", "modelador"), "👕"),
+    (("moto", "capacete", "carro", "automot", "bike", "bicicleta"), "🛵"),
+    (("limpeza", "esponja", "vassoura", "rodo", "escova"), "🧽"),
+]
+
+
+def _emoji_do_produto(produto: str):
+    """Emoji colorido que combina com o NICHO do produto (senão None)."""
+    if not produto:
+        return None
+    p = str(produto).lower()
+    for chaves, emo in _EMOJI_POR_PRODUTO:
+        if any(k in p for k in chaves):
+            return emo
+    return None
+
+
+def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
+                        produto: str = "") -> list:
     """
     Monta a ZONA SUPERIOR do template topshop, fiel ao @topshop._:
       - logo TS REDONDO no canto superior esquerdo
@@ -937,7 +973,10 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp) -> list:
     HK_MAX_LARG_1L  = int(LARGURA * 0.86)   # acima disso, quebra em 2 linhas
     HK_EMOJI_TAM    = 34     # ~= tamanho do texto (antes 48 = grandão demais)
 
-    _emoji_hook, hook_txt_limpo = _separar_emoji_hook(hook_txt)
+    _emoji_do_txt, hook_txt_limpo = _separar_emoji_hook(hook_txt)
+    # emoji combina com o NICHO do produto; se não achar nicho, usa o do
+    # próprio hook (ou 🔥 do fallback).
+    _emoji_hook = _emoji_do_produto(produto) or _emoji_do_txt
 
     # mede a largura numa linha só pra decidir 1 ou 2 linhas
     _larg_1l = None
@@ -1200,7 +1239,7 @@ def montar_video(produto: str, roteiro: dict, narracao_mp3: Path,
                     camadas.append(leg); abertos.append(leg); legendas_ok += 1
 
             # 4) Camadas do topo: logo + TopShop + selo + @ + hook
-            for camada in _criar_camadas_topo(dur_total, hook_txt, mp):
+            for camada in _criar_camadas_topo(dur_total, hook_txt, mp, produto=produto):
                 camadas.append(camada); abertos.append(camada)
 
             # 5) CTA fixo no rodapé
