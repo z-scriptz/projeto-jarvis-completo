@@ -997,11 +997,51 @@ def _limpar_links_terceiros(texto: str) -> str:
     return re.sub(r' +', ' ', texto_limpo).strip()
 
 
+# Link da Shopee que costuma vir na própria mensagem (curto ou normal, com ou
+# sem http:// na frente).
+_SHOPEE_LINK_RE = re.compile(
+    r'(?:https?://)?(?:s\.shopee\.com\.br|shope\.ee|shopee\.com\.br)/\S+', re.I)
+
+
+def _extrair_link_shopee(texto: str):
+    """Acha o 1º link da Shopee na mensagem (curto s.shopee/shope.ee ou normal).
+    É mais confiável do que re-buscar o produto pelo nome (que às vezes falha)."""
+    if not texto:
+        return None
+    m = _SHOPEE_LINK_RE.search(texto)
+    if not m:
+        return None
+    url = m.group(0).rstrip('.,);]}"\'')
+    if not url.lower().startswith("http"):
+        url = "https://" + url
+    return url
+
+
+def _resolver_link_shopee(url: str):
+    """Segue o redirect do link curto -> URL limpa do produto (sem query de
+    tracking de terceiro). Best-effort: se não resolver, retorna None."""
+    try:
+        import requests
+        r = requests.get(url, allow_redirects=True, timeout=12,
+                         headers={"User-Agent": "Mozilla/5.0 (Linux; Android 10)"})
+        final = (r.url or "").split("?")[0]
+        if "shopee.com.br" in final and final.rstrip("/") != url.rstrip("/"):
+            return final
+    except Exception:
+        log.debug("Não consegui resolver o link curto da Shopee (usa fallback).")
+    return None
+
+
 async def processar_mensagem_telegram(msg, sub_id: str = "hunter_radar"):
     if not getattr(msg, "text", None):
         return None
 
-    # limpeza preliminar de links/menções
+    # NOVO: o link da Shopee normalmente JÁ vem na mensagem. Usar ele é bem
+    # mais confiável do que re-buscar o produto pelo NOME (que falha quando o
+    # nome não bate na busca) — era por isso que muitos produtos eram perdidos.
+    link_na_msg = _extrair_link_shopee(msg.text)
+
+    # limpeza preliminar de links/menções (só pra extrair o NOME do produto)
     texto_para_extracao = _limpar_links_terceiros(msg.text)
     termo = extrair_termo_produto(texto_para_extracao)
     if not termo:
@@ -1010,22 +1050,31 @@ async def processar_mensagem_telegram(msg, sub_id: str = "hunter_radar"):
     log.info(f"Termo do produto: {termo!r}")
     atualizar_produto(termo, status="processando", origem="telegram_hunter")
 
-    # 1) Mineração Shopee + link
-    try:
-        mineracao = minerar_oportunidades(termo)
-    except Exception:
-        log.exception("Erro na mineração Shopee")
-        atualizar_produto(termo, status="erro", erro="falha mineração")
-        return None
+    url_shopee = None
+    mineracao = {}
 
-    if not mineracao.get("ok") or not mineracao.get("campeao"):
-        log.warning(f"{termo!r} não localizado na Shopee.")
-        atualizar_produto(termo, status="erro", erro="não localizado na Shopee")
-        return None
-    campeao = mineracao["campeao"]
-    url_shopee = campeao.get("product_link") or campeao.get("offer_link")
+    # 1a) PREFERIDO: link que veio na própria mensagem (resolve curto -> produto)
+    if link_na_msg:
+        url_shopee = _resolver_link_shopee(link_na_msg) or link_na_msg
+        log.info(f"Link da mensagem -> {url_shopee}")
+
+    # 1b) FALLBACK: minera por nome (só se a mensagem não trouxe link)
     if not url_shopee:
-        atualizar_produto(termo, status="erro", erro="sem URL no campeão Shopee")
+        try:
+            mineracao = minerar_oportunidades(termo)
+        except Exception:
+            log.exception("Erro na mineração Shopee")
+            atualizar_produto(termo, status="erro", erro="falha mineração")
+            return None
+        if not mineracao.get("ok") or not mineracao.get("campeao"):
+            log.warning(f"{termo!r} não localizado na Shopee (e sem link na msg).")
+            atualizar_produto(termo, status="erro", erro="não localizado na Shopee")
+            return None
+        campeao = mineracao["campeao"]
+        url_shopee = campeao.get("product_link") or campeao.get("offer_link")
+
+    if not url_shopee:
+        atualizar_produto(termo, status="erro", erro="sem URL Shopee")
         return None
 
     # gerar link de afiliado
