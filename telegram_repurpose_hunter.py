@@ -1052,6 +1052,7 @@ async def processar_mensagem_telegram(msg, sub_id: str = "hunter_radar"):
 
     url_shopee = None
     mineracao = {}
+    campeao = {}     # default: no caminho do link não há "campeão" da mineração
 
     # 1a) PREFERIDO: link que veio na própria mensagem (resolve curto -> produto)
     if link_na_msg:
