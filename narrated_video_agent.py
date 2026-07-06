@@ -823,6 +823,25 @@ def _emoji_colorido_png(emoji_char: str, tam: int):
         return None
 
 
+def _quebrar_hook_2linhas(texto: str):
+    """Divide o hook em 2 linhas equilibradas (corte na palavra mais perto do
+    meio). Retorna [linha] se tiver 1 palavra só. Base do layout 2-linhas."""
+    palavras = (texto or "").split()
+    if len(palavras) < 2:
+        return [texto]
+    total = len(texto)
+    acc, corte = 0, 1
+    for i, w in enumerate(palavras):
+        acc += len(w) + 1
+        if acc >= total / 2:
+            corte = i + 1
+            break
+    corte = max(1, min(corte, len(palavras) - 1))
+    l1 = " ".join(palavras[:corte])
+    l2 = " ".join(palavras[corte:])
+    return [l1, l2] if l2 else [l1]
+
+
 def _criar_camadas_topo(dur_total: float, hook_txt: str, mp) -> list:
     """
     Monta a ZONA SUPERIOR do template topshop, fiel ao @topshop._:
@@ -907,54 +926,76 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp) -> list:
         handle = _with_position(handle, (texto_x, logo_y + 42))
         camadas.append(handle)
 
-    # ── Hook com SOMBRA + texto branco — na faixa preta acima do vídeo ──
-    hook_y = 198   # faixa preta de cima, abaixo da marca
-    # separa 1 emoji do texto: o hook fica limpo (sem "tofu" da fonte) e o
-    # emoji vai COLORIDO à parte, ao final da frase (Noto Color Emoji).
+    # ── Hook com SOMBRA — 1 ou 2 linhas DENTRO da faixa preta, emoji na última ─
+    # Frase longa quebra em 2 linhas: a 1ª sobe, a 2ª fica embaixo, e o emoji
+    # COLORIDO vai ao final da última linha (igual você fazia na mão).
+    # >>> Constantes tunáveis (ajuste fino olhando 1 vídeo de teste) <<<
+    HK_FONT         = 38
+    HK_Y_1LINHA     = 198     # y quando cabe em 1 linha
+    HK_Y_2LINHAS    = 158     # y da 1ª linha quando quebra em 2
+    HK_ALTURA_LINHA = 52      # distância vertical entre as 2 linhas
+    HK_MAX_LARG_1L  = int(LARGURA * 0.86)   # acima disso, quebra em 2 linhas
+    HK_EMOJI_TAM    = 48
+
     _emoji_hook, hook_txt_limpo = _separar_emoji_hook(hook_txt)
-    sombra = _textclip_robusto(TextClip, hook_txt_limpo, font_size=38,
-                               color="black", stroke_width=0, stroke_color="black",
-                               largura_frac=0.9, fonte=fonte_bold)
-    if sombra is not None:
-        sombra = _with_opacity(sombra, 0.55)
-        sombra = _with_duration(sombra, dur_total)
-        sombra = _with_start(sombra, 0.0)
-        sombra = _with_position(sombra, ("center", hook_y + 4))
-        camadas.append(sombra)
-    hook = _textclip_robusto(TextClip, hook_txt_limpo, font_size=38,
-                             color="white", stroke_width=3, stroke_color="black",
-                             largura_frac=0.9, fonte=fonte_bold)
-    if hook is not None:
-        hook = _with_duration(hook, dur_total)
-        hook = _with_start(hook, 0.0)
-        hook = _with_position(hook, ("center", hook_y))
-        camadas.append(hook)
-        log.info(f"   📌 Hook: \"{hook_txt_limpo}\"")
-        # ── Emoji COLORIDO ao final do hook (nunca quebra o vídeo se falhar) ──
-        if _emoji_hook:
-            try:
-                _etam = 48
-                _epath = _emoji_colorido_png(_emoji_hook, _etam)
-                if _epath is not None:
-                    _larg_txt = None
-                    _med = _textclip_justo(TextClip, hook_txt_limpo, 38, fonte_bold)
-                    if _med is not None:
-                        _larg_txt = _med.w
-                        try: _med.close()
-                        except Exception: pass
-                    if _larg_txt:
-                        _ex = int(LARGURA / 2 + _larg_txt / 2 + 14)
-                    else:
-                        _ex = int(LARGURA * 0.72)
-                    _ex = max(10, min(_ex, LARGURA - _etam - 10))
-                    _emo = ImageClip(str(_epath))
-                    _emo = _with_duration(_emo, dur_total)
-                    _emo = _with_start(_emo, 0.0)
-                    _emo = _with_position(_emo, (_ex, hook_y - 8))
-                    camadas.append(_emo)
-                    log.info(f"   ✨ Emoji do hook '{_emoji_hook}' em x={_ex}")
-            except Exception as e:
-                log.warning(f"   ⚠️  Emoji do hook falhou (segue sem ele): {e}")
+
+    # mede a largura numa linha só pra decidir 1 ou 2 linhas
+    _larg_1l = None
+    _med = _textclip_justo(TextClip, hook_txt_limpo, HK_FONT, fonte_bold)
+    if _med is not None:
+        _larg_1l = _med.w
+        try: _med.close()
+        except Exception: pass
+    _linhas = (_quebrar_hook_2linhas(hook_txt_limpo)
+               if (_larg_1l and _larg_1l > HK_MAX_LARG_1L) else [hook_txt_limpo])
+
+    _n = len(_linhas)
+    _y0 = HK_Y_1LINHA if _n == 1 else HK_Y_2LINHAS
+    for _i, _linha in enumerate(_linhas):
+        _y = _y0 + _i * HK_ALTURA_LINHA
+        _somb = _textclip_robusto(TextClip, _linha, font_size=HK_FONT,
+                                  color="black", stroke_width=0, stroke_color="black",
+                                  largura_frac=0.92, fonte=fonte_bold)
+        if _somb is not None:
+            _somb = _with_opacity(_somb, 0.55)
+            _somb = _with_duration(_somb, dur_total)
+            _somb = _with_start(_somb, 0.0)
+            _somb = _with_position(_somb, ("center", _y + 4))
+            camadas.append(_somb)
+        _hk = _textclip_robusto(TextClip, _linha, font_size=HK_FONT,
+                                color="white", stroke_width=3, stroke_color="black",
+                                largura_frac=0.92, fonte=fonte_bold)
+        if _hk is not None:
+            _hk = _with_duration(_hk, dur_total)
+            _hk = _with_start(_hk, 0.0)
+            _hk = _with_position(_hk, ("center", _y))
+            camadas.append(_hk)
+    log.info(f"   📌 Hook ({_n}L): \"{hook_txt_limpo}\"")
+
+    # ── Emoji COLORIDO ao final da ÚLTIMA linha (nunca quebra o vídeo) ──
+    if _emoji_hook:
+        try:
+            _epath = _emoji_colorido_png(_emoji_hook, HK_EMOJI_TAM)
+            if _epath is not None:
+                _ult = _linhas[-1]
+                _y_ult = _y0 + (_n - 1) * HK_ALTURA_LINHA
+                _lw = None
+                _med2 = _textclip_justo(TextClip, _ult, HK_FONT, fonte_bold)
+                if _med2 is not None:
+                    _lw = _med2.w
+                    try: _med2.close()
+                    except Exception: pass
+                _ex = (int(LARGURA / 2 + _lw / 2 + 14) if _lw
+                       else int(LARGURA * 0.72))
+                _ex = max(10, min(_ex, LARGURA - HK_EMOJI_TAM - 10))
+                _emo = ImageClip(str(_epath))
+                _emo = _with_duration(_emo, dur_total)
+                _emo = _with_start(_emo, 0.0)
+                _emo = _with_position(_emo, (_ex, _y_ult - 8))
+                camadas.append(_emo)
+                log.info(f"   ✨ Emoji '{_emoji_hook}' na linha {_n} (x={_ex})")
+        except Exception as e:
+            log.warning(f"   ⚠️  Emoji do hook falhou (segue sem ele): {e}")
 
     return camadas
 
