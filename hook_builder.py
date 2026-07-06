@@ -407,7 +407,7 @@ def construir_hook(produto: str,
     # 1) hook explícito do plano (se curto o suficiente pra ser gancho)
     if isinstance(plano, dict):
         h = plano.get("hook")
-        if isinstance(h, str) and h.strip() and len(h.split()) <= 6:
+        if isinstance(h, str) and h.strip() and len(h.split()) <= 14:
             if _normalizar(h) != leg_norm:
                 return h.strip()
 

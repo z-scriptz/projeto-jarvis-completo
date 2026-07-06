@@ -411,12 +411,17 @@ _HASHTAGS_CAT = {
     "fitness": ["#fitness", "#treino", "#saude"],
     "pet":     ["#pet", "#cachorro", "#gato", "#petlovers"],
 }
-_LEGENDA_TEMPLATES = [
-    "{hook} Esse {nome} virou meu queridinho 😍",
-    "Precisava te mostrar esse {nome}! {hook}",
-    "Para de procurar — achei o {nome} ideal. {hook}",
-    "{hook} O {nome} que tá viralizando 🔥",
-    "Não acredito no preço desse {nome}! {hook}",
+# Frases que DESENVOLVEM o hook na legenda (2ª linha), com o nome do produto.
+# A legenda começa com o MESMO hook do vídeo e depois desenvolve — aumenta a
+# retenção no feed (a pessoa lê e continua assistindo).
+_LEGENDA_DESENVOLVIMENTO = [
+    "Achei esse {nome} e sinceramente me surpreendi 👇",
+    "Precisava te mostrar esse {nome}, olha só 👇",
+    "Esse {nome} tá dando o que falar — e não é à toa 👇",
+    "Testei esse {nome} e virou queridinho 😍👇",
+    "Se você ainda não conhece esse {nome}, presta atenção 👇",
+    "Esse {nome} resolve de verdade e ainda é baratinho 👇",
+    "Corre ver esse {nome} antes que acabe 👇",
 ]
 
 
@@ -437,9 +442,12 @@ def _hashtags_para(categoria: str) -> str:
 
 
 def _legenda_dinamica(nome: str, hook: str) -> str:
-    nome_curto = " ".join((nome or "produto").split()[:4])
-    tmpl = random.choice(_LEGENDA_TEMPLATES)
-    return tmpl.format(hook=hook or "Olha isso!", nome=nome_curto).strip()
+    """Legenda = MESMO hook do vídeo + frase que o desenvolve (na linha de
+    baixo). Ex: 'Como ninguém me mostrou isso antes?\\n\\nAchei esse ... 👇'."""
+    nome_curto = " ".join((nome or "produto").split()[:5])
+    hook = (hook or "Olha isso!").strip()
+    desenv = random.choice(_LEGENDA_DESENVOLVIMENTO).format(nome=nome_curto)
+    return f"{hook}\n\n{desenv}"
 
 
 # ══════════════════════════════════════════════════════════════════════════
