@@ -171,6 +171,7 @@ SESSION_PATH  = BASE_DIR / "shared" / "jarvis_hunter_session"
 INBOX_VIDEOS  = BASE_DIR / "assets" / "inbox" / "videos"
 SHARED_PLANS  = BASE_DIR / "shared" / "content_plans"
 SEEN_DB       = BASE_DIR / "shared" / "hunter_seen.sqlite"   # sqlite (msg_id TEXT)
+SITE_FILA     = BASE_DIR / "shared" / "produtos_fila.json"   # vitrine do site (bio)
 VIDEO_TIMEOUT = 1200  # VPS de CPU fraco renderiza devagar; margem generosa
 
 # Facebook token (opcional) para Ad Library API
@@ -1057,6 +1058,36 @@ def _termo_eh_spam(termo: str) -> bool:
     return any(s in t for s in _TERMOS_SPAM)
 
 
+def _registrar_no_site(nome: str, link: str, imagem: str = "", max_itens: int = 80):
+    """Grava o produto + link de afiliado no produtos_fila.json que o SITE
+    (bio_page_builder) lê. É a PONTE que faz a bio (topshopoficial) mostrar
+    EXATAMENTE o produto do vídeo — sem isso, o post e o site ficam descasados
+    e a comissão vaza. Mais recente primeiro, sem duplicar link, cap em max_itens."""
+    if not link:
+        return
+    try:
+        import json as _json
+        fila = []
+        if SITE_FILA.exists():
+            try:
+                fila = _json.loads(SITE_FILA.read_text(encoding="utf-8")) or []
+            except Exception:
+                fila = []
+        if not isinstance(fila, list):
+            fila = []
+        fila = [i for i in fila if isinstance(i, dict) and i.get("link") != link]
+        fila.insert(0, {
+            "produto": nome, "campeao": nome, "link": link,
+            "imagem": imagem or "", "classe": "", "ts": int(time.time()),
+        })
+        fila = fila[:max_itens]
+        SITE_FILA.parent.mkdir(parents=True, exist_ok=True)
+        _salvar_json_atomico(SITE_FILA, fila)
+        log.info(f"   🌐 Vitrine do site atualizada: '{nome}' (produtos_fila)")
+    except Exception:
+        log.exception("Falha ao registrar produto no site")
+
+
 async def processar_mensagem_telegram(msg, sub_id: str = "hunter_radar"):
     if not getattr(msg, "text", None):
         return None
@@ -1258,6 +1289,10 @@ async def processar_mensagem_telegram(msg, sub_id: str = "hunter_radar"):
         log.info(f"🚚 Esteira abastecida: {pp_dir / 'video.mp4'}")
     except Exception:
         log.exception("Falha ao abastecer pronto_para_postar")
+
+    # 8) PONTE PRO SITE — grava o produto + link de afiliado na vitrine que o
+    # site lê, pra a bio mostrar o mesmo produto do vídeo (fecha o funil $).
+    _registrar_no_site(nome_produto, meu_link)
 
     return plano
 
