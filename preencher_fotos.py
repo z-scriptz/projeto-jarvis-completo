@@ -13,6 +13,30 @@ import time
 import tempfile
 from pathlib import Path
 
+
+def _carregar_env():
+    """Roda 'na mao' (fora do daemon) nao carrega o .env sozinho — a API de
+    afiliado precisa de SHOPEE_APP_ID/SECRET. Carrega o .env do ~/jarvis aqui,
+    sem sobrescrever o que ja estiver no ambiente."""
+    for cand in (Path(".env"), Path(__file__).resolve().parent / ".env"):
+        if not cand.exists():
+            continue
+        for linha in cand.read_text(encoding="utf-8").splitlines():
+            linha = linha.strip()
+            if not linha or linha.startswith("#") or "=" not in linha:
+                continue
+            if linha.lower().startswith("export "):
+                linha = linha[7:]
+            chave, _, valor = linha.partition("=")
+            chave = chave.strip()
+            valor = valor.strip().strip('"').strip("'")
+            if chave and chave not in os.environ:
+                os.environ[chave] = valor
+        break
+
+
+_carregar_env()
+
 # API oficial de afiliado do projeto (flat OU package)
 try:
     from integrations.shopee_affiliate import obter_dados_produto
