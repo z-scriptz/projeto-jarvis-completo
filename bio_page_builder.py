@@ -76,14 +76,48 @@ def _titulo_legivel(titulo: str, limite: int = 64) -> str:
 
 
 def _carregar_produtos() -> list:
+    """Junta as fontes SEM duplicar. PRIORIDADE pros produtos que o Jarvis
+    REALMENTE postou (produtos_fila.json — já vêm com o link de afiliado, mais
+    recente primeiro); depois complementa com a curadoria (validacao_fila)."""
     produtos = []
+    vistos = set()
+
+    def _add(p):
+        chave = (p.get("link") or "").strip() or (p.get("nome") or "").strip().lower()
+        if not chave or chave in vistos:
+            return
+        vistos.add(chave)
+        produtos.append(p)
+
+    # 1) PRIORIDADE: produtos_fila.json (o que foi postado — com link pronto)
+    if JSON_FILA.exists():
+        try:
+            with open(JSON_FILA, encoding="utf-8") as f:
+                fila = json.load(f)
+            for item in fila:
+                if isinstance(item, dict):
+                    _add({
+                        "nome": item.get("produto", ""),
+                        "titulo": item.get("campeao", "") or item.get("produto", ""),
+                        "classe": item.get("classe", ""),
+                        "comissao_valor": item.get("comissao_valor", 0) or 0,
+                        "imagem": item.get("imagem", ""),
+                        "link": item.get("link", ""),
+                    })
+                elif isinstance(item, str):
+                    _add({"nome": item, "titulo": item, "classe": "",
+                          "comissao_valor": 0, "imagem": "", "link": ""})
+        except Exception as e:
+            log.warning(f"   erro lendo fila JSON: {e}")
+
+    # 2) COMPLEMENTO: validacao_fila.json (curadoria), sem duplicar
     if VALIDACAO.exists():
         try:
             with open(VALIDACAO, encoding="utf-8") as f:
                 rel = json.load(f)
             for p in rel.get("produtos", []):
                 if p.get("classe") in ("mina_ouro", "ok") and p.get("campeao"):
-                    produtos.append({
+                    _add({
                         "nome": p.get("produto", ""),
                         "titulo": p.get("campeao", ""),
                         "classe": p.get("classe", ""),
@@ -92,25 +126,7 @@ def _carregar_produtos() -> list:
                     })
         except Exception as e:
             log.warning(f"   erro lendo validação: {e}")
-    if not produtos and JSON_FILA.exists():
-        try:
-            with open(JSON_FILA, encoding="utf-8") as f:
-                fila = json.load(f)
-            for item in fila:
-                if isinstance(item, dict):
-                    produtos.append({
-                        "nome": item.get("produto", ""),
-                        "titulo": item.get("campeao", "") or item.get("produto", ""),
-                        "classe": item.get("classe", ""),
-                        "comissao_valor": 0,
-                        "imagem": item.get("imagem", ""),
-                        "link": item.get("link", ""),
-                    })
-                elif isinstance(item, str):
-                    produtos.append({"nome": item, "titulo": item, "classe": "",
-                                     "comissao_valor": 0, "imagem": "", "link": ""})
-        except Exception as e:
-            log.warning(f"   erro lendo fila JSON: {e}")
+
     return produtos
 
 
