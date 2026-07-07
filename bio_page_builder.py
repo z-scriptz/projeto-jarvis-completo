@@ -43,19 +43,41 @@ GRUPO_TELEGRAM = "https://t.me/achadinhosrelampagoh"
 
 # ===== Categorias pros filtros (inferidas pelo nome) =====
 _CATEGORIAS_FILTRO = [
-    ("Carro",   ("automotivo", "veicular", "carro")),
+    ("Games",   ("xbox", "playstation", "nintendo", "ps4", "ps5", "console",
+                 "gamer", "joystick", "controle de", "video game", "videogame",
+                 "dualshock", "switch")),
+    ("Carro",   ("automotivo", "veicular", "carro", "moto", "pneu", "painel",
+                 "volante", "veicul", "aspirador de carro", "calibrador")),
     ("Fitness", ("massageador", "massagem", "yoga", "pilates", "faixas", "corda",
                  "pular", "rolo", "pistola", "cervical", "fisioterapia",
-                 "academia", "treino", "elastica", "elástica")),
+                 "academia", "treino", "elastica", "elástica", "halter", "peso",
+                 "abdominal", "musculac", "musculaç", "luva de treino")),
     ("Beleza",  ("modelador", "cachos", "escova", "secadora", "alisadora",
-                 "maquiagem", "skincare", "cravos", "espelho", "cabelo")),
+                 "maquiagem", "skincare", "cravos", "espelho", "cabelo", "unha",
+                 "perfume", "batom", "esmalte", "depilador", "barbeador",
+                 "sobrancelha", "pelos", "hidratante", "make")),
     ("Cozinha", ("cortador", "legumes", "liquidificador", "balanca", "balança",
                  "garrafa", "caneca", "termica", "térmica", "descascador",
-                 "processador", "fatiador", "espremedor", "água", "agua")),
+                 "processador", "fatiador", "espremedor", "água", "agua",
+                 "panela", "faca", "prato", "copo", "tigela", "ralador", "forma",
+                 "air fryer", "fritadeira", "tábua", "tabua", "pote", "mixer",
+                 "sanduicheira", "cafeteira", "chaleira", "talher", "colher")),
     ("Tech",    ("mouse", "power bank", "powerbank", "carregador", "projetor",
-                 "notebook", "cabo", "fone", "usb", "celular", "induç", "induc")),
+                 "notebook", "cabo", "fone", "usb", "celular", "induç", "induc",
+                 "teclado", "headset", "camera", "câmera", "ring light",
+                 "microfone", "smartwatch", "relogio", "relógio", "tablet",
+                 "ssd", "pendrive", "bluetooth", "monitor", "adaptador", "hub",
+                 "roteador", "smart", "led rgb")),
+    ("Pet",     ("pet", "cachorro", "gato", "cão", "coleira", "ração", "racao",
+                 "comedouro", "aquario", "aquário", "arranhador")),
+    ("Infantil",("bebê", "bebe", "criança", "crianca", "infantil", "brinquedo",
+                 "fralda", "mamadeira")),
     ("Casa",    ("umidificador", "luminaria", "luminária", "led", "organizador",
-                 "aspirador", "tapete", "vela", "porta", "suporte")),
+                 "aspirador", "tapete", "vela", "porta", "suporte", "lixeira",
+                 "pedal", "litro", "sacola", "cesto", "cabide", "gancho",
+                 "prateleira", "cortina", "toalha", "almofada", "edredom",
+                 "lençol", "lencol", "vaso", "balde", "limpeza", "pano",
+                 "ferramenta", "chave", "mangueira", "varal", "capacho")),
 ]
 
 
@@ -354,7 +376,12 @@ _TEMPLATE = r"""<!DOCTYPE html>
   .grid-3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 24px; }
   .grid-2 { display: grid; grid-template-columns: repeat(2,1fr); gap: 24px; }
   @media (max-width: 860px) { .grid-3, .grid-2 { grid-template-columns: 1fr 1fr; } }
-  @media (max-width: 560px) { .grid-3, .grid-2 { grid-template-columns: 1fr; } }
+  /* no celular os cards de PRODUTO ficam 2-por-linha (menores/mais "shopáveis");
+     só os cards de texto (grid-2) é que passam pra 1 coluna. */
+  @media (max-width: 560px) {
+    .grid-2 { grid-template-columns: 1fr; }
+    .grid-3 { grid-template-columns: 1fr 1fr; gap: 12px; }
+  }
   .feat { padding: 32px 28px; }
   .feat .ico { width: 46px; height: 46px; border-radius: 12px;
                background: var(--grad); display: flex; align-items: center;
@@ -469,7 +496,9 @@ _TEMPLATE = r"""<!DOCTYPE html>
     .feat { padding: 26px 22px; }
     .pd-body { padding: 26px 22px; }
     .pd-body h3 { font-size: 1.25rem; }
-    .prod h3 { font-size: 0.98rem; }
+    .prod h3 { font-size: 0.9rem; line-height: 1.3; }
+    .prod .body { padding: 12px; gap: 8px; }
+    .prod .ver { padding: 9px; font-size: 0.85rem; }
     .difs { gap: 4px 0; }
     .dif { padding: 14px 0; }
     /* trava qualquer vazamento horizontal */
@@ -592,10 +621,22 @@ _TEMPLATE = r"""<!DOCTYPE html>
 </div></footer>
 
 <script>
-  const obs = new IntersectionObserver((entries) => {
-    entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('in'); });
-  }, { threshold: 0.12 });
-  document.querySelectorAll('.reveal').forEach(el => obs.observe(el));
+  const reveals = document.querySelectorAll('.reveal');
+  function revelarTudo() { reveals.forEach(el => el.classList.add('in')); }
+  if ('IntersectionObserver' in window) {
+    const obs = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) { e.target.classList.add('in'); obs.unobserve(e.target); }
+      });
+    }, { threshold: 0, rootMargin: '0px 0px -8% 0px' });
+    reveals.forEach(el => obs.observe(el));
+    // rede de segurança: no celular, uma seção mais alta que a tela pode nunca
+    // "intersectar" o suficiente e ficaria invisível (opacity:0). Depois de um
+    // tempinho, mostra tudo de qualquer jeito.
+    setTimeout(revelarTudo, 1600);
+  } else {
+    revelarTudo();
+  }
 
   // Busca + filtro da vitrine
   const busca = document.getElementById('busca');
