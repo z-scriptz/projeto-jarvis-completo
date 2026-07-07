@@ -1027,26 +1027,18 @@ def _extrair_link_shopee(texto: str):
 
 
 def _resolver_link_shopee(url: str):
-    """Segue o redirect do link curto -> (URL limpa do produto, imagem).
-    Também extrai a foto (og:image) da página, pra vitrine do site.
-    Best-effort: se não resolver, retorna (None, "")."""
+    """Segue o redirect do link curto -> URL limpa do produto (sem query de
+    tracking de terceiro). Best-effort: se não resolver, retorna None."""
     try:
         import requests
         r = requests.get(url, allow_redirects=True, timeout=12,
                          headers={"User-Agent": "Mozilla/5.0 (Linux; Android 10)"})
         final = (r.url or "").split("?")[0]
-        imagem = ""
-        m = re.search(
-            r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)',
-            r.text or "")
-        if m:
-            imagem = m.group(1)
         if "shopee.com.br" in final and final.rstrip("/") != url.rstrip("/"):
-            return final, imagem
-        return None, imagem
+            return final
     except Exception:
         log.debug("Não consegui resolver o link curto da Shopee (usa fallback).")
-    return None, ""
+    return None
 
 
 # Termos que são PROPAGANDA do próprio canal (não produto) — hunter ignora.
@@ -1066,6 +1058,36 @@ def _termo_eh_spam(termo: str) -> bool:
     return any(s in t for s in _TERMOS_SPAM)
 
 
+def _foto_oficial_do_link(link: str) -> str:
+    """Foto REAL do produto pela API de afiliado da Shopee. A Shopee bloqueia
+    raspar a página (não tem og:image) e a API interna (403), mas a API OFICIAL
+    de afiliado devolve a imagem: segue o link -> pega o itemId -> productOfferV2.
+    Best-effort: se falhar, devolve "" e a vitrine usa o placeholder."""
+    if not link:
+        return ""
+    try:
+        import re as _re
+        import requests as _rq
+        r = _rq.get(link, allow_redirects=True, timeout=12,
+                    headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+        final = r.url or ""
+        m = _re.search(r"i\.(\d+)\.(\d+)", final)
+        if m:
+            shop_id, item_id = m.group(1), m.group(2)
+        else:
+            pares = _re.findall(r"/(\d+)/(\d+)", final.split("?")[0])
+            shop_id, item_id = pares[-1] if pares else (None, None)
+        if not item_id:
+            return ""
+        from integrations.shopee_affiliate import obter_dados_produto
+        d = obter_dados_produto(str(item_id), shop_id=int(shop_id))
+        if d.get("ok"):
+            return d.get("imagem") or ""
+    except Exception:
+        log.debug("Não consegui a foto oficial do produto (segue sem foto).")
+    return ""
+
+
 def _registrar_no_site(nome: str, link: str, imagem: str = "", max_itens: int = 80):
     """Grava o produto + link de afiliado no produtos_fila.json que o SITE
     (bio_page_builder) lê. É a PONTE que faz a bio (topshopoficial) mostrar
@@ -1073,6 +1095,8 @@ def _registrar_no_site(nome: str, link: str, imagem: str = "", max_itens: int = 
     e a comissão vaza. Mais recente primeiro, sem duplicar link, cap em max_itens."""
     if not link:
         return
+    if not imagem:
+        imagem = _foto_oficial_do_link(link)   # foto oficial (API de afiliado)
     try:
         import json as _json
         fila = []
@@ -1120,12 +1144,10 @@ async def processar_mensagem_telegram(msg, sub_id: str = "hunter_radar"):
     url_shopee = None
     mineracao = {}
     campeao = {}     # default: no caminho do link não há "campeão" da mineração
-    img_produto = ""  # foto do produto pra vitrine do site (og:image)
 
     # 1a) PREFERIDO: link que veio na própria mensagem (resolve curto -> produto)
     if link_na_msg:
-        _resolvido, img_produto = _resolver_link_shopee(link_na_msg)
-        url_shopee = _resolvido or link_na_msg
+        url_shopee = _resolver_link_shopee(link_na_msg) or link_na_msg
         log.info(f"Link da mensagem -> {url_shopee}")
 
     # 1b) FALLBACK: minera por nome (só se a mensagem não trouxe link)
@@ -1142,7 +1164,6 @@ async def processar_mensagem_telegram(msg, sub_id: str = "hunter_radar"):
             return None
         campeao = mineracao["campeao"]
         url_shopee = campeao.get("product_link") or campeao.get("offer_link")
-        img_produto = campeao.get("imagem") or campeao.get("image") or ""
 
     if not url_shopee:
         atualizar_produto(termo, status="erro", erro="sem URL Shopee")
@@ -1303,7 +1324,7 @@ async def processar_mensagem_telegram(msg, sub_id: str = "hunter_radar"):
 
     # 8) PONTE PRO SITE — grava o produto + link de afiliado na vitrine que o
     # site lê, pra a bio mostrar o mesmo produto do vídeo (fecha o funil $).
-    _registrar_no_site(nome_produto, meu_link, imagem=img_produto)
+    _registrar_no_site(nome_produto, meu_link)
 
     return plano
 
