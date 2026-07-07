@@ -42,42 +42,50 @@ GRUPO_TELEGRAM = "https://t.me/achadinhosrelampagoh"
 
 
 # ===== Categorias pros filtros (inferidas pelo nome) =====
+# Ordem FIXA das categorias no filtro da vitrine (sempre aparecem, mesmo sem
+# produto no momento — assim a loja fica organizada e a categoria não "some").
+# "Tudo" e "Outros" são adicionados automaticamente pelo _filtros_html.
+_CATEGORIAS_FIXAS = ["Cozinha", "Beleza", "Tech", "Fitness", "Utilidades", "Casa"]
+
+# Palavras-chave por categoria (o produto cai na 1ª que casar — ordem importa).
 _CATEGORIAS_FILTRO = [
-    ("Games",   ("xbox", "playstation", "nintendo", "ps4", "ps5", "console",
-                 "gamer", "joystick", "controle de", "video game", "videogame",
-                 "dualshock", "switch")),
-    ("Carro",   ("automotivo", "veicular", "carro", "moto", "pneu", "painel",
-                 "volante", "veicul", "aspirador de carro", "calibrador")),
-    ("Fitness", ("massageador", "massagem", "yoga", "pilates", "faixas", "corda",
-                 "pular", "rolo", "pistola", "cervical", "fisioterapia",
-                 "academia", "treino", "elastica", "elástica", "halter", "peso",
-                 "abdominal", "musculac", "musculaç", "luva de treino")),
-    ("Beleza",  ("modelador", "cachos", "escova", "secadora", "alisadora",
-                 "maquiagem", "skincare", "cravos", "espelho", "cabelo", "unha",
-                 "perfume", "batom", "esmalte", "depilador", "barbeador",
-                 "sobrancelha", "pelos", "hidratante", "make")),
-    ("Cozinha", ("cortador", "legumes", "liquidificador", "balanca", "balança",
-                 "garrafa", "caneca", "termica", "térmica", "descascador",
-                 "processador", "fatiador", "espremedor", "água", "agua",
-                 "panela", "faca", "prato", "copo", "tigela", "ralador", "forma",
-                 "air fryer", "fritadeira", "tábua", "tabua", "pote", "mixer",
-                 "sanduicheira", "cafeteira", "chaleira", "talher", "colher")),
-    ("Tech",    ("mouse", "power bank", "powerbank", "carregador", "projetor",
-                 "notebook", "cabo", "fone", "usb", "celular", "induç", "induc",
-                 "teclado", "headset", "camera", "câmera", "ring light",
-                 "microfone", "smartwatch", "relogio", "relógio", "tablet",
-                 "ssd", "pendrive", "bluetooth", "monitor", "adaptador", "hub",
-                 "roteador", "smart", "led rgb")),
-    ("Pet",     ("pet", "cachorro", "gato", "cão", "coleira", "ração", "racao",
-                 "comedouro", "aquario", "aquário", "arranhador")),
-    ("Infantil",("bebê", "bebe", "criança", "crianca", "infantil", "brinquedo",
-                 "fralda", "mamadeira")),
-    ("Casa",    ("umidificador", "luminaria", "luminária", "led", "organizador",
-                 "aspirador", "tapete", "vela", "porta", "suporte", "lixeira",
-                 "pedal", "litro", "sacola", "cesto", "cabide", "gancho",
-                 "prateleira", "cortina", "toalha", "almofada", "edredom",
-                 "lençol", "lencol", "vaso", "balde", "limpeza", "pano",
-                 "ferramenta", "chave", "mangueira", "varal", "capacho")),
+    ("Cozinha",    ("cortador", "legumes", "liquidificador", "balanca", "balança",
+                    "garrafa", "caneca", "termica", "térmica", "descascador",
+                    "processador", "fatiador", "espremedor", "água", "agua",
+                    "panela", "faca", "prato", "copo", "tigela", "ralador",
+                    "forma", "air fryer", "fritadeira", "tábua", "tabua", "pote",
+                    "mixer", "sanduicheira", "cafeteira", "chaleira", "talher",
+                    "colher")),
+    ("Beleza",     ("modelador", "cachos", "escova", "secadora", "alisadora",
+                    "maquiagem", "skincare", "cravos", "espelho", "cabelo",
+                    "unha", "perfume", "batom", "esmalte", "depilador",
+                    "barbeador", "sobrancelha", "pelos", "hidratante", "make")),
+    ("Fitness",    ("massageador", "massagem", "yoga", "pilates", "faixas",
+                    "corda", "pular", "cervical", "fisioterapia", "academia",
+                    "treino", "elastica", "elástica", "halter", "abdominal",
+                    "musculac", "musculaç", "luva de treino")),
+    ("Tech",       ("mouse", "power bank", "powerbank", "carregador", "projetor",
+                    "notebook", "cabo", "fone", "usb", "celular", "induç",
+                    "induc", "teclado", "headset", "camera", "câmera",
+                    "ring light", "microfone", "smartwatch", "relogio",
+                    "relógio", "tablet", "ssd", "pendrive", "bluetooth",
+                    "monitor", "adaptador", "hub", "roteador", "smart",
+                    "led rgb", "xbox", "playstation", "nintendo", "ps4", "ps5",
+                    "console", "gamer", "joystick", "controle de", "videogame",
+                    "video game", "dualshock")),
+    ("Utilidades", ("organizador", "gancho", "cabide", "sacola", "cesto",
+                    "balde", "lixeira", "pedal", "litro", "caixa", "mala",
+                    "guarda-chuva", "ferramenta", "chave", "mangueira", "varal",
+                    "pinça", "pinca", "fita", "adesivo", "pet", "cachorro",
+                    "gato", "cão", "coleira", "ração", "racao", "comedouro",
+                    "bebê", "bebe", "criança", "crianca", "infantil",
+                    "brinquedo", "fralda", "automotivo", "veicular", "carro",
+                    "moto", "pneu")),
+    ("Casa",       ("umidificador", "luminaria", "luminária", "led", "aspirador",
+                    "tapete", "vela", "porta", "suporte", "prateleira",
+                    "cortina", "toalha", "almofada", "edredom", "lençol",
+                    "lencol", "vaso", "limpeza", "pano", "capacho", "difusor",
+                    "quadro")),
 ]
 
 
@@ -225,16 +233,19 @@ def _card_grid(p: dict) -> str:
 
 
 def _filtros_html(produtos: list) -> str:
-    cats = []
-    for p in produtos:
-        c = _inferir_categoria(p)
-        if c not in cats:
-            cats.append(c)
-    if len(cats) <= 1:
-        return ""
-    botoes = ['<button class="filtro ativo" data-filtro="todos">Tudo</button>']
-    for c in cats:
-        botoes.append(f'<button class="filtro" data-filtro="{html.escape(c)}">{html.escape(c)}</button>')
+    # Barra FIXA: Tudo + categorias fixas (sempre visíveis) + Outros (só se
+    # houver algum produto sem categoria). Clicar numa categoria vazia mostra
+    # o "nenhum produto encontrado" — normal, é a loja se enchendo aos poucos.
+    presentes = {_inferir_categoria(p) for p in produtos}
+    ordem = ["todos"] + list(_CATEGORIAS_FIXAS)
+    if "Outros" in presentes:
+        ordem.append("Outros")
+    botoes = []
+    for c in ordem:
+        rotulo = "Tudo" if c == "todos" else c
+        ativo = " ativo" if c == "todos" else ""
+        botoes.append(f'<button class="filtro{ativo}" data-filtro="{html.escape(c)}">'
+                      f'{html.escape(rotulo)}</button>')
     return '<div class="filtros" id="filtros">' + "".join(botoes) + "</div>"
 
 
