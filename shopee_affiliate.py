@@ -179,6 +179,71 @@ def _relevancia(keyword: str, titulo_produto: str) -> float:
     return len(casadas) / len(kw_palavras)
 
 
+# ── APRENDIZADO: boost pras categorias que os VÍDEOS já venderam ──────────
+# O metricas_agent escreve shared/nichos_quentes.json com o que converteu. Aqui
+# a gente relê os PRODUTOS que venderam, re-infere a categoria pela MESMA função
+# do site (consistência) e dá nota extra pros produtos de categoria campeã.
+# Fecha o loop: caça → posta → mede → caça mais do que dá dinheiro. 🔁
+_NICHOS_CACHE = {"mtime": -1.0, "pesos": {}}
+
+
+def _caminho_nichos():
+    from pathlib import Path
+    base = Path(__file__).resolve().parent
+    for c in (base.parent / "shared" / "nichos_quentes.json",
+              base / "shared" / "nichos_quentes.json",
+              Path("shared/nichos_quentes.json")):
+        if c.exists():
+            return c
+    return None
+
+
+def _infcat_nome(nome: str) -> str:
+    try:
+        try:
+            from creative_engine.bio_page_builder import _inferir_categoria
+        except Exception:
+            from bio_page_builder import _inferir_categoria
+        return _inferir_categoria({"nome": nome or "", "titulo": nome or ""})
+    except Exception:
+        return "Outros"
+
+
+def _pesos_nicho() -> dict:
+    """{categoria: peso 0..1} a partir do que os vídeos venderam (cache por mtime)."""
+    p = _caminho_nichos()
+    if not p:
+        return {}
+    try:
+        mt = p.stat().st_mtime
+        if mt == _NICHOS_CACHE["mtime"]:
+            return _NICHOS_CACHE["pesos"]
+        dados = json.loads(p.read_text(encoding="utf-8"))
+        acc = {}
+        for prod in dados.get("top_produtos", []):
+            cat = _infcat_nome(prod.get("nome", ""))
+            if cat and cat != "Outros":
+                acc[cat] = acc.get(cat, 0.0) + float(prod.get("comissao", 0) or 0)
+        if not acc:   # fallback: usa o ranking de categorias já salvo
+            for i, cat in enumerate(dados.get("ranking_categorias", [])):
+                if cat and cat != "Outros":
+                    acc[cat] = acc.get(cat, 0.0) + max(1.0, 5.0 - i)
+        maxv = max(acc.values()) if acc else 0.0
+        pesos = {c: v / maxv for c, v in acc.items()} if maxv > 0 else {}
+        _NICHOS_CACHE.update(mtime=mt, pesos=pesos)
+        return pesos
+    except Exception:
+        return {}
+
+
+def _fator_nicho(nome: str) -> float:
+    """1.0 (neutro) a 1.5 (categoria que mais converteu nos vídeos)."""
+    pesos = _pesos_nicho()
+    if not pesos:
+        return 1.0
+    return 1.0 + 0.5 * pesos.get(_infcat_nome(nome), 0.0)
+
+
 def _score_lucro(produto: dict, keyword: str = "") -> float:
     """
     Calcula o score de LUCRO de um produto. Filosofia: priorizar quanto você
@@ -220,7 +285,8 @@ def _score_lucro(produto: dict, keyword: str = "") -> float:
     else:
         fator_rel = 1.0
 
-    return round(base * fator_nota * fator_vendas * fator_rel, 3)
+    return round(base * fator_nota * fator_vendas * fator_rel *
+                 _fator_nicho(produto.get("nome", "")), 3)
 
 
 def minerar_oportunidades(keyword: str, limite_busca: int = 30,
