@@ -142,10 +142,27 @@ def _termo_heuristico(desc: str) -> str:
 
 
 _PROMPT_GEMINI = (
-    "Você recebe a legenda de um vídeo de achadinho. Responda APENAS com o nome "
-    "curto do produto pra buscar na Shopee (2 a 6 palavras, português, sem "
-    "hashtag, sem emoji, sem marca, sem aspas). Se a legenda for só um hook e não "
-    "der pra saber QUAL é o produto, responda exatamente: NAO.\n\nLegenda: {desc}")
+    "Você é um extrator de produtos. Da legenda de um vídeo, devolva APENAS o "
+    "nome curto do PRODUTO FÍSICO à venda (2 a 6 palavras, português, sem "
+    "hashtag, emoji, marca ou aspas). REGRAS: se for receita, dica, frase "
+    "motivacional, bastidores, ou se você não tiver CERTEZA do produto, responda "
+    "exatamente NAO. Nunca invente, nunca explique, nunca escreva raciocínio nem "
+    "a palavra THOUGHT — só o nome do produto ou NAO.\n\nLegenda: {desc}")
+
+# termos que NÃO são produto (vazamento do Gemini, hooks gringos, genéricos)
+_LIXO_TERMO = ("thought", "user wants", "product name", "aproveite", "promoç",
+               "promoc", "oferta", "olha isso", "corre ", "bastidores", "receita",
+               "pense", "silêncio", "silencio", "how ", "why ", "easy ", "more ",
+               "quick ", "avoid ", "pov ", "your ", " store")
+
+
+def _termo_valido(t: str) -> bool:
+    tl = (t or "").lower().strip()
+    if len(tl) < 3 or ":" in t or len(t.split()) > 6:
+        return False
+    if any(x in tl for x in _LIXO_TERMO):
+        return False
+    return bool(re.search(r"[A-Za-zÀ-ÿ]{3,}", t))
 
 
 def _termo_gemini(desc: str) -> str:
@@ -256,8 +273,8 @@ def main():
             if meta["views"] < MIN_VIEWS or (meta["duracao"] and meta["duracao"] > MAX_DUR):
                 continue
             termo = _identificar_produto(meta["descricao"])
-            if not termo:
-                _log(f"   • {vid}: não identifiquei o produto (pulo)")
+            if not termo or not _termo_valido(termo):
+                _log(f"   • {vid}: legenda sem produto claro (pulo)")
                 continue
             _log(f"   • {meta['views']:,} views | produto: '{termo}'")
 
