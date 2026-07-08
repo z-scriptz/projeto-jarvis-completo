@@ -25,7 +25,7 @@ INBOX = BASE_DIR / "inbox_tiktok"
 
 MIN_VIEWS = 50_000      # só o que já provou tração
 MAX_DUR = 90            # segundos
-POR_PERFIL = 8          # quantos vídeos recentes checar por perfil
+POR_PERFIL = 40         # quantos vídeos recentes checar por perfil (--limite muda)
 
 
 def _carregar_env():
@@ -210,19 +210,34 @@ def _salvar_vistos(ids: set):
         pass
 
 
-def _perfis_alvo() -> list:
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
-    if args:
-        return args
-    if PERFIS_TXT.exists():
-        return [l.strip() for l in PERFIS_TXT.read_text(encoding="utf-8").splitlines()
-                if l.strip() and not l.strip().startswith("#")]
-    return []
+def _parse_args():
+    """--dry, --limite N e a lista de perfis (ou tiktok_perfis.txt)."""
+    args = sys.argv[1:]
+    dry = "--dry" in args
+    limite = POR_PERFIL
+    perfis = []
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "--dry":
+            i += 1
+        elif a == "--limite" and i + 1 < len(args):
+            try:
+                limite = max(1, int(args[i + 1]))
+            except ValueError:
+                pass
+            i += 2
+        else:
+            perfis.append(a)
+            i += 1
+    if not perfis and PERFIS_TXT.exists():
+        perfis = [l.strip() for l in PERFIS_TXT.read_text(encoding="utf-8").splitlines()
+                  if l.strip() and not l.strip().startswith("#")]
+    return dry, limite, perfis
 
 
 def main():
-    dry = "--dry" in sys.argv[1:]
-    perfis = _perfis_alvo()
+    dry, limite, perfis = _parse_args()
     if not perfis:
         _log("sem perfis. Uso: python3 tiktok_coletor.py @perfil1 @perfil2")
         _log("(ou crie tiktok_perfis.txt com 1 perfil por linha)")
@@ -232,7 +247,7 @@ def main():
     achados = 0
     for perfil in perfis:
         _log(f"perfil {perfil} …")
-        for url in _listar_videos(perfil, POR_PERFIL):
+        for url in _listar_videos(perfil, limite):
             meta = _metadados(url)
             vid = meta.get("id")
             if not vid or vid in vistos:
@@ -252,8 +267,15 @@ def main():
                 continue
             camp = m["campeao"]
             origem = camp.get("product_link") or camp.get("offer_link")
-            lk = gerar_link_afiliado(origem, sub_ids=["tiktok", _slug(termo)]) if origem else {}
-            link = lk.get("short_link", "") if isinstance(lk, dict) and lk.get("ok") else ""
+            # sub_id SÓ alfanumérico (a Shopee rejeita _/-/etc → erro 11001)
+            sub_termo = re.sub(r"[^A-Za-z0-9]", "", termo)[:16] or "viral"
+            link = ""
+            if origem:
+                lk = gerar_link_afiliado(origem, sub_ids=["tiktok", sub_termo])
+                if isinstance(lk, dict) and lk.get("ok"):
+                    link = lk.get("short_link") or lk.get("link") or ""
+            if not link:   # fallbacks: link já gerado pela mineração / offer cru
+                link = m.get("link_gerado") or camp.get("offer_link") or ""
             _log(f"     ✓ Shopee: '{camp.get('nome','?')[:45]}' | "
                  f"comissão R$ {camp.get('comissao_valor', 0)} | "
                  f"link: {link or '(falhou)'}")
