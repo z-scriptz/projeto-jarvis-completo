@@ -1377,6 +1377,17 @@ async def processar_mensagem_telegram(msg, sub_id: str = "hunter_radar"):
     # site lê, pra a bio mostrar o mesmo produto do vídeo (fecha o funil $).
     _registrar_no_site(nome_produto, meu_link)
 
+    # 9) LEDGER — loga o post (produto, hook, categoria, item_id, sub_id) no
+    # diário. É a fundação do aprendizado: depois cruza com a comissão (por
+    # item_id) e descobre qual hook/categoria/horário converte. Best-effort.
+    try:
+        from posts_ledger import registrar as _reg_post
+        _reg_post(produto=nome_produto, link=meu_link, url_shopee=url_shopee,
+                  categoria=categoria, hook=hook_preview, legenda=legenda,
+                  slug=slug, sub_ids=_subs)
+    except Exception:
+        log.debug("posts_ledger indisponível (segue sem logar)")
+
     return plano
 
 
