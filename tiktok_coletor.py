@@ -14,11 +14,11 @@ import os
 import re
 import sys
 import json
+import shutil
 import subprocess
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
-PY = sys.executable
 PERFIS_TXT = BASE_DIR / "tiktok_perfis.txt"
 VISTOS = BASE_DIR / "shared" / "tiktok_vistos.json"
 INBOX = BASE_DIR / "inbox_tiktok"
@@ -57,8 +57,41 @@ def _log(m):
     print(f"[tiktok] {m}")
 
 
+_YTDLP_CMD = None
+
+
+def _resolver_ytdlp():
+    """Acha o yt-dlp mesmo que o script rode com o python errado (o yt-dlp foi
+    instalado no venv). Testa o binário e o módulo em vários interpretadores."""
+    global _YTDLP_CMD
+    if _YTDLP_CMD is not None:
+        return _YTDLP_CMD
+    # 1) binário 'yt-dlp' (PATH ou venv)
+    for c in (shutil.which("yt-dlp"),
+              str(BASE_DIR / ".venv" / "bin" / "yt-dlp"),
+              "/root/jarvis/.venv/bin/yt-dlp"):
+        if c and Path(c).exists():
+            _YTDLP_CMD = [c]
+            return _YTDLP_CMD
+    # 2) python que tenha o módulo yt_dlp
+    for py in (sys.executable,
+               str(BASE_DIR / ".venv" / "bin" / "python3"),
+               "/root/jarvis/.venv/bin/python3"):
+        if py and Path(py).exists():
+            try:
+                r = subprocess.run([py, "-m", "yt_dlp", "--version"],
+                                   capture_output=True, text=True, timeout=25)
+                if r.returncode == 0:
+                    _YTDLP_CMD = [py, "-m", "yt_dlp"]
+                    return _YTDLP_CMD
+            except Exception:
+                pass
+    _YTDLP_CMD = [sys.executable, "-m", "yt_dlp"]   # fallback (erro claro)
+    return _YTDLP_CMD
+
+
 def _ytdlp(args: list, timeout=120):
-    return subprocess.run([PY, "-m", "yt_dlp", *args],
+    return subprocess.run([*_resolver_ytdlp(), *args],
                           capture_output=True, text=True, timeout=timeout)
 
 
