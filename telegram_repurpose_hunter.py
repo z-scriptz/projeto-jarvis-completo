@@ -193,7 +193,8 @@ CFG_GRANULADO          = 3
 CFG_LIMPAR_META        = True
 CFG_VELOCIDADE         = 1.01
 CFG_ZOOM_DIGITAL       = 0.01
-CFG_MIRROR_X           = False   # OFF: espelhar inverte o texto gravado no vídeo
+CFG_MIRROR_X           = False   # override manual: True = espelha SEMPRE (cuidado)
+CFG_MIRROR_AUTO        = True    # inteligente: espelha SÓ vídeo SEM texto (OCR)
 CFG_VINHETA            = True
 
 CFG_INTRO_IA           = False
@@ -634,9 +635,59 @@ def _aplicar_zoom_digital(clip, fator=0.01):
     return _image_transform(clip, lambda f: _zoom_frame(f))
 
 
+def _clip_tem_texto(clip, amostras: int = 6, min_conf: int = 55,
+                    min_chars: int = 4) -> bool:
+    """True se o vídeo tem texto na tela (aí NÃO pode espelhar, senão o texto
+    fica de trás pra frente). Amostra alguns frames e roda OCR (Tesseract).
+
+    Precisa do Tesseract instalado (apt install tesseract-ocr + pip pytesseract).
+    SEM ele, retorna True (= não espelha) — mantém o comportamento seguro atual."""
+    try:
+        import pytesseract
+    except Exception:
+        return True   # sem OCR não dá pra saber se tem texto → não arrisca
+    try:
+        import numpy as _np
+        from PIL import Image
+        dur = float(getattr(clip, "duration", 0) or 0)
+        if dur <= 0:
+            return True
+        for i in range(amostras):
+            t = dur * (i + 1) / (amostras + 1)
+            try:
+                frame = _np.asarray(clip.get_frame(t)).astype("uint8")
+            except Exception:
+                continue
+            img = Image.fromarray(frame)
+            img.thumbnail((640, 640))   # reduz pra acelerar no VPS fraco
+            data = pytesseract.image_to_data(
+                img, output_type=pytesseract.Output.DICT)
+            chars = 0
+            for txt, conf in zip(data.get("text", []), data.get("conf", [])):
+                try:
+                    c = float(conf)
+                except (TypeError, ValueError):
+                    c = -1.0
+                palavra = (txt or "").strip()
+                if c >= min_conf and len(palavra) >= 2 and any(
+                        ch.isalnum() for ch in palavra):
+                    chars += len(palavra)
+            if chars >= min_chars:
+                log.info("Espelhamento: texto detectado no vídeo — NÃO espelha.")
+                return True
+        log.info("Espelhamento: vídeo sem texto — vai espelhar. 🪞")
+        return False
+    except Exception:
+        log.debug("Detecção de texto falhou; por segurança não espelha.")
+        return True
+
+
 def _aplicar_efeitos_diferenciacao(clip):
-    """[FIX-2] Aplica de fato mirror + zoom digital + grade/grão/vinheta."""
-    if CFG_MIRROR_X:
+    """[FIX-2] Aplica de fato mirror + zoom digital + grade/grão/vinheta.
+    Mirror é INTELIGENTE: só espelha vídeo SEM texto na tela (senão inverteria
+    o texto gravado). CFG_MIRROR_X força; CFG_MIRROR_AUTO decide pelo OCR."""
+    fazer_mirror = CFG_MIRROR_X or (CFG_MIRROR_AUTO and not _clip_tem_texto(clip))
+    if fazer_mirror:
         clip = _aplicar_mirror_x(clip)
         log.debug("VFX-1: Mirror X")
     if CFG_ZOOM_DIGITAL and CFG_ZOOM_DIGITAL > 0:
