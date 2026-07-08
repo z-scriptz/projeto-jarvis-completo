@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 # metricas_agent.py -- O LOOP DO DINHEIRO. Puxa o relatório oficial de conversão
-# da Shopee (comissões que REALMENTE caíram), mostra quanto você ganhou e —
-# o mais importante — DESCOBRE qual categoria/produto converte, escrevendo
-# shared/nichos_quentes.json pro hunter passar a caçar mais do que dá lucro.
+# da Shopee (comissões que REALMENTE caíram) e SEPARA o que veio dos vídeos do
+# Jarvis (via o sub_id gravado no utmContent) do que veio de outras origens.
+# Escreve shared/nichos_quentes.json pro hunter priorizar o que CONVERTE.
 #
 # Uso (VPS):  python3 metricas_agent.py [dias]      (padrão: 30 dias)
 import os
-import re
 import sys
 import json
 import time
@@ -15,6 +14,12 @@ from collections import defaultdict
 
 BASE_DIR = Path(__file__).resolve().parent
 NICHOS_QUENTES = BASE_DIR / "shared" / "nichos_quentes.json"
+
+# Impressão digital dos NOSSOS posts (o hunter grava esses sub_ids no link;
+# eles reaparecem no utmContent do relatório). Se o utmContent bate, a venda
+# veio de um vídeo/post nosso — não de uma compra avulsa (tua, da família...).
+VIDEO_TAGS = ("hunterradar", "telegramrepurpos", "telegramrepurpose",
+              "hunter", "topshop")
 
 
 def _carregar_env():
@@ -41,16 +46,6 @@ try:
 except Exception:
     from shopee_affiliate import _executar_graphql
 
-# reusa a MESMA categorização do site (consistência total)
-try:
-    try:
-        from creative_engine.bio_page_builder import _inferir_categoria
-    except Exception:
-        from bio_page_builder import _inferir_categoria
-except Exception:
-    def _inferir_categoria(p):   # fallback se o builder não importar
-        return "Outros"
-
 
 def _num(v):
     try:
@@ -59,28 +54,36 @@ def _num(v):
         return 0.0
 
 
+def _do_video(utm: str) -> bool:
+    u = (utm or "").lower()
+    return any(t in u for t in VIDEO_TAGS)
+
+
 def _pagina(ini, fim, scroll_id=None, limite=100):
     scroll = f', scrollId: "{scroll_id}"' if scroll_id else ""
     q = ("query { conversionReport(purchaseTimeStart: %d, purchaseTimeEnd: %d, "
-         "limit: %d%s) { nodes { conversionId purchaseTime orders { orderId "
-         "items { itemName itemId shopId itemTotalCommission actualAmount } } } "
-         "pageInfo { hasNextPage scrollId } } }" % (ini, fim, limite, scroll))
+         "limit: %d%s) { nodes { conversionId purchaseTime utmContent "
+         "conversionStatus orders { orderId items { itemId itemName "
+         "itemTotalCommission actualAmount qty refundAmount categoryLv1Name "
+         "channelType } } } pageInfo { hasNextPage scrollId } } }"
+         % (ini, fim, limite, scroll))
     return _executar_graphql(q)
 
 
 def puxar_conversoes(dias: int = 30, max_paginas: int = 30) -> list:
-    """Lista achatada de itens vendidos (comissão que caiu) no período."""
     fim = int(time.time())
     ini = fim - dias * 86400
     itens, scroll = [], None
     for _ in range(max_paginas):
         r = _pagina(ini, fim, scroll)
         if r.get("_erro"):
-            if scroll:      # erro só na paginação → fica com o que já temos
+            if scroll:
                 break
             raise RuntimeError(r["_erro"])
         rep = (r.get("data") or {}).get("conversionReport") or {}
         for node in rep.get("nodes") or []:
+            utm = node.get("utmContent") or ""
+            do_video = _do_video(utm)
             t = node.get("purchaseTime")
             for order in node.get("orders") or []:
                 for it in order.get("items") or []:
@@ -89,6 +92,11 @@ def puxar_conversoes(dias: int = 30, max_paginas: int = 30) -> list:
                         "nome": it.get("itemName", "") or "",
                         "comissao": _num(it.get("itemTotalCommission")),
                         "valor": _num(it.get("actualAmount")),
+                        "reembolso": _num(it.get("refundAmount")),
+                        "qtd": int(_num(it.get("qty"))),
+                        "categoria": (it.get("categoryLv1Name") or "Outros"),
+                        "utm": utm,
+                        "do_video": do_video,
                         "ts": t,
                         "pedido": order.get("orderId"),
                     })
@@ -100,35 +108,39 @@ def puxar_conversoes(dias: int = 30, max_paginas: int = 30) -> list:
     return itens
 
 
-def resumir(itens: list) -> dict:
-    total_com = sum(i["comissao"] for i in itens)
-    total_gmv = sum(i["valor"] for i in itens)
-    n = len(itens)
-
-    por_cat = defaultdict(lambda: {"comissao": 0.0, "vendas": 0, "gmv": 0.0})
-    por_prod = defaultdict(lambda: {"nome": "", "comissao": 0.0, "vendas": 0})
+def _agrupar(itens):
+    por_cat = defaultdict(lambda: {"comissao": 0.0, "vendas": 0})
+    por_prod = defaultdict(lambda: {"nome": "", "comissao": 0.0, "vendas": 0,
+                                    "utm": ""})
+    total = 0.0
     for i in itens:
-        cat = _inferir_categoria({"nome": i["nome"], "titulo": i["nome"]})
-        por_cat[cat]["comissao"] += i["comissao"]
-        por_cat[cat]["vendas"] += 1
-        por_cat[cat]["gmv"] += i["valor"]
-        pid = i["item_id"]
-        por_prod[pid]["nome"] = i["nome"]
-        por_prod[pid]["comissao"] += i["comissao"]
-        por_prod[pid]["vendas"] += 1
+        total += i["comissao"]
+        por_cat[i["categoria"]]["comissao"] += i["comissao"]
+        por_cat[i["categoria"]]["vendas"] += 1
+        p = por_prod[i["item_id"]]
+        p["nome"] = i["nome"]
+        p["comissao"] += i["comissao"]
+        p["vendas"] += 1
+        p["utm"] = i["utm"]
+    cats = sorted(({"categoria": c, **v} for c, v in por_cat.items()),
+                  key=lambda x: x["comissao"], reverse=True)
+    prods = sorted(({"item_id": k, **v} for k, v in por_prod.items()),
+                   key=lambda x: x["comissao"], reverse=True)
+    return round(total, 2), cats, prods
 
-    cats = sorted(
-        ({"categoria": c, **v} for c, v in por_cat.items()),
-        key=lambda x: x["comissao"], reverse=True)
-    prods = sorted(
-        ({"item_id": p, **v} for p, v in por_prod.items()),
-        key=lambda x: x["comissao"], reverse=True)
+
+def resumir(itens: list) -> dict:
+    video = [i for i in itens if i["do_video"]]
+    outros = [i for i in itens if not i["do_video"]]
+    tv, cats_v, prods_v = _agrupar(video)
+    to, cats_o, _ = _agrupar(outros)
     return {
-        "total_comissao": round(total_com, 2),
-        "total_gmv": round(total_gmv, 2),
-        "vendas": n,
-        "por_categoria": cats,
-        "top_produtos": prods[:15],
+        "total": round(sum(i["comissao"] for i in itens), 2),
+        "gmv": round(sum(i["valor"] for i in itens), 2),
+        "vendas": len(itens),
+        "video": {"total": tv, "vendas": len(video),
+                  "categorias": cats_v, "produtos": prods_v[:15]},
+        "outros": {"total": to, "vendas": len(outros), "categorias": cats_o},
     }
 
 
@@ -137,17 +149,18 @@ def _brl(v):
 
 
 def _salvar_nichos_quentes(resumo: dict, dias: int):
-    """Escreve o que o hunter vai usar pra priorizar o que CONVERTE."""
     try:
         NICHOS_QUENTES.parent.mkdir(parents=True, exist_ok=True)
-        ranking = [c["categoria"] for c in resumo["por_categoria"]
-                   if c["comissao"] > 0]
+        v = resumo["video"]
+        ranking = [c["categoria"] for c in v["categorias"] if c["comissao"] > 0]
         dados = {
             "gerado_em": int(time.time()),
             "periodo_dias": dias,
-            "ranking_categorias": ranking,          # mais lucrativa primeiro
-            "por_categoria": resumo["por_categoria"],
-            "top_produtos": resumo["top_produtos"],
+            "fonte": "conversoes_de_video",     # só o que os vídeos venderam
+            "comissao_video": v["total"],
+            "ranking_categorias": ranking,       # a mais lucrativa primeiro
+            "por_categoria": v["categorias"],
+            "top_produtos": v["produtos"],
         }
         NICHOS_QUENTES.write_text(
             json.dumps(dados, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -165,7 +178,7 @@ def main():
         except ValueError:
             pass
 
-    print(f"\n💰 RELATÓRIO DE COMISSÕES — últimos {dias} dias")
+    print(f"\n💰 COMISSÕES — últimos {dias} dias")
     print("=" * 52)
     try:
         itens = puxar_conversoes(dias)
@@ -174,29 +187,39 @@ def main():
         return 1
 
     if not itens:
-        print("Nenhuma comissão no período ainda. O encanamento está pronto —")
-        print("quando as vendas entrarem, é só rodar de novo. 🌱")
+        print("Nenhuma comissão no período. O encanamento está pronto —")
+        print("quando as vendas entrarem, rode de novo. 🌱")
+        _salvar_nichos_quentes(resumir(itens), dias)
         return 0
 
     r = resumir(itens)
-    print(f"\n  Comissão total : {_brl(r['total_comissao'])}")
-    print(f"  Vendas         : {r['vendas']}")
-    print(f"  GMV (vendido)  : {_brl(r['total_gmv'])}")
-    if r["vendas"]:
-        print(f"  Comissão média : {_brl(r['total_comissao'] / r['vendas'])}/venda")
+    v, o = r["video"], r["outros"]
+    print(f"\n  Comissão TOTAL : {_brl(r['total'])}  ({r['vendas']} vendas · "
+          f"GMV {_brl(r['gmv'])})")
+    print(f"    ├─ 💚 DOS VÍDEOS : {_brl(v['total'])}  ({v['vendas']} vendas)")
+    print(f"    └─ ⚪ Outras     : {_brl(o['total'])}  ({o['vendas']} vendas)")
 
-    print("\n  🏆 POR CATEGORIA (o que te dá dinheiro):")
-    for c in r["por_categoria"]:
-        print(f"    {c['categoria']:<11} {_brl(c['comissao']):>11}  "
-              f"· {c['vendas']} venda(s)")
-
-    print("\n  🥇 TOP PRODUTOS:")
-    for p in r["top_produtos"][:8]:
-        print(f"    {_brl(p['comissao']):>10}  {p['nome'][:52]}")
+    if v["vendas"]:
+        print("\n  🏆 CATEGORIAS que os VÍDEOS venderam:")
+        for c in v["categorias"]:
+            print(f"     {c['categoria']:<22} {_brl(c['comissao']):>10}  "
+                  f"· {c['vendas']} venda(s)")
+        print("\n  🥇 PRODUTOS que os VÍDEOS venderam:")
+        for p in v["produtos"][:8]:
+            print(f"     {_brl(p['comissao']):>10}  {p['nome'][:50]}")
+    else:
+        print("\n  💚 Nenhuma venda ATRIBUÍDA aos vídeos ainda.")
+        print("     (as vendas de hoje vieram de outras origens — normal no")
+        print("      começo; o vídeo→clique→compra leva alguns dias). O")
+        print("      rastreamento por sub_id já está ligado pra capturar. 🌱")
+        if o["categorias"]:
+            print("\n  ⚪ Pra referência, o que VENDEU (qualquer origem):")
+            for c in o["categorias"][:6]:
+                print(f"     {c['categoria']:<22} {_brl(c['comissao']):>10}")
 
     if _salvar_nichos_quentes(r, dias):
-        print(f"\n✅ nichos_quentes.json atualizado — o hunter agora sabe o que")
-        print("   converte (categoria mais lucrativa primeiro). Loop fechado. 🔁")
+        print("\n✅ nichos_quentes.json atualizado (só conversões de vídeo).")
+        print("   Próximo passo: o hunter priorizar essas categorias. 🔁")
     return 0
 
 
