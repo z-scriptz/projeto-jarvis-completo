@@ -46,6 +46,24 @@ try:
 except Exception:
     from shopee_affiliate import _executar_graphql
 
+# plano B de categoria: se a Shopee não mandar a categoria oficial (vem vazia em
+# conversão pendente), inferimos pelo nome — mesma lógica do site.
+try:
+    try:
+        from creative_engine.bio_page_builder import _inferir_categoria as _infcat
+    except Exception:
+        from bio_page_builder import _inferir_categoria as _infcat
+except Exception:
+    def _infcat(p):
+        return "Outros"
+
+
+def _categoria(nome: str, oficial: str) -> str:
+    o = (oficial or "").strip()
+    if o:
+        return o
+    return _infcat({"nome": nome or "", "titulo": nome or ""})
+
 
 def _num(v):
     try:
@@ -94,7 +112,8 @@ def puxar_conversoes(dias: int = 30, max_paginas: int = 30) -> list:
                         "valor": _num(it.get("actualAmount")),
                         "reembolso": _num(it.get("refundAmount")),
                         "qtd": int(_num(it.get("qty"))),
-                        "categoria": (it.get("categoryLv1Name") or "Outros"),
+                        "categoria": _categoria(it.get("itemName", ""),
+                                                it.get("categoryLv1Name")),
                         "utm": utm,
                         "do_video": do_video,
                         "ts": t,
