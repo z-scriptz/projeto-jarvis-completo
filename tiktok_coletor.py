@@ -141,31 +141,40 @@ def _termo_heuristico(desc: str) -> str:
     return " ".join(palavras[:5]).strip()
 
 
+_PROMPT_GEMINI = (
+    "Você recebe a legenda de um vídeo de achadinho. Responda APENAS com o nome "
+    "curto do produto pra buscar na Shopee (2 a 6 palavras, português, sem "
+    "hashtag, sem emoji, sem marca, sem aspas). Se a legenda for só um hook e não "
+    "der pra saber QUAL é o produto, responda exatamente: NAO.\n\nLegenda: {desc}")
+
+
 def _termo_gemini(desc: str) -> str:
     api_key = os.getenv("GEMINI_API_KEY", "")
     if not api_key or not desc:
         return ""
+    prompt = _PROMPT_GEMINI.format(desc=desc[:500])
+
+    def _limpa(t):
+        t = (t or "").strip().strip('"').split("\n")[0].strip()
+        return "" if t.upper().startswith("NAO") else t[:80]
+
+    # SDK nova (google-genai) — a que o resto do projeto usa
     try:
         from google import genai
-    except Exception:
-        try:
-            import google.generativeai as _g  # noqa
-        except Exception:
-            return ""
-        return ""
-    try:
         client = genai.Client(api_key=api_key)
-        prompt = ("Você recebe a legenda de um vídeo de achadinho. Responda APENAS "
-                  "com o nome curto do produto pra buscar na Shopee (2 a 6 palavras, "
-                  "português, sem hashtag, sem emoji, sem marca, sem aspas).\n\n"
-                  f"Legenda: {desc[:500]}")
         resp = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=[{"parts": [{"text": prompt}]}])
-        termo = (resp.text or "").strip().strip('"').split("\n")[0]
-        return termo[:80]
+            model="gemini-2.5-flash", contents=[{"parts": [{"text": prompt}]}])
+        return _limpa(resp.text)
+    except Exception:
+        pass
+    # SDK antiga (google.generativeai) — fallback se a nova não estiver instalada
+    try:
+        import google.generativeai as _old
+        _old.configure(api_key=api_key)
+        resp = _old.GenerativeModel("gemini-1.5-flash").generate_content(prompt)
+        return _limpa(getattr(resp, "text", ""))
     except Exception as e:
-        _log(f"   Gemini falhou ({str(e)[:60]}) — uso heurística")
+        _log(f"   Gemini indisponível ({str(e)[:50]}) — uso heurística")
         return ""
 
 
