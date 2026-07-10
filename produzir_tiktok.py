@@ -1,0 +1,188 @@
+#!/usr/bin/env python3
+# produzir_tiktok.py -- FASE 3 do coletor: pega os virais baixados em
+# inbox_tiktok/ (video + plano.json do tiktok_coletor) e passa pela MESMA
+# esteira do hunter: reproduzir_video (template TopShop + hook + narração)
+# -> pronto_para_postar/ (daemon posta) -> vitrine do site -> posts_ledger.
+#
+# Fluxo completo: tiktok_coletor.py (baixa) -> produzir_tiktok.py (fabrica)
+#                 -> daemon posta nos horários -> $$
+#
+# Uso (VPS):  python3 produzir_tiktok.py [quantos]     (padrão: 2 por rodada —
+#             render é pesado no VPS; o resto fica pra próxima rodada)
+import os
+import sys
+import json
+import shutil
+import asyncio
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent
+INBOX = BASE_DIR / "inbox_tiktok"
+FEITOS = INBOX / "_produzidos"       # pra onde a pasta vai depois de produzir
+MAX_PADRAO = 2
+
+
+def _carregar_env():
+    for cand in (BASE_DIR / ".env", Path(".env")):
+        if not cand.exists():
+            continue
+        for linha in cand.read_text(encoding="utf-8").splitlines():
+            linha = linha.strip()
+            if not linha or linha.startswith("#") or "=" not in linha:
+                continue
+            if linha.lower().startswith("export "):
+                linha = linha[7:]
+            k, _, v = linha.partition("=")
+            k, v = k.strip(), v.strip().strip('"').strip("'")
+            if k and k not in os.environ:
+                os.environ[k] = v
+        break
+
+
+_carregar_env()
+
+# Reusa a esteira REAL do hunter (mesmo template, hook, narração, legenda)
+try:
+    from integrations import telegram_repurpose_hunter as H
+except Exception:
+    import telegram_repurpose_hunter as H
+
+
+def _log(m):
+    print(f"[produzir_tiktok] {m}")
+
+
+def _pendentes() -> list:
+    """Pastas do inbox com plano.json + video ainda não produzidos."""
+    if not INBOX.exists():
+        return []
+    out = []
+    for pasta in sorted(INBOX.iterdir()):
+        if not pasta.is_dir() or pasta.name.startswith("_"):
+            continue
+        pj = pasta / "plano.json"
+        vids = list(pasta.glob("video.*"))
+        if pj.exists() and vids:
+            out.append((pasta, pj, vids[0]))
+    return out
+
+
+def _produzir(pasta: Path, pj: Path, video_src: Path) -> bool:
+    info = json.loads(pj.read_text(encoding="utf-8"))
+    nome = info.get("produto") or info.get("termo") or pasta.name
+    link = info.get("link_afiliado", "")
+    if not link:
+        _log(f"   sem link de afiliado em {pasta.name} — pulo (não monetiza)")
+        return False
+
+    slug = H._slugify(nome)
+    hook = (H._HOOK[0](nome, plano={}) if H._HOOK_OK else "Olha isso!")
+
+    plano = {
+        "produto": nome,
+        "titulo_real": nome,
+        "preco_real": "",
+        "link_afiliado": link,
+        "musica_fundo": "",
+        "hook": hook,
+    }
+
+    # 1) RE-PRODUÇÃO (mesma esteira do hunter: 9:16, template, narração, hook)
+    destino = H.INBOX_VIDEOS / f"{slug}.mp4"
+    H.INBOX_VIDEOS.mkdir(parents=True, exist_ok=True)
+    _log(f"   🎬 renderizando '{nome[:45]}' (pode demorar no VPS)…")
+    resultado = asyncio.run(H.reproduzir_video(video_src, destino, nome, nome, plano))
+    if not resultado.get("sucesso"):
+        _log(f"   ❌ render falhou: {resultado.get('erro')}")
+        return False
+
+    # 2) Legenda + hashtags + plano (espelha os passos 5-6 do hunter)
+    categoria = ""
+    try:
+        from creative_engine.narration_script_builder import _categoria_do_produto
+        categoria = _categoria_do_produto(nome) or ""
+    except Exception:
+        pass
+    legenda = H._legenda_dinamica(nome, hook)
+    hashtags = H._hashtags_para(categoria)
+    plano.update({
+        "video_path_sugerido": str(destino),
+        "roteiro_narrado": resultado.get("frases", []),
+        "legenda": legenda,
+        "hashtags": hashtags,
+        "cta": (H._HOOK[1](nome) if H._HOOK_OK else "Link na Bio!"),
+        "narracao": resultado.get("narracao", False),
+        "duracao": resultado.get("duracao"),
+        "narracao_propria": resultado.get("narracao", False),
+        "duracao_video": resultado.get("duracao"),
+        "categoria": categoria,
+        "status_producao": "video_gerado",
+        "fonte": "tiktok",
+        "fonte_url": info.get("url", ""),
+        "fonte_views": info.get("views", 0),
+    })
+    H._salvar_json_atomico(H.SHARED_PLANS / f"plano_{slug}.json", plano)
+    H._salvar_json_atomico(H.SHARED_PLANS / "ultimo_plano.json", plano)
+
+    # 3) Esteira de postagem (passo 7 do hunter)
+    pp = H.BASE_DIR / "pronto_para_postar" / slug
+    pp.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(str(destino), str(pp / "video.mp4"))
+    (pp / "titulo_youtube.txt").write_text(f"{nome} #shorts"[:100], encoding="utf-8")
+    (pp / "descricao_youtube.txt").write_text(
+        (legenda + "\n\n" + hashtags).strip(), encoding="utf-8")
+    (pp / "hashtags.txt").write_text(hashtags, encoding="utf-8")
+
+    # 4) Site (passo 8) — com a foto oficial que o coletor já pegou
+    H._registrar_no_site(nome, link, imagem=info.get("imagem", ""))
+
+    # 5) Ledger (passo 9)
+    try:
+        from posts_ledger import registrar as _reg
+        _reg(produto=nome, link=link, categoria=categoria, hook=hook,
+             legenda=legenda, slug=slug, sub_ids=["tiktok"],
+             plataforma="", extra={"fonte": "tiktok",
+                                   "fonte_views": info.get("views", 0)})
+    except Exception:
+        pass
+
+    _log(f"   ✅ '{nome[:45]}' na esteira (pronto_para_postar/{slug})")
+    return True
+
+
+def main():
+    quantos = MAX_PADRAO
+    if len(sys.argv) > 1:
+        try:
+            quantos = max(1, int(sys.argv[1]))
+        except ValueError:
+            pass
+
+    fila = _pendentes()
+    if not fila:
+        _log("inbox_tiktok vazio — roda o tiktok_coletor.py primeiro (sem --dry)")
+        return 1
+    _log(f"{len(fila)} viral(is) no inbox · produzindo até {quantos} nesta rodada")
+
+    ok = 0
+    for pasta, pj, vid in fila[:quantos]:
+        try:
+            sucesso = _produzir(pasta, pj, vid)
+        except Exception as e:
+            _log(f"   ❌ erro em {pasta.name}: {str(e)[:120]}")
+            sucesso = False
+        # move a pasta pra _produzidos/ (ok) — falha fica pra tentar de novo
+        if sucesso:
+            ok += 1
+            FEITOS.mkdir(parents=True, exist_ok=True)
+            try:
+                shutil.move(str(pasta), str(FEITOS / pasta.name))
+            except Exception:
+                pass
+
+    _log(f"fim: {ok}/{min(quantos, len(fila))} produzidos. O daemon posta nos horários. 🚚")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
