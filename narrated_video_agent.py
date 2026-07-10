@@ -28,6 +28,7 @@
 import argparse
 import json
 import sys
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -65,7 +66,7 @@ LARGURA, ALTURA = 1080, 1920   # canvas 9:16 (vídeo 3:4 reduzido fica centraliz
 # Template de marca topshop — liga/desliga e textos. Carimba identidade no vídeo.
 TEMPLATE_MARCA = True
 MARCA_NOME = "TopShop"
-MARCA_HANDLE = "@topshop._"
+MARCA_HANDLE = os.environ.get("TOPSHOP_HANDLE", "@topshop._")
 # Pasta com os assets de marca (logo, fundo, selo, fontes)
 BRAND_DIR = PROJETO_ROOT / "assets" / "brand"
 EXT_VIDEO = {".mp4", ".mov", ".webm", ".m4v"}
@@ -972,8 +973,8 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
     # COLORIDO vai ao final da última linha (igual você fazia na mão).
     # >>> Constantes tunáveis (ajuste fino olhando 1 vídeo de teste) <<<
     HK_FONT         = 38
-    HK_Y_1LINHA     = 198     # y quando cabe em 1 linha
-    HK_Y_2LINHAS    = 180     # y da 1ª linha quando quebra em 2 (abaixo do @)
+    HK_Y_1LINHA     = int(os.environ.get("HK_Y_1LINHA", 236))   # desce p/ não tampar o header (logo/@)
+    HK_Y_2LINHAS    = int(os.environ.get("HK_Y_2LINHAS", 220))  # 1ª linha ABAIXO do logo (y=90..210)
     HK_ALTURA_LINHA = 52      # distância vertical entre as 2 linhas
     HK_MAX_LARG_1L  = int(LARGURA * 0.86)   # acima disso, quebra em 2 linhas
     HK_EMOJI_TAM    = 34     # ~= tamanho do texto (antes 48 = grandão demais)
