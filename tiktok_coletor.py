@@ -175,28 +175,57 @@ def _termo_gemini(desc: str) -> str:
         t = (t or "").strip().strip('"').split("\n")[0].strip()
         return "" if t.upper().startswith("NAO") else t[:80]
 
-    # SDK nova (google-genai) — a que o resto do projeto usa
-    try:
-        from google import genai
-        client = genai.Client(api_key=api_key)
-        resp = client.models.generate_content(
-            model="gemini-2.5-flash", contents=[{"parts": [{"text": prompt}]}])
-        return _limpa(resp.text)
-    except Exception:
-        pass
-    # SDK antiga (google.generativeai) — fallback se a nova não estiver instalada
-    try:
-        import google.generativeai as _old
-        _old.configure(api_key=api_key)
-        resp = _old.GenerativeModel("gemini-1.5-flash").generate_content(prompt)
-        return _limpa(getattr(resp, "text", ""))
-    except Exception as e:
-        _log(f"   Gemini indisponível ({str(e)[:50]}) — uso heurística")
-        return ""
+    # SDK nova (google-genai). Rate-limit do free tier: espera e tenta de novo.
+    import time as _t
+    for tentativa in (1, 2):
+        try:
+            from google import genai
+            client = genai.Client(api_key=api_key)
+            resp = client.models.generate_content(
+                model="gemini-2.5-flash", contents=[{"parts": [{"text": prompt}]}])
+            return _limpa(resp.text)
+        except Exception as e:
+            s = str(e)
+            if tentativa == 1 and ("429" in s or "RESOURCE_EXHAUSTED" in s
+                                   or "quota" in s.lower()):
+                _log("   Gemini rate-limit — espero 20s e tento de novo")
+                _t.sleep(20)
+                continue
+            _log(f"   Gemini indisponível ({s[:50]}) — uso heurística")
+            return ""
+    return ""
 
 
 def _identificar_produto(desc: str) -> str:
     return _termo_gemini(desc) or _termo_heuristico(desc)
+
+
+# adjetivos genéricos não contam como "parentesco" (senão 'Ventilador portátil'
+# casa com 'Aquecedor Portátil' só pelo 'portátil')
+_STOP_REL = {"portatil", "eletrico", "eletrica", "eletronico", "eletronica",
+             "automatico", "automatica", "digital", "profissional", "grande",
+             "pequeno", "pequena", "completo", "completa", "casual", "facil",
+             "mini", "para", "com", "the", "and"}
+
+
+def _sem_acento(s: str) -> str:
+    import unicodedata
+    return "".join(c for c in unicodedata.normalize("NFD", s)
+                   if unicodedata.category(c) != "Mn")
+
+
+def _match_relevante(termo: str, nome_produto: str) -> bool:
+    """O produto que a Shopee devolveu tem que COMPARTILHAR pelo menos uma
+    palavra significativa com o termo buscado. Mata o match falso ('silence' ->
+    Camiseta, 'maravilhosa' -> Sandália): a Shopee sempre devolve ALGO, e sem
+    essa trava o link vai pro produto errado."""
+    def palavras(s):
+        s = _sem_acento((s or "").lower())
+        return {p for p in re.findall(r"[a-z0-9]{4,}", s)} - _STOP_REL
+    t, n = palavras(termo), palavras(nome_produto)
+    if not t:
+        return False
+    return bool(t & n)
 
 
 def _baixar(url: str, destino: Path) -> Path | None:
@@ -283,6 +312,10 @@ def main():
                 _log(f"     ✗ sem match na Shopee (gringo/Amazon?) — descarto")
                 continue
             camp = m["campeao"]
+            if not _match_relevante(termo, camp.get("nome", "")):
+                _log(f"     ✗ match fraco ('{camp.get('nome','?')[:35]}' não bate "
+                     f"com o termo) — descarto")
+                continue
             origem = camp.get("product_link") or camp.get("offer_link")
             # sub_id SÓ alfanumérico (a Shopee rejeita _/-/etc → erro 11001)
             sub_termo = re.sub(r"[^A-Za-z0-9]", "", termo)[:16] or "viral"
