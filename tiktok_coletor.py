@@ -347,9 +347,11 @@ def main():
             }, ensure_ascii=False, indent=2), encoding="utf-8")
             _log(f"     ⬇️  baixado em {pasta.name}/")
 
-    _salvar_vistos(vistos)
+    # no --dry NÃO persiste o cache (senão a rodada real pula tudo que o teste viu)
+    if not dry:
+        _salvar_vistos(vistos)
     _log(f"fim. {achados} produto(s) casado(s) na Shopee "
-         f"{'(dry — nada baixado)' if dry else ''}")
+         f"{'(dry — nada baixado, cache intacto)' if dry else ''}")
     return 0
 
 
