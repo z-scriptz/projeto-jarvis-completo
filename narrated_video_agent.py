@@ -974,7 +974,7 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
     # >>> Constantes tunáveis (ajuste fino olhando 1 vídeo de teste) <<<
     HK_FONT_MAX     = int(os.environ.get("HK_FONT", 38))     # tamanho inicial do hook
     HK_FONT_MIN     = int(os.environ.get("HK_FONT_MIN", 26)) # piso ao encolher p/ caber
-    HK_Y            = int(os.environ.get("HK_Y", 250))       # posição ÚNICA (1 linha), abaixo do header
+    HK_Y            = int(os.environ.get("HK_Y", 198))       # posição ÚNICA (1 linha), logo abaixo do @ (valor bom antigo)
     HK_ALTURA_LINHA = 52      # (mantido só p/ o bloco do emoji; hook é sempre 1 linha)
     HK_MAX_LARG     = int(LARGURA * float(os.environ.get("HK_LARG_FRAC", "0.90")))
     HK_EMOJI_TAM    = 34     # ~= tamanho do texto (antes 48 = grandão demais)
