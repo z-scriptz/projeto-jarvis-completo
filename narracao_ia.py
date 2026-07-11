@@ -92,15 +92,30 @@ def falar_elevenlabs(texto: str, destino: Path) -> bool:
     if not api_key or not voice:
         print("   ⚠️ Faltam ELEVENLABS_API_KEY / ELEVENLABS_VOICE_ID no .env")
         return False
+    def _f(nome, padrao):
+        try:
+            return float(os.getenv(nome, padrao))
+        except (TypeError, ValueError):
+            return float(padrao)
+
+    # settings ajustáveis pelo .env (padrão = os valores da voz do Michael)
+    vs = {
+        "stability":        _f("ELEVENLABS_STABILITY", 0.45),
+        "similarity_boost": _f("ELEVENLABS_SIMILARITY", 0.75),
+        "style":            _f("ELEVENLABS_STYLE", 0.40),
+        "use_speaker_boost": True,
+    }
+    _spd = _f("ELEVENLABS_SPEED", 1.15)
+    if _spd and _spd != 1.0:
+        vs["speed"] = max(0.7, min(1.2, _spd))   # faixa aceita pela API
+
     try:
         import requests
         url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice}"
         r = requests.post(url, timeout=60,
             headers={"xi-api-key": api_key, "Content-Type": "application/json",
                      "Accept": "audio/mpeg"},
-            json={"text": texto, "model_id": model,
-                  "voice_settings": {"stability": 0.45, "similarity_boost": 0.8,
-                                     "style": 0.35, "use_speaker_boost": True}})
+            json={"text": texto, "model_id": model, "voice_settings": vs})
         if r.status_code != 200:
             print(f"   ❌ ElevenLabs HTTP {r.status_code}: {r.text[:180]}")
             return False
