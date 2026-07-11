@@ -12,6 +12,7 @@
 import os
 import sys
 import json
+import random
 import shutil
 import asyncio
 import subprocess
@@ -21,6 +22,10 @@ BASE_DIR = Path(__file__).resolve().parent
 INBOX = BASE_DIR / "inbox_tiktok"
 FEITOS = INBOX / "_produzidos"       # pra onde a pasta vai depois de produzir
 MAX_PADRAO = 2
+
+# Trilha de fundo baixinha (pra nunca ficar silêncio quando a narração acaba).
+# Coloque .mp3/.m4a/.wav sutis e "virais" nessa pasta — uma é sorteada por vídeo.
+MUSICA_EXTS = (".mp3", ".m4a", ".wav", ".ogg", ".aac")
 
 
 def _carregar_env():
@@ -53,9 +58,37 @@ def _log(m):
     print(f"[produzir_tiktok] {m}")
 
 
+def _f(nome: str, padrao: float) -> float:
+    try:
+        return float(os.getenv(nome, padrao))
+    except (TypeError, ValueError):
+        return float(padrao)
+
+
+def _dir_musica() -> Path:
+    d = os.getenv("MUSICA_FUNDO_DIR", "assets/inbox/audio")
+    p = Path(d)
+    return p if p.is_absolute() else (BASE_DIR / p)
+
+
+def _escolher_musica() -> Path:
+    """Sorteia uma trilha de fundo da pasta de músicas. '' se não houver nenhuma
+    (aí o vídeo sai só com a narração, sem música — sem quebrar)."""
+    pasta = _dir_musica()
+    try:
+        cands = [p for p in pasta.iterdir()
+                 if p.is_file() and p.suffix.lower() in MUSICA_EXTS
+                 and p.stat().st_size > 5000]
+    except Exception:
+        cands = []
+    return random.choice(cands) if cands else Path()
+
+
 def _narrar_e_trocar_audio(video: Path, nome: str, contexto: str) -> bool:
     """Gera a narração (Michael/ElevenLabs, roteiro do vídeo) e SUBSTITUI o áudio
     do vídeo por ela — mata o áudio original (fim do copyright/crédito a terceiro).
+    Mixa uma TRILHA DE FUNDO baixinha por baixo (loopada até o fim do vídeo), pra
+    nunca ficar silêncio quando a narração acaba antes do vídeo.
     Best-effort: se algo falhar, mantém o vídeo com o áudio original."""
     if os.getenv("NARRAR_TIKTOK", "1").strip().lower() not in ("1", "true", "sim"):
         return False
@@ -68,15 +101,46 @@ def _narrar_e_trocar_audio(video: Path, nome: str, contexto: str) -> bool:
     if not _gerar_narr(nome, contexto, narr):
         _log("   narração não gerada — mantém áudio original")
         return False
+
     out = video.with_suffix(".narrado.mp4")
-    r = subprocess.run(
-        ["ffmpeg", "-y", "-i", str(video), "-i", str(narr),
-         "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy",
-         "-c:a", "aac", "-b:a", "128k", str(out)],
-        capture_output=True, text=True, timeout=180)
+    musica = _escolher_musica()
+    vol = max(0.0, min(0.5, _f("MUSICA_FUNDO_VOL", 0.10)))
+
+    # narração = trilha 1 (volume cheio), música = trilha 2 (baixa, loopada).
+    # amix normaliza dividindo por 2, então pré-amplifico o dobro pra manter os
+    # níveis. -shortest corta no fim do VÍDEO (música é infinita via stream_loop).
+    if musica and vol > 0:
+        fc = (f"[1:a]volume=2.0[nar];"
+              f"[2:a]volume={2 * vol:.3f}[bg];"
+              f"[nar][bg]amix=inputs=2:duration=longest:dropout_transition=0[a]")
+        cmd = ["ffmpeg", "-y", "-i", str(video), "-i", str(narr),
+               "-stream_loop", "-1", "-i", str(musica),
+               "-filter_complex", fc, "-map", "0:v:0", "-map", "[a]",
+               "-c:v", "copy", "-c:a", "aac", "-b:a", "128k",
+               "-shortest", str(out)]
+        tag = f"narração (Michael) + trilha '{musica.name}' baixinha"
+    else:
+        cmd = ["ffmpeg", "-y", "-i", str(video), "-i", str(narr),
+               "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy",
+               "-c:a", "aac", "-b:a", "128k", str(out)]
+        tag = "narração (Michael)"
+        if not musica:
+            _log(f"   ℹ️ sem trilha em {_dir_musica()} — vídeo sai só com narração")
+
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+    # se a mixagem com música falhar (ffmpeg antigo etc.), tenta só narração
+    if (r.returncode != 0 or not out.exists()) and musica and vol > 0:
+        _log(f"   ⚠️ mix c/ música falhou, tento só narração: {(r.stderr or '')[-140:]}")
+        r = subprocess.run(
+            ["ffmpeg", "-y", "-i", str(video), "-i", str(narr),
+             "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy",
+             "-c:a", "aac", "-b:a", "128k", str(out)],
+            capture_output=True, text=True, timeout=180)
+        tag = "narração (Michael)"
+
     if r.returncode == 0 and out.exists() and out.stat().st_size > 1000:
         out.replace(video)
-        _log("   🎙️  áudio original SUBSTITUÍDO pela narração (Michael)")
+        _log(f"   🎙️  áudio original SUBSTITUÍDO por {tag}")
         return True
     _log(f"   ⚠️ troca de áudio falhou (mantém original): {(r.stderr or '')[-160:]}")
     try:
