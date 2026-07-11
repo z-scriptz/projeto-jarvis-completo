@@ -682,28 +682,50 @@ def _clip_tem_texto(clip, amostras: int = 6, min_conf: int = 55,
         return True
 
 
+def _aplicar_rotacao(clip, graus: float):
+    """Rotaciona o clip alguns graus (sem expandir a moldura). Combinado com o
+    zoom, as bordas pretas da rotação ficam escondidas."""
+    if not graus:
+        return clip
+    try:
+        from moviepy.video import fx as vfx
+        return clip.with_effects([vfx.Rotate(graus, expand=False)])
+    except Exception:
+        try:
+            return clip.rotated(graus)          # algumas versões do moviepy
+        except Exception:
+            return clip
+
+
 def _aplicar_efeitos_diferenciacao(clip):
-    """[FIX-2] Aplica de fato mirror + zoom digital + grade/grão/vinheta.
-    Mirror é INTELIGENTE: só espelha vídeo SEM texto na tela (senão inverteria
-    o texto gravado). CFG_MIRROR_X força; CFG_MIRROR_AUTO decide pelo OCR."""
+    """DIFERENCIAÇÃO ALEATÓRIA por vídeo: mirror (inteligente) + rotação leve
+    alternada + zoom variável 3–7% + cor variável (brilho/saturação/grão). Cada
+    post sai único — o algoritmo tende a ler como conteúdo novo, não repost."""
+    import random as _rnd
     fazer_mirror = CFG_MIRROR_X or (CFG_MIRROR_AUTO and not _clip_tem_texto(clip))
     if fazer_mirror:
         clip = _aplicar_mirror_x(clip)
         log.debug("VFX-1: Mirror X")
-    if CFG_ZOOM_DIGITAL and CFG_ZOOM_DIGITAL > 0:
-        clip = _aplicar_zoom_digital(clip, fator=CFG_ZOOM_DIGITAL)
-        log.debug(f"VFX-3: Zoom {CFG_ZOOM_DIGITAL * 100:.0f}%")
 
-    brilho = CFG_BRILHO if CFG_GRADE else 1.0
-    sat = CFG_SATURACAO if CFG_GRADE else 1.0
-    grain = CFG_GRANULADO if CFG_GRADE else 0
-    if brilho != 1.0 or sat != 1.0 or grain > 0 or CFG_VINHETA:
-        clip = _image_transform(
-            clip,
-            lambda f, _b=brilho, _s=sat, _g=grain, _v=CFG_VINHETA:
-                _processar_frame(f, _b, _s, _g, _v),
-        )
-        log.debug(f"VFX-2,4,5: brilho={brilho} sat={sat} grain={grain} vignette={CFG_VINHETA}")
+    # rotação leve ±(0.8–1.4)° — quebra o alinhamento geométrico original
+    ang = round(_rnd.uniform(0.8, 1.4), 2) * _rnd.choice((-1, 1))
+    clip = _aplicar_rotacao(clip, ang)
+
+    # zoom digital VARIÁVEL 3–7% (também esconde as bordas da rotação)
+    zoom = round(_rnd.uniform(0.03, 0.07), 3)
+    clip = _aplicar_zoom_digital(clip, fator=zoom)
+
+    # cor VARIÁVEL por vídeo — desfaz os "blocos cromáticos" do original
+    brilho = round(_rnd.uniform(0.98, 1.06), 3)
+    sat = round(_rnd.uniform(0.96, 1.10), 3)
+    grain = _rnd.choice((2, 3, 4))
+    clip = _image_transform(
+        clip,
+        lambda f, _b=brilho, _s=sat, _g=grain, _v=CFG_VINHETA:
+            _processar_frame(f, _b, _s, _g, _v),
+    )
+    log.info(f"🎲 VFX aleatório: rot={ang}° zoom={zoom*100:.1f}% "
+             f"brilho={brilho} sat={sat} grão={grain}")
     return clip
 
 
