@@ -36,6 +36,10 @@ converte → repete. **Objetivo: virar máquina de dinheiro, dia após dia.**
 
 ### Distribuição / site
 - **Auto-post no grupo do Telegram** (@achadinhosrelampagoh).
+- **Facebook posting consertado** (2026-07-11): era um TOKEN DE PÁGINA em
+  `META_ACCESS_TOKEN` (o `/me/accounts` não existe pra Página). Fix: setar
+  `FACEBOOK_PAGE_TOKEN` com o mesmo valor — o código usa direto, sem
+  `/me/accounts`. `diag_facebook.py` detecta esse caso sozinho. ✅ post real ok.
 - **Site** topshopoficial.com.br: health-check (esconde link morto), fotos
   oficiais via API de afiliado, categorias em barra fixa, mobile 2 colunas.
 
@@ -60,16 +64,7 @@ produto pra conta certa por nicho** e postar em múltiplos destinos.
 - Coletor/produtor decidem o nicho do produto → mandam pro perfil e handle
   daquele nicho (o `TOPSHOP_HANDLE` vira dinâmico por conta).
 
-### 2. 🐞 Bug do Facebook — token da página
-Erro atual: *"não consegui obter o token da página (confere se o token de
-usuário tem `pages_show_list` e se você é admin da página)"*.
-- Causa provável: o **user token** não tem as permissões, ou falta buscar o
-  **Page Access Token** via `/me/accounts`.
-- Fix: gerar user token com `pages_show_list` + `pages_manage_posts` +
-  `pages_read_engagement`, confirmar admin da página, e no código pegar o
-  page token de `/me/accounts` antes de publicar. (Detalhar quando formos mexer.)
-
-### 3. Expandir a rede de vídeos (fontes novas)
+### 2. Expandir a rede de vídeos (fontes novas)
 - Coletar de **perfis "dark" do Instagram** que postam produtos e são
   relevantes (centenas de seguidores) — um coletor de IG análogo ao do TikTok.
 - Preferir **fontes sem texto** na tela (a edição fica mais limpa).
