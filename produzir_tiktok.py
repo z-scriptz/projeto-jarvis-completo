@@ -24,8 +24,9 @@ FEITOS = INBOX / "_produzidos"       # pra onde a pasta vai depois de produzir
 MAX_PADRAO = 2
 
 # Trilha de fundo baixinha (pra nunca ficar silêncio quando a narração acaba).
-# Coloque .mp3/.m4a/.wav sutis e "virais" nessa pasta — uma é sorteada por vídeo.
-MUSICA_EXTS = (".mp3", ".m4a", ".wav", ".ogg", ".aac")
+# Coloque áudios sutis e "virais" nessa pasta — uma é sorteada por vídeo.
+# Aceita mp4/mov também (Reels Sound): o ffmpeg usa só a faixa de áudio deles.
+MUSICA_EXTS = (".mp3", ".m4a", ".wav", ".ogg", ".aac", ".mp4", ".mov", ".m4v")
 
 
 def _carregar_env():
