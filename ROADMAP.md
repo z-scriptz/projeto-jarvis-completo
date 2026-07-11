@@ -66,7 +66,12 @@ produto pra conta certa por nicho** e postar em múltiplos destinos.
 - Coletor/produtor decidem o nicho do produto → mandam pro perfil e handle
   daquele nicho (o `TOPSHOP_HANDLE` vira dinâmico por conta).
 
-### 2. Expandir a rede de vídeos (fontes novas)
+### 2. Dedup por PRODUTO no coletor/produtor
+Hoje 2 vídeos diferentes do mesmo item (ex: "Gaabor Ferro a Vapor" casou 2x)
+viram 2 posts iguais. Deduplicar pelo produto/item_id da Shopee (ou nome
+normalizado) pra nunca postar o mesmo produto duas vezes seguidas.
+
+### 3. Expandir a rede de vídeos (fontes novas)
 - Coletar de **perfis "dark" do Instagram** que postam produtos e são
   relevantes (centenas de seguidores) — um coletor de IG análogo ao do TikTok.
 - Preferir **fontes sem texto** na tela (a edição fica mais limpa).
