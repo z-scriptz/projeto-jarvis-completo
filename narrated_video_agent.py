@@ -972,11 +972,11 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
     # Frase longa quebra em 2 linhas: a 1ª sobe, a 2ª fica embaixo, e o emoji
     # COLORIDO vai ao final da última linha (igual você fazia na mão).
     # >>> Constantes tunáveis (ajuste fino olhando 1 vídeo de teste) <<<
-    HK_FONT         = 38
-    HK_Y_1LINHA     = int(os.environ.get("HK_Y_1LINHA", 236))   # desce p/ não tampar o header (logo/@)
-    HK_Y_2LINHAS    = int(os.environ.get("HK_Y_2LINHAS", 220))  # 1ª linha ABAIXO do logo (y=90..210)
-    HK_ALTURA_LINHA = 52      # distância vertical entre as 2 linhas
-    HK_MAX_LARG_1L  = int(LARGURA * 0.86)   # acima disso, quebra em 2 linhas
+    HK_FONT_MAX     = int(os.environ.get("HK_FONT", 38))     # tamanho inicial do hook
+    HK_FONT_MIN     = int(os.environ.get("HK_FONT_MIN", 26)) # piso ao encolher p/ caber
+    HK_Y            = int(os.environ.get("HK_Y", 250))       # posição ÚNICA (1 linha), abaixo do header
+    HK_ALTURA_LINHA = 52      # (mantido só p/ o bloco do emoji; hook é sempre 1 linha)
+    HK_MAX_LARG     = int(LARGURA * float(os.environ.get("HK_LARG_FRAC", "0.90")))
     HK_EMOJI_TAM    = 34     # ~= tamanho do texto (antes 48 = grandão demais)
 
     _emoji_do_txt, hook_txt_limpo = _separar_emoji_hook(hook_txt)
@@ -984,18 +984,22 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
     # próprio hook (ou 🔥 do fallback).
     _emoji_hook = _emoji_do_produto(produto) or _emoji_do_txt
 
-    # mede a largura numa linha só pra decidir 1 ou 2 linhas
-    _larg_1l = None
-    _med = _textclip_justo(TextClip, hook_txt_limpo, HK_FONT, fonte_bold)
-    if _med is not None:
-        _larg_1l = _med.w
-        try: _med.close()
-        except Exception: pass
-    _linhas = (_quebrar_hook_2linhas(hook_txt_limpo)
-               if (_larg_1l and _larg_1l > HK_MAX_LARG_1L) else [hook_txt_limpo])
+    # HOOK SEMPRE EM 1 LINHA: reduz a fonte até caber em HK_MAX_LARG (nunca
+    # quebra em 2 — 2 linhas encavalava o header/CTA e saía torto).
+    HK_FONT = HK_FONT_MAX
+    while HK_FONT > HK_FONT_MIN:
+        _med = _textclip_justo(TextClip, hook_txt_limpo, HK_FONT, fonte_bold)
+        _w = getattr(_med, "w", 0) if _med is not None else 0
+        if _med is not None:
+            try: _med.close()
+            except Exception: pass
+        if not _w or _w <= HK_MAX_LARG:
+            break
+        HK_FONT -= 2
 
-    _n = len(_linhas)
-    _y0 = HK_Y_1LINHA if _n == 1 else HK_Y_2LINHAS
+    _linhas = [hook_txt_limpo]
+    _n = 1
+    _y0 = HK_Y
     for _i, _linha in enumerate(_linhas):
         _y = _y0 + _i * HK_ALTURA_LINHA
         _somb = _textclip_robusto(TextClip, _linha, font_size=HK_FONT,
