@@ -49,6 +49,8 @@ converte → repete. **Objetivo: virar máquina de dinheiro, dia após dia.**
 - **Config por `.env`** (sem precisar de patch): `TOPSHOP_HANDLE`, `HK_Y`,
   `HK_FONT`, `HK_FONT_MIN`, `HK_LARG_FRAC`, `ELEVENLABS_*`, `MUSICA_FUNDO_VOL`,
   `MUSICA_FUNDO_DIR`, `NARRAR_TIKTOK`.
+- **Perfis-fonte do TikTok** em `tiktok_perfis.txt` (1 por linha) — combustível
+  do coletor. SEM esse arquivo o cron coleta zero. Ampliar sempre que esgotar.
 
 ---
 
@@ -73,6 +75,11 @@ produto pra conta certa por nicho** e postar em múltiplos destinos.
 
 ## 🧠 Backlog / avançado
 
+- **Multiplataforma de afiliados (Amazon + outras):** além da Shopee, pegar
+  link de afiliado da **Amazon** (os "amazon gadgets" que viralizam) e de outras
+  plataformas. Cada plataforma numa **página separada do site** (Achados Shopee /
+  Achados Amazon / …). O coletor já baixa virais de vários nichos — falta o
+  matcher/gerador de link por plataforma e a vitrine dividida.
 - **Comentários automáticos + Stories** pro Jarvis (auto-engajamento).
 - **Auto-DM** pra CTA tipo "COMENTE QUERO" → responde no direct com o link
   (precisa Graph API / permissões de mensagem).
