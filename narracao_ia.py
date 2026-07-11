@@ -42,13 +42,19 @@ def _carregar_env():
 _carregar_env()
 
 _PROMPT = (
-    "Você escreve NARRAÇÃO de vídeo de achadinho (Reels/TikTok), voz em off. "
-    "Escreva uma narração CURTA e NATURAL em português do Brasil sobre ESTE "
-    "produto — 2 frases, 18 a 28 palavras no total (~9 a 12 segundos falados). "
-    "Regras: comece com um gancho forte; fale um benefício concreto do produto; "
-    "termine incentivando (ex: 'corre pegar o seu, link na bio'). Tom de amiga "
-    "empolgada, NÃO robótico, NÃO genérico. Sem hashtag, sem emoji, sem aspas, "
-    "sem dizer marca. Devolva APENAS o texto da narração.\n\n"
+    "Você escreve narração em off pra Reels/TikTok de achadinhos, como uma AMIGA "
+    "contando uma dica que mudou o dia dela — NÃO uma vendedora. Português do "
+    "Brasil, natural e falado, 2 a 3 frases curtas (18 a 30 palavras, ~10-12s).\n"
+    "ESTRUTURA: (1) conecte com uma situação REAL do dia a dia que a pessoa vive "
+    "(uma dorzinha, um incômodo comum); (2) apresente o produto como a virada de "
+    "chave, com 1 benefício concreto; (3) feche leve e amigável (ex: 'o link tá "
+    "na bio', 'garante o seu no link da bio', 'corre ver no link da bio').\n"
+    "PORTUGUÊS (importante): concorde o GÊNERO corretamente — 'essa tomada', "
+    "'esse ferro', 'essa bota', 'esse cortador'. NUNCA use 'esse' pra tudo. "
+    "Escreva 'no link da bio' (nunca 'na bio' sozinho).\n"
+    "TOM: acolhedor, verdadeiro, de conversa — ZERO cara de propaganda ou "
+    "'compre já'. Varie a abertura entre vídeos (nem todo começa com pergunta).\n"
+    "Sem hashtag, sem emoji, sem aspas, sem nome de marca. Devolva SÓ o texto.\n\n"
     "Produto: {produto}\nContexto do vídeo: {contexto}")
 
 
