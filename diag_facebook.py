@@ -103,7 +103,42 @@ def main():
         print("   " + (_erro(me) or f"HTTP {st}"))
         print("\n👉 Gere um token novo (passos no fim). Token de usuário expira!")
         return 1
-    print(f"✅ Token válido — usuário: {me.get('name')} (id {me.get('id')})")
+    print(f"✅ Token válido — nome: {me.get('name')} (id {me.get('id')})")
+
+    # 1.5) É um TOKEN DE PÁGINA? (o /me retorna a própria Página, não um usuário)
+    st_ac, contas0 = _get(sess, "me/accounts", token, fields="id")
+    sem_accounts = "nonexisting field" in (_erro(contas0).lower())
+    eh_page_token = (page_id and str(me.get("id")) == page_id) or sem_accounts
+    if eh_page_token:
+        print("\n🎯 Esse token é um TOKEN DE PÁGINA (o /me retornou a própria Página,")
+        print("   e /me/accounts não existe pra Página). Isso é BOM: pra postar na")
+        print("   Página o Facebook usa exatamente um token de página como esse.")
+        print("   Ele só está em META_ACCESS_TOKEN; o código procura em FACEBOOK_PAGE_TOKEN.")
+        # verifica leitura da Página
+        _, pg = _get(sess, page_id or str(me.get("id")), token, fields="name,fan_count")
+        if "name" in pg:
+            print(f"   ✅ Lê a Página: {pg.get('name')} (fãs: {pg.get('fan_count', '?')})")
+        else:
+            print(f"   ⚠️  Não leu a Página: {_erro(pg)}")
+        # verifica alcance do Instagram
+        if ig_id:
+            _, ig = _get(sess, ig_id, token, fields="username,name")
+            if "username" in ig or "name" in ig:
+                print(f"   ✅ Alcança o Instagram: @{ig.get('username', ig.get('name'))}")
+            else:
+                print(f"   ⚠️  Não alcançou o IG ({ig_id}): {_erro(ig)}")
+        print("\n" + "=" * 58)
+        print("🧭  VEREDITO — fix de 1 linha")
+        print("=" * 58)
+        if page_token:
+            print("• FACEBOOK_PAGE_TOKEN já está setado. Se ainda falhar, confirme que")
+            print("  ele é o MESMO token de página (copie o de META_ACCESS_TOKEN).")
+        else:
+            print("• Adicione no .env:  FACEBOOK_PAGE_TOKEN=<o mesmo token de 3 meses>")
+            print("  (o código usa ele direto pra postar na Página, sem /me/accounts).")
+        print("• Depois: systemctl restart jarvis  → Facebook volta a postar.")
+        print("• Instagram já usa esse token + INSTAGRAM_USER_ID (page token serve pro IG).")
+        return 0
 
     # 2) permissões concedidas
     st, perms = _get(sess, "me/permissions", token)
