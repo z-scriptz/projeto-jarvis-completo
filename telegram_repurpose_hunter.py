@@ -417,13 +417,13 @@ _HASHTAGS_CAT = {
 # A legenda começa com o MESMO hook do vídeo e depois desenvolve — aumenta a
 # retenção no feed (a pessoa lê e continua assistindo).
 _LEGENDA_DESENVOLVIMENTO = [
-    "Achei esse {nome} e sinceramente me surpreendi 👇",
-    "Precisava te mostrar esse {nome}, olha só 👇",
-    "Esse {nome} tá dando o que falar — e não é à toa 👇",
-    "Testei esse {nome} e virou queridinho 😍👇",
-    "Se você ainda não conhece esse {nome}, presta atenção 👇",
-    "Esse {nome} resolve de verdade e ainda é baratinho 👇",
-    "Corre ver esse {nome} antes que acabe 👇",
+    "Achei esse achadinho e me surpreendi: {nome} 👇",
+    "Precisava te mostrar esse achado — {nome} 👇",
+    "Tá dando o que falar e não é à toa: {nome} 👇",
+    "Testei e virou queridinho: {nome} 😍👇",
+    "Se você ainda não conhece, presta atenção: {nome} 👇",
+    "Resolve de verdade e ainda é baratinho: {nome} 👇",
+    "Corre ver antes que acabe: {nome} 👇",
 ]
 
 

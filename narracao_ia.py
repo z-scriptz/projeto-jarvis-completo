@@ -45,15 +45,21 @@ _PROMPT = (
     "Você escreve narração em off pra Reels/TikTok de achadinhos, como uma AMIGA "
     "contando uma dica que mudou o dia dela — NÃO uma vendedora. Português do "
     "Brasil, natural e falado, 2 a 3 frases curtas (18 a 30 palavras, ~10-12s).\n"
-    "ESTRUTURA: (1) conecte com uma situação REAL do dia a dia que a pessoa vive "
-    "(uma dorzinha, um incômodo comum); (2) apresente o produto como a virada de "
-    "chave, com 1 benefício concreto; (3) feche leve e amigável (ex: 'o link tá "
-    "na bio', 'garante o seu no link da bio', 'corre ver no link da bio').\n"
-    "PORTUGUÊS (importante): concorde o GÊNERO corretamente — 'essa tomada', "
-    "'esse ferro', 'essa bota', 'esse cortador'. NUNCA use 'esse' pra tudo. "
-    "Escreva 'no link da bio' (nunca 'na bio' sozinho).\n"
-    "TOM: acolhedor, verdadeiro, de conversa — ZERO cara de propaganda ou "
-    "'compre já'. Varie a abertura entre vídeos (nem todo começa com pergunta).\n"
+    "ESTRUTURA: (1) conecte com uma situação REAL do dia a dia (uma dorzinha, um "
+    "incômodo comum); (2) apresente o produto como a virada de chave, com 1 "
+    "benefício concreto; (3) feche com um convite curto pro link da bio.\n"
+    "FECHAMENTO — use UM destes, EXATAMENTE assim (não invente variação torta "
+    "tipo 'corre ver no link da bio'): 'tá tudo no link da bio', 'é só clicar no "
+    "link da bio', 'garante o seu no link da bio', 'o link tá na bio', 'corre "
+    "pro link da bio'.\n"
+    "GÊNERO (essencial): concorde MASCULINO/FEMININO com o produto — 'essa "
+    "passadeira', 'esse ferro', 'essa tomada', 'esse cortador', 'essa bota'. "
+    "NUNCA use 'esse/o' pra palavra feminina, nem 'essa/a' pra masculina. Na "
+    "dúvida sobre o gênero, REESCREVA a frase pra não precisar do artigo.\n"
+    "QUALIDADE: frases COMPLETAS e ortografia PERFEITA — não abrevie, não 'coma' "
+    "palavras, não corte no meio. Releia e corrija antes de devolver.\n"
+    "TOM: acolhedor, de conversa — ZERO cara de propaganda ou 'compre já'. "
+    "Varie a abertura entre vídeos (nem todo começa com pergunta).\n"
     "Sem hashtag, sem emoji, sem aspas, sem nome de marca. Devolva SÓ o texto.\n\n"
     "Produto: {produto}\nContexto do vídeo: {contexto}")
 
@@ -79,9 +85,9 @@ def roteiro(produto: str, contexto: str = "") -> str:
                     time.sleep(20); continue
                 print(f"   (Gemini falhou: {s[:60]}) — uso roteiro simples")
                 break
-    # fallback (não deveria acontecer com a key certa)
-    return (f"Você precisa conhecer esse {produto}. "
-            f"Facilita demais o dia a dia — corre pegar o seu, link na bio.")
+    # fallback (não deveria acontecer com a key certa) — gênero-safe (apposto)
+    return (f"Esse achadinho vale muito a pena: {produto}. "
+            f"Facilita demais o dia a dia — o link tá na bio.")
 
 
 def falar_elevenlabs(texto: str, destino: Path) -> bool:
