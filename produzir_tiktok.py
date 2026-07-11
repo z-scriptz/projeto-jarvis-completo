@@ -14,6 +14,7 @@ import sys
 import json
 import shutil
 import asyncio
+import subprocess
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -50,6 +51,39 @@ except Exception:
 
 def _log(m):
     print(f"[produzir_tiktok] {m}")
+
+
+def _narrar_e_trocar_audio(video: Path, nome: str, contexto: str) -> bool:
+    """Gera a narração (Michael/ElevenLabs, roteiro do vídeo) e SUBSTITUI o áudio
+    do vídeo por ela — mata o áudio original (fim do copyright/crédito a terceiro).
+    Best-effort: se algo falhar, mantém o vídeo com o áudio original."""
+    if os.getenv("NARRAR_TIKTOK", "1").strip().lower() not in ("1", "true", "sim"):
+        return False
+    try:
+        from narracao_ia import gerar as _gerar_narr
+    except Exception:
+        _log("   narracao_ia indisponível — mantém áudio original")
+        return False
+    narr = video.parent / (video.stem + "_narr.mp3")
+    if not _gerar_narr(nome, contexto, narr):
+        _log("   narração não gerada — mantém áudio original")
+        return False
+    out = video.with_suffix(".narrado.mp4")
+    r = subprocess.run(
+        ["ffmpeg", "-y", "-i", str(video), "-i", str(narr),
+         "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy",
+         "-c:a", "aac", "-b:a", "128k", str(out)],
+        capture_output=True, text=True, timeout=180)
+    if r.returncode == 0 and out.exists() and out.stat().st_size > 1000:
+        out.replace(video)
+        _log("   🎙️  áudio original SUBSTITUÍDO pela narração (Michael)")
+        return True
+    _log(f"   ⚠️ troca de áudio falhou (mantém original): {(r.stderr or '')[-160:]}")
+    try:
+        out.unlink()
+    except Exception:
+        pass
+    return False
 
 
 def _pendentes() -> list:
@@ -95,6 +129,9 @@ def _produzir(pasta: Path, pj: Path, video_src: Path) -> bool:
     if not resultado.get("sucesso"):
         _log(f"   ❌ render falhou: {resultado.get('erro')}")
         return False
+
+    # 1.5) NARRAÇÃO própria + mata o áudio original (copyright/crédito)
+    _narrar_e_trocar_audio(destino, nome, info.get("descricao", ""))
 
     # 2) Legenda + hashtags + plano (espelha os passos 5-6 do hunter)
     categoria = ""
