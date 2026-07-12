@@ -94,6 +94,24 @@ Shopee como chave (mais preciso que o nome).
 
 ---
 
+## 🐞 Observações do dia (2026-07-12) — a resolver
+
+- 🔴 **Narração não rodou em alguns vídeos** (saíram com o áudio ORIGINAL). É
+  regressão do recurso-chave (narração mata copyright/áudio). Suspeitas:
+  créditos do ElevenLabs esgotando, erro de API (402/429) ou o swap ffmpeg
+  falhando best-effort (cai no original em silêncio). EM DIAGNÓSTICO (ver log
+  cron_produzir). **Prioridade.**
+- 🟠 **Marca d'água VISUAL do vídeo-fonte vaza crédito** — um vídeo deu crédito a
+  outra pessoa por ter a marca d'água na tela. A narração mata o crédito por
+  ÁUDIO, mas o watermark visual permanece. Fix: Gemini Vision detecta marca
+  d'água → PULA o vídeo (fonte sem marca é a melhor); alternativa: cobrir a
+  região com overlay. (Liga com o item "Gemini Vision" do backlog.)
+- 🟡 **Voz masculina (Michael) sobre conteúdo de persona feminina** soa estranho
+  (não urgente). Opções: roteiro neutro (sem "amiga/amigo") OU voz por nicho
+  (ex: voz feminina pra beleza).
+
+---
+
 ## 🧠 Backlog / avançado
 
 - **Multiplataforma de afiliados (Amazon + outras):** 🚧 em construção.
