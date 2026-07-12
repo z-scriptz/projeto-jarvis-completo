@@ -291,13 +291,24 @@ def _produzir(pasta: Path, pj: Path, video_src: Path) -> bool:
     H._registrar_no_site(nome, link, imagem=info.get("imagem", ""),
                          plataforma=plataforma)
 
-    # 5) Ledger (passo 9)
+    # 5) Ledger (passo 9) — tag SEMPRE categoria + plataforma + nicho (o CEO
+    #    precisa disso; antes saía "sem_categoria"/"?" e cegava a análise).
     try:
         from posts_ledger import registrar as _reg
-        _reg(produto=nome, link=link, categoria=categoria, hook=hook,
+        nicho = (conta.get("nicho") if conta else "") or ""
+        if not nicho:
+            try:
+                import roteador_contas as _RC
+                nicho = _RC.nicho_do_produto(nome, categoria)
+            except Exception:
+                nicho = "geral"
+        categoria_ledger = categoria or nicho     # nunca vazio
+        _reg(produto=nome, link=link, categoria=categoria_ledger, hook=hook,
              legenda=legenda, slug=slug, sub_ids=["tiktok"],
-             plataforma="", extra={"fonte": "tiktok", "plataforma_afiliado": plataforma,
-                                   "fonte_views": info.get("views", 0)})
+             plataforma=plataforma,                # shopee / amazon
+             extra={"fonte": "tiktok", "nicho": nicho,
+                    "plataforma_afiliado": plataforma,
+                    "fonte_views": info.get("views", 0)})
     except Exception:
         pass
 

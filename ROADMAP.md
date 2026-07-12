@@ -137,7 +137,10 @@ Shopee como chave (mais preciso que o nome).
   honesto com pouco dado), e o Gemini escreve relatório executivo + propostas
   numeradas (advisory puro). Entrega no Telegram + salva shared/ceo/relatorio_*.md.
   Falta: mecanismo de aplicar propostas aprovadas (níveis de autonomia) + cron
-  semanal. Modo original:
+  semanal. **1º conselho já aplicado:** o CEO apontou que o ledger saía
+  'sem_categoria'/'?' → agora `produzir_tiktok` grava SEMPRE categoria (cai no
+  nicho), plataforma (shopee/amazon) e nicho da conta. Alertas/relatórios vão pro
+  `TELEGRAM_ALERT_CHAT_ID` (privado), não pro grupo público. Modo original:
   CONSELHEIRO (não executivo): lê métricas (`nichos_quentes`, ledger,
   conversionReport), gera um RELATÓRIO + um **Jarvis Confidence Score** e
   **PROPÕE** mudanças (produzir mais de X, cortar perfil-fonte ruim, mudar

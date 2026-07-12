@@ -81,11 +81,13 @@ def _analisar(dias: int) -> dict:
     prod_plat = defaultdict(int)
     prod_fonte = defaultdict(int)
     prod_hora = defaultdict(int)
+    prod_nicho = defaultdict(int)
     for r in ledger:
         prod_cat[(r.get("categoria") or "sem_categoria").lower()] += 1
         prod_plat[r.get("plataforma") or r.get("plataforma_afiliado") or "?"] += 1
         prod_fonte[r.get("fonte") or "?"] += 1
         prod_hora[r.get("hora", "?")] += 1
+        prod_nicho[r.get("nicho") or "?"] += 1
 
     # vendas (o que converteu) — do nichos_quentes (só conversões de vídeo)
     vendas_cat = {c["categoria"].lower(): c for c in nichos.get("por_categoria", [])}
@@ -113,6 +115,7 @@ def _analisar(dias: int) -> dict:
         "cruzamento_categorias": cruzamento,
         "top_produtos": top_produtos,
         "producao_por_plataforma": dict(prod_plat),
+        "producao_por_nicho": dict(prod_nicho),
         "producao_por_fonte": dict(prod_fonte),
         "producao_por_hora": dict(sorted(prod_hora.items(), key=lambda x: -x[1])[:6]),
         "nichos_gerado_em": nichos.get("gerado_em"),
