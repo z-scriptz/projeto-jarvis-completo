@@ -56,7 +56,7 @@ converte → repete. **Objetivo: virar máquina de dinheiro, dia após dia.**
 
 ## 🔜 Próximas (prioridade)
 
-### 1. Multi-conta / roteador de nicho  🚧 CONSTRUÍDO (falta testar/ligar)
+### 1. Multi-conta / roteador de nicho  ✅ IG+FB NO AR (YouTube pendente)
 Roteia cada produto pra conta do nicho: renderiza com o @handle certo E posta na
 conta certa. Arquitetura: produção grava `conta.json` ao lado do `video.mp4`; o
 `meta_uploader` lê e posta naquela conta (sem tocar no publish_guard/daemon).
@@ -66,9 +66,10 @@ conta certa. Arquitetura: produção grava `conta.json` ao lado do `video.mp4`; 
 - **Handle no render:** `narrated_video_agent` lê `TOPSHOP_HANDLE` em tempo de
   render; a produção seta por vídeo.
 - **Ligado por** `MULTI_CONTA=1` no `.env` (desligado = comportamento antigo).
-- ✅ **IG + Facebook funcionando** (2026-07-12): produção roteou "Carregador Sem
-  Fio" → tech → renderizou `@topshoptech_` + gravou `conta.json` certo. Falta só
-  confirmar o post caindo na conta (teste ou daemon).
+- ✅ **IG + Facebook CONFIRMADO** (2026-07-12): produção roteia por nicho +
+  `meta_uploader` lê o `conta.json` e ativa a conta certa (ig_id + token do
+  nicho) — provado em checagem seca (tech→@topshoptech_, geral→@topshop.__,
+  sem conta.json→default). O daemon posta na conta certa nos horários.
 - 🔜 **YouTube multi-canal:** o `youtube_uploader` usa OAuth (Google) com UM
   `youtube_token.json` (canal único) e o 1º consentimento abre navegador (ruim no
   VPS). Multi-canal = 1 token por canal: fazer o consentimento no PC (gera o
