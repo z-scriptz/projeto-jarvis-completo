@@ -59,6 +59,22 @@ def _log(m):
     print(f"[produzir_tiktok] {m}")
 
 
+def _alerta_telegram(msg: str) -> None:
+    """Manda um alerta no chat de admin (best-effort, nunca quebra o fluxo).
+    Usa TELEGRAM_ALERT_CHAT_ID se existir, senão TELEGRAM_CHAT_ID (mesmo canal
+    do '🚨 Jarvis'). Nunca vai pro grupo público de achadinhos (userbot)."""
+    tok = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    chat = (os.getenv("TELEGRAM_ALERT_CHAT_ID") or os.getenv("TELEGRAM_CHAT_ID") or "").strip()
+    if not tok or not chat:
+        return
+    try:
+        import requests
+        requests.post(f"https://api.telegram.org/bot{tok}/sendMessage", timeout=15,
+                      json={"chat_id": chat, "text": msg, "parse_mode": "HTML"})
+    except Exception:
+        pass
+
+
 def _f(nome: str, padrao: float) -> float:
     try:
         return float(os.getenv(nome, padrao))
@@ -93,14 +109,23 @@ def _narrar_e_trocar_audio(video: Path, nome: str, contexto: str) -> bool:
     Best-effort: se algo falhar, mantém o vídeo com o áudio original."""
     if os.getenv("NARRAR_TIKTOK", "1").strip().lower() not in ("1", "true", "sim"):
         return False
+
+    def _avisa(motivo):
+        _log(f"   🚨 alerta: narração falhou ({motivo})")
+        _alerta_telegram(f"🚨 <b>Jarvis — narração falhou</b>\n🎬 {nome[:60]}\n"
+                         f"⚠️ {motivo}\nVídeo saiu com o áudio ORIGINAL "
+                         f"(risco de copyright/crédito). Re-narra quando puder.")
+
     try:
         from narracao_ia import gerar as _gerar_narr
     except Exception:
         _log("   narracao_ia indisponível — mantém áudio original")
+        _avisa("narracao_ia indisponível (import)")
         return False
     narr = video.parent / (video.stem + "_narr.mp3")
     if not _gerar_narr(nome, contexto, narr):
         _log("   narração não gerada — mantém áudio original")
+        _avisa("roteiro (Gemini) ou voz (ElevenLabs) falhou")
         return False
 
     out = video.with_suffix(".narrado.mp4")
@@ -144,6 +169,7 @@ def _narrar_e_trocar_audio(video: Path, nome: str, contexto: str) -> bool:
         _log(f"   🎙️  áudio original SUBSTITUÍDO por {tag}")
         return True
     _log(f"   ⚠️ troca de áudio falhou (mantém original): {(r.stderr or '')[-160:]}")
+    _avisa("ffmpeg (troca de áudio) falhou")
     try:
         out.unlink()
     except Exception:

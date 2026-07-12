@@ -96,11 +96,12 @@ Shopee como chave (mais preciso que o nome).
 
 ## 🐞 Observações do dia (2026-07-12) — a resolver
 
-- 🔴 **Narração não rodou em alguns vídeos** (saíram com o áudio ORIGINAL). É
-  regressão do recurso-chave (narração mata copyright/áudio). Suspeitas:
-  créditos do ElevenLabs esgotando, erro de API (402/429) ou o swap ffmpeg
-  falhando best-effort (cai no original em silêncio). EM DIAGNÓSTICO (ver log
-  cron_produzir). **Prioridade.**
+- ✅ **Narração sem áudio (resolvido 2026-07-12):** a chave ElevenLabs está boa
+  (TTS ok; o 401 era só no endpoint de saldo). O `produzir_tiktok` narra certo.
+  Os vídeos mudos eram sobras de um lote manual/antigo sem Michael (a produção
+  PRÓPRIA do daemon está DESLIGADA — `producao_max_videos_dia=0`), já purgadas.
+  **Blindagem:** `_narrar_e_trocar_audio` agora manda **alerta no Telegram** (chat
+  de admin) quando a narração falha, em vez de cair no original silenciosamente.
 - 🟠 **Marca d'água VISUAL do vídeo-fonte vaza crédito** — um vídeo deu crédito a
   outra pessoa por ter a marca d'água na tela. A narração mata o crédito por
   ÁUDIO, mas o watermark visual permanece. Fix: Gemini Vision detecta marca
