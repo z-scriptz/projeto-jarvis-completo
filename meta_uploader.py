@@ -27,6 +27,7 @@
 #   r = postar_instagram(video_path, legenda)
 
 import os
+import json
 import time
 from pathlib import Path
 from typing import Optional
@@ -97,16 +98,44 @@ def _req():
 # ══════════════════════════════════════════════════════════════════════════
 # CREDENCIAIS
 # ══════════════════════════════════════════════════════════════════════════
+# Conta ativa por vídeo (multi-conta): setada por postar_* a partir de um
+# conta.json ao lado do video.mp4. Vazio => usa as vars globais do .env.
+_CTX: dict = {}
+
+
+def _ativar_conta(video_path) -> None:
+    """Lê conta.json ao lado do vídeo e ativa a conta daquele nicho (ig_id,
+    page_id, token). Sem conta.json, limpa o contexto (usa o .env global)."""
+    _CTX.clear()
+    try:
+        cj = Path(video_path).parent / "conta.json"
+        if not cj.exists():
+            return
+        c = json.loads(cj.read_text(encoding="utf-8"))
+        env = c.get("page_token_env", "")
+        tok = os.environ.get(env, "") if env else ""
+        _CTX.update({
+            "facebook_page_id":  str(c.get("facebook_page_id", "")).strip(),
+            "instagram_user_id": str(c.get("instagram_user_id", "")).strip(),
+            "token":             (tok or "").strip(),
+            "handle":            c.get("handle", ""),
+        })
+        if _CTX.get("handle"):
+            log.info(f"   🎯 conta ativa: {_CTX['handle']} (nicho {c.get('nicho', '?')})")
+    except Exception:
+        _CTX.clear()
+
+
 def _token() -> str:
-    return os.environ.get("META_ACCESS_TOKEN", "").strip()
+    return (_CTX.get("token") or os.environ.get("META_ACCESS_TOKEN", "")).strip()
 
 
 def _page_id() -> str:
-    return os.environ.get("FACEBOOK_PAGE_ID", "").strip()
+    return (_CTX.get("facebook_page_id") or os.environ.get("FACEBOOK_PAGE_ID", "")).strip()
 
 
 def _ig_user_id() -> str:
-    return os.environ.get("INSTAGRAM_USER_ID", "").strip()
+    return (_CTX.get("instagram_user_id") or os.environ.get("INSTAGRAM_USER_ID", "")).strip()
 
 
 def _checar_base() -> Optional[str]:
@@ -155,6 +184,9 @@ def _page_access_token() -> Optional[str]:
     mesmo com pages_manage_posts. Este token é derivado via /me/accounts.
     Retorna o token da página, ou None se não achar.
     """
+    # 0) conta ativa (multi-conta) tem prioridade — token da página do nicho
+    if _CTX.get("token"):
+        return _CTX["token"]
     # 1) Se o usuário setou um token de página direto, usa ele
     direto = os.environ.get("FACEBOOK_PAGE_TOKEN", "").strip()
     if direto:
@@ -199,6 +231,7 @@ def postar_facebook(video_path: str, legenda: str = "") -> dict:
     Usa o TOKEN DA PÁGINA (derivado do token de usuário automaticamente).
     Retorna {"sucesso", "url"|"erro"}.
     """
+    _ativar_conta(video_path)
     erro_base = _checar_base()
     if erro_base:
         return {"sucesso": False, "erro": erro_base}
@@ -253,6 +286,7 @@ def postar_instagram(video_path: str, legenda: str = "") -> dict:
       4. publica o container
     Retorna {"sucesso", "url"|"erro"}.
     """
+    _ativar_conta(video_path)
     erro_base = _checar_base()
     if erro_base:
         return {"sucesso": False, "erro": erro_base}

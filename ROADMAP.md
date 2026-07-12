@@ -56,15 +56,18 @@ converte → repete. **Objetivo: virar máquina de dinheiro, dia após dia.**
 
 ## 🔜 Próximas (prioridade)
 
-### 1. Multi-conta / roteador de nicho
-Já existem as contas (páginas do IG configuradas). Falta o Jarvis **rotear cada
-produto pra conta certa por nicho** e postar em múltiplos destinos.
-- **Instagram:** `@topshop.__` (geral) · `@topshopbeauty._` (beleza) ·
-  `@topshoptech_` (tech).
-- **YouTube:** `topshop.oficial` (geral) · `topshopbeauty` (beleza).
-- Cada conta = handle próprio + nicho + (opcional) voz própria + páginas/tokens.
-- Coletor/produtor decidem o nicho do produto → mandam pro perfil e handle
-  daquele nicho (o `TOPSHOP_HANDLE` vira dinâmico por conta).
+### 1. Multi-conta / roteador de nicho  🚧 CONSTRUÍDO (falta testar/ligar)
+Roteia cada produto pra conta do nicho: renderiza com o @handle certo E posta na
+conta certa. Arquitetura: produção grava `conta.json` ao lado do `video.mp4`; o
+`meta_uploader` lê e posta naquela conta (sem tocar no publish_guard/daemon).
+- **Contas (contas.json):** geral `@topshop.__` · beleza `@topshopbeauty._` ·
+  tech `@topshoptech_` (cada uma com ig_id, page_id, page_token_env).
+- **Router:** `roteador_contas.py` (nicho por palavra-chave em nome+categoria).
+- **Handle no render:** `narrated_video_agent` lê `TOPSHOP_HANDLE` em tempo de
+  render; a produção seta por vídeo.
+- **Ligado por** `MULTI_CONTA=1` no `.env` (desligado = comportamento antigo).
+- FALTA: testar ponta-a-ponta (produzir beleza/tech → checar handle + postar na
+  conta) e o YouTube multi-canal (por enquanto YT posta só a conta principal).
 
 ### 2. Dedup por PRODUTO no coletor/produtor
 Hoje 2 vídeos diferentes do mesmo item (ex: "Gaabor Ferro a Vapor" casou 2x)

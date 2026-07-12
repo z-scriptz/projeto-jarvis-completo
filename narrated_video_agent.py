@@ -959,7 +959,10 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
         log.warning("   ⚠️  verificado.png NÃO encontrado na pasta brand!")
 
     # ── '@topshop._' BRANCO (Bold) com contorno PRETO ──
-    handle = _textclip_robusto(TextClip, MARCA_HANDLE, font_size=46,
+    # lê o handle em tempo de render (multi-conta): a produção seta TOPSHOP_HANDLE
+    # por vídeo antes de renderizar; cai no MARCA_HANDLE default se não setado.
+    _handle_txt = os.environ.get("TOPSHOP_HANDLE", MARCA_HANDLE) or MARCA_HANDLE
+    handle = _textclip_robusto(TextClip, _handle_txt, font_size=46,
                                color="white", stroke_width=3, stroke_color="black",
                                largura_frac=0.34, fonte=fonte_bold, text_align="West")
     if handle is not None:

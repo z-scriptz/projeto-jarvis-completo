@@ -177,6 +177,26 @@ def _produzir(pasta: Path, pj: Path, video_src: Path) -> bool:
     slug = H._slugify(nome)
     hook = (H._HOOK[0](nome, plano={}) if H._HOOK_OK else "Olha isso!")
 
+    # categoria + roteamento multi-conta: decide o nicho ANTES de renderizar,
+    # pra o vídeo já sair com o @handle da conta certa (beleza/tech/geral).
+    categoria = ""
+    try:
+        from creative_engine.narration_script_builder import _categoria_do_produto
+        categoria = _categoria_do_produto(nome) or ""
+    except Exception:
+        pass
+    conta = None
+    if os.getenv("MULTI_CONTA", "0").strip().lower() in ("1", "true", "sim"):
+        try:
+            import roteador_contas as _RC
+            conta = _RC.conta_do_produto(nome, categoria)
+            if conta.get("handle"):
+                os.environ["TOPSHOP_HANDLE"] = conta["handle"]
+                _log(f"   🎯 conta '{conta.get('nicho')}' → {conta['handle']}")
+        except Exception as e:
+            _log(f"   roteador de conta off ({str(e)[:60]}) — usa a principal")
+            conta = None
+
     plano = {
         "produto": nome,
         "titulo_real": nome,
@@ -199,12 +219,6 @@ def _produzir(pasta: Path, pj: Path, video_src: Path) -> bool:
     _narrar_e_trocar_audio(destino, nome, info.get("descricao", ""))
 
     # 2) Legenda + hashtags + plano (espelha os passos 5-6 do hunter)
-    categoria = ""
-    try:
-        from creative_engine.narration_script_builder import _categoria_do_produto
-        categoria = _categoria_do_produto(nome) or ""
-    except Exception:
-        pass
     legenda = H._legenda_dinamica(nome, hook)
     hashtags = H._hashtags_para(categoria)
     plano.update({
@@ -230,6 +244,16 @@ def _produzir(pasta: Path, pj: Path, video_src: Path) -> bool:
     pp = H.BASE_DIR / "pronto_para_postar" / slug
     pp.mkdir(parents=True, exist_ok=True)
     shutil.copy2(str(destino), str(pp / "video.mp4"))
+    # conta.json ao lado do vídeo → o meta_uploader posta na conta certa
+    if conta:
+        try:
+            import roteador_contas as _RC
+            (pp / "conta.json").write_text(
+                json.dumps(_RC.conta_para_json(conta), ensure_ascii=False, indent=2),
+                encoding="utf-8")
+            _log(f"   🗂️  conta.json gravado (posta em {conta.get('handle')})")
+        except Exception:
+            pass
     (pp / "titulo_youtube.txt").write_text(f"{nome} #shorts"[:100], encoding="utf-8")
     (pp / "descricao_youtube.txt").write_text(
         (legenda + "\n\n" + hashtags).strip(), encoding="utf-8")
