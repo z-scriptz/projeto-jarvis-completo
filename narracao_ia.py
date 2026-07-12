@@ -90,19 +90,46 @@ def roteiro(produto: str, contexto: str = "") -> str:
             f"Facilita demais o dia a dia — o link tá na bio.")
 
 
-def falar_elevenlabs(texto: str, destino: Path) -> bool:
-    """Sintetiza o texto com o ElevenLabs -> MP3. Retorna True se deu certo."""
+def _norm_nicho(n: str) -> str:
+    """'Beleza' -> 'BELEZA' (sem acento, só alfanum) pra virar sufixo de env."""
+    import unicodedata
+    n = unicodedata.normalize("NFKD", (n or "")).encode("ascii", "ignore").decode()
+    return "".join(c for c in n.upper() if c.isalnum())
+
+
+def _voz_do_nicho(nicho: str = ""):
+    """Escolhe a VOZ pelo nicho: ELEVENLABS_VOICE_ID_<NICHO> (ex.: _BELEZA = voz
+    feminina) e, se não houver, cai na ELEVENLABS_VOICE_ID (Michael, padrão).
+    Assim beleza/skincare fala com voz feminina e tech/geral com a masculina."""
+    n = _norm_nicho(nicho)
+    if n:
+        v = os.getenv(f"ELEVENLABS_VOICE_ID_{n}", "").strip()
+        if v:
+            return v, n, True
+    return os.getenv("ELEVENLABS_VOICE_ID", "").strip(), n, False
+
+
+def falar_elevenlabs(texto: str, destino: Path, nicho: str = "") -> bool:
+    """Sintetiza o texto com o ElevenLabs -> MP3. Retorna True se deu certo.
+    A voz é escolhida pelo nicho (voz feminina p/ beleza, masculina p/ o resto)."""
     api_key = os.getenv("ELEVENLABS_API_KEY", "")
-    voice = os.getenv("ELEVENLABS_VOICE_ID", "")
+    voice, n, voz_propria = _voz_do_nicho(nicho)
     model = os.getenv("ELEVENLABS_MODEL", "eleven_multilingual_v2")
     if not api_key or not voice:
         print("   ⚠️ Faltam ELEVENLABS_API_KEY / ELEVENLABS_VOICE_ID no .env")
         return False
+    if voz_propria:
+        print(f"   🎙️ voz do nicho '{nicho}' (ELEVENLABS_VOICE_ID_{n})")
     def _f(nome, padrao):
-        try:
-            return float(os.getenv(nome, padrao))
-        except (TypeError, ValueError):
-            return float(padrao)
+        # tenta NOME_<NICHO> antes de NOME — voz feminina pode querer settings próprios
+        for cand in ((f"{nome}_{n}",) if n else ()) + (nome,):
+            v = os.getenv(cand)
+            if v not in (None, ""):
+                try:
+                    return float(v)
+                except (TypeError, ValueError):
+                    pass
+        return float(padrao)
 
     # settings ajustáveis pelo .env (padrão = os valores da voz do Michael)
     vs = {
@@ -133,25 +160,27 @@ def falar_elevenlabs(texto: str, destino: Path) -> bool:
         return False
 
 
-def gerar(produto: str, contexto: str, destino: Path) -> str:
-    """Roteiro (Gemini) -> voz (ElevenLabs) -> caminho do mp3 (ou '')."""
+def gerar(produto: str, contexto: str, destino: Path, nicho: str = "") -> str:
+    """Roteiro (Gemini) -> voz (ElevenLabs, escolhida pelo nicho) -> mp3 (ou '')."""
     txt = roteiro(produto, contexto)
     print(f"   📝 roteiro: {txt}")
     print(f"   🔤 {len(txt)} caracteres (custo ElevenLabs)")
-    if falar_elevenlabs(txt, destino):
+    if falar_elevenlabs(txt, destino, nicho):
         return str(destino)
     return ""
 
 
 def main():
     if len(sys.argv) < 2:
-        print('Uso: python3 narracao_ia.py "Nome do Produto" "contexto do vídeo (opcional)"')
+        print('Uso: python3 narracao_ia.py "Nome do Produto" "contexto (opcional)" "nicho (opcional: beleza/tech/geral)"')
         return 1
     produto = sys.argv[1]
     contexto = sys.argv[2] if len(sys.argv) > 2 else ""
+    nicho = sys.argv[3] if len(sys.argv) > 3 else ""
     destino = BASE_DIR / "narracao_teste.mp3"
-    print(f"🎙️  Gerando narração de teste pra: {produto}")
-    caminho = gerar(produto, contexto, destino)
+    print(f"🎙️  Gerando narração de teste pra: {produto}"
+          + (f" (nicho: {nicho})" if nicho else ""))
+    caminho = gerar(produto, contexto, destino, nicho)
     if caminho:
         print(f"\n✅ Pronto! Escuta: {caminho}")
         print("   (baixa pro teu PC com scp e ouve. Boa? aí a gente pluga no vídeo)")

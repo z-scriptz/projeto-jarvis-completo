@@ -108,9 +108,13 @@ Shopee como chave (mais preciso que o nome).
   produzir. Roda no frame CRU (antes do template TopShop, sem falso-positivo do
   nosso @). Gated por `ANTI_WATERMARK=1`; best-effort (erro/sem key → mantém+loga).
   Fecha o loop de copyright: narração mata o ÁUDIO-crédito, isto mata o VISUAL.
-- 🟡 **Voz masculina (Michael) sobre conteúdo de persona feminina** soa estranho
-  (não urgente). Opções: roteiro neutro (sem "amiga/amigo") OU voz por nicho
-  (ex: voz feminina pra beleza).
+- ✅ **Voz por nicho** (2026-07-12): a narração escolhe a VOZ pelo nicho —
+  `ELEVENLABS_VOICE_ID_<NICHO>` (ex.: `ELEVENLABS_VOICE_ID_BELEZA` = voz
+  feminina) e cai na `ELEVENLABS_VOICE_ID` (Michael) pra tech/geral. Cada voz
+  pode ter settings próprios (`ELEVENLABS_STABILITY_BELEZA`, `_STYLE_BELEZA`…).
+  `produzir_tiktok.py` calcula o nicho UMA vez (mesmo sem MULTI_CONTA) e passa
+  pra `narracao_ia.gerar(...,nicho)`. Sem `_BELEZA` no `.env` → tudo Michael
+  (comportamento antigo, zero regressão). Teste: `narracao_ia.py "produto" "" beleza`.
 
 ---
 

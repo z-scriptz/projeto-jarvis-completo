@@ -101,8 +101,8 @@ def _escolher_musica() -> Path:
     return random.choice(cands) if cands else Path()
 
 
-def _narrar_e_trocar_audio(video: Path, nome: str, contexto: str) -> bool:
-    """Gera a narração (Michael/ElevenLabs, roteiro do vídeo) e SUBSTITUI o áudio
+def _narrar_e_trocar_audio(video: Path, nome: str, contexto: str, nicho: str = "") -> bool:
+    """Gera a narração (ElevenLabs, voz do nicho, roteiro do vídeo) e SUBSTITUI o áudio
     do vídeo por ela — mata o áudio original (fim do copyright/crédito a terceiro).
     Mixa uma TRILHA DE FUNDO baixinha por baixo (loopada até o fim do vídeo), pra
     nunca ficar silêncio quando a narração acaba antes do vídeo.
@@ -123,7 +123,7 @@ def _narrar_e_trocar_audio(video: Path, nome: str, contexto: str) -> bool:
         _avisa("narracao_ia indisponível (import)")
         return False
     narr = video.parent / (video.stem + "_narr.mp3")
-    if not _gerar_narr(nome, contexto, narr):
+    if not _gerar_narr(nome, contexto, narr, nicho):
         _log("   narração não gerada — mantém áudio original")
         _avisa("roteiro (Gemini) ou voz (ElevenLabs) falhou")
         return False
@@ -144,12 +144,12 @@ def _narrar_e_trocar_audio(video: Path, nome: str, contexto: str) -> bool:
                "-filter_complex", fc, "-map", "0:v:0", "-map", "[a]",
                "-c:v", "copy", "-c:a", "aac", "-b:a", "128k",
                "-shortest", str(out)]
-        tag = f"narração (Michael) + trilha '{musica.name}' baixinha"
+        tag = f"narração própria + trilha '{musica.name}' baixinha"
     else:
         cmd = ["ffmpeg", "-y", "-i", str(video), "-i", str(narr),
                "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy",
                "-c:a", "aac", "-b:a", "128k", str(out)]
-        tag = "narração (Michael)"
+        tag = "narração própria"
         if not musica:
             _log(f"   ℹ️ sem trilha em {_dir_musica()} — vídeo sai só com narração")
 
@@ -162,7 +162,7 @@ def _narrar_e_trocar_audio(video: Path, nome: str, contexto: str) -> bool:
              "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy",
              "-c:a", "aac", "-b:a", "128k", str(out)],
             capture_output=True, text=True, timeout=180)
-        tag = "narração (Michael)"
+        tag = "narração própria"
 
     if r.returncode == 0 and out.exists() and out.stat().st_size > 1000:
         out.replace(video)
@@ -224,6 +224,16 @@ def _produzir(pasta: Path, pj: Path, video_src: Path) -> bool:
             _log(f"   roteador de conta off ({str(e)[:60]}) — usa a principal")
             conta = None
 
+    # nicho decide a VOZ da narração (feminina p/ beleza, masculina p/ tech/geral)
+    # e também vai pro ledger. Calcula uma vez aqui, funciona mesmo sem MULTI_CONTA.
+    nicho = (conta.get("nicho") if conta else "") or ""
+    if not nicho:
+        try:
+            import roteador_contas as _RC
+            nicho = _RC.nicho_do_produto(nome, categoria)
+        except Exception:
+            nicho = "geral"
+
     plano = {
         "produto": nome,
         "titulo_real": nome,
@@ -243,7 +253,7 @@ def _produzir(pasta: Path, pj: Path, video_src: Path) -> bool:
         return False
 
     # 1.5) NARRAÇÃO própria + mata o áudio original (copyright/crédito)
-    _narrar_e_trocar_audio(destino, nome, info.get("descricao", ""))
+    _narrar_e_trocar_audio(destino, nome, info.get("descricao", ""), nicho)
 
     # 2) Legenda + hashtags + plano (espelha os passos 5-6 do hunter)
     legenda = H._legenda_dinamica(nome, hook)
@@ -295,14 +305,7 @@ def _produzir(pasta: Path, pj: Path, video_src: Path) -> bool:
     #    precisa disso; antes saía "sem_categoria"/"?" e cegava a análise).
     try:
         from posts_ledger import registrar as _reg
-        nicho = (conta.get("nicho") if conta else "") or ""
-        if not nicho:
-            try:
-                import roteador_contas as _RC
-                nicho = _RC.nicho_do_produto(nome, categoria)
-            except Exception:
-                nicho = "geral"
-        categoria_ledger = categoria or nicho     # nunca vazio
+        categoria_ledger = categoria or nicho     # nunca vazio (nicho já calculado)
         _reg(produto=nome, link=link, categoria=categoria_ledger, hook=hook,
              legenda=legenda, slug=slug, sub_ids=["tiktok"],
              plataforma=plataforma,                # shopee / amazon
