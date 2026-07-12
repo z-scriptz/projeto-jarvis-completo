@@ -71,6 +71,47 @@ def _amazon_link(termo: str) -> str:
     return f"https://www.{dom}/s?k={quote_plus(termo)}&tag={tag}"
 
 
+def _tem_watermark(video, dur=0) -> bool:
+    """Gemini Vision olha 1 frame: True se tem MARCA D'ÁGUA / @usuário / logo de
+    OUTRO criador (que vazaria crédito no visual). Gated por ANTI_WATERMARK.
+    Best-effort: desligado, sem key ou erro -> False (mantém o vídeo + loga)."""
+    if os.getenv("ANTI_WATERMARK", "1").strip().lower() not in ("1", "true", "sim"):
+        return False
+    key = os.getenv("GEMINI_API_KEY", "")
+    if not key:
+        return False
+    frame = Path(str(video)).with_suffix(".wm.jpg")
+    try:
+        # frame a ~40% do vídeo (evita intro preta; marca d'água costuma ser fixa)
+        pos = max(1, int((float(dur) or 4) * 0.4))
+        subprocess.run(["ffmpeg", "-y", "-ss", str(pos), "-i", str(video),
+                        "-vframes", "1", "-q:v", "3", str(frame)],
+                       capture_output=True, timeout=40)
+        if not frame.exists() or frame.stat().st_size < 500:
+            return False
+        from google import genai
+        from google.genai import types
+        cli = genai.Client(api_key=key)
+        prompt = (
+            "Este é um frame de um vídeo de produto que vou REPOSTAR. Tem alguma "
+            "MARCA D'ÁGUA, @usuário, logo, ou nome de criador/perfil SOBREPOSTO na "
+            "imagem, que daria crédito a OUTRA pessoa? IGNORE texto do próprio "
+            "produto/embalagem e preços. Responda SÓ com uma palavra: SIM ou NAO.")
+        r = cli.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[types.Part.from_bytes(data=frame.read_bytes(),
+                                            mime_type="image/jpeg"), prompt])
+        return (r.text or "").strip().upper().startswith("SIM")
+    except Exception as e:
+        _log(f"     (anti-watermark falhou, mantém o vídeo: {str(e)[:55]})")
+        return False
+    finally:
+        try:
+            frame.unlink()
+        except Exception:
+            pass
+
+
 def _carregar_env():
     for cand in (BASE_DIR / ".env", Path(".env")):
         if not cand.exists():
@@ -435,7 +476,6 @@ def main():
             if _produto_repetido(chave_prod, produtos_vistos):
                 _log(f"     ⤵️  produto repetido ('{produto_nome[:38]}') — pulo (dedup)")
                 continue
-            produtos_vistos[chave_prod] = int(time.time())
             achados += 1
 
             if dry:
@@ -444,6 +484,13 @@ def main():
             arq = _baixar(url, pasta)
             if not arq:
                 continue
+            # anti-watermark: não reposta vídeo com marca d'água de terceiro (o
+            # visual vazaria crédito, mesmo com a narração matando o áudio).
+            if _tem_watermark(arq, meta.get("duracao") or 0):
+                _log("     🚫 marca d'água detectada — descarto (não credita terceiro)")
+                shutil.rmtree(pasta, ignore_errors=True)
+                continue
+            produtos_vistos[chave_prod] = int(time.time())   # só marca o que FICOU
             (pasta / "plano.json").write_text(json.dumps({
                 "fonte": "tiktok", "plataforma": plataforma,
                 "url": meta["url"], "uploader": meta["uploader"],

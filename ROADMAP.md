@@ -102,11 +102,12 @@ Shopee como chave (mais preciso que o nome).
   PRÓPRIA do daemon está DESLIGADA — `producao_max_videos_dia=0`), já purgadas.
   **Blindagem:** `_narrar_e_trocar_audio` agora manda **alerta no Telegram** (chat
   de admin) quando a narração falha, em vez de cair no original silenciosamente.
-- 🟠 **Marca d'água VISUAL do vídeo-fonte vaza crédito** — um vídeo deu crédito a
-  outra pessoa por ter a marca d'água na tela. A narração mata o crédito por
-  ÁUDIO, mas o watermark visual permanece. Fix: Gemini Vision detecta marca
-  d'água → PULA o vídeo (fonte sem marca é a melhor); alternativa: cobrir a
-  região com overlay. (Liga com o item "Gemini Vision" do backlog.)
+- ✅ **Marca d'água VISUAL (resolvido 2026-07-12):** o coletor agora extrai 1
+  frame do vídeo-fonte (a ~40%) e o **Gemini Vision** (`_tem_watermark`) detecta
+  marca d'água/@usuário/logo de OUTRO criador → **descarta o vídeo** antes de
+  produzir. Roda no frame CRU (antes do template TopShop, sem falso-positivo do
+  nosso @). Gated por `ANTI_WATERMARK=1`; best-effort (erro/sem key → mantém+loga).
+  Fecha o loop de copyright: narração mata o ÁUDIO-crédito, isto mata o VISUAL.
 - 🟡 **Voz masculina (Michael) sobre conteúdo de persona feminina** soa estranho
   (não urgente). Opções: roteiro neutro (sem "amiga/amigo") OU voz por nicho
   (ex: voz feminina pra beleza).
