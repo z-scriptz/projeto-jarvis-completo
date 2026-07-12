@@ -132,7 +132,12 @@ Shopee como chave (mais preciso que o nome).
 - **Comentários automáticos + Stories** pro Jarvis (auto-engajamento).
 - **Auto-DM** pra CTA tipo "COMENTE QUERO" → responde no direct com o link
   (precisa Graph API / permissões de mensagem).
-- **CEO IA — Conselheiro de Alto Nível (próximo grande passo):** começa em modo
+- **CEO IA — Conselheiro** 🚧 v1 CONSTRUÍDO (`ceo_agent.py`): lê ledger +
+  nichos_quentes, calcula retrato produção×venda + Jarvis Confidence Score (0-100,
+  honesto com pouco dado), e o Gemini escreve relatório executivo + propostas
+  numeradas (advisory puro). Entrega no Telegram + salva shared/ceo/relatorio_*.md.
+  Falta: mecanismo de aplicar propostas aprovadas (níveis de autonomia) + cron
+  semanal. Modo original:
   CONSELHEIRO (não executivo): lê métricas (`nichos_quentes`, ledger,
   conversionReport), gera um RELATÓRIO + um **Jarvis Confidence Score** e
   **PROPÕE** mudanças (produzir mais de X, cortar perfil-fonte ruim, mudar
