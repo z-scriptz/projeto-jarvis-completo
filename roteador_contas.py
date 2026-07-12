@@ -18,6 +18,26 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent
 CONTAS_JSON = BASE_DIR / "contas.json"
 
+
+def _carregar_env():
+    for cand in (BASE_DIR / ".env", Path(".env")):
+        if not cand.exists():
+            continue
+        for linha in cand.read_text(encoding="utf-8").splitlines():
+            linha = linha.strip()
+            if not linha or linha.startswith("#") or "=" not in linha:
+                continue
+            if linha.lower().startswith("export "):
+                linha = linha[7:]
+            k, _, v = linha.partition("=")
+            k, v = k.strip(), v.strip().strip('"').strip("'")
+            if k and k not in os.environ:
+                os.environ[k] = v
+        break
+
+
+_carregar_env()
+
 # palavras-chave de ALTA precisão (o default 'geral' é o fallback seguro).
 _BELEZA = (
     "beleza", "beauty", "skincare", "maquiag", "makeup", "perfume", "hidratante",
