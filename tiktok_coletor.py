@@ -27,6 +27,41 @@ MIN_VIEWS = 50_000      # só o que já provou tração
 MAX_DUR = 90            # segundos
 POR_PERFIL = 40         # quantos vídeos recentes checar por perfil (--limite muda)
 
+# --- Amazon: fallback quando NÃO tem na Shopee. Usa link de BUSCA afiliado
+# (amazon.com.br/s?k=produto&tag=SUATAG) — não precisa da PA-API, só da tag.
+# Gated por AMAZON_ATIVO=1 + AMAZON_TAG no .env (desligado = só Shopee, como hoje).
+from urllib.parse import quote_plus
+
+# palavras que denunciam legenda/hook em inglês (não é produto pt-BR) — evita
+# gerar link de busca Amazon lixo tipo "buy the most viral gadget".
+_ENGLISH_LIXO = (
+    " the ", " you ", " your ", "buy ", "order", "deliver", "today", "want",
+    "making ", "finding", "restock", "satisfying", "which ", " now", " with ",
+    " have ", " for ", "how to", "amazon", "tiktok", "link in", " home ",
+)
+
+
+def _amazon_ativo() -> bool:
+    return (os.getenv("AMAZON_ATIVO", "0").strip().lower() in ("1", "true", "sim")
+            and bool(os.getenv("AMAZON_TAG", "").strip()))
+
+
+def _produto_pra_amazon(termo: str) -> bool:
+    """Só monta link Amazon pra termo que parece produto de verdade (evita
+    frases/hook em inglês que o Gemini às vezes devolve)."""
+    if not termo or not _termo_valido(termo):
+        return False
+    t = f" {termo.lower()} "
+    if any(w in t for w in _ENGLISH_LIXO):
+        return False
+    return 2 <= len(termo.split()) <= 8
+
+
+def _amazon_link(termo: str) -> str:
+    tag = os.getenv("AMAZON_TAG", "").strip()
+    dom = os.getenv("AMAZON_DOMAIN", "amazon.com.br").strip() or "amazon.com.br"
+    return f"https://www.{dom}/s?k={quote_plus(termo)}&tag={tag}"
+
 
 def _carregar_env():
     for cand in (BASE_DIR / ".env", Path(".env")):
@@ -308,27 +343,41 @@ def main():
             _log(f"   • {meta['views']:,} views | produto: '{termo}'")
 
             m = minerar_oportunidades(termo)
-            if not m.get("ok") or not m.get("campeao"):
-                _log(f"     ✗ sem match na Shopee (gringo/Amazon?) — descarto")
+            plataforma = "shopee"
+            if m.get("ok") and m.get("campeao"):
+                camp = m["campeao"]
+                if not _match_relevante(termo, camp.get("nome", "")):
+                    _log(f"     ✗ match fraco ('{camp.get('nome','?')[:35]}' não bate "
+                         f"com o termo) — descarto")
+                    continue
+                origem = camp.get("product_link") or camp.get("offer_link")
+                # sub_id SÓ alfanumérico (a Shopee rejeita _/-/etc → erro 11001)
+                sub_termo = re.sub(r"[^A-Za-z0-9]", "", termo)[:16] or "viral"
+                link = ""
+                if origem:
+                    lk = gerar_link_afiliado(origem, sub_ids=["tiktok", sub_termo])
+                    if isinstance(lk, dict) and lk.get("ok"):
+                        link = lk.get("short_link") or lk.get("link") or ""
+                if not link:   # fallbacks: link já gerado pela mineração / offer cru
+                    link = m.get("link_gerado") or camp.get("offer_link") or ""
+                produto_nome = camp.get("nome", termo)
+                imagem = camp.get("imagem", "")
+                comissao = camp.get("comissao_valor", 0)
+                _log(f"     ✓ Shopee: '{produto_nome[:45]}' | "
+                     f"comissão R$ {comissao} | link: {link or '(falhou)'}")
+            elif _amazon_ativo() and _produto_pra_amazon(termo):
+                # Shopee não tem → Amazon (link de busca afiliado, só a tag)
+                plataforma = "amazon"
+                produto_nome = termo
+                imagem = ""
+                comissao = 0
+                link = _amazon_link(termo)
+                _log(f"     ✓ Amazon (busca afiliada): {link}")
+            else:
+                _log(f"     ✗ sem match na Shopee"
+                     f"{' e sem Amazon' if _amazon_ativo() else ' (gringo/Amazon?)'}"
+                     f" — descarto")
                 continue
-            camp = m["campeao"]
-            if not _match_relevante(termo, camp.get("nome", "")):
-                _log(f"     ✗ match fraco ('{camp.get('nome','?')[:35]}' não bate "
-                     f"com o termo) — descarto")
-                continue
-            origem = camp.get("product_link") or camp.get("offer_link")
-            # sub_id SÓ alfanumérico (a Shopee rejeita _/-/etc → erro 11001)
-            sub_termo = re.sub(r"[^A-Za-z0-9]", "", termo)[:16] or "viral"
-            link = ""
-            if origem:
-                lk = gerar_link_afiliado(origem, sub_ids=["tiktok", sub_termo])
-                if isinstance(lk, dict) and lk.get("ok"):
-                    link = lk.get("short_link") or lk.get("link") or ""
-            if not link:   # fallbacks: link já gerado pela mineração / offer cru
-                link = m.get("link_gerado") or camp.get("offer_link") or ""
-            _log(f"     ✓ Shopee: '{camp.get('nome','?')[:45]}' | "
-                 f"comissão R$ {camp.get('comissao_valor', 0)} | "
-                 f"link: {link or '(falhou)'}")
             achados += 1
 
             if dry:
@@ -338,14 +387,15 @@ def main():
             if not arq:
                 continue
             (pasta / "plano.json").write_text(json.dumps({
-                "fonte": "tiktok", "url": meta["url"], "uploader": meta["uploader"],
+                "fonte": "tiktok", "plataforma": plataforma,
+                "url": meta["url"], "uploader": meta["uploader"],
                 "views": meta["views"], "descricao": meta["descricao"],
-                "termo": termo, "produto": camp.get("nome", termo),
-                "link_afiliado": link, "imagem": camp.get("imagem", ""),
-                "comissao_valor": camp.get("comissao_valor", 0),
+                "termo": termo, "produto": produto_nome,
+                "link_afiliado": link, "imagem": imagem,
+                "comissao_valor": comissao,
                 "video": str(arq),
             }, ensure_ascii=False, indent=2), encoding="utf-8")
-            _log(f"     ⬇️  baixado em {pasta.name}/")
+            _log(f"     ⬇️  baixado em {pasta.name}/ [{plataforma}]")
 
     # no --dry NÃO persiste o cache (senão a rodada real pula tudo que o teste viu)
     if not dry:

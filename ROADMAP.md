@@ -89,11 +89,16 @@ normalizado) pra nunca postar o mesmo produto duas vezes seguidas.
 
 ## 🧠 Backlog / avançado
 
-- **Multiplataforma de afiliados (Amazon + outras):** além da Shopee, pegar
-  link de afiliado da **Amazon** (os "amazon gadgets" que viralizam) e de outras
-  plataformas. Cada plataforma numa **página separada do site** (Achados Shopee /
-  Achados Amazon / …). O coletor já baixa virais de vários nichos — falta o
-  matcher/gerador de link por plataforma e a vitrine dividida.
+- **Multiplataforma de afiliados (Amazon + outras):** 🚧 em construção.
+  - ✅ **Camada 1 (coletor):** Shopee falhou → tenta Amazon via LINK DE BUSCA
+    afiliado (`/s?k=produto&tag=SUATAG`, sem PA-API, só a tag), com filtro
+    anti-lixo (barra hook em inglês). plano carrega `plataforma`. Gated por
+    `AMAZON_ATIVO=1` + `AMAZON_TAG` (desligado = só Shopee).
+  - 🔜 **Camada 2 (produção/site):** carregar `plataforma` até a vitrine; o
+    `_registrar_no_site` e a produção precisam tratar Amazon (sem foto oficial).
+  - 🔜 **Camada 3 (layout do site):** seção/página "Achados Amazon" separada da
+    Shopee.
+  - 🔮 Depois: PA-API pra link direto do produto (foto/preço) + outras plataformas.
 - **Comentários automáticos + Stories** pro Jarvis (auto-engajamento).
 - **Auto-DM** pra CTA tipo "COMENTE QUERO" → responde no direct com o link
   (precisa Graph API / permissões de mensagem).
