@@ -5,14 +5,14 @@
     "instagram_user_id": "17841430055674609",
     "facebook_page_id": "1143173928870536",
     "page_token_env": "PAGE_TOKEN_TOPSHOP_OFERTAS",
-    "youtube": "topshop.oficial"
+    "youtube": ""
   },
   "beleza": {
     "handle": "@topshopbeauty._",
     "instagram_user_id": "17841449173043818",
     "facebook_page_id": "733972149805897",
     "page_token_env": "PAGE_TOKEN_TOPSHOP_DESCONTOS",
-    "youtube": "topshopbeauty"
+    "youtube": "beauty"
   },
   "tech": {
     "handle": "@topshoptech_",

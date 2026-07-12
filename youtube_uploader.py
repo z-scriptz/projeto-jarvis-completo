@@ -137,32 +137,56 @@ def _checar_dependencias() -> bool:
     return True
 
 
-def _autenticar():
+def _token_do_video(pasta) -> Path:
+    """Multi-canal: escolhe o token do canal pela conta.json ao lado do vídeo.
+    conta.youtube = chave do token (ex: 'beauty' -> youtube_token_beauty.json);
+    vazio ou token inexistente -> token principal (youtube_token.json)."""
+    try:
+        cj = Path(pasta) / "conta.json"
+        if cj.exists():
+            import json as _json
+            key = (_json.loads(cj.read_text(encoding="utf-8")).get("youtube") or "").strip()
+            if key:
+                tp = CRED_DIR / f"youtube_token_{key}.json"
+                if tp.exists():
+                    log.info(f"   🎯 canal YouTube: '{key}' ({tp.name})")
+                    return tp
+                log.warning(f"   ⚠️ token do canal '{key}' não existe — usa o principal")
+    except Exception:
+        pass
+    return TOKEN_PATH
+
+
+def _autenticar(token_path: Path = None, interativo: bool = False):
     """
-    Autentica via OAuth. 1ª vez: abre navegador. Depois: usa token salvo.
-    Retorna o objeto 'youtube' pronto pra chamar a API.
+    Autentica no YouTube. REFRESH-ONLY por padrão (nunca abre navegador — pra não
+    travar o daemon); o consentimento inicial de cada canal é feito pelo
+    auth_youtube.py. token_path: token do canal (multi-canal); None = principal.
     """
+    tp = token_path or TOKEN_PATH
     creds = None
-    if TOKEN_PATH.exists():
+    if tp.exists():
         try:
-            creds = Credentials.from_authorized_user_file(str(TOKEN_PATH), SCOPES)
+            creds = Credentials.from_authorized_user_file(str(tp), SCOPES)
         except Exception:
             creds = None
 
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file(
-                str(CLIENT_SECRET), SCOPES)
-            # abre o navegador local pra autorizar
-            creds = flow.run_local_server(port=0)
-        # salva o token pra não pedir de novo
+    if creds and creds.valid:
+        return build("youtube", "v3", credentials=creds)
+    if creds and creds.expired and creds.refresh_token:
+        creds.refresh(Request())
         CRED_DIR.mkdir(parents=True, exist_ok=True)
-        TOKEN_PATH.write_text(creds.to_json(), encoding="utf-8")
-        log.info(f"   🔑 Token salvo em {TOKEN_PATH}")
-
-    return build("youtube", "v3", credentials=creds)
+        tp.write_text(creds.to_json(), encoding="utf-8")
+        return build("youtube", "v3", credentials=creds)
+    if interativo:
+        flow = InstalledAppFlow.from_client_secrets_file(str(CLIENT_SECRET), SCOPES)
+        creds = flow.run_local_server(port=0)
+        CRED_DIR.mkdir(parents=True, exist_ok=True)
+        tp.write_text(creds.to_json(), encoding="utf-8")
+        log.info(f"   🔑 Token salvo em {tp}")
+        return build("youtube", "v3", credentials=creds)
+    _k = tp.stem.replace("youtube_token_", "").replace("youtube_token", "")
+    raise RuntimeError(f"sem token válido para {tp.name} — rode: auth_youtube.py {_k}".strip())
 
 
 def _ler_pacote(produto: str, slug: str = None) -> dict:
@@ -210,7 +234,7 @@ def subir_video(produto: str, publico: bool = False, slug: str = None) -> dict:
     log.info(f"   Privacidade: {'PÚBLICO' if publico else 'PRIVADO (revise no Studio)'}")
 
     try:
-        youtube = _autenticar()
+        youtube = _autenticar(_token_do_video(pacote.get("pasta")))
     except Exception as e:
         log.error(f"❌ Falha na autenticação: {e}")
         return {"sucesso": False, "erro": f"auth: {e}"}

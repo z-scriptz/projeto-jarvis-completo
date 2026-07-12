@@ -56,7 +56,7 @@ converte → repete. **Objetivo: virar máquina de dinheiro, dia após dia.**
 
 ## 🔜 Próximas (prioridade)
 
-### 1. Multi-conta / roteador de nicho  ✅ IG+FB NO AR (YouTube pendente)
+### 1. Multi-conta / roteador de nicho  ✅ IG+FB NO AR · YT multi-canal CONSTRUÍDO
 Roteia cada produto pra conta do nicho: renderiza com o @handle certo E posta na
 conta certa. Arquitetura: produção grava `conta.json` ao lado do `video.mp4`; o
 `meta_uploader` lê e posta naquela conta (sem tocar no publish_guard/daemon).
@@ -70,11 +70,14 @@ conta certa. Arquitetura: produção grava `conta.json` ao lado do `video.mp4`; 
   `meta_uploader` lê o `conta.json` e ativa a conta certa (ig_id + token do
   nicho) — provado em checagem seca (tech→@topshoptech_, geral→@topshop.__,
   sem conta.json→default). O daemon posta na conta certa nos horários.
-- 🔜 **YouTube multi-canal:** o `youtube_uploader` usa OAuth (Google) com UM
-  `youtube_token.json` (canal único) e o 1º consentimento abre navegador (ruim no
-  VPS). Multi-canal = 1 token por canal: fazer o consentimento no PC (gera o
-  token) → scp pro VPS → `youtube_uploader` escolhe o token por `conta.youtube`.
-  Precisa: consent por canal (topshop.oficial, topshopbeauty) + seleção por conta.
+- ✅ **YouTube:** token expirava (invalid_grant). `auth_youtube.py` re-autentica
+  na VPS via TÚNEL SSH (`ssh -L 8765:localhost:8765`), headless, com refresh_token
+  (offline). ⚠️ manter o app OAuth em **Production** (Testing expira em 7 dias).
+- ✅ **YouTube multi-canal:** `youtube_uploader` agora é refresh-only (não trava
+  o daemon) e escolhe o token pelo `conta.youtube` do `conta.json`
+  (''=principal `topshop.oficial`; `beauty`=`youtube_token_beauty.json`). Sem o
+  token do canal → cai no principal. Autenticar o beauty: `auth_youtube.py beauty`
+  pelo túnel, logando no canal topshopbeauty.
 
 ### 2. Dedup por PRODUTO no coletor/produtor
 Hoje 2 vídeos diferentes do mesmo item (ex: "Gaabor Ferro a Vapor" casou 2x)
