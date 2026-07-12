@@ -56,7 +56,7 @@ converte → repete. **Objetivo: virar máquina de dinheiro, dia após dia.**
 
 ## 🔜 Próximas (prioridade)
 
-### 1. Multi-conta / roteador de nicho  ✅ IG+FB NO AR · YT multi-canal CONSTRUÍDO
+### 1. Multi-conta / roteador de nicho  ✅ COMPLETO (IG + FB + YouTube)
 Roteia cada produto pra conta do nicho: renderiza com o @handle certo E posta na
 conta certa. Arquitetura: produção grava `conta.json` ao lado do `video.mp4`; o
 `meta_uploader` lê e posta naquela conta (sem tocar no publish_guard/daemon).
@@ -73,11 +73,12 @@ conta certa. Arquitetura: produção grava `conta.json` ao lado do `video.mp4`; 
 - ✅ **YouTube:** token expirava (invalid_grant). `auth_youtube.py` re-autentica
   na VPS via TÚNEL SSH (`ssh -L 8765:localhost:8765`), headless, com refresh_token
   (offline). ⚠️ manter o app OAuth em **Production** (Testing expira em 7 dias).
-- ✅ **YouTube multi-canal:** `youtube_uploader` agora é refresh-only (não trava
-  o daemon) e escolhe o token pelo `conta.youtube` do `conta.json`
-  (''=principal `topshop.oficial`; `beauty`=`youtube_token_beauty.json`). Sem o
-  token do canal → cai no principal. Autenticar o beauty: `auth_youtube.py beauty`
-  pelo túnel, logando no canal topshopbeauty.
+- ✅ **YouTube multi-canal CONFIRMADO** (2026-07-12): `youtube_uploader`
+  refresh-only + escolhe o token pelo `conta.youtube`. **3 canais autenticados**
+  (token com refresh, app em Production): geral→`topshop.oficial`
+  (youtube_token.json) · beleza→`topshopbeauty` (youtube_token_beauty.json) ·
+  tech→`@topshoptech` (youtube_token_tech.json). `auth_youtube.py <canal>` faz o
+  consentimento headless (fluxo de colar o code, sem túnel).
 
 ### 2. Dedup por PRODUTO no coletor/produtor
 Hoje 2 vídeos diferentes do mesmo item (ex: "Gaabor Ferro a Vapor" casou 2x)
@@ -130,5 +131,8 @@ normalizado) pra nunca postar o mesmo produto duas vezes seguidas.
   (backup + verificação + idempotente). A VPS **não** dá git-sync com o repo.
 - **Segurança:** nunca colar tokens/segredos no chat; segredos no `.env` da VPS
   / Bitwarden; PAT do GitHub com escopo mínimo.
-- **Marcas/contas:** Site `topshopoficial.com.br` · Telegram
-  `@achadinhosrelampagoh` · IG/YouTube (ver seção Multi-conta).
+- **Contas por nicho:**
+  - geral: IG @topshop.__ · FB TopShop & Ofertas · YT topshop.oficial
+  - beleza: IG @topshopbeauty._ · FB TopShop Descontos · YT topshopbeauty
+  - tech: IG @topshoptech_ · FB TopShop & Casa · YT @topshoptech
+- **Marcas:** Site `topshopoficial.com.br` · Telegram `@achadinhosrelampagoh`.
