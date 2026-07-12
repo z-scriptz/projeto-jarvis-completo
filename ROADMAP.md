@@ -66,8 +66,14 @@ conta certa. Arquitetura: produção grava `conta.json` ao lado do `video.mp4`; 
 - **Handle no render:** `narrated_video_agent` lê `TOPSHOP_HANDLE` em tempo de
   render; a produção seta por vídeo.
 - **Ligado por** `MULTI_CONTA=1` no `.env` (desligado = comportamento antigo).
-- FALTA: testar ponta-a-ponta (produzir beleza/tech → checar handle + postar na
-  conta) e o YouTube multi-canal (por enquanto YT posta só a conta principal).
+- ✅ **IG + Facebook funcionando** (2026-07-12): produção roteou "Carregador Sem
+  Fio" → tech → renderizou `@topshoptech_` + gravou `conta.json` certo. Falta só
+  confirmar o post caindo na conta (teste ou daemon).
+- 🔜 **YouTube multi-canal:** o `youtube_uploader` usa OAuth (Google) com UM
+  `youtube_token.json` (canal único) e o 1º consentimento abre navegador (ruim no
+  VPS). Multi-canal = 1 token por canal: fazer o consentimento no PC (gera o
+  token) → scp pro VPS → `youtube_uploader` escolhe o token por `conta.youtube`.
+  Precisa: consent por canal (topshop.oficial, topshopbeauty) + seleção por conta.
 
 ### 2. Dedup por PRODUTO no coletor/produtor
 Hoje 2 vídeos diferentes do mesmo item (ex: "Gaabor Ferro a Vapor" casou 2x)
