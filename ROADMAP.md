@@ -80,10 +80,12 @@ conta certa. Arquitetura: produção grava `conta.json` ao lado do `video.mp4`; 
   tech→`@topshoptech` (youtube_token_tech.json). `auth_youtube.py <canal>` faz o
   consentimento headless (fluxo de colar o code, sem túnel).
 
-### 2. Dedup por PRODUTO no coletor/produtor
-Hoje 2 vídeos diferentes do mesmo item (ex: "Gaabor Ferro a Vapor" casou 2x)
-viram 2 posts iguais. Deduplicar pelo produto/item_id da Shopee (ou nome
-normalizado) pra nunca postar o mesmo produto duas vezes seguidas.
+### 2. Dedup por PRODUTO  ✅ FEITO (2026-07-12)
+2 vídeos diferentes do mesmo item viravam 2 posts iguais. Agora o coletor guarda
+`shared/produtos_vistos.json` (chave = nome normalizado sem acento, 1as 8
+palavras) com TTL `DEDUP_DIAS` (padrão 30): mesmo produto não entra 2x dentro da
+janela; depois pode voltar. `--dry` não persiste. Futuro: usar o item_id da
+Shopee como chave (mais preciso que o nome).
 
 ### 3. Expandir a rede de vídeos (fontes novas)
 - Coletar de **perfis "dark" do Instagram** que postam produtos e são
@@ -111,9 +113,14 @@ normalizado) pra nunca postar o mesmo produto duas vezes seguidas.
 - **Comentários automáticos + Stories** pro Jarvis (auto-engajamento).
 - **Auto-DM** pra CTA tipo "COMENTE QUERO" → responde no direct com o link
   (precisa Graph API / permissões de mensagem).
-- **CEO IA dentro do Jarvis:** uma IA estratégica que lê as métricas, decide
-  nichos/orçamento, o que escalar ou cortar, e ajusta a máquina sozinha
-  (o "cérebro" acima dos agentes).
+- **CEO IA — Conselheiro de Alto Nível (próximo grande passo):** começa em modo
+  CONSELHEIRO (não executivo): lê métricas (`nichos_quentes`, ledger,
+  conversionReport), gera um RELATÓRIO + um **Jarvis Confidence Score** e
+  **PROPÕE** mudanças (produzir mais de X, cortar perfil-fonte ruim, mudar
+  horário, ajustar `_fator_nicho`). O Dre **aprova ou rejeita** — nada é aplicado
+  sozinho. Conforme o índice de acerto dele se comprova, liberar **níveis de
+  autonomia** (Nível 1, 2, 3…) por tipo de tarefa, rumo a um **conselho de
+  agentes**. Modo executivo/admin só quando estiver apto.
 - **Gemini Vision** pra detectar texto no vídeo (substituir o tesseract que
   falhava no espelhamento) e liberar espelhamento seguro só quando não há texto.
 - **Proxies por conta** — só se vier punição/bloqueio (não antes).

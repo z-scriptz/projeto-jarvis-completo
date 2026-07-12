@@ -14,6 +14,7 @@ import os
 import re
 import sys
 import json
+import time
 import shutil
 import subprocess
 from pathlib import Path
@@ -298,6 +299,48 @@ def _salvar_vistos(ids: set):
         pass
 
 
+# ── Dedup por PRODUTO: o mesmo item (2 vídeos diferentes → mesmo produto) não
+# vira 2 posts. Janela de DEDUP_DIAS: depois disso o produto pode voltar. ──
+PRODUTOS_VISTOS = BASE_DIR / "shared" / "produtos_vistos.json"
+
+
+def _norm_produto(nome: str) -> str:
+    """Chave normalizada do produto: sem acento, minúsculo, 1as 8 palavras."""
+    s = (nome or "").lower().translate(str.maketrans(
+        "áàâãäéèêëíìîïóòôõöúùûüç", "aaaaaeeeeiiiiooooouuuuc"))
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", s).split()[:8])
+
+
+def _carregar_produtos_vistos() -> dict:
+    try:
+        return dict(json.loads(PRODUTOS_VISTOS.read_text(encoding="utf-8")))
+    except Exception:
+        return {}
+
+
+def _salvar_produtos_vistos(pv: dict):
+    try:
+        PRODUTOS_VISTOS.parent.mkdir(parents=True, exist_ok=True)
+        PRODUTOS_VISTOS.write_text(json.dumps(pv, ensure_ascii=False, indent=2),
+                                   encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _produto_repetido(chave: str, pv: dict) -> bool:
+    """True se o produto já foi coletado dentro dos últimos DEDUP_DIAS dias."""
+    if not chave:
+        return False
+    ts = pv.get(chave)
+    if not ts:
+        return False
+    try:
+        dias = int(os.getenv("DEDUP_DIAS", "30"))
+    except ValueError:
+        dias = 30
+    return (time.time() - ts) < dias * 86400
+
+
 def _parse_args():
     """--dry, --limite N e a lista de perfis (ou tiktok_perfis.txt)."""
     args = sys.argv[1:]
@@ -332,6 +375,7 @@ def main():
         return 1
 
     vistos = _carregar_vistos()
+    produtos_vistos = _carregar_produtos_vistos()
     achados = 0
     for perfil in perfis:
         _log(f"perfil {perfil} …")
@@ -385,6 +429,13 @@ def main():
                      f"{' e sem Amazon' if _amazon_ativo() else ' (gringo/Amazon?)'}"
                      f" — descarto")
                 continue
+
+            # dedup por PRODUTO: o mesmo item não entra 2x (dentro de DEDUP_DIAS)
+            chave_prod = _norm_produto(produto_nome)
+            if _produto_repetido(chave_prod, produtos_vistos):
+                _log(f"     ⤵️  produto repetido ('{produto_nome[:38]}') — pulo (dedup)")
+                continue
+            produtos_vistos[chave_prod] = int(time.time())
             achados += 1
 
             if dry:
@@ -407,6 +458,7 @@ def main():
     # no --dry NÃO persiste o cache (senão a rodada real pula tudo que o teste viu)
     if not dry:
         _salvar_vistos(vistos)
+        _salvar_produtos_vistos(produtos_vistos)
     _log(f"fim. {achados} produto(s) casado(s) na Shopee "
          f"{'(dry — nada baixado, cache intacto)' if dry else ''}")
     return 0
