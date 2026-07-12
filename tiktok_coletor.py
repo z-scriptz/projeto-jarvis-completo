@@ -32,13 +32,19 @@ POR_PERFIL = 40         # quantos vídeos recentes checar por perfil (--limite m
 # Gated por AMAZON_ATIVO=1 + AMAZON_TAG no .env (desligado = só Shopee, como hoje).
 from urllib.parse import quote_plus
 
-# palavras que denunciam legenda/hook em inglês (não é produto pt-BR) — evita
-# gerar link de busca Amazon lixo tipo "buy the most viral gadget".
-_ENGLISH_LIXO = (
-    " the ", " you ", " your ", "buy ", "order", "deliver", "today", "want",
-    "making ", "finding", "restock", "satisfying", "which ", " now", " with ",
-    " have ", " for ", "how to", "amazon", "tiktok", "link in", " home ",
-)
+# palavras INGLESAS comuns (funcionais + de comida/lifestyle gringo). Se o termo
+# tem QUALQUER uma como palavra inteira, é legenda/hook em inglês, não produto
+# pt-BR → não vira link Amazon (evita "dirty coconut", "meal prep yogurt"...).
+_EN_WORDS = frozenset("""
+the a an with without for this that your you have has had make making made home
+new most love good best my her his their and or who like now today high small big
+buy order deliver want finding restock restocking packing pack prep prepping meal
+protein soda yogurt lunch coconut sweet treat healthy drink refresher smoothie
+salad cream blast organize organizing fridge kitchen watch dirty ultimate busy
+forgetful themed satisfying people favorite floor mop steam cleaner gradient
+projector lamp night light cake fruit summer daughter pink viral ice bag give
+friend people setting starting cottage clean into every from they them we our
+""".split())
 
 
 def _amazon_ativo() -> bool:
@@ -47,14 +53,15 @@ def _amazon_ativo() -> bool:
 
 
 def _produto_pra_amazon(termo: str) -> bool:
-    """Só monta link Amazon pra termo que parece produto de verdade (evita
-    frases/hook em inglês que o Gemini às vezes devolve)."""
+    """Só monta link Amazon pra termo que PARECE produto pt-BR de verdade —
+    rejeita se tiver qualquer palavra funcional/comida do inglês (o Gemini às
+    vezes devolve legenda/hook gringo em vez de produto)."""
     if not termo or not _termo_valido(termo):
         return False
-    t = f" {termo.lower()} "
-    if any(w in t for w in _ENGLISH_LIXO):
+    palavras = re.findall(r"[a-zA-ZÀ-ÿ]+", termo.lower())
+    if not (2 <= len(palavras) <= 8):
         return False
-    return 2 <= len(termo.split()) <= 8
+    return not any(p in _EN_WORDS for p in palavras)
 
 
 def _amazon_link(termo: str) -> str:
