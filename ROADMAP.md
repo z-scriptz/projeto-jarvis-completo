@@ -97,8 +97,11 @@ normalizado) pra nunca postar o mesmo produto duas vezes seguidas.
   - ✅ **Camada 2 (produção/site):** `plataforma` flui do plano → produção →
     `_registrar_no_site` (Amazon não busca foto na Shopee; a fila do site marca
     `plataforma`). Falta só a Camada 3 usar isso no layout.
-  - 🔜 **Camada 3 (layout do site):** seção/página "Achados Amazon" separada da
-    Shopee.
+  - ✅ **Camada 3 (layout do site):** vitrine com toggle Tudo/🛒Shopee/📦Amazon +
+    selo por card + placeholder pros cards Amazon. So aditivo (com so-Shopee o
+    site fica igual; o toggle so surge com produto Amazon). Testado em preview.
+  - 🎬 **GO-LIVE:** aplicar patch_camada3_site.py + rodar deploy_site.py; depois
+    `AMAZON_ATIVO=1` no .env liga o pipeline inteiro (coletor→produção→site).
   - 🔮 Depois: PA-API pra link direto do produto (foto/preço) + outras plataformas.
 - **Comentários automáticos + Stories** pro Jarvis (auto-engajamento).
 - **Auto-DM** pra CTA tipo "COMENTE QUERO" → responde no direct com o link
