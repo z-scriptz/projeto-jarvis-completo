@@ -292,6 +292,15 @@ def _produzir(pasta: Path, pj: Path, video_src: Path) -> bool:
             _log(f"   🗂️  conta.json gravado (posta em {conta.get('handle')})")
         except Exception:
             pass
+    # engajamento.json → o meta_uploader monta o 1º comentário (link no FB, isca no IG)
+    try:
+        eng = {"link": link, "produto": nome,
+               "handle": (conta.get("handle") if conta else "") or "",
+               "plataforma": plataforma, "nicho": nicho}
+        (pp / "engajamento.json").write_text(
+            json.dumps(eng, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
     (pp / "titulo_youtube.txt").write_text(f"{nome} #shorts"[:100], encoding="utf-8")
     (pp / "descricao_youtube.txt").write_text(
         (legenda + "\n\n" + hashtags).strip(), encoding="utf-8")

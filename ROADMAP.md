@@ -134,7 +134,17 @@ Shopee como chave (mais preciso que o nome).
   - 🎬 **GO-LIVE:** aplicar patch_camada3_site.py + rodar deploy_site.py; depois
     `AMAZON_ATIVO=1` no .env liga o pipeline inteiro (coletor→produção→site).
   - 🔮 Depois: PA-API pra link direto do produto (foto/preço) + outras plataformas.
-- **Comentários automáticos + Stories** pro Jarvis (auto-engajamento).
+- **1º comentário automático** ✅ FEITO (2026-07-12): logo após publicar, a
+  máquina dropa o 1º comentário — POR PLATAFORMA: **Facebook** com o LINK do
+  produto (clicável no FB → venda direta), **Instagram** com isca de engajamento
+  ("link na bio, comenta EU QUERO" → gera comentários = sinal pro algoritmo).
+  `meta_uploader._comentar/_montar_comentario` (gated `ENGAJAR_COMENTARIO=1`,
+  best-effort — se faltar permissão, loga e segue). `produzir_tiktok` grava
+  `engajamento.json` (link/produto/handle) ao lado do vídeo. Templates editáveis
+  via `.env` (`ENGAJAR_IG_TMPL`/`ENGAJAR_FB_TMPL`, placeholders {link}/{handle}/{produto}).
+  Permissões Graph: IG precisa `instagram_manage_comments`, FB `pages_manage_engagement`.
+  🔜 v2: **Stories** (reshare do reel — precisa URL pública hospedada).
+- **Auto-comentários (Stories parte 2)** pro Jarvis (auto-engajamento).
 - **Auto-DM** pra CTA tipo "COMENTE QUERO" → responde no direct com o link
   (precisa Graph API / permissões de mensagem).
 - **CEO IA — Conselheiro** 🚧 v1 CONSTRUÍDO (`ceo_agent.py`): lê ledger +

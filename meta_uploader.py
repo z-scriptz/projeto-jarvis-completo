@@ -225,6 +225,73 @@ def _page_access_token() -> Optional[str]:
     return tok
 
 
+# ══════════════════════════════════════════════════════════════════════════
+# ENGAJAMENTO — primeiro comentário automático (o "1º comentário" clássico)
+#
+# Logo após publicar, a máquina dropa o 1º comentário. Estratégia POR PLATAFORMA:
+#   FACEBOOK  → link do produto (no FB o link em comentário é CLICÁVEL → venda)
+#   INSTAGRAM → isca de engajamento (no IG link não clica; então "link na bio" +
+#               pede comentário → gera sinal forte pro algoritmo)
+# Gated por ENGAJAR_COMENTARIO=1. Best-effort: se falhar (ex: falta permissão),
+# loga e segue — o post em si continua valendo.
+# ══════════════════════════════════════════════════════════════════════════
+_TMPL_IG = ("🛒 O link tá na BIO, corre pegar o seu! 😍\n"
+            "💬 comenta \"EU QUERO\" que eu te ajudo a achar 👇")
+_TMPL_FB = ("🛒 Compra aqui ó: {link}\n"
+            "😍 aproveita que a oferta some rápido!")
+
+
+def _engajar_ligado() -> bool:
+    return os.environ.get("ENGAJAR_COMENTARIO", "0").strip().lower() in ("1", "true", "sim")
+
+
+def _dados_engajamento(video_path) -> dict:
+    """Lê engajamento.json ao lado do vídeo (link/produto/handle). {} se não houver."""
+    try:
+        ej = Path(video_path).parent / "engajamento.json"
+        if ej.exists():
+            return json.loads(ej.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return {}
+
+
+def _montar_comentario(plataforma: str, video_path) -> str:
+    d = _dados_engajamento(video_path)
+    ctx = {
+        "link":    (d.get("link") or "").strip(),
+        "handle":  (_CTX.get("handle") or d.get("handle") or "").strip(),
+        "produto": (d.get("produto") or "").strip(),
+    }
+    tmpl = (os.environ.get("ENGAJAR_IG_TMPL", _TMPL_IG) if plataforma == "instagram"
+            else os.environ.get("ENGAJAR_FB_TMPL", _TMPL_FB))
+    # se o template precisa do {link} mas não temos, não comenta (evita "Compra aqui: ")
+    if "{link}" in tmpl and not ctx["link"]:
+        return ""
+    try:
+        return tmpl.format(**ctx).strip()
+    except Exception:
+        return ""
+
+
+def _comentar(obj_id: str, texto: str, token: str) -> bool:
+    """Posta o 1º comentário no objeto recém-publicado. Best-effort (nunca quebra)."""
+    if not texto:
+        return False
+    try:
+        r = _req().post(f"{GRAPH}/{obj_id}/comments",
+                        data={"message": texto, "access_token": token}, timeout=30)
+        d = r.json()
+        if d.get("id"):
+            log.info(f"   💬 1º comentário postado ({obj_id})")
+            return True
+        err = (d.get("error") or {}).get("message") or str(d)[:160]
+        log.warning(f"   ⚠️  1º comentário não postou: {err}")
+    except Exception as e:
+        log.warning(f"   ⚠️  exceção no 1º comentário: {e}")
+    return False
+
+
 def postar_facebook(video_path: str, legenda: str = "") -> dict:
     """
     Posta um vídeo na Página do Facebook (upload de arquivo local).
@@ -264,6 +331,9 @@ def postar_facebook(video_path: str, legenda: str = "") -> dict:
     # Sucesso = veio um id de vídeo
     video_id = dados.get("id")
     if video_id:
+        # 1º comentário automático (FB: link clicável) — best-effort
+        if _engajar_ligado():
+            _comentar(video_id, _montar_comentario("facebook", video_path), page_token)
         # a URL pública real vem da permalink_url; fallback = watch?v= (válido
         # pra vídeo de feed, ao contrário do id solto que nem sempre resolve)
         link = _buscar_permalink(video_id, "permalink_url", page_token,
@@ -383,6 +453,9 @@ def postar_instagram(video_path: str, legenda: str = "") -> dict:
 
     media_id = d4.get("id")
     if media_id:
+        # 1º comentário automático (IG: isca de engajamento) — best-effort
+        if _engajar_ligado():
+            _comentar(media_id, _montar_comentario("instagram", video_path), tok)
         # o media-id numérico NÃO forma a URL do Reel (IG usa shortcode) —
         # busca a permalink real; fallback guarda ao menos o id de referência
         link = _buscar_permalink(media_id, "permalink", tok,
@@ -404,6 +477,7 @@ def diagnostico() -> dict:
         "INSTAGRAM_USER_ID":  "✅ ok" if _ig_user_id() else "❌ faltando",
         "facebook_pronto":    bool(_token() and _page_id()),
         "instagram_pronto":   bool(_token() and _ig_user_id()),
+        "ENGAJAR_COMENTARIO": "✅ ligado" if _engajar_ligado() else "⚪ desligado",
     }
 
 
