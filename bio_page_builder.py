@@ -133,10 +133,12 @@ def _carregar_produtos() -> list:
                         "comissao_valor": item.get("comissao_valor", 0) or 0,
                         "imagem": item.get("imagem", ""),
                         "link": item.get("link", ""),
+                        "plataforma": (item.get("plataforma") or "shopee").lower(),
                     })
                 elif isinstance(item, str):
                     _add({"nome": item, "titulo": item, "classe": "",
-                          "comissao_valor": 0, "imagem": "", "link": ""})
+                          "comissao_valor": 0, "imagem": "", "link": "",
+                          "plataforma": "shopee"})
         except Exception as e:
             log.warning(f"   erro lendo fila JSON: {e}")
 
@@ -152,7 +154,7 @@ def _carregar_produtos() -> list:
                         "titulo": p.get("campeao", ""),
                         "classe": p.get("classe", ""),
                         "comissao_valor": p.get("comissao_valor", 0),
-                        "imagem": "", "link": "",
+                        "imagem": "", "link": "", "plataforma": "shopee",
                     })
         except Exception as e:
             log.warning(f"   erro lendo validação: {e}")
@@ -198,13 +200,18 @@ def _card_destaque(p: dict) -> str:
     link = html.escape(p.get("link", "#"))
     cat = html.escape(_inferir_categoria(p))
     img = html.escape(p.get("imagem", ""))
+    plat = (p.get("plataforma") or "shopee").lower()
+    ph_emoji = "📦" if plat == "amazon" else "🛍️"
+    badge = "📦 Amazon" if plat == "amazon" else "🛒 Shopee"
     img_html = (f'<img src="{img}" alt="{titulo}" loading="lazy" '
                 f'onerror="this.style.display=\'none\'">') if img else ""
     return f"""
     <a class="prod-destaque" href="{link}" target="_blank" rel="noopener"
-       data-busca="{titulo.lower()} {nome.lower()}" data-categoria="{cat}">
-      <div class="pd-img">{img_html}<span class="pd-ph">🛍️</span>
-        <span class="selo">⭐ Produto do dia</span></div>
+       data-busca="{titulo.lower()} {nome.lower()}" data-categoria="{cat}"
+       data-plataforma="{plat}">
+      <div class="pd-img">{img_html}<span class="pd-ph">{ph_emoji}</span>
+        <span class="selo">⭐ Produto do dia</span>
+        <span class="plat-badge plat-{plat}">{badge}</span></div>
       <div class="pd-body">
         <h3>{titulo}</h3>
         <span class="pd-cta">🛒 PEGAR MEU DESCONTO</span>
@@ -218,13 +225,18 @@ def _card_grid(p: dict) -> str:
     link = html.escape(p.get("link", "#"))
     cat = html.escape(_inferir_categoria(p))
     img = html.escape(p.get("imagem", ""))
+    plat = (p.get("plataforma") or "shopee").lower()
+    ph_emoji = "📦" if plat == "amazon" else "🛍️"
+    badge = "📦 Amazon" if plat == "amazon" else "🛒 Shopee"
     img_html = (f'<img src="{img}" alt="{titulo}" loading="lazy" '
                 f'onerror="this.style.display=\'none\'">') if img else ""
     return f"""
       <a class="glass prod" href="{link}" target="_blank" rel="noopener"
-         data-busca="{titulo.lower()} {nome.lower()}" data-categoria="{cat}">
-        <div class="thumb">{img_html}<span class="pd-ph">🛍️</span>
-          <span class="selo">Achado topshop</span></div>
+         data-busca="{titulo.lower()} {nome.lower()}" data-categoria="{cat}"
+         data-plataforma="{plat}">
+        <div class="thumb">{img_html}<span class="pd-ph">{ph_emoji}</span>
+          <span class="selo">Achado topshop</span>
+          <span class="plat-badge plat-{plat}">{badge}</span></div>
         <div class="body">
           <h3>{titulo}</h3>
           <span class="ver">Ver oferta →</span>
@@ -249,19 +261,35 @@ def _filtros_html(produtos: list) -> str:
     return '<div class="filtros" id="filtros">' + "".join(botoes) + "</div>"
 
 
+def _toggle_plataforma_html(produtos: list) -> str:
+    """Toggle 🛒 Shopee / 📦 Amazon — só aparece se houver produto de mais de
+    uma plataforma (senão não polui a barra)."""
+    plats = {(p.get("plataforma") or "shopee").lower() for p in produtos}
+    if len(plats) < 2:
+        return ""
+    botoes = [
+        '<button class="filtro-plat ativo" data-plat="todos">Tudo</button>',
+        '<button class="filtro-plat" data-plat="shopee">🛒 Shopee</button>',
+        '<button class="filtro-plat" data-plat="amazon">📦 Amazon</button>',
+    ]
+    return ('<div class="filtros filtros-plat" id="filtros-plat">'
+            + "".join(botoes) + "</div>")
+
+
 def _vitrine_html(produtos: list) -> str:
-    """Monta a vitrine completa: busca + filtros + destaque + grade."""
+    """Monta a vitrine completa: busca + toggle plataforma + filtros + destaque + grade."""
     if not produtos:
         return '<p style="text-align:center;color:var(--muted);padding:40px 0;">Em breve, novos achados ✨</p>'
     busca = ('<div class="busca-wrap">'
              '<input id="busca" type="search" placeholder="🔍 Buscar produto do vídeo..." '
              'autocomplete="off"></div>')
+    toggle = _toggle_plataforma_html(produtos)
     filtros = _filtros_html(produtos)
     destaque = _card_destaque(produtos[0])
     grade_cards = "\n".join(_card_grid(p) for p in produtos[1:])
     grade = f'<div class="grid-3" id="grade-prod">{grade_cards}</div>' if grade_cards else ""
     sem = '<p class="sem-res" id="sem-res" style="display:none;text-align:center;color:var(--muted);padding:24px;">Nenhum produto encontrado 🔍</p>'
-    return busca + filtros + destaque + grade + sem
+    return busca + toggle + filtros + destaque + grade + sem
 
 
 def _grupos_html() -> str:
@@ -414,13 +442,20 @@ _TEMPLATE = r"""<!DOCTYPE html>
   #busca:focus { border-color: var(--pop); box-shadow: 0 0 0 3px rgba(109,93,252,0.25); }
   #busca::placeholder { color: var(--muted); }
   .filtros { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 40px; }
-  .filtro { background: var(--glass); color: var(--muted);
+  .filtros-plat { margin-bottom: 16px; }
+  .filtro, .filtro-plat { background: var(--glass); color: var(--muted);
     border: 1px solid var(--glass-border); border-radius: 100px;
     padding: 8px 18px; font-size: 0.88rem; font-weight: 600; cursor: pointer;
     transition: all .2s; font-family: inherit; }
-  .filtro:hover { color: var(--ink); border-color: var(--pop2); }
-  .filtro.ativo { background: var(--grad); color: #fff; border-color: transparent;
+  .filtro:hover, .filtro-plat:hover { color: var(--ink); border-color: var(--pop2); }
+  .filtro.ativo, .filtro-plat.ativo { background: var(--grad); color: #fff; border-color: transparent;
     box-shadow: 0 6px 20px rgba(109,93,252,0.4); }
+  .plat-badge { position: absolute; top: 14px; right: 14px; z-index: 2;
+    font-size: 0.62rem; font-weight: 800; letter-spacing: .3px;
+    padding: 4px 9px; border-radius: 100px; color: #fff; white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+  .plat-shopee { background: #ee4d2d; }
+  .plat-amazon { background: #ff9900; color: #131a22; }
   .prod-destaque { display: grid; grid-template-columns: 1fr 1fr; gap: 0;
     background: linear-gradient(135deg, rgba(109,93,252,0.12), var(--glass));
     border: 1px solid var(--pop); border-radius: 24px; overflow: hidden;
@@ -655,16 +690,20 @@ _TEMPLATE = r"""<!DOCTYPE html>
     const cards = Array.from(document.querySelectorAll('.prod, .prod-destaque'));
     const semRes = document.getElementById('sem-res');
     const filtros = document.querySelectorAll('.filtro');
+    const filtrosPlat = document.querySelectorAll('.filtro-plat');
     let catAtiva = 'todos';
+    let platAtiva = 'todos';
     function aplicar() {
       const termo = busca.value.trim().toLowerCase();
       let achou = 0;
       cards.forEach(function(c) {
         const alvo = c.getAttribute('data-busca') || '';
         const cat = c.getAttribute('data-categoria') || '';
+        const plat = c.getAttribute('data-plataforma') || 'shopee';
         const okB = !termo || alvo.indexOf(termo) !== -1;
         const okC = catAtiva === 'todos' || cat === catAtiva;
-        const mostra = okB && okC;
+        const okP = platAtiva === 'todos' || plat === platAtiva;
+        const mostra = okB && okC && okP;
         c.style.display = mostra ? '' : 'none';
         if (mostra) achou++;
       });
@@ -676,6 +715,14 @@ _TEMPLATE = r"""<!DOCTYPE html>
         filtros.forEach(function(x) { x.classList.remove('ativo'); });
         b.classList.add('ativo');
         catAtiva = b.getAttribute('data-filtro');
+        aplicar();
+      });
+    });
+    filtrosPlat.forEach(function(b) {
+      b.addEventListener('click', function() {
+        filtrosPlat.forEach(function(x) { x.classList.remove('ativo'); });
+        b.classList.add('ativo');
+        platAtiva = b.getAttribute('data-plat');
         aplicar();
       });
     });
