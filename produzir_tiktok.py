@@ -170,6 +170,7 @@ def _produzir(pasta: Path, pj: Path, video_src: Path) -> bool:
     info = json.loads(pj.read_text(encoding="utf-8"))
     nome = info.get("produto") or info.get("termo") or pasta.name
     link = info.get("link_afiliado", "")
+    plataforma = (info.get("plataforma") or "shopee").strip().lower()
     if not link:
         _log(f"   sem link de afiliado em {pasta.name} — pulo (não monetiza)")
         return False
@@ -232,6 +233,7 @@ def _produzir(pasta: Path, pj: Path, video_src: Path) -> bool:
         "narracao_propria": resultado.get("narracao", False),
         "duracao_video": resultado.get("duracao"),
         "categoria": categoria,
+        "plataforma": plataforma,
         "status_producao": "video_gerado",
         "fonte": "tiktok",
         "fonte_url": info.get("url", ""),
@@ -259,15 +261,16 @@ def _produzir(pasta: Path, pj: Path, video_src: Path) -> bool:
         (legenda + "\n\n" + hashtags).strip(), encoding="utf-8")
     (pp / "hashtags.txt").write_text(hashtags, encoding="utf-8")
 
-    # 4) Site (passo 8) — com a foto oficial que o coletor já pegou
-    H._registrar_no_site(nome, link, imagem=info.get("imagem", ""))
+    # 4) Site (passo 8) — Shopee pega foto oficial; Amazon vai sem foto (Camada 3)
+    H._registrar_no_site(nome, link, imagem=info.get("imagem", ""),
+                         plataforma=plataforma)
 
     # 5) Ledger (passo 9)
     try:
         from posts_ledger import registrar as _reg
         _reg(produto=nome, link=link, categoria=categoria, hook=hook,
              legenda=legenda, slug=slug, sub_ids=["tiktok"],
-             plataforma="", extra={"fonte": "tiktok",
+             plataforma="", extra={"fonte": "tiktok", "plataforma_afiliado": plataforma,
                                    "fonte_views": info.get("views", 0)})
     except Exception:
         pass

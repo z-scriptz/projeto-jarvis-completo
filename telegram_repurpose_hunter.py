@@ -1161,15 +1161,16 @@ def _foto_oficial_do_link(link: str) -> str:
     return ""
 
 
-def _registrar_no_site(nome: str, link: str, imagem: str = "", max_itens: int = 80):
+def _registrar_no_site(nome: str, link: str, imagem: str = "", max_itens: int = 80,
+                       plataforma: str = "shopee"):
     """Grava o produto + link de afiliado no produtos_fila.json que o SITE
     (bio_page_builder) lê. É a PONTE que faz a bio (topshopoficial) mostrar
     EXATAMENTE o produto do vídeo — sem isso, o post e o site ficam descasados
     e a comissão vaza. Mais recente primeiro, sem duplicar link, cap em max_itens."""
     if not link:
         return
-    if not imagem:
-        imagem = _foto_oficial_do_link(link)   # foto oficial (API de afiliado)
+    if not imagem and plataforma == "shopee":
+        imagem = _foto_oficial_do_link(link)   # foto oficial (API de afiliado Shopee)
     try:
         import json as _json
         fila = []
@@ -1183,7 +1184,8 @@ def _registrar_no_site(nome: str, link: str, imagem: str = "", max_itens: int = 
         fila = [i for i in fila if isinstance(i, dict) and i.get("link") != link]
         fila.insert(0, {
             "produto": nome, "campeao": nome, "link": link,
-            "imagem": imagem or "", "classe": "", "ts": int(time.time()),
+            "imagem": imagem or "", "classe": "", "plataforma": plataforma,
+            "ts": int(time.time()),
         })
         fila = fila[:max_itens]
         SITE_FILA.parent.mkdir(parents=True, exist_ok=True)

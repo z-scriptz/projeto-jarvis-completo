@@ -94,8 +94,9 @@ normalizado) pra nunca postar o mesmo produto duas vezes seguidas.
     afiliado (`/s?k=produto&tag=SUATAG`, sem PA-API, só a tag), com filtro
     anti-lixo (barra hook em inglês). plano carrega `plataforma`. Gated por
     `AMAZON_ATIVO=1` + `AMAZON_TAG` (desligado = só Shopee).
-  - 🔜 **Camada 2 (produção/site):** carregar `plataforma` até a vitrine; o
-    `_registrar_no_site` e a produção precisam tratar Amazon (sem foto oficial).
+  - ✅ **Camada 2 (produção/site):** `plataforma` flui do plano → produção →
+    `_registrar_no_site` (Amazon não busca foto na Shopee; a fila do site marca
+    `plataforma`). Falta só a Camada 3 usar isso no layout.
   - 🔜 **Camada 3 (layout do site):** seção/página "Achados Amazon" separada da
     Shopee.
   - 🔮 Depois: PA-API pra link direto do produto (foto/preço) + outras plataformas.
