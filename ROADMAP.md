@@ -106,6 +106,18 @@ Shopee como chave (mais preciso que o nome).
   + `_tags_video()` extensível por `.env` (`VIDEO_SUBID_TAGS=`) + diagnóstico
   `metricas_agent.py --utms` (lista os utmContent crus). ⚠️ Amazon continua fora do
   `conversionReport` da Shopee (programa separado) — sem relatório de venda por ora.
+  **Descoberta (2026-07-13):** as 15 vendas/R$57 do período vêm dos 450+ vídeos MANUAIS
+  do Dre no Shopee Vídeo (utm vazio/`----`) — renda passiva do trabalho dele; o
+  pipeline automático (IG/FB/YT) ainda não converteu venda rastreada (contas novas).
+- ✅ **Atribuição por CANAL (sub_id)** (2026-07-13): esquema padrão de sub_id =
+  `[canal, nicho, produto]` (alfanumérico ≤16). `tiktok_coletor` guarda `origem_url`
+  no plano; `produzir_tiktok._link_do_canal` gera um link **fb-etiquetado** e põe no
+  `engajamento.json` → o 1º comentário do FB (e a auto-resposta que reusa o link)
+  saem como `fb-<nicho>-<produto>`, então a venda vinda dali aparece por canal.
+  `metricas_agent._canal` decodifica a 1ª etiqueta e o relatório mostra **📡 POR
+  CANAL** (fb/ig/tiktok/hunter/direto). Zero patcher (engajamento.json só é lido
+  pelo comentário do FB). 🔜 IG por-produto precisa de store media→link (v2, IG não
+  deixa link clicável no post).
 
 - ✅ **Narração sem áudio (resolvido 2026-07-12):** a chave ElevenLabs está boa
   (TTS ok; o 401 era só no endpoint de saldo). O `produzir_tiktok` narra certo.

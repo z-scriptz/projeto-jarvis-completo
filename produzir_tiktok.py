@@ -54,9 +54,41 @@ try:
 except Exception:
     import telegram_repurpose_hunter as H
 
+try:
+    from integrations.shopee_affiliate import gerar_link_afiliado as _gerar_link
+except Exception:
+    try:
+        from shopee_affiliate import gerar_link_afiliado as _gerar_link
+    except Exception:
+        _gerar_link = None
+
 
 def _log(m):
     print(f"[produzir_tiktok] {m}")
+
+
+def _subids(canal: str, nicho: str, nome: str) -> list:
+    """Sub-IDs padronizados p/ atribuição por CANAL: [canal, nicho, produto].
+    Só alfanumérico e ≤16 chars cada (a Shopee rejeita _/-/espaço → erro 11001)."""
+    import re
+    def s(x, padrao):
+        v = re.sub(r"[^A-Za-z0-9]", "", str(x or ""))[:16]
+        return v or padrao
+    return [s(canal, "x"), s(nicho, "geral"), s(nome, "prod")]
+
+
+def _link_do_canal(canal: str, origem_url: str, nicho: str, nome: str, base: str) -> str:
+    """Gera um link de afiliado etiquetado pro CANAL (ex: 'fb'). Se não der, usa
+    o link base (best-effort — nunca quebra a produção)."""
+    if not (_gerar_link and origem_url):
+        return base
+    try:
+        r = _gerar_link(origem_url, sub_ids=_subids(canal, nicho, nome))
+        if isinstance(r, dict) and r.get("ok"):
+            return r.get("short_link") or r.get("link") or base
+    except Exception as e:
+        _log(f"   (link {canal} falhou, uso o base: {str(e)[:50]})")
+    return base
 
 
 def _alerta_telegram(msg: str) -> None:
@@ -292,9 +324,15 @@ def _produzir(pasta: Path, pj: Path, video_src: Path) -> bool:
             _log(f"   🗂️  conta.json gravado (posta em {conta.get('handle')})")
         except Exception:
             pass
-    # engajamento.json → o meta_uploader monta o 1º comentário (link no FB, isca no IG)
+    # engajamento.json → o meta_uploader monta o 1º comentário (link no FB, isca no IG).
+    # O 1º comentário do FB (e a auto-resposta que reusa esse link) sai com um link
+    # ETIQUETADO 'fb' → toda venda vinda dele aparece como 'fb-<nicho>-<produto>' no
+    # relatório (atribuição por canal). Só Shopee re-etiqueta; Amazon usa o base.
     try:
-        eng = {"link": link, "produto": nome,
+        link_fb = link
+        if plataforma == "shopee":
+            link_fb = _link_do_canal("fb", info.get("origem_url", ""), nicho, nome, link)
+        eng = {"link": link_fb, "link_post": link, "produto": nome,
                "handle": (conta.get("handle") if conta else "") or "",
                "plataforma": plataforma, "nicho": nicho}
         (pp / "engajamento.json").write_text(

@@ -436,6 +436,7 @@ def main():
 
             m = minerar_oportunidades(termo)
             plataforma = "shopee"
+            origem = ""      # URL original do produto (p/ re-etiquetar link por canal)
             if m.get("ok") and m.get("campeao"):
                 camp = m["campeao"]
                 if not _match_relevante(termo, camp.get("nome", "")):
@@ -497,6 +498,7 @@ def main():
                 "views": meta["views"], "descricao": meta["descricao"],
                 "termo": termo, "produto": produto_nome,
                 "link_afiliado": link, "imagem": imagem,
+                "origem_url": origem,      # URL original → produzir re-etiqueta por canal
                 "comissao_valor": comissao,
                 "video": str(arq),
             }, ensure_ascii=False, indent=2), encoding="utf-8")

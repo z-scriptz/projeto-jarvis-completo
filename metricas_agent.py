@@ -89,6 +89,15 @@ def _do_video(utm: str) -> bool:
     return any(t in u for t in _tags_video())
 
 
+def _canal(utm: str) -> str:
+    """1ª etiqueta do sub_id = o CANAL. 'fb-beleza-serum' → 'fb'; 'tiktok-x' →
+    'tiktok'; vazio/só traços → 'direto' (venda orgânica/avulsa, sem etiqueta)."""
+    u = (utm or "").strip().lower().strip("-")
+    if not u:
+        return "direto"
+    return u.split("-")[0] or "direto"
+
+
 def _pagina(ini, fim, scroll_id=None, limite=100):
     scroll = f', scrollId: "{scroll_id}"' if scroll_id else ""
     q = ("query { conversionReport(purchaseTimeStart: %d, purchaseTimeEnd: %d, "
@@ -241,6 +250,18 @@ def main():
           f"GMV {_brl(r['gmv'])})")
     print(f"    ├─ 💚 DOS VÍDEOS : {_brl(v['total'])}  ({v['vendas']} vendas)")
     print(f"    └─ ⚪ Outras     : {_brl(o['total'])}  ({o['vendas']} vendas)")
+
+    # ATRIBUIÇÃO POR CANAL (1ª etiqueta do sub_id): fb / ig / tiktok / hunter / direto
+    from collections import defaultdict
+    por_canal = defaultdict(lambda: {"comissao": 0.0, "vendas": 0})
+    for i in itens:
+        c = por_canal[_canal(i["utm"])]
+        c["comissao"] += i["comissao"]
+        c["vendas"] += 1
+    print("\n  📡 POR CANAL (de onde veio a venda):")
+    for canal, d in sorted(por_canal.items(), key=lambda x: -x[1]["comissao"]):
+        rotulo = "direto/orgânico (sem etiqueta)" if canal == "direto" else canal
+        print(f"     {rotulo:<32} {_brl(d['comissao']):>10}  · {d['vendas']} venda(s)")
 
     if v["vendas"]:
         print("\n  🏆 CATEGORIAS que os VÍDEOS venderam:")
