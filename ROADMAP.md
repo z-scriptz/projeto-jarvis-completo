@@ -97,6 +97,16 @@ Shopee como chave (mais preciso que o nome).
   no `.env` — senão cai no login wall. Dedup + anti-watermark + narração valem igual.
   💡 Nota: os 450 vídeos do Shopee Vídeo do Dre NÃO são exclusivos (mesma fonte
   TikTok que já circula entre afiliados) — descartado como diferencial.
+- ✅ **Auto-crop de moldura** (2026-07-13): `_auto_crop` (gated `AUTO_CROP=1`) detecta
+  a MOLDURA estática (borda + texto/@ do criador) e corta só a janela do PRODUTO —
+  a parte que SE MEXE entre frames (`_detectar_caixa`: std temporal por pixel →
+  bounding box). Perfeito p/ canais dark tipo @promosda.alana (produto pequeno com
+  borda/texto em volta). Roda ANTES do anti-watermark (o corte já pode tirar o @).
+  Best-effort (vídeo cheio → não corta). Tunável: `AUTO_CROP_THR`/`AUTO_CROP_FRAC`.
+  Teste: `tiktok_coletor.py --crop-teste video.mp4`. Detector validado com numpy.
+- ⚠️ **Listar perfil do IG**: o yt-dlp baixa Reel INDIVIDUAL bem, mas ENUMERAR os
+  reels de um perfil é instável (extractor de perfil do IG quebra). 🔜 usar
+  **instaloader** (já disponível) pra listar o perfil → alimentar a esteira.
 - Preferir **fontes sem texto** na tela (a edição fica mais limpa).
 
 ---

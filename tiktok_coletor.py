@@ -434,6 +434,101 @@ def _perfis_do_arquivo(caminho: Path, fonte: str) -> list:
             if l.strip() and not l.strip().startswith("#")]
 
 
+def _detectar_caixa(frames, thr_std=8.0, frac=0.06, pad=6):
+    """Acha a caixa do conteúdo que SE MEXE (o vídeo do produto) dentro de uma
+    moldura ESTÁTICA (borda + texto/@ do criador). frames: arrays HxW (cinza).
+    Retorna (x0,y0,x1,y1) ou None se não houver caixa sã (aí não corta)."""
+    import numpy as np
+    stk = np.stack(frames).astype(np.float32)
+    std = stk.std(axis=0)                       # quanto cada pixel varia no tempo
+    mask = std > thr_std                         # pixels que "se mexem" = produto
+    H, W = mask.shape
+    ys = np.where(mask.mean(axis=1) > frac)[0]   # linhas com atividade
+    xs = np.where(mask.mean(axis=0) > frac)[0]   # colunas com atividade
+    if len(ys) < 4 or len(xs) < 4:
+        return None
+    y0, y1 = max(0, ys[0] - pad), min(H, ys[-1] + pad)
+    x0, x1 = max(0, xs[0] - pad), min(W, xs[-1] + pad)
+    w, h = x1 - x0, y1 - y0
+    if w < W * 0.25 or h < H * 0.25 or (w * h) / float(W * H) > 0.985:
+        return None                              # caixa degenerada → não corta
+    return int(x0), int(y0), int(x1), int(y1)
+
+
+def _auto_crop(video: Path) -> bool:
+    """Gated AUTO_CROP=1. Corta a MOLDURA estática (borda/texto/@ do criador) e
+    deixa só a janela do PRODUTO. Best-effort: sem caixa sã, mantém o vídeo inteiro.
+    Bônus: se o @/marca do criador estava na borda, o corte já tira (o anti-watermark
+    nem reclama). Roda ANTES do anti-watermark de propósito."""
+    if os.getenv("AUTO_CROP", "0").strip().lower() not in ("1", "true", "sim"):
+        return False
+    try:
+        import numpy as np
+        from PIL import Image
+    except Exception:
+        _log("   (auto-crop: falta numpy/Pillow — pulo)")
+        return False
+    fpaths = []
+    try:
+        pr = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=width,height", "-show_entries", "format=duration",
+             "-of", "json", str(video)], capture_output=True, text=True, timeout=30)
+        info = json.loads(pr.stdout or "{}")
+        st = (info.get("streams") or [{}])[0]
+        W, H = int(st.get("width") or 0), int(st.get("height") or 0)
+        dur = float((info.get("format") or {}).get("duration") or 0)
+        if not (W and H):
+            return False
+        thr = float(os.getenv("AUTO_CROP_THR", "8"))
+        frac = float(os.getenv("AUTO_CROP_FRAC", "0.06"))
+        n, frames = 6, []
+        for i in range(n):
+            pos = max(0.1, dur * (i + 1) / (n + 1)) if dur else i * 0.5
+            f = video.parent / f".crop_f{i}.jpg"
+            fpaths.append(f)
+            subprocess.run(["ffmpeg", "-y", "-ss", f"{pos:.2f}", "-i", str(video),
+                            "-vframes", "1", "-vf", "scale=360:-2", "-q:v", "4", str(f)],
+                           capture_output=True, timeout=30)
+            if f.exists():
+                frames.append(np.asarray(Image.open(f).convert("L"), dtype=np.uint8))
+        if len(frames) < 3 or len({fr.shape for fr in frames}) != 1:
+            return False
+        hs, ws = frames[0].shape
+        box = _detectar_caixa(frames, thr_std=thr, frac=frac)
+        if not box:
+            return False
+        sx, sy = W / float(ws), H / float(hs)      # reescala p/ o tamanho real
+        x0 = int(box[0] * sx) & ~1
+        y0 = int(box[1] * sy) & ~1
+        cw = max(2, int((box[2] - box[0]) * sx)) & ~1
+        ch = max(2, int((box[3] - box[1]) * sy)) & ~1
+        if cw < W * 0.25 or ch < H * 0.25 or x0 + cw > W or y0 + ch > H:
+            return False
+        out = video.with_suffix(".crop.mp4")
+        r = subprocess.run(["ffmpeg", "-y", "-i", str(video),
+                            "-vf", f"crop={cw}:{ch}:{x0}:{y0}", "-c:a", "copy", str(out)],
+                           capture_output=True, text=True, timeout=180)
+        if r.returncode == 0 and out.exists() and out.stat().st_size > 1000:
+            out.replace(video)
+            _log(f"   ✂️  auto-crop: moldura removida → {cw}x{ch} (era {W}x{H})")
+            return True
+        _log(f"   (auto-crop: ffmpeg falhou, mantém inteiro: {(r.stderr or '')[-100:]})")
+        try:
+            out.unlink()
+        except Exception:
+            pass
+    except Exception as e:
+        _log(f"   (auto-crop falhou, mantém inteiro: {str(e)[:70]})")
+    finally:
+        for f in fpaths:
+            try:
+                f.unlink()
+            except Exception:
+                pass
+    return False
+
+
 def _parse_args():
     """--dry, --limite N e perfis (ou tiktok_perfis.txt + instagram_perfis.txt).
     Retorna perfis como lista de (perfil, fonte)."""
@@ -462,6 +557,22 @@ def _parse_args():
 
 
 def main():
+    # modo calibração: testa o auto-crop num arquivo (força AUTO_CROP=1).
+    #   python3 tiktok_coletor.py --crop-teste /caminho/video.mp4
+    if "--crop-teste" in sys.argv:
+        i = sys.argv.index("--crop-teste")
+        alvo = sys.argv[i + 1] if i + 1 < len(sys.argv) else ""
+        if not alvo or not Path(alvo).exists():
+            _log("uso: tiktok_coletor.py --crop-teste /caminho/video.mp4"); return 1
+        os.environ["AUTO_CROP"] = "1"
+        src = Path(alvo)
+        cp = src.with_name(src.stem + "_cropTESTE" + src.suffix)
+        shutil.copy2(src, cp)
+        _log(f"testando auto-crop em cópia: {cp.name}")
+        ok = _auto_crop(cp)
+        _log(f"resultado: {'✂️ CORTOU (veja ' + cp.name + ')' if ok else 'não cortou (moldura não detectada / vídeo cheio)'}")
+        return 0
+
     dry, limite, perfis = _parse_args()
     if not perfis:
         _log("sem perfis. Uso: python3 tiktok_coletor.py @tiktok1 ig:@insta1")
@@ -538,6 +649,10 @@ def main():
             arq = _baixar(url, pasta)
             if not arq:
                 continue
+            # auto-crop: tira a moldura estática (borda/texto/@ do criador) e deixa
+            # só a janela do produto. Roda ANTES do anti-watermark (o corte pode já
+            # remover o @ que estava na borda).
+            _auto_crop(arq)
             # anti-watermark: não reposta vídeo com marca d'água de terceiro (o
             # visual vazaria crédito, mesmo com a narração matando o áudio).
             if _tem_watermark(arq, meta.get("duracao") or 0):
