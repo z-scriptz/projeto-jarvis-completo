@@ -276,10 +276,17 @@ def _listar_videos(perfil: str, limite: int, fonte: str = "tiktok") -> list:
     """URLs dos vídeos mais recentes do perfil (sem baixar). TikTok via yt-dlp;
     Instagram via instaloader (enumera o perfil), com yt-dlp como último recurso."""
     if fonte == "instagram":
+        # URL DIRETA de reel/post → não precisa listar (o IG bloqueia listagem de
+        # datacenter). O yt-dlp baixa o reel individual liso → curadoria manual:
+        # cola os links dos melhores reels e a máquina processa cada um.
+        low = perfil.lower()
+        if perfil.startswith("http") and ("/reel/" in low or "/p/" in low or "/tv/" in low):
+            return [perfil]
         urls = _listar_ig_instaloader(perfil, limite)
         if urls:
             return urls
-        _log("   (instaloader vazio — tento yt-dlp como fallback)")
+        _log("   (instaloader bloqueado/vazio — no IP da VPS o IG barra a listagem; "
+             "use links de reel DIRETOS pra curadoria manual)")
     url = _url_perfil(perfil, fonte)
     r = _ytdlp(["--flat-playlist", "-J", "--playlist-end", str(limite), url], fonte=fonte)
     try:
