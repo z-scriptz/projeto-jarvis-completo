@@ -87,6 +87,16 @@ palavras) com TTL `DEDUP_DIAS` (padrão 30): mesmo produto não entra 2x dentro 
 janela; depois pode voltar. `--dry` não persiste. Futuro: usar o item_id da
 Shopee como chave (mais preciso que o nome).
 
+### 2.4 Produto por VISÃO (Gemini Vision) ✅ FEITO (2026-07-13)
+Os canais dark (ex: @promosda.alana) usam hook curiosity-gap ("você precisa ter ISSO
+😍") que **de propósito NÃO diz o produto** — então a identificação por TEXTO da
+legenda falhava (`0 produtos casados`). Fix: `_termo_por_visao` — quando a legenda
+não revela, a máquina **BAIXA o vídeo e o Gemini Vision OLHA** um frame, devolve um
+termo de busca PT-BR ('suporte de notebook', 'luminária de flor'…) → aí busca na
+Shopee/Amazon normal. Gated `VISAO_PRODUTO=1` (+ GEMINI_API_KEY). O download da visão
+é reaproveitado (não baixa 2x) e limpo se descartar. Deixa a máquina achar produto de
+QUALQUER vídeo, mesmo sem legenda. Reusa o padrão do anti-watermark.
+
 ### 2.5 Hook estilo "curiosity-gap" (aprender com quem vende) 🔜 FORTE
 Insight do Dre (2026-07-13) analisando a @promosda.alana: os hooks dela vendem mais
 porque **nunca dizem o produto** ("você precisa ter **isso** 😍", "não mostre isso pra

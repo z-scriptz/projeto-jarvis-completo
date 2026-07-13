@@ -113,6 +113,56 @@ def _tem_watermark(video, dur=0) -> bool:
             pass
 
 
+def _visao_ativa() -> bool:
+    """Identificar produto pela IMAGEM (Gemini Vision) quando a legenda não revela
+    (curiosity-gap, comum no IG). Gated VISAO_PRODUTO=1 + precisa da GEMINI_API_KEY."""
+    return (os.getenv("VISAO_PRODUTO", "1").strip().lower() in ("1", "true", "sim")
+            and bool(os.getenv("GEMINI_API_KEY", "")))
+
+
+def _termo_por_visao(video, dur=0) -> str:
+    """Gemini Vision OLHA um frame e diz que PRODUTO é — pra quando a legenda não
+    diz (ex: 'você precisa ter ISSO 😍'). Retorna termo de busca PT-BR, ou ''."""
+    if not _visao_ativa():
+        return ""
+    key = os.getenv("GEMINI_API_KEY", "")
+    frame = Path(str(video)).with_suffix(".prod.jpg")
+    try:
+        pos = max(1, int((float(dur) or 5) * 0.45))
+        subprocess.run(["ffmpeg", "-y", "-ss", str(pos), "-i", str(video),
+                        "-vframes", "1", "-q:v", "3", str(frame)],
+                       capture_output=True, timeout=40)
+        if not frame.exists() or frame.stat().st_size < 500:
+            return ""
+        from google import genai
+        from google.genai import types
+        cli = genai.Client(api_key=key)
+        prompt = (
+            "Olhe este frame de um vídeo de 'achadinho'. Qual é o PRODUTO principal "
+            "sendo mostrado/demonstrado? Responda APENAS com um termo CURTO de busca "
+            "em português do Brasil pra achar esse produto numa loja online (ex: "
+            "'suporte de notebook', 'luminária de flor', 'palmilha ortopédica', "
+            "'organizador de geladeira'). Só o termo — sem marca, sem frase, sem "
+            "aspas. Se não der pra identificar um produto físico, responda NAO.")
+        r = cli.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[types.Part.from_bytes(data=frame.read_bytes(),
+                                            mime_type="image/jpeg"), prompt])
+        t = (r.text or "").strip().strip('"').strip("'").split("\n")[0].strip()
+        if not t or t.upper().startswith("NAO") or len(t) > 60:
+            return ""
+        _log(f"     👁️  Gemini viu: '{t}'")
+        return t
+    except Exception as e:
+        _log(f"     (visão de produto falhou: {str(e)[:55]})")
+        return ""
+    finally:
+        try:
+            frame.unlink()
+        except Exception:
+            pass
+
+
 def _carregar_env():
     for cand in (BASE_DIR / ".env", Path(".env")):
         if not cand.exists():
@@ -689,7 +739,7 @@ def main():
         alvo = sys.argv[i + 1] if i + 1 < len(sys.argv) else ""
         if not alvo:
             _log("uso: tiktok_coletor.py --ig-teste <perfil>"); return 1
-        urls = _listar_ig_instaloader(alvo, 8)
+        urls = _listar_ig_playwright(alvo, 8) or _listar_ig_instaloader(alvo, 8)
         for u in urls:
             _log(f"   • {u}")
         _log(f"{'✅ ' + str(len(urls)) + ' reels listados' if urls else '❌ 0 reels (confere cookies/instaloader)'}")
@@ -714,9 +764,18 @@ def main():
             vistos.add(vid)      # marca cedo pra não repetir mesmo se descartar
             if meta["views"] < MIN_VIEWS or (meta["duracao"] and meta["duracao"] > MAX_DUR):
                 continue
+            pasta = INBOX / f"{_slug(meta['uploader'])}_{vid}"
             termo = _identificar_produto(meta["descricao"])
+            arq_pre = None
+            # legenda não revela o produto (curiosity-gap)? BAIXA e OLHA com o Gemini.
+            if (not termo or not _termo_valido(termo)) and _visao_ativa() and not dry:
+                arq_pre = _baixar(url, pasta)
+                if arq_pre:
+                    termo = _termo_por_visao(arq_pre, meta.get("duracao") or 0) or termo
             if not termo or not _termo_valido(termo):
-                _log(f"   • {vid}: legenda sem produto claro (pulo)")
+                _log(f"   • {vid}: sem produto claro (legenda+visão) — pulo")
+                if arq_pre:
+                    shutil.rmtree(pasta, ignore_errors=True)
                 continue
             _log(f"   • {meta['views']:,} views | produto: '{termo}'")
 
@@ -728,6 +787,8 @@ def main():
                 if not _match_relevante(termo, camp.get("nome", "")):
                     _log(f"     ✗ match fraco ('{camp.get('nome','?')[:35]}' não bate "
                          f"com o termo) — descarto")
+                    if arq_pre:
+                        shutil.rmtree(pasta, ignore_errors=True)
                     continue
                 origem = camp.get("product_link") or camp.get("offer_link")
                 # sub_id SÓ alfanumérico (a Shopee rejeita _/-/etc → erro 11001)
@@ -756,19 +817,22 @@ def main():
                 _log(f"     ✗ sem match na Shopee"
                      f"{' e sem Amazon' if _amazon_ativo() else ' (gringo/Amazon?)'}"
                      f" — descarto")
+                if arq_pre:
+                    shutil.rmtree(pasta, ignore_errors=True)
                 continue
 
             # dedup por PRODUTO: o mesmo item não entra 2x (dentro de DEDUP_DIAS)
             chave_prod = _norm_produto(produto_nome)
             if _produto_repetido(chave_prod, produtos_vistos):
                 _log(f"     ⤵️  produto repetido ('{produto_nome[:38]}') — pulo (dedup)")
+                if arq_pre:
+                    shutil.rmtree(pasta, ignore_errors=True)
                 continue
             achados += 1
 
             if dry:
                 continue
-            pasta = INBOX / f"{_slug(meta['uploader'])}_{vid}"
-            arq = _baixar(url, pasta)
+            arq = arq_pre or _baixar(url, pasta)   # reusa o download da visão, se houve
             if not arq:
                 continue
             # auto-crop: tira a moldura estática (borda/texto/@ do criador) e deixa
