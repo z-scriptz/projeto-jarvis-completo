@@ -266,6 +266,13 @@ def _produzir(pasta: Path, pj: Path, video_src: Path) -> bool:
         except Exception:
             nicho = "geral"
 
+    # FUNDO por nicho: geral (@topshop.__) = PRETO (mantém o grid da principal);
+    # contas novas (beleza/tech) = BRANCO (estilo Alana). Override por BG_<NICHO>.
+    _bg_padrao = "preto" if nicho in ("geral", "") else "branco"
+    os.environ["TOPSHOP_BG"] = (os.environ.get("FORCE_BG")          # p/ testar os 2
+                                or os.environ.get("BG_" + nicho.upper(), _bg_padrao))
+    _log(f"   🎨 fundo '{os.environ['TOPSHOP_BG']}' (nicho {nicho or 'geral'})")
+
     plano = {
         "produto": nome,
         "titulo_real": nome,

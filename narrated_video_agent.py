@@ -896,6 +896,23 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
     camadas = []
     fonte_bold = _fonte_montserrat("Bold") or _resolver_fonte_textclip(TextClip)
 
+    # ── ESTILO POR FUNDO: geral=preto (texto branco), demais=branco (texto preto,
+    # estilo Alana). O produtor seta TOPSHOP_BG por vídeo (preto/branco). ──
+    _bg = os.environ.get("TOPSHOP_BG", "preto").strip().lower()
+    _claro = _bg in ("branco", "white", "bege", "claro")
+    if _claro:      # fundo BRANCO (estilo Alana): texto preto, @ cinza, sem contorno
+        C_NOME, SC_NOME, SW_NOME = "black", "black", 0
+        C_HANDLE = "#7a7a7a"
+        C_HOOK, SC_HOOK, SW_HOOK = "black", "black", 0
+    else:           # fundo PRETO: texto branco com contorno preto (legível)
+        C_NOME, SC_NOME, SW_NOME = "white", "black", 3
+        C_HANDLE = "white"
+        C_HOOK, SC_HOOK, SW_HOOK = "white", "black", 3
+    # fonte do HOOK: por padrão Liberation Sans (~Arial, igual a Alana); cai na Montserrat
+    _hk_fonte = os.environ.get("HOOK_FONTE", "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf")
+    if not (_hk_fonte and Path(_hk_fonte).exists()):
+        _hk_fonte = fonte_bold
+
     logo_x, logo_y, logo_tam = 65, 90, 120
 
     # ── Logo TS REDONDO (canto superior esquerdo) ──
@@ -916,7 +933,7 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
 
     # ── 'TopShop' PRETO (Bold) com contorno BRANCO ──
     nome = _textclip_robusto(TextClip, MARCA_NOME, font_size=56,
-                             color="black", stroke_width=4, stroke_color="white",
+                             color=C_NOME, stroke_width=SW_NOME, stroke_color=SC_NOME,
                              largura_frac=0.32, fonte=fonte_bold, text_align="West")
     fim_topshop_x = texto_x + 235  # fallback se não der pra medir
     if nome is not None:
@@ -963,7 +980,8 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
     # por vídeo antes de renderizar; cai no MARCA_HANDLE default se não setado.
     _handle_txt = os.environ.get("TOPSHOP_HANDLE", MARCA_HANDLE) or MARCA_HANDLE
     handle = _textclip_robusto(TextClip, _handle_txt, font_size=46,
-                               color="white", stroke_width=3, stroke_color="black",
+                               color=C_HANDLE, stroke_width=(0 if _claro else 3),
+                               stroke_color="black",
                                largura_frac=0.34, fonte=fonte_bold, text_align="West")
     if handle is not None:
         handle = _with_duration(handle, dur_total)
@@ -971,89 +989,69 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
         handle = _with_position(handle, (texto_x, logo_y + 42))
         camadas.append(handle)
 
-    # ── Hook com SOMBRA — 1 ou 2 linhas DENTRO da faixa preta, emoji na última ─
-    # Frase longa quebra em 2 linhas: a 1ª sobe, a 2ª fica embaixo, e o emoji
-    # COLORIDO vai ao final da última linha (igual você fazia na mão).
-    # >>> Constantes tunáveis (ajuste fino olhando 1 vídeo de teste) <<<
-    HK_FONT_MAX     = int(os.environ.get("HK_FONT", 38))     # tamanho inicial do hook
-    HK_FONT_MIN     = int(os.environ.get("HK_FONT_MIN", 26)) # piso ao encolher p/ caber
-    HK_Y            = int(os.environ.get("HK_Y", 198))       # posição ÚNICA (1 linha), logo abaixo do @ (valor bom antigo)
-    HK_ALTURA_LINHA = 52      # (mantido só p/ o bloco do emoji; hook é sempre 1 linha)
-    HK_MAX_LARG     = int(LARGURA * float(os.environ.get("HK_LARG_FRAC", "0.90")))
-    HK_EMOJI_TAM    = 34     # ~= tamanho do texto (antes 48 = grandão demais)
+    # ── HOOK à ESQUERDA, 1 OU 2 linhas, cor por fundo (estilo Alana) ──────────
+    # >>> tudo tunável por .env (ajuste fino olhando 1 render de teste) <<<
+    HK_FONT_MAX = int(os.environ.get("HK_FONT", 48))
+    HK_FONT_MIN = int(os.environ.get("HK_FONT_MIN", 34))
+    HK_Y        = int(os.environ.get("HK_Y", 300))       # topo da 1ª linha
+    HK_MARGEM   = int(os.environ.get("HK_MARGEM", 55))   # margem ESQUERDA (hook + header)
+    HK_ALTURA_LINHA = int(os.environ.get("HK_ALT_LINHA", 62))
+    HK_MAX_LARG = LARGURA - HK_MARGEM - int(os.environ.get("HK_MARGEM_DIR", 45))
+    HK_EMOJI_TAM = int(os.environ.get("HK_EMOJI", 40))
 
     _emoji_do_txt, hook_txt_limpo = _separar_emoji_hook(hook_txt)
-    # emoji combina com o NICHO do produto; se não achar nicho, usa o do
-    # próprio hook (ou 🔥 do fallback).
     _emoji_hook = _emoji_do_produto(produto) or _emoji_do_txt
 
-    # HOOK SEMPRE EM 1 LINHA: reduz a fonte até caber em HK_MAX_LARG (nunca
-    # quebra em 2 — 2 linhas encavalava o header/CTA e saía torto).
-    HK_FONT = HK_FONT_MAX
-    while HK_FONT > HK_FONT_MIN:
-        _med = _textclip_justo(TextClip, hook_txt_limpo, HK_FONT, fonte_bold)
-        _w = getattr(_med, "w", 0) if _med is not None else 0
-        if _med is not None:
-            try: _med.close()
+    def _larg(txt, fnt):
+        _m = _textclip_justo(TextClip, txt, fnt, _hk_fonte)
+        w = getattr(_m, "w", 0) if _m is not None else 0
+        if _m is not None:
+            try: _m.close()
             except Exception: pass
-        if not _w or _w <= HK_MAX_LARG:
-            break
-        HK_FONT -= 2
+        return w
 
-    _linhas = [hook_txt_limpo]
-    _n = 1
-    _y0 = HK_Y
+    # 1 linha se couber na fonte cheia; senão quebra em 2 e encolhe até caber
+    HK_FONT = HK_FONT_MAX
+    if _larg(hook_txt_limpo, HK_FONT) <= HK_MAX_LARG:
+        _linhas = [hook_txt_limpo]
+    else:
+        try:
+            _linhas = [l for l in _quebrar_hook_2linhas(hook_txt_limpo) if l]
+        except Exception:
+            _linhas = [hook_txt_limpo]
+        while HK_FONT > HK_FONT_MIN and max(_larg(l, HK_FONT) for l in _linhas) > HK_MAX_LARG:
+            HK_FONT -= 2
+    _n = len(_linhas)
+
+    _hk = None
     for _i, _linha in enumerate(_linhas):
-        _y = _y0 + _i * HK_ALTURA_LINHA
-        _somb = _textclip_robusto(TextClip, _linha, font_size=HK_FONT,
-                                  color="black", stroke_width=0, stroke_color="black",
-                                  largura_frac=0.92, fonte=fonte_bold)
-        if _somb is not None:
-            _somb = _with_opacity(_somb, 0.55)
-            _somb = _with_duration(_somb, dur_total)
-            _somb = _with_start(_somb, 0.0)
-            _somb = _with_position(_somb, ("center", _y + 4))
-            camadas.append(_somb)
+        _y = HK_Y + _i * HK_ALTURA_LINHA
         _hk = _textclip_robusto(TextClip, _linha, font_size=HK_FONT,
-                                color="white", stroke_width=3, stroke_color="black",
-                                largura_frac=0.92, fonte=fonte_bold)
+                                color=C_HOOK, stroke_width=SW_HOOK, stroke_color=SC_HOOK,
+                                largura_frac=0.92, fonte=_hk_fonte, text_align="West")
         if _hk is not None:
             _hk = _with_duration(_hk, dur_total)
             _hk = _with_start(_hk, 0.0)
-            _hk = _with_position(_hk, ("center", _y))
+            _hk = _with_position(_hk, (HK_MARGEM, _y))
             camadas.append(_hk)
-    log.info(f"   📌 Hook ({_n}L): \"{hook_txt_limpo}\"")
+    log.info(f"   📌 Hook ({_n}L, {'claro' if _claro else 'escuro'}): \"{hook_txt_limpo}\"")
 
-    # ── Emoji COLORIDO ao final da ÚLTIMA linha (nunca quebra o vídeo) ──
+    # emoji COLORIDO ao final da ÚLTIMA linha (à direita do texto, alinhado à esq)
     if _emoji_hook:
         try:
             _epath = _emoji_colorido_png(_emoji_hook, HK_EMOJI_TAM)
             if _epath is not None:
-                _ult = _linhas[-1]
-                _y_ult = _y0 + (_n - 1) * HK_ALTURA_LINHA
-                _lw = None
-                _med2 = _textclip_justo(TextClip, _ult, HK_FONT, fonte_bold)
-                if _med2 is not None:
-                    _lw = _med2.w
-                    try: _med2.close()
-                    except Exception: pass
-                _ex = (int(LARGURA / 2 + _lw / 2 + 8) if _lw
-                       else int(LARGURA * 0.72))
-                _ex = max(10, min(_ex, LARGURA - HK_EMOJI_TAM - 10))
+                _y_ult = HK_Y + (_n - 1) * HK_ALTURA_LINHA
+                _lw = _larg(_linhas[-1], HK_FONT)
+                _ex = max(10, min(HK_MARGEM + (_lw or int(LARGURA * 0.5)) + 12,
+                                  LARGURA - HK_EMOJI_TAM - 10))
+                _alt = getattr(_hk, "h", None) if _hk is not None else None
+                _ey = int(_y_ult + max(0, ((_alt or HK_FONT) - HK_EMOJI_TAM) / 2))
                 _emo = ImageClip(str(_epath))
                 _emo = _with_duration(_emo, dur_total)
                 _emo = _with_start(_emo, 0.0)
-                # centraliza o emoji NA ALTURA da linha (a caixa do texto tem
-                # respiro; colar no topo deixava o emoji "pra cima"). Usa a
-                # altura real do clip da última linha pra alinhar com o texto.
-                _alt_linha = getattr(_hk, "h", None) if _hk is not None else None
-                if _alt_linha:
-                    _ey = int(_y_ult + max(0, (_alt_linha - HK_EMOJI_TAM) / 2))
-                else:
-                    _ey = _y_ult + 8
                 _emo = _with_position(_emo, (_ex, _ey))
                 camadas.append(_emo)
-                log.info(f"   ✨ Emoji '{_emoji_hook}' na linha {_n} (x={_ex}, y={_ey})")
         except Exception as e:
             log.warning(f"   ⚠️  Emoji do hook falhou (segue sem ele): {e}")
 
@@ -1062,59 +1060,47 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
 
 def _criar_cta_fixo(dur_total: float, mp) -> list:
     """
-    CTA fixo abaixo do vídeo: 'LINK NA BIO!' em Montserrat Bold PARRUDO
-    (texto branco com contorno preto grosso), com emojis 🛒 e 🔥 como PNGs
-    coloridos ao lado (carrinho.png e fogo.png na pasta brand).
-    Retorna lista de camadas.
+    CTA fixo abaixo do vídeo: COMENTE "QUERO" 👇 (texto + emoji colorido).
+    Cor por fundo (branco→preto / preto→branco). Texto/posição via .env.
     """
     (_, _, ImageClip, _, _, _, TextClip) = mp
     camadas = []
     fonte_bold = _fonte_montserrat("Bold") or _resolver_fonte_textclip(TextClip)
-    cta_y = 1645   # quase encostando no rodapé do vídeo (termina ~1644)
+    _bg = os.environ.get("TOPSHOP_BG", "preto").strip().lower()
+    _claro = _bg in ("branco", "white", "bege", "claro")
+    C_CTA = "black" if _claro else "white"
+    SW_CTA = 0 if _claro else 4
 
-    # texto central, parrudo (stroke grosso pra destacar)
-    txt = _textclip_robusto(TextClip, "LINK NA BIO!", font_size=54,
-                            color="white", stroke_width=4, stroke_color="black",
-                            largura_frac=0.55, fonte=fonte_bold)
-    larg_texto = int(LARGURA * 0.55)
+    CTA_TXT  = os.environ.get("CTA_TEXTO", 'COMENTE "QUERO"')
+    CTA_FONT = int(os.environ.get("CTA_FONT", 52))
+    cta_y    = int(os.environ.get("CTA_Y", 1672))
+
+    txt = _textclip_robusto(TextClip, CTA_TXT, font_size=CTA_FONT,
+                            color=C_CTA, stroke_width=SW_CTA, stroke_color="black",
+                            largura_frac=0.72, fonte=fonte_bold)
     if txt is not None:
         txt = _with_duration(txt, dur_total)
         txt = _with_start(txt, 0.0)
         txt = _with_position(txt, ("center", cta_y))
         camadas.append(txt)
 
-    # Posiciona os emojis com base na largura REAL estimada do texto
-    # "LINK NA BIO!" (não na caixa, que é maior). Texto centralizado.
-    larg_texto_real = int(len("LINK NA BIO!") * 54 * 0.52)  # ~337px
-    centro = LARGURA // 2
-    fim_texto = centro + larg_texto_real // 2
-    inicio_texto = centro - larg_texto_real // 2
-
-    # carrinho (🛒) à ESQUERDA do texto — autocrop, mais pra baixo
-    carrinho = _emoji_aparado("carrinho.png", 56)
-    if carrinho is not None:
-        try:
-            c = ImageClip(str(carrinho))
-            c = _with_duration(c, dur_total); c = _with_start(c, 0.0)
-            c = _with_position(c, (inicio_texto - 56 - 18, cta_y + 22))
-            camadas.append(c)
-        except Exception as e:
-            log.warning(f"   ⚠️  Emoji carrinho falhou: {e}")
-    else:
-        log.warning("   ⚠️  carrinho.png NÃO encontrado na pasta brand!")
-
-    # fogo (🔥) à DIREITA do texto — autocrop, tamanho aprovado, mais pra baixo
-    fogo = _emoji_aparado("fogo.png", 85)
-    if fogo is not None:
-        try:
-            f = ImageClip(str(fogo))
-            f = _with_duration(f, dur_total); f = _with_start(f, 0.0)
-            f = _with_position(f, (fim_texto + 18, cta_y + 20))
-            camadas.append(f)
-        except Exception as e:
-            log.warning(f"   ⚠️  Emoji fogo falhou: {e}")
-    else:
-        log.warning("   ⚠️  fogo.png NÃO encontrado na pasta brand!")
+    # emoji 👇 colorido à direita do texto (mede a largura real p/ posicionar)
+    try:
+        _m = _textclip_justo(TextClip, CTA_TXT, CTA_FONT, fonte_bold)
+        _lw = getattr(_m, "w", 0) if _m is not None else 0
+        if _m is not None:
+            try: _m.close()
+            except Exception: pass
+        _fim = LARGURA // 2 + (_lw or int(LARGURA * 0.45)) // 2
+        _et = int(os.environ.get("CTA_EMOJI", 50))
+        _ep = _emoji_colorido_png("👇", _et)
+        if _ep is not None:
+            e = ImageClip(str(_ep))
+            e = _with_duration(e, dur_total); e = _with_start(e, 0.0)
+            e = _with_position(e, (min(_fim + 14, LARGURA - _et - 8), cta_y + 4))
+            camadas.append(e)
+    except Exception as e:
+        log.warning(f"   ⚠️  Emoji do CTA falhou (segue sem): {e}")
 
     return camadas
 

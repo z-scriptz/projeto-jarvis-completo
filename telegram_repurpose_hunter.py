@@ -979,23 +979,30 @@ def _reproduzir_video_sync(src: Path, dst: Path, produto: str,
                 _import_moviepy as _brand_mp_import, _brand_asset)
             _ColorClip = _brand_mp_import()[5]
 
-            # fundo: brand fundo.png se existir, senão quase-preto
-            _fp = _brand_asset("fundo.png")
-            if _fp is not None:
-                _fundo_bg = _resize_clip(ImageClip(str(_fp)), (LARGURA_ALVO, ALTURA_ALVO))
+            # FUNDO por nicho: geral=preto, contas novas=branco (estilo Alana).
+            # O produtor seta TOPSHOP_BG (preto/branco) por vídeo antes de renderizar.
+            _bgm = os.environ.get("TOPSHOP_BG", "preto").strip().lower()
+            if _bgm in ("branco", "white"):
+                _cor_bg = (255, 255, 255)
+            elif _bgm in ("bege", "claro"):
+                _cor_bg = (232, 224, 210)
             else:
-                _fundo_bg = _ColorClip(size=(LARGURA_ALVO, ALTURA_ALVO), color=(12, 12, 16))
+                _cor_bg = (0, 0, 0)
+            _fundo_bg = _ColorClip(size=(LARGURA_ALVO, ALTURA_ALVO), color=_cor_bg)
             _fundo_bg = _clip_timing(_fundo_bg, dur=alvo, start=0.0, pos=("center", "center"))
             abertos.append(_fundo_bg)
 
-            # vídeo reduzido pra 3:4 (95% da largura), centralizado
-            _larg_v = int(LARGURA_ALVO * 0.95)                       # 1026
+            # VÍDEO reduzido (3:4), posicionado deixando espaço p/ header+hook em cima
+            # e CTA embaixo. Largura e Y do topo tunáveis por .env.
+            _fracw = float(os.environ.get("VIDEO_W_FRAC", "0.82"))
+            _larg_v = int(LARGURA_ALVO * _fracw)
             _alt_full = int(_larg_v * ALTURA_ALVO / LARGURA_ALVO)    # 9:16 escalado
             _alt_v = int(_larg_v * 4 / 3)                            # 3:4
             _vid = _resize_clip(base, (_larg_v, _alt_full))
             _yc = max(0, (_alt_full - _alt_v) // 2)
             _vid = _crop_clip(_vid, x1=0, x2=_larg_v, y1=_yc, y2=_yc + _alt_v)
-            _vid = _clip_timing(_vid, pos=("center", "center"))
+            _video_y = int(os.environ.get("VIDEO_Y", "470"))
+            _vid = _clip_timing(_vid, pos=("center", _video_y))
             abertos.append(_vid)
 
             clip_final = CompositeVideoClip([_fundo_bg, _vid, *overlays],
