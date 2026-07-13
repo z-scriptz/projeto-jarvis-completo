@@ -279,12 +279,6 @@ def _listar_ig_instaloader(perfil: str, limite: int) -> list:
         if px:
             L.context._session.proxies.update({"http": px, "https": px})
             _log(f"   via proxy {px.split('@')[-1]}")   # não loga user:senha
-        # 4) confirma que a sessão está logada (diagnóstico honesto)
-        try:
-            quem = L.test_login()
-            _log(f"   logado como @{quem}" if quem else "   ⚠️ sessão NÃO logada (refaça o --login)")
-        except Exception:
-            pass
         prof = instaloader.Profile.from_username(L.context, user)
         urls = []
         for post in prof.get_posts():
