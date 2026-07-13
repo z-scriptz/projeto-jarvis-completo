@@ -248,9 +248,12 @@ def _listar_ig_instaloader(perfil: str, limite: int) -> list:
     user = _ig_username(perfil)
     if not user:
         return []
+    # max_connection_attempts=1 → NÃO fica martelando em caso de rate-limit (cada
+    # retry piora o castigo do IG). Melhor falhar rápido e tentar de novo mais tarde.
     L = instaloader.Instaloader(quiet=True, download_pictures=False,
                                 download_videos=False, download_comments=False,
-                                save_metadata=False, compress_json=False)
+                                save_metadata=False, compress_json=False,
+                                max_connection_attempts=1)
     try:
         # 1) AUTENTICA primeiro. PREFERIDO: sessão NATIVA do instaloader (o IG barra
         #    menos que cookies do navegador). Crie com a conta:
