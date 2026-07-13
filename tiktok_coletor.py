@@ -239,12 +239,25 @@ def _listar_ig_instaloader(perfil: str, limite: int) -> list:
     L = instaloader.Instaloader(quiet=True, download_pictures=False,
                                 download_videos=False, download_comments=False,
                                 save_metadata=False, compress_json=False)
-    cookie = (os.environ.get("YTDLP_COOKIES") or os.environ.get("IG_COOKIES") or "").strip()
     try:
-        if cookie and Path(cookie).exists():
-            cj = http.cookiejar.MozillaCookieJar(cookie)
-            cj.load(ignore_discard=True, ignore_expires=True)
-            L.context._session.cookies.update(cj)
+        # 1) PREFERIDO: sessão NATIVA do instaloader (bem mais robusta que os cookies
+        #    do navegador — o IG barra menos). Crie com a conta QUEIMÁVEL:
+        #      .venv/bin/instaloader --login=SUA_CONTA_QUEIMAVEL
+        #    e aponte INSTALOADER_USER=SUA_CONTA_QUEIMAVEL no .env.
+        login_user = os.environ.get("INSTALOADER_USER", "").strip()
+        if login_user:
+            sess = os.environ.get("INSTALOADER_SESSION", "").strip()
+            if sess and Path(sess).exists():
+                L.load_session_from_file(login_user, sess)
+            else:
+                L.load_session_from_file(login_user)     # caminho padrão do instaloader
+        else:
+            # 2) fallback: cookies.txt do navegador (funciona, mas o IG barra mais)
+            cookie = (os.environ.get("YTDLP_COOKIES") or os.environ.get("IG_COOKIES") or "").strip()
+            if cookie and Path(cookie).exists():
+                cj = http.cookiejar.MozillaCookieJar(cookie)
+                cj.load(ignore_discard=True, ignore_expires=True)
+                L.context._session.cookies.update(cj)
         prof = instaloader.Profile.from_username(L.context, user)
         urls = []
         for post in prof.get_posts():
