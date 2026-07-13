@@ -772,11 +772,18 @@ def main():
             pasta = INBOX / f"{_slug(meta['uploader'])}_{vid}"
             termo = _identificar_produto(meta["descricao"])
             arq_pre = None
-            # legenda não revela o produto (curiosity-gap)? BAIXA e OLHA com o Gemini.
-            if (not termo or not _termo_valido(termo)) and _visao_ativa() and not dry:
+            # IG: a legenda é quase sempre um HOOK (curiosity-gap: "pouca gente imagina…"),
+            # NÃO o produto — então a VISÃO (Gemini) é a autoridade. TikTok: a legenda
+            # costuma nomear o produto, então a visão só entra se o texto falhar.
+            usar_visao = _visao_ativa() and not dry and (
+                fonte == "instagram" or not termo or not _termo_valido(termo))
+            if usar_visao:
                 arq_pre = _baixar(url, pasta)
-                if arq_pre:
-                    termo = _termo_por_visao(arq_pre, meta.get("duracao") or 0) or termo
+                tv = _termo_por_visao(arq_pre, meta.get("duracao") or 0) if arq_pre else ""
+                if tv:
+                    termo = tv                       # a visão vence a legenda-hook
+                elif fonte == "instagram":
+                    termo = ""                        # IG sem visão: não confia no hook
             if not termo or not _termo_valido(termo):
                 _log(f"   • {vid}: sem produto claro (legenda+visão) — pulo")
                 if arq_pre:
