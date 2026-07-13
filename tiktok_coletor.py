@@ -762,7 +762,12 @@ def main():
             if not vid or vid in vistos:
                 continue
             vistos.add(vid)      # marca cedo pra não repetir mesmo se descartar
-            if meta["views"] < MIN_VIEWS or (meta["duracao"] and meta["duracao"] > MAX_DUR):
+            # views: só corta se for CONHECIDO e baixo. O yt-dlp às vezes não pega a
+            # contagem do IG (vem 0) — aí a gente confia na curadoria do perfil.
+            if (meta["views"] and meta["views"] < MIN_VIEWS) or \
+               (meta["duracao"] and meta["duracao"] > MAX_DUR):
+                _log(f"   • {vid}: fora do filtro (views={meta['views']}, "
+                     f"dur={meta['duracao']}s) — pulo")
                 continue
             pasta = INBOX / f"{_slug(meta['uploader'])}_{vid}"
             termo = _identificar_produto(meta["descricao"])
