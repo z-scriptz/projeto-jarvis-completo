@@ -164,8 +164,18 @@ Shopee como chave (mais preciso que o nome).
   nichos_quentes, calcula retrato produção×venda + Jarvis Confidence Score (0-100,
   honesto com pouco dado), e o Gemini escreve relatório executivo + propostas
   numeradas (advisory puro). Entrega no Telegram + salva shared/ceo/relatorio_*.md.
-  Falta: mecanismo de aplicar propostas aprovadas (níveis de autonomia) + cron
-  semanal. **1º conselho já aplicado:** o CEO apontou que o ledger saía
+  - ✅ **NÍVEL 1 — autonomia supervisionada** (2026-07-13): o CEO gera propostas
+    ESTRUTURADAS (motor determinístico do DADO, `_propostas_estruturadas`) mirando
+    knobs de uma **whitelist segura** (`SAFE_ENV`: DEDUP_DIAS, toggles de
+    engajamento/Amazon/anti-watermark/multi-conta, volumes) com `de→para` concreto.
+    O Dre aplica: `ceo_agent.py --aplicar N` (backup do .env + `decisoes.jsonl`),
+    reverte com `--desfazer`, audita com `--decisoes`. **Trava de segurança:** só
+    mexe na whitelist — NUNCA em token/segredo/id (recusa mesmo propostas.json
+    adulterado). Gemini segue escrevendo a prosa; as propostas aplicáveis vêm de
+    código (confiável). 🔜 Nível 2: auto-aplicar as de baixo risco quando o
+    Confidence subir.
+  - ✅ Cron semanal (domingo 09h) já instalado.
+  Modo CONSELHEIRO permanece o default. **1º conselho já aplicado:** o CEO apontou que o ledger saía
   'sem_categoria'/'?' → agora `produzir_tiktok` grava SEMPRE categoria (cai no
   nicho), plataforma (shopee/amazon) e nicho da conta. Alertas/relatórios vão pro
   `TELEGRAM_ALERT_CHAT_ID` (privado), não pro grupo público. Modo original:

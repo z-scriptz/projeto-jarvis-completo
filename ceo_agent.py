@@ -215,23 +215,296 @@ def _enviar_telegram(texto: str) -> None:
         pass
 
 
-def main():
-    dias = 30
-    if len(sys.argv) > 1:
+# ═══════════════════════════════════════════════════════════════════════════
+# NÍVEL 1 — AUTONOMIA SUPERVISIONADA
+# O CEO gera propostas ESTRUTURADAS (não só prosa) mirando knobs de uma WHITELIST
+# segura. O Dre aplica com `--aplicar N` (backup + log, reversível com `--desfazer`).
+# SEGURANÇA: só mexe nos knobs abaixo — NUNCA em token/segredo/id de conta.
+# ═══════════════════════════════════════════════════════════════════════════
+PROPOSTAS_JSON = CEO_DIR / "propostas.json"
+DECISOES = CEO_DIR / "decisoes.jsonl"
+
+# knob -> regras de validação. tipo: bool | int | float
+SAFE_ENV = {
+    "DEDUP_DIAS":         {"tipo": "int",   "min": 5,   "max": 90,  "desc": "dias até um produto poder repostar"},
+    "AUTO_RESP_MAX":      {"tipo": "int",   "min": 10,  "max": 200, "desc": "máx de respostas por rodada"},
+    "AUTO_RESP_HORAS":    {"tipo": "int",   "min": 12,  "max": 168, "desc": "janela de posts que o auto-resposta varre"},
+    "MUSICA_FUNDO_VOL":   {"tipo": "float", "min": 0.0, "max": 0.30, "desc": "volume da trilha de fundo"},
+    "ENGAJAR_COMENTARIO": {"tipo": "bool",  "desc": "1º comentário automático"},
+    "AUTO_RESPONDER":     {"tipo": "bool",  "desc": "auto-resposta a comentários"},
+    "AUTO_RESP_DM":       {"tipo": "bool",  "desc": "mandar o link na DM"},
+    "AMAZON_ATIVO":       {"tipo": "bool",  "desc": "usar Amazon como 2ª fonte"},
+    "ANTI_WATERMARK":     {"tipo": "bool",  "desc": "descartar vídeo-fonte com marca d'água"},
+    "MULTI_CONTA":        {"tipo": "bool",  "desc": "rotear cada produto pra conta do nicho"},
+}
+
+
+def _env_atual(chave: str) -> str:
+    return os.getenv(chave, "").strip()
+
+
+def _bool_on(v: str) -> bool:
+    return str(v).strip().lower() in ("1", "true", "sim")
+
+
+def _validar_valor(chave: str, valor) -> str:
+    """Normaliza+valida o valor pro tipo do knob. Levanta ValueError se inválido."""
+    regra = SAFE_ENV[chave]
+    t = regra["tipo"]
+    if t == "bool":
+        return "1" if _bool_on(valor) else "0"
+    if t == "int":
+        n = int(float(valor))
+        n = max(regra["min"], min(regra["max"], n))
+        return str(n)
+    if t == "float":
+        f = float(valor)
+        f = max(regra["min"], min(regra["max"], f))
+        return f"{f:.3f}".rstrip("0").rstrip(".")
+    raise ValueError(f"tipo desconhecido: {t}")
+
+
+# ── Motor determinístico de propostas (do DADO, não do Gemini) ──────────────
+def _propostas_estruturadas(a: dict) -> list:
+    """Gera propostas APLICÁVEIS a partir do estado atual + dos dados. Honesto:
+    só propõe o que o dado sustenta; com pouco dado, poucas (ou nenhuma)."""
+    props = []
+    vendas = a.get("vendas_video", 0)
+    posts = a.get("posts_periodo", 0)
+    cats_vendem = [c for c in a.get("cruzamento_categorias", []) if c.get("comissao", 0) > 0]
+
+    def add(tipo, titulo, motivo, env, para, impacto):
+        de = _env_atual(env) or ("0" if SAFE_ENV[env]["tipo"] == "bool" else "")
         try:
-            dias = max(1, int(sys.argv[1]))
-        except ValueError:
-            pass
+            para_n = _validar_valor(env, para)
+        except Exception:
+            return
+        if str(de) == str(para_n):      # já está no valor proposto → não propõe
+            return
+        props.append({"id": len(props) + 1, "tipo": tipo, "titulo": titulo,
+                      "motivo": motivo, "acao": {"env": env, "de": str(de), "para": para_n},
+                      "impacto": impacto, "reversivel": True})
+
+    # R1: engajamento é o motor de clique — se algo estiver desligado, liga
+    if not _bool_on(_env_atual("ENGAJAR_COMENTARIO")):
+        add("config", "Ligar o 1º comentário automático",
+            "engajamento é o que puxa clique; está desligado", "ENGAJAR_COMENTARIO", "1",
+            "todo post sai com o 1º comentário (link no FB, isca no IG)")
+    if not _bool_on(_env_atual("AUTO_RESPONDER")):
+        add("config", "Ligar a auto-resposta a comentários",
+            "responder 'eu quero' na hora converte interesse em clique", "AUTO_RESPONDER", "1",
+            "comentários com gatilho passam a ser respondidos a cada 20min")
+    if _bool_on(_env_atual("AUTO_RESPONDER")) and not _bool_on(_env_atual("AUTO_RESP_DM")):
+        add("config", "Ligar o link na DM",
+            "no direct o link CLICA (no comentário não) — conversão direta", "AUTO_RESP_DM", "1",
+            "quem comenta gatilho recebe o link clicável no direct")
+
+    # R2: Amazon como 2ª fonte pra não desperdiçar vídeo não-Shopee
+    if not _bool_on(_env_atual("AMAZON_ATIVO")):
+        add("config", "Ativar a Amazon como 2ª fonte",
+            "vídeos que não casam com a Shopee estão sendo desperdiçados", "AMAZON_ATIVO", "1",
+            "produtos sem match na Shopee viram link de afiliado Amazon")
+
+    # R3: sem vendas ainda + volume ok → hipótese: girar o catálogo mais rápido
+    dedup = _env_atual("DEDUP_DIAS") or "30"
+    if vendas == 0 and posts >= 15 and int(float(dedup)) > 15:
+        add("config", "Girar o catálogo mais rápido (teste)",
+            f"{posts} posts e 0 venda de vídeo no período — hipótese: renovar produtos "
+            f"mais rápido acha o que converte", "DEDUP_DIAS", "15",
+            "um produto pode repostar após 15d (era %sd) — mais variedade" % dedup)
+
+    # R4: JÁ vendeu algo → repor os campeões mais cedo (acelera o que dá dinheiro)
+    if vendas > 0 and int(float(dedup)) > 20:
+        campea = cats_vendem[0]["categoria"] if cats_vendem else "a campeã"
+        add("config", "Repor os campeões mais cedo",
+            f"categoria '{campea}' já converteu; repor antes acelera a receita",
+            "DEDUP_DIAS", "18", "campeões podem voltar após 18d (era %sd)" % dedup)
+
+    # R5: revisão manual (não aplica sozinho) — cortar fonte que só gasta e não vende
+    if vendas == 0 and posts >= 30:
+        props.append({"id": len(props) + 1, "tipo": "revisao",
+                      "titulo": "Revisar as fontes de vídeo (perfis do TikTok)",
+                      "motivo": f"{posts} posts sem venda: pode haver fonte que só gasta produção",
+                      "acao": None,
+                      "impacto": "revisão manual em tiktok_perfis.txt — cortar perfil fraco",
+                      "reversivel": False})
+    return props
+
+
+def _render_propostas(props: list) -> str:
+    if not props:
+        return ("## 🤖 Propostas aplicáveis (Nível 1)\n"
+                "_Nenhuma proposta automática com os dados/estado atuais — a máquina "
+                "já está com os knobs seguros no lugar. Seguimos coletando dado._\n")
+    linhas = ["## 🤖 Propostas aplicáveis (Nível 1)",
+              "_Aprove com `ceo_agent.py --aplicar N` · reverte com `--desfazer`_", ""]
+    for p in props:
+        if p["tipo"] == "config":
+            ac = p["acao"]
+            linhas.append(f"**{p['id']}. {p['titulo']}** — {p['motivo']}.")
+            linhas.append(f"   ⚙️ `{ac['env']}`: `{ac['de'] or '(vazio)'}` → `{ac['para']}` · "
+                          f"{p['impacto']} · ✅ reversível · `--aplicar {p['id']}`")
+        else:
+            linhas.append(f"**{p['id']}. {p['titulo']}** _(revisão manual)_ — {p['motivo']}.")
+            linhas.append(f"   👀 {p['impacto']} (não aplica sozinho)")
+        linhas.append("")
+    return "\n".join(linhas)
+
+
+def _salvar_propostas(dias: int, props: list) -> None:
+    CEO_DIR.mkdir(parents=True, exist_ok=True)
+    PROPOSTAS_JSON.write_text(json.dumps(
+        {"gerado_em": int(time.time()), "data": time.strftime("%Y-%m-%d %H:%M"),
+         "dias": dias, "propostas": props}, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _carregar_propostas() -> list:
+    try:
+        return json.loads(PROPOSTAS_JSON.read_text(encoding="utf-8")).get("propostas", [])
+    except Exception:
+        return []
+
+
+def _escrever_env(chave: str, valor: str) -> str:
+    """Atualiza (ou adiciona) chave=valor no .env, com backup. Retorna o valor antigo."""
+    p = BASE_DIR / ".env"
+    linhas = p.read_text(encoding="utf-8").splitlines() if p.exists() else []
+    antigo, achou, out = "", False, []
+    for ln in linhas:
+        s = ln.strip()
+        if s and not s.startswith("#") and "=" in s:
+            k = s.split("=", 1)[0].strip()
+            if k.lower().startswith("export "):
+                k = k[7:].strip()
+            if k == chave:
+                antigo = s.split("=", 1)[1].strip().strip('"').strip("'")
+                out.append(f"{chave}={valor}")
+                achou = True
+                continue
+        out.append(ln)
+    if not achou:
+        out.append(f"{chave}={valor}")
+    if p.exists():
+        import shutil
+        shutil.copy2(p, p.parent / (".env.bak_" + time.strftime("%Y%m%d_%H%M%S")))
+    p.write_text("\n".join(out) + "\n", encoding="utf-8")
+    return antigo
+
+
+def _log_decisao(reg: dict) -> None:
+    CEO_DIR.mkdir(parents=True, exist_ok=True)
+    with open(DECISOES, "a", encoding="utf-8") as f:
+        f.write(json.dumps(reg, ensure_ascii=False) + "\n")
+
+
+def _aplicar(n: int) -> int:
+    props = _carregar_propostas()
+    alvo = next((p for p in props if p.get("id") == n), None)
+    if not alvo:
+        print(f"❌ proposta {n} não existe. Rode `ceo_agent.py` pra gerar as propostas.")
+        return 1
+    if alvo["tipo"] != "config" or not alvo.get("acao"):
+        print(f"⚠️ Proposta {n} é REVISÃO manual — não dá pra aplicar automático.\n"
+              f"   {alvo['titulo']}: {alvo['impacto']}")
+        return 1
+    env = alvo["acao"]["env"]
+    if env not in SAFE_ENV:
+        print(f"🛡️ recusado: '{env}' não está na whitelist segura (o CEO nunca mexe em segredo).")
+        return 1
+    try:
+        valor = _validar_valor(env, alvo["acao"]["para"])
+    except Exception as e:
+        print(f"❌ valor inválido pra {env}: {e}")
+        return 1
+    antigo = _escrever_env(env, valor)
+    _log_decisao({"ts": int(time.time()), "data": time.strftime("%Y-%m-%d %H:%M"),
+                  "acao": "aplicar", "proposta": alvo["titulo"], "env": env,
+                  "de": antigo, "para": valor})
+    print(f"✅ APLICADO: {alvo['titulo']}\n   {env}: {antigo or '(vazio)'} → {valor}")
+    print("   (backup do .env criado; reverte com `ceo_agent.py --desfazer`)")
+    print("   ⚠️ reinicie o serviço p/ valer no daemon:  systemctl restart jarvis")
+    _enviar_telegram(f"👑 CEO aplicou (Nível 1): {alvo['titulo']}\n"
+                     f"{env}: {antigo or '(vazio)'} → {valor}\n"
+                     f"Reverter: ceo_agent.py --desfazer")
+    return 0
+
+
+def _desfazer() -> int:
+    if not DECISOES.exists():
+        print("nada pra desfazer (sem decisões registradas).")
+        return 0
+    linhas = [l for l in DECISOES.read_text(encoding="utf-8").splitlines() if l.strip()]
+    # acha a última decisão do tipo 'aplicar' ainda não desfeita
+    for i in range(len(linhas) - 1, -1, -1):
+        try:
+            d = json.loads(linhas[i])
+        except Exception:
+            continue
+        if d.get("acao") == "aplicar" and not d.get("desfeita"):
+            env, de = d["env"], d.get("de", "")
+            _escrever_env(env, de if de != "" else ("0" if SAFE_ENV.get(env, {}).get("tipo") == "bool" else ""))
+            d["desfeita"] = True
+            linhas[i] = json.dumps(d, ensure_ascii=False)
+            DECISOES.write_text("\n".join(linhas) + "\n", encoding="utf-8")
+            _log_decisao({"ts": int(time.time()), "data": time.strftime("%Y-%m-%d %H:%M"),
+                          "acao": "desfazer", "proposta": d.get("proposta", ""),
+                          "env": env, "de": d.get("para", ""), "para": de})
+            print(f"↩️  DESFEITO: {d.get('proposta')}\n   {env}: {d.get('para')} → {de or '(vazio)'}")
+            print("   ⚠️ reinicie:  systemctl restart jarvis")
+            return 0
+    print("nada pra desfazer (todas as decisões já foram revertidas).")
+    return 0
+
+
+def _listar_decisoes() -> int:
+    if not DECISOES.exists():
+        print("nenhuma decisão registrada ainda.")
+        return 0
+    print("📒 Histórico de decisões do CEO (Nível 1):")
+    for l in DECISOES.read_text(encoding="utf-8").splitlines():
+        try:
+            d = json.loads(l)
+        except Exception:
+            continue
+        tag = "✅" if d.get("acao") == "aplicar" else "↩️"
+        risca = " (desfeita)" if d.get("desfeita") else ""
+        print(f"  {tag} {d.get('data')} · {d.get('proposta')} · "
+              f"{d.get('env')}: {d.get('de') or '(vazio)'} → {d.get('para') or '(vazio)'}{risca}")
+    return 0
+
+
+def main():
+    argv = sys.argv[1:]
+    if "--aplicar" in argv:
+        i = argv.index("--aplicar")
+        try:
+            return _aplicar(int(argv[i + 1]))
+        except (IndexError, ValueError):
+            print("uso: ceo_agent.py --aplicar N")
+            return 1
+    if "--desfazer" in argv:
+        return _desfazer()
+    if "--decisoes" in argv:
+        return _listar_decisoes()
+
+    dias = 30
+    for arg in argv:
+        if arg.isdigit():
+            dias = max(1, int(arg))
+            break
 
     a = _analisar(dias)
     score, nivel = _confidence(a)
     relatorio = _relatorio_gemini(a, score, nivel)
+    propostas = _propostas_estruturadas(a)
+    _salvar_propostas(dias, propostas)
+    bloco_props = _render_propostas(propostas)
 
     cabecalho = (f"# 👑 CEO TopShop — Conselheiro\n"
                  f"Período: últimos {dias} dias · "
                  f"**Jarvis Confidence Score: {score}/100** ({nivel})\n"
                  f"Gerado: {time.strftime('%Y-%m-%d %H:%M')}\n\n---\n\n")
-    doc = cabecalho + relatorio
+    doc = cabecalho + relatorio + "\n\n---\n\n" + bloco_props
 
     print("\n" + "=" * 66)
     print(doc)
@@ -243,10 +516,13 @@ def main():
     print(f"\n💾 Salvo em {arq}")
 
     # resumo curto no Telegram (o relatório completo fica no arquivo)
+    aplicaveis = [p for p in propostas if p["tipo"] == "config"]
     resumo = (f"👑 CEO TopShop — relatório dos últimos {dias}d\n"
               f"Confidence: {score}/100 ({nivel.split('—')[0].strip()})\n"
               f"Comissão vídeo: {_brl(a['comissao_video'])} · "
-              f"vendas: {a['vendas_video']} · posts: {a['posts_periodo']}\n\n"
+              f"vendas: {a['vendas_video']} · posts: {a['posts_periodo']}\n"
+              f"Propostas aplicáveis: {len(aplicaveis)} "
+              f"(aprove com: ceo_agent.py --aplicar N)\n\n"
               f"{relatorio}")
     _enviar_telegram(resumo)
     print("📱 Resumo enviado no Telegram (se configurado).")
