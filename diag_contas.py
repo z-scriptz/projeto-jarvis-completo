@@ -69,6 +69,35 @@ def _set_env(chave, valor):
     ENV.write_text("\n".join(linhas) + "\n", encoding="utf-8")
 
 
+def _trocar_long_lived(sess, token, app_id, app_secret):
+    """Troca um token de usuário CURTO por um LONG-LIVED (~60 dias). As páginas
+    derivadas de um token long-lived viram tokens que NÃO EXPIRAM."""
+    try:
+        r = sess.get(f"{GRAPH}/oauth/access_token", timeout=30, params={
+            "grant_type": "fb_exchange_token", "client_id": app_id,
+            "client_secret": app_secret, "fb_exchange_token": token})
+        return (r.json() or {}).get("access_token")
+    except Exception:
+        return None
+
+
+def _validade(sess, token, app_id, app_secret):
+    """Mostra quando o token expira (0 = nunca) via debug_token."""
+    try:
+        r = sess.get(f"{GRAPH}/debug_token", timeout=30, params={
+            "input_token": token, "access_token": f"{app_id}|{app_secret}"})
+        d = (r.json() or {}).get("data") or {}
+        exp = d.get("expires_at")
+        if exp == 0:
+            return "NUNCA expira ✅"
+        if exp:
+            import time
+            return "expira em " + time.strftime("%Y-%m-%d %H:%M", time.localtime(exp))
+        return "?"
+    except Exception:
+        return "?"
+
+
 def main():
     escrever = "--escrever" in sys.argv[1:]
     try:
@@ -81,6 +110,23 @@ def main():
     if not token:
         print("❌ Sem META_ACCESS_TOKEN no .env.")
         return 1
+
+    # long-lived: se tiver app id+secret, troca o token por um de 60 dias (as
+    # páginas derivadas dele NÃO expiram — fim do 'session has expired').
+    app_id = os.environ.get("FACEBOOK_APP_ID", "").strip()
+    app_secret = os.environ.get("FACEBOOK_APP_SECRET", "").strip()
+    if app_id and app_secret:
+        ll = _trocar_long_lived(sess, token, app_id, app_secret)
+        if ll:
+            token = ll
+            print("🔑 token trocado por LONG-LIVED (páginas derivadas não expiram)")
+            if escrever:
+                _set_env("META_ACCESS_TOKEN", token)
+                print("   ✅ META_ACCESS_TOKEN (long-lived) atualizado no .env")
+        print(f"   validade do token de usuário: {_validade(sess, token, app_id, app_secret)}")
+    else:
+        print("⚠️  Sem FACEBOOK_APP_ID / FACEBOOK_APP_SECRET no .env → NÃO dá pra fazer")
+        print("   long-lived, e os PAGE_TOKEN vão expirar de novo. Ponha os 2 no .env.")
 
     # valida
     r = sess.get(f"{GRAPH}/me", params={"access_token": token, "fields": "id,name"}, timeout=30)
