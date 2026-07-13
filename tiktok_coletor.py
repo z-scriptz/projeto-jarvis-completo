@@ -21,6 +21,7 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 PERFIS_TXT = BASE_DIR / "tiktok_perfis.txt"
+IG_PERFIS_TXT = BASE_DIR / "instagram_perfis.txt"   # mesma esteira, fonte Instagram
 VISTOS = BASE_DIR / "shared" / "tiktok_vistos.json"
 INBOX = BASE_DIR / "inbox_tiktok"
 
@@ -174,8 +175,22 @@ def _resolver_ytdlp():
     return _YTDLP_CMD
 
 
-def _ytdlp(args: list, timeout=120):
-    return subprocess.run([*_resolver_ytdlp(), *args],
+def _cookies_args(fonte: str = "") -> list:
+    """Cookies pro yt-dlp. O Instagram quase sempre EXIGE sessão logada pra listar
+    Reels — aponte YTDLP_COOKIES (ou IG_COOKIES) pra um cookies.txt exportado do
+    navegador. Sem cookies, o IG costuma falhar (login wall). O TikTok não precisa.
+    Alternativa: YTDLP_COOKIES_FROM_BROWSER=chrome (usa cookies do navegador local)."""
+    arq = (os.environ.get("YTDLP_COOKIES") or os.environ.get("IG_COOKIES") or "").strip()
+    if arq and Path(arq).exists():
+        return ["--cookies", arq]
+    nav = os.environ.get("YTDLP_COOKIES_FROM_BROWSER", "").strip()
+    if nav:
+        return ["--cookies-from-browser", nav]
+    return []
+
+
+def _ytdlp(args: list, timeout=120, fonte: str = ""):
+    return subprocess.run([*_resolver_ytdlp(), *_cookies_args(fonte), *args],
                           capture_output=True, text=True, timeout=timeout)
 
 
@@ -184,16 +199,34 @@ def _slug(s: str) -> str:
     return s[:40] or "video"
 
 
-def _listar_videos(perfil: str, limite: int) -> list:
-    """URLs dos vídeos mais recentes do perfil (sem baixar)."""
-    url = perfil if perfil.startswith("http") else f"https://www.tiktok.com/@{perfil.lstrip('@')}"
+def _url_perfil(perfil: str, fonte: str) -> str:
+    """Monta a URL do perfil pela fonte. Instagram → /reels/ (só Reels);
+    TikTok → /@handle. Se já vier http, usa como está."""
+    if perfil.startswith("http"):
+        return perfil
+    h = perfil.lstrip("@")
+    if fonte == "instagram":
+        return f"https://www.instagram.com/{h}/reels/"
+    return f"https://www.tiktok.com/@{h}"
+
+
+def _listar_videos(perfil: str, limite: int, fonte: str = "tiktok") -> list:
+    """URLs dos vídeos mais recentes do perfil (sem baixar). Funciona pra TikTok
+    e Instagram (o yt-dlp cobre os dois)."""
+    url = _url_perfil(perfil, fonte)
     r = _ytdlp(["--flat-playlist", "-J", "--playlist-end", str(limite), url])
     try:
         d = json.loads(r.stdout)
-        return [e.get("url") or f"https://www.tiktok.com/@x/video/{e.get('id')}"
-                for e in (d.get("entries") or []) if e.get("id") or e.get("url")]
+        out = []
+        for e in (d.get("entries") or []):
+            u = e.get("url")
+            if u:
+                out.append(u)
+            elif e.get("id") and fonte == "tiktok":   # TikTok resolve id→url
+                out.append(f"https://www.tiktok.com/@x/video/{e.get('id')}")
+        return out
     except Exception:
-        _log(f"   não consegui listar {perfil}: {(r.stderr or '')[:120]}")
+        _log(f"   não consegui listar {perfil} [{fonte}]: {(r.stderr or '')[:120]}")
         return []
 
 
@@ -382,8 +415,28 @@ def _produto_repetido(chave: str, pv: dict) -> bool:
     return (time.time() - ts) < dias * 86400
 
 
+def _fonte_do_arg(a: str) -> tuple:
+    """Detecta a fonte de um perfil passado na linha de comando.
+    'ig:@x' ou url do instagram → instagram; senão tiktok (compat)."""
+    low = a.lower()
+    if low.startswith("ig:") or low.startswith("instagram:"):
+        return a.split(":", 1)[1].strip(), "instagram"
+    if "instagram.com" in low:
+        return a, "instagram"
+    return a, "tiktok"
+
+
+def _perfis_do_arquivo(caminho: Path, fonte: str) -> list:
+    if not caminho.exists():
+        return []
+    return [(l.strip(), fonte)
+            for l in caminho.read_text(encoding="utf-8").splitlines()
+            if l.strip() and not l.strip().startswith("#")]
+
+
 def _parse_args():
-    """--dry, --limite N e a lista de perfis (ou tiktok_perfis.txt)."""
+    """--dry, --limite N e perfis (ou tiktok_perfis.txt + instagram_perfis.txt).
+    Retorna perfis como lista de (perfil, fonte)."""
     args = sys.argv[1:]
     dry = "--dry" in args
     limite = POR_PERFIL
@@ -400,27 +453,27 @@ def _parse_args():
                 pass
             i += 2
         else:
-            perfis.append(a)
+            perfis.append(_fonte_do_arg(a))
             i += 1
-    if not perfis and PERFIS_TXT.exists():
-        perfis = [l.strip() for l in PERFIS_TXT.read_text(encoding="utf-8").splitlines()
-                  if l.strip() and not l.strip().startswith("#")]
+    if not perfis:      # sem args → lê as duas listas (TikTok + Instagram)
+        perfis = _perfis_do_arquivo(PERFIS_TXT, "tiktok") \
+            + _perfis_do_arquivo(IG_PERFIS_TXT, "instagram")
     return dry, limite, perfis
 
 
 def main():
     dry, limite, perfis = _parse_args()
     if not perfis:
-        _log("sem perfis. Uso: python3 tiktok_coletor.py @perfil1 @perfil2")
-        _log("(ou crie tiktok_perfis.txt com 1 perfil por linha)")
+        _log("sem perfis. Uso: python3 tiktok_coletor.py @tiktok1 ig:@insta1")
+        _log("(ou crie tiktok_perfis.txt e/ou instagram_perfis.txt — 1 perfil por linha)")
         return 1
 
     vistos = _carregar_vistos()
     produtos_vistos = _carregar_produtos_vistos()
     achados = 0
-    for perfil in perfis:
-        _log(f"perfil {perfil} …")
-        for url in _listar_videos(perfil, limite):
+    for perfil, fonte in perfis:
+        _log(f"perfil {perfil} [{fonte}] …")
+        for url in _listar_videos(perfil, limite, fonte):
             meta = _metadados(url)
             vid = meta.get("id")
             if not vid or vid in vistos:
@@ -493,7 +546,7 @@ def main():
                 continue
             produtos_vistos[chave_prod] = int(time.time())   # só marca o que FICOU
             (pasta / "plano.json").write_text(json.dumps({
-                "fonte": "tiktok", "plataforma": plataforma,
+                "fonte": fonte, "plataforma": plataforma,
                 "url": meta["url"], "uploader": meta["uploader"],
                 "views": meta["views"], "descricao": meta["descricao"],
                 "termo": termo, "produto": produto_nome,

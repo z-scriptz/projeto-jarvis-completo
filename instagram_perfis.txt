@@ -1,0 +1,14 @@
+# instagram_perfis.txt -- perfis do INSTAGRAM que o coletor vasculha (Reels).
+# Mesma esteira do TikTok: pega Reels virais -> acha o produto na Shopee/Amazon ->
+# gera teu link -> produz -> posta. 1 perfil por linha (só o @, sem a URL).
+#
+# ⚠️ IMPORTANTE: o Instagram exige SESSÃO LOGADA pra listar Reels. Exporte um
+# cookies.txt do navegador (extensão "Get cookies.txt") e aponte no .env:
+#     YTDLP_COOKIES=/root/jarvis/ig_cookies.txt
+# (ou YTDLP_COOKIES_FROM_BROWSER=chrome). Sem cookies, o IG cai em login wall.
+#
+# Linhas com # são ignoradas. Descomente/adicione os perfis:
+#
+# achadinhosdashopee
+# achaditchos
+# ofertas.br

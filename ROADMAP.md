@@ -88,8 +88,15 @@ janela; depois pode voltar. `--dry` não persiste. Futuro: usar o item_id da
 Shopee como chave (mais preciso que o nome).
 
 ### 3. Expandir a rede de vídeos (fontes novas)
-- Coletar de **perfis "dark" do Instagram** que postam produtos e são
-  relevantes (centenas de seguidores) — um coletor de IG análogo ao do TikTok.
+- ✅ **Instagram como FONTE** (2026-07-13): o `tiktok_coletor` agora coleta Reels
+  do Instagram na MESMA esteira (yt-dlp cobre os 2). Lê `instagram_perfis.txt`
+  (além do `tiktok_perfis.txt`); na CLI aceita `ig:@perfil` ou URL do IG. `_parse_args`
+  devolve `(perfil, fonte)`, `_url_perfil` monta `/reels/`, e o `plano.json` grava
+  a `fonte` real (tiktok/instagram) p/ o CEO. ⚠️ IG exige **cookies logados**:
+  `YTDLP_COOKIES=/root/jarvis/ig_cookies.txt` (ou `YTDLP_COOKIES_FROM_BROWSER=chrome`)
+  no `.env` — senão cai no login wall. Dedup + anti-watermark + narração valem igual.
+  💡 Nota: os 450 vídeos do Shopee Vídeo do Dre NÃO são exclusivos (mesma fonte
+  TikTok que já circula entre afiliados) — descartado como diferencial.
 - Preferir **fontes sem texto** na tela (a edição fica mais limpa).
 
 ---
