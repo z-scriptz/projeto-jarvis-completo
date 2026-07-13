@@ -96,6 +96,17 @@ Shopee como chave (mais preciso que o nome).
 
 ## 🐞 Observações do dia (2026-07-12) — a resolver
 
+- 🚨 **BUG DE ATRIBUIÇÃO — vendas de TikTok saíam do radar (achado + corrigido 2026-07-13):**
+  o `metricas_agent._do_video` reconhecia venda de vídeo pelo `utmContent` usando
+  `VIDEO_TAGS` = (hunterradar, telegramrepurpose, hunter, topshop) — mas o pipeline
+  PRINCIPAL (produzir_tiktok, 3/dia) gera o link com `sub_ids=["tiktok", termo]`, e
+  **"tiktok" não estava na lista**. Resultado: toda venda de vídeo do TikTok era
+  classificada como "outros" e o `nichos_quentes`/CEO mostrava `vendas_video=0` —
+  podia estar mascarando venda real. **Fix:** "tiktok" adicionado ao `VIDEO_TAGS`
+  + `_tags_video()` extensível por `.env` (`VIDEO_SUBID_TAGS=`) + diagnóstico
+  `metricas_agent.py --utms` (lista os utmContent crus). ⚠️ Amazon continua fora do
+  `conversionReport` da Shopee (programa separado) — sem relatório de venda por ora.
+
 - ✅ **Narração sem áudio (resolvido 2026-07-12):** a chave ElevenLabs está boa
   (TTS ok; o 401 era só no endpoint de saldo). O `produzir_tiktok` narra certo.
   Os vídeos mudos eram sobras de um lote manual/antigo sem Michael (a produção

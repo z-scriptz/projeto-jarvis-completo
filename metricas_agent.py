@@ -15,11 +15,15 @@ from collections import defaultdict
 BASE_DIR = Path(__file__).resolve().parent
 NICHOS_QUENTES = BASE_DIR / "shared" / "nichos_quentes.json"
 
-# Impressão digital dos NOSSOS posts (o hunter grava esses sub_ids no link;
+# Impressão digital dos NOSSOS posts (a esteira grava esses sub_ids no link;
 # eles reaparecem no utmContent do relatório). Se o utmContent bate, a venda
 # veio de um vídeo/post nosso — não de uma compra avulsa (tua, da família...).
+#
+# IMPORTANTE: "tiktok" é o sub_id do pipeline PRINCIPAL (produzir_tiktok, 3/dia —
+# o coletor gera o link com sub_ids=["tiktok", termo]). Sem ele aqui, TODA venda
+# de vídeo do TikTok caía em "outros" e sumia do radar do CEO (vendas_video=0).
 VIDEO_TAGS = ("hunterradar", "telegramrepurpos", "telegramrepurpose",
-              "hunter", "topshop")
+              "hunter", "topshop", "tiktok")
 
 
 def _carregar_env():
@@ -72,9 +76,17 @@ def _num(v):
         return 0.0
 
 
+def _tags_video() -> tuple:
+    """VIDEO_TAGS + marcadores extras do .env (VIDEO_SUBID_TAGS=a,b,c) — permite
+    plugar fonte nova sem mexer no código."""
+    extra = tuple(t.strip().lower() for t in
+                  os.getenv("VIDEO_SUBID_TAGS", "").split(",") if t.strip())
+    return VIDEO_TAGS + extra
+
+
 def _do_video(utm: str) -> bool:
     u = (utm or "").lower()
-    return any(t in u for t in VIDEO_TAGS)
+    return any(t in u for t in _tags_video())
 
 
 def _pagina(ini, fim, scroll_id=None, limite=100):
@@ -191,11 +203,10 @@ def _salvar_nichos_quentes(resumo: dict, dias: int):
 
 def main():
     dias = 30
-    if len(sys.argv) > 1:
-        try:
-            dias = max(1, int(sys.argv[1]))
-        except ValueError:
-            pass
+    for arg in sys.argv[1:]:
+        if arg.isdigit():
+            dias = max(1, int(arg))
+            break
 
     print(f"\n💰 COMISSÕES — últimos {dias} dias")
     print("=" * 52)
@@ -204,6 +215,19 @@ def main():
     except Exception as e:
         print(f"ERRO ao puxar o relatório: {str(e)[:200]}")
         return 1
+
+    # DIAGNÓSTICO: lista os utmContent crus + se cada um é reconhecido como vídeo.
+    # Serve pra CRAVAR se existe venda de TikTok caindo em "outros" por engano.
+    if "--utms" in sys.argv:
+        from collections import Counter
+        print("\n🔬 utmContent das conversões (marcador → nº itens · do_video?):")
+        cont = Counter((i["utm"] or "(vazio)") for i in itens)
+        if not cont:
+            print("   (nenhuma conversão no período — sem venda ainda, tracking ok)")
+        for utm, n in cont.most_common():
+            print(f"   {'✅VÍDEO' if _do_video(utm) else '⚪outros'}  {utm[:60]:<60} · {n}")
+        print(f"\n   tags reconhecidas como vídeo: {_tags_video()}")
+        return 0
 
     if not itens:
         print("Nenhuma comissão no período. O encanamento está pronto —")
