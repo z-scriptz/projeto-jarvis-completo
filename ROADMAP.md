@@ -153,8 +153,13 @@ Shopee como chave (mais preciso que o nome).
   cap por rodada (`AUTO_RESP_MAX`), dry-run (`--teste`), nunca responde a si mesmo.
   Gatilhos/templates/janela editáveis via `.env`. Mesma permissão do 1º comentário
   (`instagram_manage_comments`/`pages_manage_engagement`).
-  🔜 v2: **DM/private reply** no IG ("EU QUERO" → link no direct; precisa
-  `instagram_manage_messages`).
+  - **Só top-level** (não responde subcomentário): IG usa `/media/comments` (parents)
+    sem descer em `.replies`; FB usa `filter=toplevel`.
+  - **3 estilos rotativos no IG** (`AUTO_RESP_IG_TMPLS`, sep `|||`): "Feito! Verifique
+    suas dms…" / "Te mandei no direct 🥰" / "Corre que o link tá na bio 🚀…".
+  - **DM/private reply** ✅ FEITO (gated `AUTO_RESP_DM=1`): manda o link CLICÁVEL no
+    direct (`POST /{ig}/messages` recipient=comment_id). Precisa `instagram_manage_messages`.
+    Trava anti-mentira: DM desligado → só usa a frase que NÃO promete direct.
 - **CEO IA — Conselheiro** 🚧 v1 CONSTRUÍDO (`ceo_agent.py`): lê ledger +
   nichos_quentes, calcula retrato produção×venda + Jarvis Confidence Score (0-100,
   honesto com pouco dado), e o Gemini escreve relatório executivo + propostas

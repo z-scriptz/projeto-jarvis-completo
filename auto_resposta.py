@@ -17,6 +17,7 @@ import re
 import sys
 import json
 import time
+import random
 import unicodedata
 from pathlib import Path
 
@@ -83,6 +84,59 @@ def _bateu(texto: str, gatilhos: list) -> bool:
     return any(g in t for g in gatilhos)
 
 
+# ── Respostas IG: 3 estilos que rodam pra todo post/reel ───────────────────
+_IG_TMPLS_DEFAULT = (
+    "Feito! Verifique suas dms! 😍 ou clique no link da bio.|||"
+    "Te mandei no direct 🥰|||"
+    "Corre que o link tá na bio 🚀 depois me fala o que achou! 👀")
+# frase segura (não promete DM) — usada quando o DM está desligado
+_IG_TMPL_SEM_DM = "Corre que o link tá na bio 🚀 depois me fala o que achou! 👀"
+
+
+def _ig_tmpls() -> list:
+    raw = os.environ.get("AUTO_RESP_IG_TMPLS", _IG_TMPLS_DEFAULT)
+    return [t.strip() for t in raw.split("|||") if t.strip()]
+
+
+def _menciona_dm(t: str) -> bool:
+    n = _norm(t)
+    return "dm" in n or "direct" in n
+
+
+def _escolhe_ig_tmpl(dm_ok: bool) -> str:
+    """Sorteia 1 dos 3 estilos. Sem DM confirmado, só usa os que NÃO prometem
+    direct (pra nunca mentir 'te mandei no direct' sem ter mandado)."""
+    tmpls = _ig_tmpls()
+    if not dm_ok:
+        tmpls = [t for t in tmpls if not _menciona_dm(t)] or [_IG_TMPL_SEM_DM]
+    return random.choice(tmpls)
+
+
+def _dm_ligado() -> bool:
+    return os.environ.get("AUTO_RESP_DM", "0").strip().lower() in ("1", "true", "sim")
+
+
+def _enviar_dm_ig(ig: str, comment_id: str, token: str) -> bool:
+    """DM (private reply) em resposta a um comentário. No direct o link CLICA.
+    Precisa do escopo instagram_manage_messages. Best-effort."""
+    site = os.environ.get("AUTO_RESP_SITE", "topshopoficial.com.br")
+    msg = os.environ.get(
+        "AUTO_RESP_DM_TMPL",
+        "Oiee! 😍 tá tudo aqui ó: {site} 💛 corre que as ofertas somem rápido!"
+    ).format(site=site)
+    r = _post(f"{GRAPH}/{ig}/messages", {
+        "recipient": json.dumps({"comment_id": comment_id}),
+        "message": json.dumps({"text": msg}),
+        "access_token": token,
+    })
+    if r.get("message_id") or r.get("recipient_id") or r.get("id"):
+        return True
+    err = (r.get("error") or {}).get("message") or ""
+    if err:
+        _log(f"   ⚠️ DM IG falhou ({err[:100]})")
+    return False
+
+
 def _carregar_respondidos() -> dict:
     try:
         d = json.loads(RESPONDIDOS.read_text(encoding="utf-8"))
@@ -139,11 +193,10 @@ def _resp_instagram(conta, token, gatilhos, respondidos, limites, teste) -> int:
     if not ig:
         return 0
     handle = _norm(conta.get("handle", "")).lstrip("@")
-    tmpl = os.environ.get("AUTO_RESP_IG_TMPL",
-                          "😍 aee! o link tá na BIO, corre pegar o seu 👉💨")
-    corte = time.time() - limites["horas"] * 3600
     feitos = 0
 
+    # SÓ comentários de cima (top-level). O /media/comments do IG já devolve os
+    # parents; a gente NÃO desce em .replies, então nunca responde subcomentário.
     midia = _get(f"{GRAPH}/{ig}/media",
                  {"fields": "id,timestamp", "limit": limites["midias"],
                   "access_token": token}).get("data", [])
@@ -161,15 +214,24 @@ def _resp_instagram(conta, token, gatilhos, respondidos, limites, teste) -> int:
                 continue
             if not _bateu(c.get("text", ""), gatilhos):
                 continue
+
+            # 1) DM (private reply) com o link clicável — se ligado e com escopo
+            dm_ok = True if teste and _dm_ligado() else \
+                (_enviar_dm_ig(ig, cid, token) if (_dm_ligado() and not teste) else False)
+            # 2) resposta pública: sorteia 1 dos 3 estilos (só promete direct se DM foi)
+            msg = _escolhe_ig_tmpl(dm_ok)
+
             if teste:
-                _log(f"   [DRY] IG responderia @{c.get('username')} → {tmpl}")
+                _log(f"   [DRY] IG responderia @{c.get('username')} → {msg}"
+                     + ("  (+DM)" if _dm_ligado() else ""))
                 respondidos[cid] = int(time.time()); feitos += 1
                 if feitos >= limites["max"]:
                     break
                 continue
-            r = _post(f"{GRAPH}/{cid}/replies", {"message": tmpl, "access_token": token})
+            r = _post(f"{GRAPH}/{cid}/replies", {"message": msg, "access_token": token})
             if r.get("id"):
-                _log(f"   💬 IG respondeu @{c.get('username')} ({conta.get('handle')})")
+                _log(f"   💬 IG respondeu @{c.get('username')} ({conta.get('handle')})"
+                     + (" +DM" if dm_ok else ""))
                 respondidos[cid] = int(time.time()); feitos += 1
             else:
                 err = (r.get("error") or {}).get("message") or str(r)[:120]
@@ -197,8 +259,9 @@ def _resp_facebook(conta, token, gatilhos, respondidos, limites, teste) -> int:
     for v in videos:
         if feitos >= limites["max"]:
             break
+        # filter=toplevel → só comentários de cima (ignora subcomentários/replies)
         cmts = _get(f"{GRAPH}/{v.get('id')}/comments",
-                    {"fields": "id,message,from", "limit": 50,
+                    {"fields": "id,message,from", "filter": "toplevel", "limit": 50,
                      "access_token": token}).get("data", [])
         # 1) descobre o LINK do produto a partir do NOSSO 1º comentário (tem o link)
         link = ""
