@@ -87,6 +87,13 @@ palavras) com TTL `DEDUP_DIAS` (padrão 30): mesmo produto não entra 2x dentro 
 janela; depois pode voltar. `--dry` não persiste. Futuro: usar o item_id da
 Shopee como chave (mais preciso que o nome).
 
+### 2.5 Hook estilo "curiosity-gap" (aprender com quem vende) 🔜 FORTE
+Insight do Dre (2026-07-13) analisando a @promosda.alana: os hooks dela vendem mais
+porque **nunca dizem o produto** ("você precisa ter **isso** 😍", "não mostre isso pra
+quem ama flores") + **miram a dor/público primeiro** ("Se você trabalha várias horas
+em pé…"). Curiosity gap = retenção alta = viraliza. Ensinar o gerador de hook do
+Jarvis a copiar essa fórmula (dor/público + "isso" sem revelar o produto). Replicável.
+
 ### 3. Expandir a rede de vídeos (fontes novas)
 - ✅ **Instagram como FONTE** (2026-07-13): o `tiktok_coletor` agora coleta Reels
   do Instagram na MESMA esteira (yt-dlp cobre os 2). Lê `instagram_perfis.txt`
@@ -104,9 +111,13 @@ Shopee como chave (mais preciso que o nome).
   borda/texto em volta). Roda ANTES do anti-watermark (o corte já pode tirar o @).
   Best-effort (vídeo cheio → não corta). Tunável: `AUTO_CROP_THR`/`AUTO_CROP_FRAC`.
   Teste: `tiktok_coletor.py --crop-teste video.mp4`. Detector validado com numpy.
-- ⚠️ **Listar perfil do IG**: o yt-dlp baixa Reel INDIVIDUAL bem, mas ENUMERAR os
-  reels de um perfil é instável (extractor de perfil do IG quebra). 🔜 usar
-  **instaloader** (já disponível) pra listar o perfil → alimentar a esteira.
+- ✅ **Listar perfil do IG via instaloader** (2026-07-13): `_listar_ig_instaloader`
+  enumera os Reels do perfil (o yt-dlp não faz isso de forma confiável) reusando o
+  MESMO `YTDLP_COOKIES` (injeta o cookies.txt na sessão do instaloader). Retorna
+  URLs de reel; o **download de cada um continua pelo yt-dlp** (que já funciona) +
+  auto-crop + anti-watermark. Fallback pro yt-dlp se o instaloader vier vazio.
+  Teste: `tiktok_coletor.py --ig-teste promosda.alana`. Precisa
+  `.venv/bin/pip install instaloader`. Instagram como fonte agora roda AUTOMÁTICO. 🎉
 - Preferir **fontes sem texto** na tela (a edição fica mais limpa).
 
 ---

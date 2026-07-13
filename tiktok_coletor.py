@@ -210,11 +210,65 @@ def _url_perfil(perfil: str, fonte: str) -> str:
     return f"https://www.tiktok.com/@{h}"
 
 
+def _ig_username(perfil: str) -> str:
+    """Extrai o @username de um perfil do IG (aceita handle ou URL)."""
+    p = perfil.strip().rstrip("/")
+    if p.startswith("http"):
+        # https://www.instagram.com/<user>/reels/ → <user>
+        try:
+            partes = [x for x in p.split("instagram.com/", 1)[1].split("/") if x]
+            return partes[0].lstrip("@") if partes else ""
+        except Exception:
+            return ""
+    return p.lstrip("@")
+
+
+def _listar_ig_instaloader(perfil: str, limite: int) -> list:
+    """Lista os Reels de um perfil do IG via instaloader (o yt-dlp não enumera
+    perfil de forma confiável). Reusa o MESMO cookies.txt (YTDLP_COOKIES). Retorna
+    URLs de reel; o download de cada um continua pelo yt-dlp (que já funciona)."""
+    try:
+        import instaloader
+        import http.cookiejar
+    except Exception:
+        _log("   instaloader não instalado — rode: .venv/bin/pip install instaloader")
+        return []
+    user = _ig_username(perfil)
+    if not user:
+        return []
+    L = instaloader.Instaloader(quiet=True, download_pictures=False,
+                                download_videos=False, download_comments=False,
+                                save_metadata=False, compress_json=False)
+    cookie = (os.environ.get("YTDLP_COOKIES") or os.environ.get("IG_COOKIES") or "").strip()
+    try:
+        if cookie and Path(cookie).exists():
+            cj = http.cookiejar.MozillaCookieJar(cookie)
+            cj.load(ignore_discard=True, ignore_expires=True)
+            L.context._session.cookies.update(cj)
+        prof = instaloader.Profile.from_username(L.context, user)
+        urls = []
+        for post in prof.get_posts():
+            if getattr(post, "is_video", False):
+                urls.append(f"https://www.instagram.com/reel/{post.shortcode}/")
+            if len(urls) >= limite:
+                break
+        _log(f"   instaloader: {len(urls)} reels de @{user}")
+        return urls
+    except Exception as e:
+        _log(f"   instaloader falhou em @{user}: {str(e)[:120]}")
+        return []
+
+
 def _listar_videos(perfil: str, limite: int, fonte: str = "tiktok") -> list:
-    """URLs dos vídeos mais recentes do perfil (sem baixar). Funciona pra TikTok
-    e Instagram (o yt-dlp cobre os dois)."""
+    """URLs dos vídeos mais recentes do perfil (sem baixar). TikTok via yt-dlp;
+    Instagram via instaloader (enumera o perfil), com yt-dlp como último recurso."""
+    if fonte == "instagram":
+        urls = _listar_ig_instaloader(perfil, limite)
+        if urls:
+            return urls
+        _log("   (instaloader vazio — tento yt-dlp como fallback)")
     url = _url_perfil(perfil, fonte)
-    r = _ytdlp(["--flat-playlist", "-J", "--playlist-end", str(limite), url])
+    r = _ytdlp(["--flat-playlist", "-J", "--playlist-end", str(limite), url], fonte=fonte)
     try:
         d = json.loads(r.stdout)
         out = []
@@ -571,6 +625,19 @@ def main():
         _log(f"testando auto-crop em cópia: {cp.name}")
         ok = _auto_crop(cp)
         _log(f"resultado: {'✂️ CORTOU (veja ' + cp.name + ')' if ok else 'não cortou (moldura não detectada / vídeo cheio)'}")
+        return 0
+
+    # modo diagnóstico: lista os reels de um perfil do IG (sem baixar nada).
+    #   python3 tiktok_coletor.py --ig-teste promosda.alana
+    if "--ig-teste" in sys.argv:
+        i = sys.argv.index("--ig-teste")
+        alvo = sys.argv[i + 1] if i + 1 < len(sys.argv) else ""
+        if not alvo:
+            _log("uso: tiktok_coletor.py --ig-teste <perfil>"); return 1
+        urls = _listar_ig_instaloader(alvo, 8)
+        for u in urls:
+            _log(f"   • {u}")
+        _log(f"{'✅ ' + str(len(urls)) + ' reels listados' if urls else '❌ 0 reels (confere cookies/instaloader)'}")
         return 0
 
     dry, limite, perfis = _parse_args()
