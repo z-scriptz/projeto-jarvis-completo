@@ -251,15 +251,10 @@ def _listar_ig_instaloader(perfil: str, limite: int) -> list:
     L = instaloader.Instaloader(quiet=True, download_pictures=False,
                                 download_videos=False, download_comments=False,
                                 save_metadata=False, compress_json=False)
-    px = _ig_proxy()
-    if px:
-        L.context._session.proxies.update({"http": px, "https": px})
-        _log(f"   via proxy {px.split('@')[-1]}")   # não loga user:senha
     try:
-        # 1) PREFERIDO: sessão NATIVA do instaloader (bem mais robusta que os cookies
-        #    do navegador — o IG barra menos). Crie com a conta QUEIMÁVEL:
-        #      .venv/bin/instaloader --login=SUA_CONTA_QUEIMAVEL
-        #    e aponte INSTALOADER_USER=SUA_CONTA_QUEIMAVEL no .env.
+        # 1) AUTENTICA primeiro. PREFERIDO: sessão NATIVA do instaloader (o IG barra
+        #    menos que cookies do navegador). Crie com a conta:
+        #      .venv/bin/instaloader --login=SUA_CONTA  → INSTALOADER_USER no .env.
         login_user = os.environ.get("INSTALOADER_USER", "").strip()
         if login_user:
             sess = os.environ.get("INSTALOADER_SESSION", "").strip()
@@ -274,6 +269,19 @@ def _listar_ig_instaloader(perfil: str, limite: int) -> list:
                 cj = http.cookiejar.MozillaCookieJar(cookie)
                 cj.load(ignore_discard=True, ignore_expires=True)
                 L.context._session.cookies.update(cj)
+        # 3) PROXY *depois* de autenticar — o load_session cria uma sessão NOVA,
+        #    então o proxy tem que ir na sessão que já carregou os cookies (senão
+        #    a requisição vai sem login → "Profile does not exist").
+        px = _ig_proxy()
+        if px:
+            L.context._session.proxies.update({"http": px, "https": px})
+            _log(f"   via proxy {px.split('@')[-1]}")   # não loga user:senha
+        # 4) confirma que a sessão está logada (diagnóstico honesto)
+        try:
+            quem = L.test_login()
+            _log(f"   logado como @{quem}" if quem else "   ⚠️ sessão NÃO logada (refaça o --login)")
+        except Exception:
+            pass
         prof = instaloader.Profile.from_username(L.context, user)
         urls = []
         for post in prof.get_posts():
