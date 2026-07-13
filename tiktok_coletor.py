@@ -120,47 +120,57 @@ def _visao_ativa() -> bool:
             and bool(os.getenv("GEMINI_API_KEY", "")))
 
 
-def _termo_por_visao(video, dur=0) -> str:
-    """Gemini Vision OLHA um frame e diz que PRODUTO é — pra quando a legenda não
-    diz (ex: 'você precisa ter ISSO 😍'). Retorna termo de busca PT-BR, ou ''."""
+def _termo_por_visao(video, dur=0, legenda="") -> str:
+    """Gemini Vision OLHA 3 frames (+ a legenda como pista) e diz que PRODUTO é —
+    pra quando a legenda é só gancho ('você precisa ter ISSO 😍'). Termo PT-BR ou ''."""
     if not _visao_ativa():
         return ""
     key = os.getenv("GEMINI_API_KEY", "")
-    frame = Path(str(video)).with_suffix(".prod.jpg")
+    n, frames, fpaths = 3, [], []
     try:
-        pos = max(1, int((float(dur) or 5) * 0.45))
-        subprocess.run(["ffmpeg", "-y", "-ss", str(pos), "-i", str(video),
-                        "-vframes", "1", "-q:v", "3", str(frame)],
-                       capture_output=True, timeout=40)
-        if not frame.exists() or frame.stat().st_size < 500:
+        d = float(dur) or 6.0
+        for i in range(n):
+            pos = max(1.0, d * (i + 1) / (n + 1))     # 3 momentos espalhados
+            f = Path(str(video)).with_suffix(f".prod{i}.jpg")
+            fpaths.append(f)
+            subprocess.run(["ffmpeg", "-y", "-ss", f"{pos:.1f}", "-i", str(video),
+                            "-vframes", "1", "-q:v", "3", str(f)],
+                           capture_output=True, timeout=40)
+            if f.exists() and f.stat().st_size > 500:
+                frames.append(f.read_bytes())
+        if not frames:
             return ""
         from google import genai
         from google.genai import types
         cli = genai.Client(api_key=key)
+        pista = (f"A LEGENDA do vídeo (pode ser só um gancho, às vezes sem dizer o "
+                 f"produto, mas ajuda a entender o USO) é: \"{legenda.strip()[:200]}\". "
+                 if legenda.strip() else "")
         prompt = (
-            "Olhe este frame de um vídeo de 'achadinho'. Qual é o PRODUTO principal "
-            "sendo mostrado/demonstrado? Responda APENAS com um termo CURTO de busca "
-            "em português do Brasil pra achar esse produto numa loja online (ex: "
-            "'suporte de notebook', 'luminária de flor', 'palmilha ortopédica', "
-            "'organizador de geladeira'). Só o termo — sem marca, sem frase, sem "
-            "aspas. Se não der pra identificar um produto físico, responda NAO.")
-        r = cli.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=[types.Part.from_bytes(data=frame.read_bytes(),
-                                            mime_type="image/jpeg"), prompt])
+            "Estes são frames de um vídeo de 'achadinho'. " + pista +
+            "Qual é o PRODUTO físico principal sendo mostrado/demonstrado? Responda "
+            "APENAS com um termo CURTO e ESPECÍFICO de busca em português do Brasil "
+            "pra achar ESSE produto numa loja (ex: 'palmilha ortopédica gel', "
+            "'suporte de notebook', 'luminária de flor', 'organizador de geladeira'). "
+            "Pense no PROBLEMA que ele resolve (ex: dor no pé em quem fica em pé = "
+            "palmilha). Só o termo — sem marca, sem frase, sem aspas. Se não der pra "
+            "identificar um produto físico, responda NAO.")
+        parts = [types.Part.from_bytes(data=b, mime_type="image/jpeg") for b in frames]
+        r = cli.models.generate_content(model="gemini-2.5-flash", contents=parts + [prompt])
         t = (r.text or "").strip().strip('"').strip("'").split("\n")[0].strip()
         if not t or t.upper().startswith("NAO") or len(t) > 60:
             return ""
-        _log(f"     👁️  Gemini viu: '{t}'")
+        _log(f"     👁️  Gemini viu ({len(frames)} frames): '{t}'")
         return t
     except Exception as e:
         _log(f"     (visão de produto falhou: {str(e)[:55]})")
         return ""
     finally:
-        try:
-            frame.unlink()
-        except Exception:
-            pass
+        for f in fpaths:
+            try:
+                f.unlink()
+            except Exception:
+                pass
 
 
 def _carregar_env():
@@ -779,7 +789,8 @@ def main():
                 fonte == "instagram" or not termo or not _termo_valido(termo))
             if usar_visao:
                 arq_pre = _baixar(url, pasta)
-                tv = _termo_por_visao(arq_pre, meta.get("duracao") or 0) if arq_pre else ""
+                tv = (_termo_por_visao(arq_pre, meta.get("duracao") or 0,
+                                       meta.get("descricao") or "") if arq_pre else "")
                 if tv:
                     termo = tv                       # a visão vence a legenda-hook
                 elif fonte == "instagram":
