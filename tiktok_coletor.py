@@ -293,21 +293,35 @@ def _listar_ig_instaloader(perfil: str, limite: int) -> list:
         return []
 
 
+def _listar_ig_playwright(perfil: str, limite: int) -> list:
+    """Lista os Reels via NAVEGADOR real (Playwright + stealth) — contorna o bloqueio
+    de API do instaloader. Reusa cookies (YTDLP_COOKIES) + proxy (IG_PROXY)."""
+    try:
+        import ig_playwright
+        return ig_playwright.listar_reels(perfil, limite)
+    except Exception as e:
+        _log(f"   playwright indisponível ({str(e)[:70]})")
+        return []
+
+
 def _listar_videos(perfil: str, limite: int, fonte: str = "tiktok") -> list:
     """URLs dos vídeos mais recentes do perfil (sem baixar). TikTok via yt-dlp;
-    Instagram via instaloader (enumera o perfil), com yt-dlp como último recurso."""
+    Instagram via Playwright (navegador real) → instaloader → yt-dlp (fallbacks)."""
     if fonte == "instagram":
-        # URL DIRETA de reel/post → não precisa listar (o IG bloqueia listagem de
-        # datacenter). O yt-dlp baixa o reel individual liso → curadoria manual:
-        # cola os links dos melhores reels e a máquina processa cada um.
+        # URL DIRETA de reel/post → não precisa listar; o yt-dlp baixa direto.
         low = perfil.lower()
         if perfil.startswith("http") and ("/reel/" in low or "/p/" in low or "/tv/" in low):
             return [perfil]
+        # 1) Playwright (navegador real) — o approach que o IG não bloqueia fácil
+        urls = _listar_ig_playwright(perfil, limite)
+        if urls:
+            return urls
+        # 2) instaloader (API) — funciona quando a conta não está limitada
         urls = _listar_ig_instaloader(perfil, limite)
         if urls:
             return urls
-        _log("   (instaloader bloqueado/vazio — no IP da VPS o IG barra a listagem; "
-             "use links de reel DIRETOS pra curadoria manual)")
+        _log("   (listagem do IG vazia — tente Playwright com cookies+proxy, "
+             "ou use links de reel DIRETOS pra curadoria manual)")
     url = _url_perfil(perfil, fonte)
     r = _ytdlp(["--flat-playlist", "-J", "--playlist-end", str(limite), url], fonte=fonte)
     try:

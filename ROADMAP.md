@@ -111,7 +111,15 @@ Jarvis a copiar essa fórmula (dor/público + "isso" sem revelar o produto). Rep
   borda/texto em volta). Roda ANTES do anti-watermark (o corte já pode tirar o @).
   Best-effort (vídeo cheio → não corta). Tunável: `AUTO_CROP_THR`/`AUTO_CROP_FRAC`.
   Teste: `tiktok_coletor.py --crop-teste video.mp4`. Detector validado com numpy.
-- ✅ **Listar perfil do IG via instaloader** (2026-07-13): `_listar_ig_instaloader`
+- ✅ **Listar perfil do IG via Playwright + stealth** (2026-07-13): `ig_playwright.py`
+  abre um Chromium REAL, renderiza o `/reels/` como humano, rola e extrai os links
+  dos reels do HTML — contorna o bloqueio de API (graphql 401/403) que derruba o
+  instaloader/yt-dlp. Reusa `YTDLP_COOKIES` + `IG_PROXY` (proxy só pro IG). Stealth
+  esconde `navigator.webdriver` etc. Coletor usa: Playwright → instaloader → yt-dlp
+  (fallbacks) → link direto (curadoria). Provado: Chromium+stealth+extração de /reel/
+  OK. VPS: `.venv/bin/pip install playwright && .venv/bin/playwright install chromium`.
+  Teste: `python ig_playwright.py promosda.alana 8`. RAM da VPS: 11GB (folgado).
+- 〰️ (histórico) instaloader sozinho: `_listar_ig_instaloader`
   enumera os Reels do perfil (o yt-dlp não faz isso de forma confiável) reusando o
   MESMO `YTDLP_COOKIES` (injeta o cookies.txt na sessão do instaloader). Retorna
   URLs de reel; o **download de cada um continua pelo yt-dlp** (que já funciona) +
