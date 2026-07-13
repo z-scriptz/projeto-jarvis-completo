@@ -145,8 +145,16 @@ Shopee como chave (mais preciso que o nome).
   Permissões Graph: IG precisa `instagram_manage_comments`, FB `pages_manage_engagement`.
   🔜 v2: **Stories** (reshare do reel — precisa URL pública hospedada).
 - **Auto-comentários (Stories parte 2)** pro Jarvis (auto-engajamento).
-- **Auto-DM** pra CTA tipo "COMENTE QUERO" → responde no direct com o link
-  (precisa Graph API / permissões de mensagem).
+- **Auto-resposta a comentários** ✅ FEITO (2026-07-12): `auto_resposta.py` (cron
+  a cada 20min, gated `AUTO_RESPONDER=1`) varre os posts recentes das 3 contas via
+  Graph API, acha comentários com GATILHO ("eu quero", "quanto", "link"...) e
+  RESPONDE: **FB** com o LINK do produto (pega do nosso próprio 1º comentário do
+  post; clicável no FB), **IG** mandando pra BIO. Dedup (`respondidos.json`, TTL 7d),
+  cap por rodada (`AUTO_RESP_MAX`), dry-run (`--teste`), nunca responde a si mesmo.
+  Gatilhos/templates/janela editáveis via `.env`. Mesma permissão do 1º comentário
+  (`instagram_manage_comments`/`pages_manage_engagement`).
+  🔜 v2: **DM/private reply** no IG ("EU QUERO" → link no direct; precisa
+  `instagram_manage_messages`).
 - **CEO IA — Conselheiro** 🚧 v1 CONSTRUÍDO (`ceo_agent.py`): lê ledger +
   nichos_quentes, calcula retrato produção×venda + Jarvis Confidence Score (0-100,
   honesto com pouco dado), e o Gemini escreve relatório executivo + propostas

@@ -32,6 +32,9 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 0 18 * * * cd $JARVIS && $PY produzir_tiktok.py 1 >> $JARVIS/logs/cron_produzir.log 2>&1
 # DOMINGO 09:00 -> CEO Conselheiro: relatorio semanal (vai pro Telegram privado)
 0 9 * * 0 cd $JARVIS && $PY ceo_agent.py 7 >> $JARVIS/logs/cron_ceo.log 2>&1
+# A cada 20min -> auto-resposta: responde comentarios com gatilho (so roda se
+# AUTO_RESPONDER=1 no .env; senao sai na hora). FB responde com link, IG manda pra bio.
+*/20 * * * * cd $JARVIS && $PY auto_resposta.py >> $JARVIS/logs/cron_autoresp.log 2>&1
 # JARVIS-AUTO-END"
 
 # recompoe o crontab: o que ja existia (sem o bloco antigo) + o bloco novo
@@ -40,6 +43,7 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 echo "✅ cron instalado. A maquina agora roda sozinha:"
 echo "   • 03:00  coleta virais do TikTok"
 echo "   • 04h/12h/18h  produz 1 video cada (3/dia)"
+echo "   • a cada 20min  auto-resposta a comentarios (se AUTO_RESPONDER=1)"
 echo "   • daemon posta nos horarios de sempre"
 echo
 echo "Logs:  tail -f $JARVIS/logs/cron_produzir.log"
