@@ -189,8 +189,20 @@ def _cookies_args(fonte: str = "") -> list:
     return []
 
 
+def _ig_proxy() -> str:
+    """Proxy só pro Instagram (o IG bloqueia IP de datacenter). Aceita
+    IG_PROXY=socks5://user:pass@host:porta ou http://... no .env. Pra socks5 no
+    instaloader precisa: .venv/bin/pip install 'requests[socks]'. Vazio = sem proxy."""
+    return (os.environ.get("IG_PROXY") or "").strip()
+
+
 def _ytdlp(args: list, timeout=120, fonte: str = ""):
-    return subprocess.run([*_resolver_ytdlp(), *_cookies_args(fonte), *args],
+    # roteia SÓ requests do Instagram pelo proxy (TikTok continua direto/rápido)
+    extra = []
+    px = _ig_proxy()
+    if px and (fonte == "instagram" or any("instagram.com" in str(a) for a in args)):
+        extra = ["--proxy", px]
+    return subprocess.run([*_resolver_ytdlp(), *_cookies_args(fonte), *extra, *args],
                           capture_output=True, text=True, timeout=timeout)
 
 
@@ -239,6 +251,10 @@ def _listar_ig_instaloader(perfil: str, limite: int) -> list:
     L = instaloader.Instaloader(quiet=True, download_pictures=False,
                                 download_videos=False, download_comments=False,
                                 save_metadata=False, compress_json=False)
+    px = _ig_proxy()
+    if px:
+        L.context._session.proxies.update({"http": px, "https": px})
+        _log(f"   via proxy {px.split('@')[-1]}")   # não loga user:senha
     try:
         # 1) PREFERIDO: sessão NATIVA do instaloader (bem mais robusta que os cookies
         #    do navegador — o IG barra menos). Crie com a conta QUEIMÁVEL:
