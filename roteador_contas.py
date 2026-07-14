@@ -50,6 +50,12 @@ _TECH = (
     "powerbank", "power bank", "projetor", "drone", "caixa de som", "bluetooth",
     "webcam", "mouse", "teclado", "ring light", "luminária led", "luminaria led",
     "gamer", "smart tv", "roteador wi", "ssd", "pendrive", "gadget",
+    # celular + acessórios (capinha/capa/película de iPhone iam pro 'geral' antes)
+    "celular", "smartphone", "iphone", "android", "telefone", "capinha",
+    "capa de celular", "capa de telefone", "capa magnetica", "capa magnética",
+    "magsafe", "pelicula", "película", "suporte de celular", "suporte celular",
+    "suporte veicular", "cabo usb", "cabo tipo c", "cabo lightning",
+    "carregador sem fio", "hub usb", "adaptador usb",
 )
 
 
