@@ -740,22 +740,28 @@ def _textclip_justo(TextClip, texto, font_size, fonte):
 def _textclip_esq(TextClip, texto, font_size, color, stroke_width, stroke_color, fonte):
     """TextClip JUSTO (method='label') COM cor+contorno — alinhamento à ESQUERDA
     de verdade (a caixa 'caption' centraliza; o label não tem caixa, então o
-    canto esquerdo do clip = começo do texto). Fallback pro caption se falhar."""
-    for novo in (True, False):
-        try:
-            kw = dict(color=color, method="label")
-            if fonte:
-                kw["font"] = fonte
-            if stroke_width:
-                kw["stroke_color"] = stroke_color
-                kw["stroke_width"] = stroke_width
-            if novo:
-                kw["font_size"] = font_size
-                return TextClip(text=texto, **kw)
-            kw["fontsize"] = font_size
-            return TextClip(texto, **kw)
-        except Exception:
-            continue
+    canto esquerdo do clip = começo do texto). Fallback pro caption se falhar.
+    Usa margem transparente (TXT_MARGEM) p/ não CORTAR descendentes (p, g) e
+    acentos — a caixa 'label' é justa e come as pontas sem essa folga."""
+    _m = int(os.environ.get("TXT_MARGEM", 8))
+    for com_margem in (True, False):          # tenta COM margem; se a versão não
+        for novo in (True, False):            # aceitar, cai p/ label puro (não corta o texto)
+            try:
+                kw = dict(color=color, method="label")
+                if fonte:
+                    kw["font"] = fonte
+                if stroke_width:
+                    kw["stroke_color"] = stroke_color
+                    kw["stroke_width"] = stroke_width
+                if com_margem and _m:
+                    kw["margin"] = (_m, _m)
+                if novo:
+                    kw["font_size"] = font_size
+                    return TextClip(text=texto, **kw)
+                kw["fontsize"] = font_size
+                return TextClip(texto, **kw)
+            except Exception:
+                continue
     # não deu label → cai no caption (pode centralizar, mas não quebra)
     return _textclip_robusto(TextClip, texto, font_size, color, stroke_width,
                              0.92, fonte, stroke_color=stroke_color, text_align="West")
@@ -1015,7 +1021,6 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
     # >>> tudo tunável por .env (ajuste fino olhando 1 render de teste) <<<
     HK_FONT_MAX = int(os.environ.get("HK_FONT", 48))
     HK_FONT_MIN = int(os.environ.get("HK_FONT_MIN", 34))
-    HK_Y        = int(os.environ.get("HK_Y", 300))       # topo da 1ª linha
     HK_MARGEM   = int(os.environ.get("HK_MARGEM", 55))   # margem ESQUERDA (hook + header)
     HK_ALTURA_LINHA = int(os.environ.get("HK_ALT_LINHA", 62))
     HK_MAX_LARG = LARGURA - HK_MARGEM - int(os.environ.get("HK_MARGEM_DIR", 45))
@@ -1055,6 +1060,17 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
         while HK_FONT > HK_FONT_MIN and max(_larg(l, HK_FONT) for l in _linhas) > HK_MAX_LARG:
             HK_FONT -= 2
     _n = len(_linhas)
+
+    # POSIÇÃO VERTICAL: ancora o RODAPÉ do hook logo acima do topo do vídeo
+    # (VIDEO_Y no hunter). Assim 1 OU 2 linhas ficam sempre "coladas" em cima do
+    # vídeo, estilo Alana — sem precisar calibrar HK_Y por fora. HK_Y absoluto
+    # ainda funciona como override (debug).
+    _video_top = int(os.environ.get("VIDEO_Y", 470))
+    _gap = int(os.environ.get("HK_GAP_VIDEO", 16))
+    if os.environ.get("HK_Y"):
+        HK_Y = int(os.environ["HK_Y"])
+    else:
+        HK_Y = max(logo_y + logo_tam + 20, _video_top - _gap - _n * HK_ALTURA_LINHA)
 
     _hk_por_linha = []
     for _i, _linha in enumerate(_linhas):
