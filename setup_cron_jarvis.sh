@@ -24,12 +24,18 @@ fi
 
 BLOCO="# JARVIS-AUTO-BEGIN  (TopShop — coleta+producao; use setup_cron_jarvis.sh, nao edite a mao)
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-# 03:00 -> coleta virais NOVOS do TikTok (dedup automatico) -> inbox_tiktok/
-0 3 * * * cd $JARVIS && $PY tiktok_coletor.py --limite 10 >> $JARVIS/logs/cron_coletor.log 2>&1
-# 04:00 / 12:00 / 18:00 -> produz 1 video cada (3/dia) -> pronto_para_postar/
-0 4 * * * cd $JARVIS && $PY produzir_tiktok.py 1 >> $JARVIS/logs/cron_produzir.log 2>&1
-0 12 * * * cd $JARVIS && $PY produzir_tiktok.py 1 >> $JARVIS/logs/cron_produzir.log 2>&1
-0 18 * * * cd $JARVIS && $PY produzir_tiktok.py 1 >> $JARVIS/logs/cron_produzir.log 2>&1
+# 03:00 -> coleta MAIS virais NOVOS (alimenta as 3 contas) -> inbox_tiktok/
+0 3 * * * cd $JARVIS && $PY tiktok_coletor.py --limite 20 >> $JARVIS/logs/cron_coletor.log 2>&1
+# PRODUCAO POR NICHO (cota por conta, ~11/dia) -> pronto_para_postar/
+#   tech 4/dia (2+2) · beleza 4/dia (2+2) · geral 3/dia (1+1+1)
+#   horarios ESCALONADOS p/ nao empilhar render no VPS (cada video ~7min)
+0 5 * * *   cd $JARVIS && $PY produzir_tiktok.py --nicho tech 2   >> $JARVIS/logs/cron_produzir.log 2>&1
+0 16 * * *  cd $JARVIS && $PY produzir_tiktok.py --nicho tech 2   >> $JARVIS/logs/cron_produzir.log 2>&1
+30 6 * * *  cd $JARVIS && $PY produzir_tiktok.py --nicho beleza 2 >> $JARVIS/logs/cron_produzir.log 2>&1
+30 17 * * * cd $JARVIS && $PY produzir_tiktok.py --nicho beleza 2 >> $JARVIS/logs/cron_produzir.log 2>&1
+0 8 * * *   cd $JARVIS && $PY produzir_tiktok.py --nicho geral 1  >> $JARVIS/logs/cron_produzir.log 2>&1
+0 13 * * *  cd $JARVIS && $PY produzir_tiktok.py --nicho geral 1  >> $JARVIS/logs/cron_produzir.log 2>&1
+0 20 * * *  cd $JARVIS && $PY produzir_tiktok.py --nicho geral 1  >> $JARVIS/logs/cron_produzir.log 2>&1
 # DOMINGO 09:00 -> CEO Conselheiro: relatorio semanal (vai pro Telegram privado)
 0 9 * * 0 cd $JARVIS && $PY ceo_agent.py 7 >> $JARVIS/logs/cron_ceo.log 2>&1
 # A cada 20min -> auto-resposta: responde comentarios com gatilho (so roda se
