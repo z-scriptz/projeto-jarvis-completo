@@ -913,7 +913,9 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
     if not (_hk_fonte and Path(_hk_fonte).exists()):
         _hk_fonte = fonte_bold
 
-    logo_x, logo_y, logo_tam = 65, 90, 120
+    logo_x = int(os.environ.get("LOGO_X", 100))    # + à direita (era 65)
+    logo_y = int(os.environ.get("LOGO_Y", 112))    # + pra baixo (era 90)
+    logo_tam = int(os.environ.get("LOGO_TAM", 120))
 
     # ── Logo TS REDONDO (canto superior esquerdo) ──
     logo_path = _brand_asset("logo_ts.png")
@@ -1097,7 +1099,8 @@ def _criar_cta_fixo(dur_total: float, mp) -> list:
         if _ep is not None:
             e = ImageClip(str(_ep))
             e = _with_duration(e, dur_total); e = _with_start(e, 0.0)
-            e = _with_position(e, (min(_fim + 14, LARGURA - _et - 8), cta_y + 4))
+            _edy = int(os.environ.get("CTA_EMOJI_DY", 22))   # desce o 👇 p/ alinhar
+            e = _with_position(e, (min(_fim + 14, LARGURA - _et - 8), cta_y + _edy))
             camadas.append(e)
     except Exception as e:
         log.warning(f"   ⚠️  Emoji do CTA falhou (segue sem): {e}")
