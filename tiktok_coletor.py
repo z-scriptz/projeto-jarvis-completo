@@ -25,7 +25,7 @@ IG_PERFIS_TXT = BASE_DIR / "instagram_perfis.txt"   # mesma esteira, fonte Insta
 VISTOS = BASE_DIR / "shared" / "tiktok_vistos.json"
 INBOX = BASE_DIR / "inbox_tiktok"
 
-MIN_VIEWS = 50_000      # só o que já provou tração
+MIN_VIEWS = 50_000      # min de views (default; override por MIN_VIEWS no .env — aplicado após _carregar_env)
 MAX_DUR = 90            # segundos
 POR_PERFIL = 40         # quantos vídeos recentes checar por perfil (--limite muda)
 
@@ -191,6 +191,9 @@ def _carregar_env():
 
 
 _carregar_env()
+
+# agora que o .env está carregado, aplica o override do min de views (se houver)
+MIN_VIEWS = int(os.environ.get("MIN_VIEWS", MIN_VIEWS))
 
 try:
     from integrations.shopee_affiliate import minerar_oportunidades, gerar_link_afiliado
