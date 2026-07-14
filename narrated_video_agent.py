@@ -1056,10 +1056,20 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
         _linhas = [hook_txt_limpo]
         _emoji_linha = 0
     else:
+        # GREEDY: enche a 1ª linha da esquerda até a direita (largura máx) e joga o
+        # resto na 2ª — em vez de dividir no meio (que deixava a 1ª linha curta).
         try:
-            _linhas = [l for l in _quebrar_hook_2linhas(hook_txt_limpo) if l]
+            _pal = hook_txt_limpo.split()
+            _l1, _linhas = [], None
+            for _k, _w in enumerate(_pal):
+                if _l1 and _larg(" ".join(_l1 + [_w]), HK_FONT) > HK_MAX_LARG:
+                    _linhas = [" ".join(_l1), " ".join(_pal[_k:])]
+                    break
+                _l1.append(_w)
+            if _linhas is None:
+                _linhas = [" ".join(_l1) or hook_txt_limpo]
         except Exception:
-            _linhas = [hook_txt_limpo]
+            _linhas = [l for l in _quebrar_hook_2linhas(hook_txt_limpo) if l]
         _emoji_linha = len(_linhas) - 1
         while HK_FONT > HK_FONT_MIN and max(_larg(l, HK_FONT) for l in _linhas) > HK_MAX_LARG:
             HK_FONT -= 2
