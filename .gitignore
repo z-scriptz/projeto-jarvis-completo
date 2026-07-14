@@ -43,3 +43,4 @@ env/
 logs/
 .DS_Store
 Thumbs.db
+hooks_alana_recentes.json
