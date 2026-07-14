@@ -418,18 +418,44 @@ def _produzir(pasta: Path, pj: Path, video_src: Path) -> bool:
     return True
 
 
-def main():
-    quantos = MAX_PADRAO
-    if len(sys.argv) > 1:
+def _nicho_da_pasta(pj: Path) -> str:
+    """Nicho do produto de uma pasta da fila (pra filtrar produção por conta)."""
+    try:
+        info = json.loads(pj.read_text(encoding="utf-8"))
+        nome = info.get("produto") or info.get("termo") or ""
+        cat = ""
         try:
-            quantos = max(1, int(sys.argv[1]))
-        except ValueError:
+            from creative_engine.narration_script_builder import _categoria_do_produto
+            cat = _categoria_do_produto(nome) or ""
+        except Exception:
             pass
+        import roteador_contas as _RC
+        return _RC.nicho_do_produto(nome, cat)
+    except Exception:
+        return "geral"
+
+
+def main():
+    # args: [N] e/ou "--nicho X". Ex.: 'produzir_tiktok.py --nicho tech 4'
+    quantos = MAX_PADRAO
+    nicho_alvo = ""
+    _args = sys.argv[1:]
+    for _i, _a in enumerate(_args):
+        if _a == "--nicho" and _i + 1 < len(_args):
+            nicho_alvo = _args[_i + 1].strip().lower()
+        elif _a.isdigit():
+            quantos = max(1, int(_a))
 
     fila = _pendentes()
     if not fila:
         _log("inbox_tiktok vazio — roda o tiktok_coletor.py primeiro (sem --dry)")
         return 1
+    if nicho_alvo:
+        fila = [t for t in fila if _nicho_da_pasta(t[1]) == nicho_alvo]
+        if not fila:
+            _log(f"nenhum produto do nicho '{nicho_alvo}' na fila agora — nada a produzir")
+            return 0
+        _log(f"filtro de nicho '{nicho_alvo}' → {len(fila)} na fila")
     _log(f"{len(fila)} viral(is) no inbox · produzindo até {quantos} nesta rodada")
 
     ok = 0
