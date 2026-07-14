@@ -133,6 +133,19 @@ def _escolher_musica() -> Path:
     return random.choice(cands) if cands else Path()
 
 
+def _dur_media(p) -> float:
+    """Duração (s) de um vídeo/áudio via ffprobe. 0.0 se falhar (usado p/ capar
+    o áudio no tamanho do vídeo com -t, evitando saída infinita com stream_loop)."""
+    try:
+        r = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1", str(p)],
+            capture_output=True, text=True, timeout=30)
+        return float((r.stdout or "0").strip() or 0)
+    except Exception:
+        return 0.0
+
+
 def _narrar_e_trocar_audio(video: Path, nome: str, contexto: str, nicho: str = "") -> bool:
     """Gera a narração (ElevenLabs, voz do nicho, roteiro do vídeo) e SUBSTITUI o áudio
     do vídeo por ela — mata o áudio original (fim do copyright/crédito a terceiro).
@@ -160,13 +173,19 @@ def _narrar_e_trocar_audio(video: Path, nome: str, contexto: str, nicho: str = "
         _avisa("roteiro (Gemini) ou voz (ElevenLabs) falhou")
         return False
 
-    out = video.with_suffix(".narrado.mp4")
+    # saída em arquivo TEMP sem acento (o nome real tem 'tábua' etc. e o ffmpeg
+    # quebra ao CRIAR arquivo com acento em locale não-UTF8 → "Invalid argument").
+    # No fim, o Python renomeia p/ o vídeo (Path.replace lida com Unicode).
+    out = video.parent / f"_narrtmp_{os.getpid()}.mp4"
     musica = _escolher_musica()
     vol = max(0.0, min(0.5, _f("MUSICA_FUNDO_VOL", 0.10)))
+    # CAPA a saída na duração do VÍDEO (-t): com stream_loop -1 + amix longest a
+    # música é infinita e o -shortest sozinho falhava → vídeo de 50min. -t resolve.
+    _dur = _dur_media(video)
+    _tcap = ["-t", f"{_dur:.3f}"] if _dur > 0 else []
 
     # narração = trilha 1 (volume cheio), música = trilha 2 (baixa, loopada).
-    # amix normaliza dividindo por 2, então pré-amplifico o dobro pra manter os
-    # níveis. -shortest corta no fim do VÍDEO (música é infinita via stream_loop).
+    # amix normaliza dividindo por 2, então pré-amplifico o dobro pra manter os níveis.
     if musica and vol > 0:
         fc = (f"[1:a]volume=2.0[nar];"
               f"[2:a]volume={2 * vol:.3f}[bg];"
@@ -175,25 +194,32 @@ def _narrar_e_trocar_audio(video: Path, nome: str, contexto: str, nicho: str = "
                "-stream_loop", "-1", "-i", str(musica),
                "-filter_complex", fc, "-map", "0:v:0", "-map", "[a]",
                "-c:v", "copy", "-c:a", "aac", "-b:a", "128k",
-               "-shortest", str(out)]
+               *_tcap, "-shortest", str(out)]
         tag = f"narração própria + trilha '{musica.name}' baixinha"
     else:
         cmd = ["ffmpeg", "-y", "-i", str(video), "-i", str(narr),
                "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy",
-               "-c:a", "aac", "-b:a", "128k", str(out)]
+               "-c:a", "aac", "-b:a", "128k", *_tcap, "-shortest", str(out)]
         tag = "narração própria"
         if not musica:
             _log(f"   ℹ️ sem trilha em {_dir_musica()} — vídeo sai só com narração")
 
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+    def _roda(c):
+        try:
+            return subprocess.run(c, capture_output=True, text=True, timeout=180)
+        except subprocess.TimeoutExpired:
+            class _R:  # simula um resultado de falha p/ cair no fallback/aviso
+                returncode = 124
+                stderr = "timeout 180s (ffmpeg travou no áudio)"
+            return _R()
+
+    r = _roda(cmd)
     # se a mixagem com música falhar (ffmpeg antigo etc.), tenta só narração
     if (r.returncode != 0 or not out.exists()) and musica and vol > 0:
         _log(f"   ⚠️ mix c/ música falhou, tento só narração: {(r.stderr or '')[-140:]}")
-        r = subprocess.run(
-            ["ffmpeg", "-y", "-i", str(video), "-i", str(narr),
-             "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy",
-             "-c:a", "aac", "-b:a", "128k", str(out)],
-            capture_output=True, text=True, timeout=180)
+        r = _roda(["ffmpeg", "-y", "-i", str(video), "-i", str(narr),
+                   "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy",
+                   "-c:a", "aac", "-b:a", "128k", *_tcap, "-shortest", str(out)])
         tag = "narração própria"
 
     if r.returncode == 0 and out.exists() and out.stat().st_size > 1000:
