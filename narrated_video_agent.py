@@ -141,7 +141,7 @@ def _logo_circular(logo_path: Path, tam: int = 110) -> Optional[Path]:
         draw = ImageDraw.Draw(mask)
         draw.ellipse((0, 0, tam, tam), fill=255)
         img.putalpha(mask)
-        out = TMP_DIR / "logo_ts_circular.png"
+        out = TMP_DIR / f"logo_circ_{logo_path.stem}.png"
         out.parent.mkdir(parents=True, exist_ok=True)
         img.save(str(out))
         return out
@@ -948,7 +948,11 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
     logo_tam = int(os.environ.get("LOGO_TAM", 120))
 
     # ── Logo TS REDONDO (canto superior esquerdo) ──
-    logo_path = _brand_asset("logo_ts.png")
+    # logo POR CONTA/NICHO: a produção seta TOPSHOP_LOGO (ex.: logo_ts_tech.png,
+    # logo_ts_beauty.png) antes de renderizar; cai na logo_ts.png padrão.
+    logo_path = _brand_asset(os.environ.get("TOPSHOP_LOGO", "logo_ts.png"))
+    if logo_path is None:
+        logo_path = _brand_asset("logo_ts.png")
     if logo_path is not None:
         circular = _logo_circular(logo_path, tam=logo_tam) or logo_path
         try:
