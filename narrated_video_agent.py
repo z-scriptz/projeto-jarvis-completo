@@ -1092,11 +1092,15 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
             if _epath is not None:
                 _y_emo = HK_Y + _emoji_linha * HK_ALTURA_LINHA
                 _lw = _larg(_linhas[_emoji_linha], HK_FONT)
-                _ex = max(10, min(HK_MARGEM + (_lw or int(LARGURA * 0.5)) + 12,
+                _txm = int(os.environ.get("TXT_MARGEM", 8))
+                # x: depois do fim REAL do texto (margem + largura) + folga tunável
+                _ex = max(10, min(HK_MARGEM + _txm + (_lw or int(LARGURA * 0.5))
+                                  + int(os.environ.get("HK_EMOJI_DX", 18)),
                                   LARGURA - HK_EMOJI_TAM - 10))
-                _hk_ref = _hk_por_linha[_emoji_linha]
-                _alt = getattr(_hk_ref, "h", None) if _hk_ref is not None else None
-                _ey = int(_y_emo + max(0, ((_alt or HK_FONT) - HK_EMOJI_TAM) / 2))
+                # y: centra pela ALTURA DA FONTE (consistente entre claro/escuro; o
+                # _alt do clip varia com o contorno) + nudge fino HK_EMOJI_DY.
+                _ey = int(_y_emo + _txm + (HK_FONT - HK_EMOJI_TAM) / 2
+                          + int(os.environ.get("HK_EMOJI_DY", 0)))
                 _emo = ImageClip(str(_epath))
                 _emo = _with_duration(_emo, dur_total)
                 _emo = _with_start(_emo, 0.0)
