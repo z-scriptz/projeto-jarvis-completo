@@ -937,9 +937,15 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
     else:           # fundo PRETO: texto branco com contorno preto (legível)
         C_NOME, SC_NOME, SW_NOME = "white", "black", 3
         C_HANDLE = "white"
-        C_HOOK, SC_HOOK, SW_HOOK = "white", "black", 3
-    # fonte do HOOK: por padrão Liberation Sans (~Arial, igual a Alana); cai na Montserrat
-    _hk_fonte = os.environ.get("HOOK_FONTE", "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf")
+        C_HOOK, SC_HOOK = "white", "black"
+        SW_HOOK = int(os.environ.get("HK_STROKE_PRETO", 4))  # contorno + grosso no preto
+    # fonte do HOOK: fundo BRANCO usa Regular (fino, elegante, estilo Alana);
+    # fundo PRETO usa BOLD pra as letras brancas DESTACAREM sobre o vídeo.
+    _LIB = "/usr/share/fonts/truetype/liberation/"
+    if _claro:
+        _hk_fonte = os.environ.get("HOOK_FONTE", _LIB + "LiberationSans-Regular.ttf")
+    else:
+        _hk_fonte = os.environ.get("HOOK_FONTE_PRETO", _LIB + "LiberationSans-Bold.ttf")
     if not (_hk_fonte and Path(_hk_fonte).exists()):
         _hk_fonte = fonte_bold
 
