@@ -273,6 +273,18 @@ def _produzir(pasta: Path, pj: Path, video_src: Path) -> bool:
                                 or os.environ.get("BG_" + nicho.upper(), _bg_padrao))
     _log(f"   🎨 fundo '{os.environ['TOPSHOP_BG']}' (nicho {nicho or 'geral'})")
 
+    # HOOK estilo Alana ("frase relatable 😩" / "A Shopee:") — é o que converte.
+    # Usa Gemini (HOOK_ALANA=1 + GEMINI_API_KEY); senão banco relatable por nicho.
+    if os.getenv("HOOK_ALANA", "1").strip().lower() in ("1", "true", "sim"):
+        try:
+            from hook_alana import gerar_hook_alana
+            _ha = gerar_hook_alana(nome, info.get("descricao", ""), nicho)
+            if _ha:
+                hook = _ha
+                _log(f"   ✍️  hook Alana: \"{hook.splitlines()[0]}\" / {hook.splitlines()[-1]}")
+        except Exception as _e:
+            _log(f"   hook Alana off ({str(_e)[:50]}) — usa o hook padrão")
+
     plano = {
         "produto": nome,
         "titulo_real": nome,

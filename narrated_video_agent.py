@@ -956,9 +956,10 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
             log.warning(f"   ⚠️  Logo TS falhou: {e}")
 
     texto_x = logo_x + logo_tam + int(os.environ.get("TEXTO_DX", 16))  # DEPOIS do logo
+    _nome_font = int(os.environ.get("NOME_FONT", 56))   # tamanho do "TopShop"
 
     # ── 'TopShop' PRETO (Bold) com contorno BRANCO ──
-    nome = _textclip_esq(TextClip, MARCA_NOME, 56, C_NOME, SW_NOME, SC_NOME, fonte_bold)
+    nome = _textclip_esq(TextClip, MARCA_NOME, _nome_font, C_NOME, SW_NOME, SC_NOME, fonte_bold)
     fim_topshop_x = texto_x + 235  # fallback se não der pra medir
     if nome is not None:
         nome = _with_duration(nome, dur_total)
@@ -975,7 +976,7 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
             # mede a largura real do "TopShop" com um TextClip justo (sem caixa)
             larg_real = None
             try:
-                medidor = _textclip_justo(TextClip, MARCA_NOME, 56, fonte_bold)
+                medidor = _textclip_justo(TextClip, MARCA_NOME, _nome_font, fonte_bold)
                 if medidor is not None:
                     larg_real = medidor.w
                     try: medidor.close()
@@ -1002,8 +1003,8 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
     # lê o handle em tempo de render (multi-conta): a produção seta TOPSHOP_HANDLE
     # por vídeo antes de renderizar; cai no MARCA_HANDLE default se não setado.
     _handle_txt = os.environ.get("TOPSHOP_HANDLE", MARCA_HANDLE) or MARCA_HANDLE
-    handle = _textclip_esq(TextClip, _handle_txt, 46, C_HANDLE,
-                           (0 if _claro else 3), "black", fonte_bold)
+    handle = _textclip_esq(TextClip, _handle_txt, int(os.environ.get("HANDLE_FONT", 46)),
+                           C_HANDLE, (0 if _claro else 3), "black", fonte_bold)
     if handle is not None:
         handle = _with_duration(handle, dur_total)
         handle = _with_start(handle, 0.0)
@@ -1031,41 +1032,55 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
             except Exception: pass
         return w
 
-    # 1 linha se couber na fonte cheia; senão quebra em 2 e encolhe até caber
+    # LINHAS do hook:
+    #   • quebra EXPLÍCITA "\n" (formato Alana: 'frase 😩' / 'A Shopee:') → respeita;
+    #     o emoji fica no fim da 1ª linha (a frase relatable).
+    #   • senão 1 linha (cabe na fonte cheia) ou auto-quebra em 2 (emoji na última).
     HK_FONT = HK_FONT_MAX
-    if _larg(hook_txt_limpo, HK_FONT) <= HK_MAX_LARG:
+    if "\n" in hook_txt_limpo:
+        _linhas = [l.strip() for l in hook_txt_limpo.split("\n") if l.strip()]
+        _emoji_linha = 0
+        while HK_FONT > HK_FONT_MIN and _linhas and \
+                max(_larg(l, HK_FONT) for l in _linhas) > HK_MAX_LARG:
+            HK_FONT -= 2
+    elif _larg(hook_txt_limpo, HK_FONT) <= HK_MAX_LARG:
         _linhas = [hook_txt_limpo]
+        _emoji_linha = 0
     else:
         try:
             _linhas = [l for l in _quebrar_hook_2linhas(hook_txt_limpo) if l]
         except Exception:
             _linhas = [hook_txt_limpo]
+        _emoji_linha = len(_linhas) - 1
         while HK_FONT > HK_FONT_MIN and max(_larg(l, HK_FONT) for l in _linhas) > HK_MAX_LARG:
             HK_FONT -= 2
     _n = len(_linhas)
 
-    _hk = None
+    _hk_por_linha = []
     for _i, _linha in enumerate(_linhas):
         _y = HK_Y + _i * HK_ALTURA_LINHA
         _hk = _textclip_esq(TextClip, _linha, HK_FONT, C_HOOK, SW_HOOK, SC_HOOK, _hk_fonte)
+        _hk_por_linha.append(_hk)
         if _hk is not None:
             _hk = _with_duration(_hk, dur_total)
             _hk = _with_start(_hk, 0.0)
             _hk = _with_position(_hk, (HK_MARGEM, _y))
             camadas.append(_hk)
-    log.info(f"   📌 Hook ({_n}L, {'claro' if _claro else 'escuro'}): \"{hook_txt_limpo}\"")
+    log.info(f"   📌 Hook ({_n}L, {'claro' if _claro else 'escuro'}): "
+             f"\"{hook_txt_limpo.replace(chr(10), ' / ')}\"")
 
-    # emoji COLORIDO ao final da ÚLTIMA linha (à direita do texto, alinhado à esq)
-    if _emoji_hook:
+    # emoji COLORIDO no fim da linha certa (1ª no formato Alana; última no auto)
+    if _emoji_hook and 0 <= _emoji_linha < _n:
         try:
             _epath = _emoji_colorido_png(_emoji_hook, HK_EMOJI_TAM)
             if _epath is not None:
-                _y_ult = HK_Y + (_n - 1) * HK_ALTURA_LINHA
-                _lw = _larg(_linhas[-1], HK_FONT)
+                _y_emo = HK_Y + _emoji_linha * HK_ALTURA_LINHA
+                _lw = _larg(_linhas[_emoji_linha], HK_FONT)
                 _ex = max(10, min(HK_MARGEM + (_lw or int(LARGURA * 0.5)) + 12,
                                   LARGURA - HK_EMOJI_TAM - 10))
-                _alt = getattr(_hk, "h", None) if _hk is not None else None
-                _ey = int(_y_ult + max(0, ((_alt or HK_FONT) - HK_EMOJI_TAM) / 2))
+                _hk_ref = _hk_por_linha[_emoji_linha]
+                _alt = getattr(_hk_ref, "h", None) if _hk_ref is not None else None
+                _ey = int(_y_emo + max(0, ((_alt or HK_FONT) - HK_EMOJI_TAM) / 2))
                 _emo = ImageClip(str(_epath))
                 _emo = _with_duration(_emo, dur_total)
                 _emo = _with_start(_emo, 0.0)
