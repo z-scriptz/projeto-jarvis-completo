@@ -955,7 +955,7 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
         except Exception as e:
             log.warning(f"   ⚠️  Logo TS falhou: {e}")
 
-    texto_x = logo_x + logo_tam - 32
+    texto_x = logo_x + logo_tam + int(os.environ.get("TEXTO_DX", 16))  # DEPOIS do logo
 
     # ── 'TopShop' PRETO (Bold) com contorno BRANCO ──
     nome = _textclip_esq(TextClip, MARCA_NOME, 56, C_NOME, SW_NOME, SC_NOME, fonte_bold)
@@ -983,11 +983,10 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
             except Exception:
                 pass
             if larg_real:
-                # +50 extra: compensa a caixa do TextClip que pode centralizar
-                # o texto (text_align nem sempre é suportado pela versão)
-                selo_x = texto_x + larg_real + 64
+                # texto agora é JUSTO (label) → cola o selo logo após o nome
+                selo_x = texto_x + larg_real + int(os.environ.get("SELO_DX", 12))
             else:
-                selo_x = texto_x + 290  # fallback estimado
+                selo_x = texto_x + 200  # fallback estimado (nome justo ~180px)
             selo = ImageClip(str(selo_aparado))
             selo = _with_duration(selo, dur_total)
             selo = _with_start(selo, 0.0)
