@@ -45,10 +45,16 @@ GRUPO_TELEGRAM = "https://t.me/achadinhosrelampagoh"
 # Ordem FIXA das categorias no filtro da vitrine (sempre aparecem, mesmo sem
 # produto no momento — assim a loja fica organizada e a categoria não "some").
 # "Tudo" e "Outros" são adicionados automaticamente pelo _filtros_html.
-_CATEGORIAS_FIXAS = ["Cozinha", "Beleza", "Tech", "Fitness", "Utilidades", "Casa"]
+_CATEGORIAS_FIXAS = ["Cozinha", "Beleza", "Tech", "Fitness", "Pet", "Utilidades", "Casa"]
 
 # Palavras-chave por categoria (o produto cai na 1ª que casar — ordem importa).
 _CATEGORIAS_FILTRO = [
+    # Pet PRIMEIRO: evita que "Tablete" (comprimido) case com "tablet" (Tech) e
+    # dá nicho próprio pro que é de bicho (antes só caía em Utilidades/Tech).
+    ("Pet",        ("antipulgas", "carrapato", "vermifugo", "vermífugo", "ração",
+                    "racao", "coleira", "comedouro", "bebedouro", "cachorro",
+                    "cão", "cães", "gato", "gatos", "filhote", "petisco",
+                    "arranhador", "aquário", "aquario", "canino", "felino")),
     ("Cozinha",    ("cortador", "legumes", "liquidificador", "balanca", "balança",
                     "garrafa", "caneca", "termica", "térmica", "descascador",
                     "processador", "fatiador", "espremedor", "água", "agua",
@@ -76,8 +82,7 @@ _CATEGORIAS_FILTRO = [
     ("Utilidades", ("organizador", "gancho", "cabide", "sacola", "cesto",
                     "balde", "lixeira", "pedal", "litro", "caixa", "mala",
                     "guarda-chuva", "ferramenta", "chave", "mangueira", "varal",
-                    "pinça", "pinca", "fita", "adesivo", "pet", "cachorro",
-                    "gato", "cão", "coleira", "ração", "racao", "comedouro",
+                    "pinça", "pinca", "fita", "adesivo",
                     "bebê", "bebe", "criança", "crianca", "infantil",
                     "brinquedo", "fralda", "automotivo", "veicular", "carro",
                     "moto", "pneu")),
