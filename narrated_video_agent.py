@@ -737,6 +737,30 @@ def _textclip_justo(TextClip, texto, font_size, fonte):
     return None
 
 
+def _textclip_esq(TextClip, texto, font_size, color, stroke_width, stroke_color, fonte):
+    """TextClip JUSTO (method='label') COM cor+contorno — alinhamento à ESQUERDA
+    de verdade (a caixa 'caption' centraliza; o label não tem caixa, então o
+    canto esquerdo do clip = começo do texto). Fallback pro caption se falhar."""
+    for novo in (True, False):
+        try:
+            kw = dict(color=color, method="label")
+            if fonte:
+                kw["font"] = fonte
+            if stroke_width:
+                kw["stroke_color"] = stroke_color
+                kw["stroke_width"] = stroke_width
+            if novo:
+                kw["font_size"] = font_size
+                return TextClip(text=texto, **kw)
+            kw["fontsize"] = font_size
+            return TextClip(texto, **kw)
+        except Exception:
+            continue
+    # não deu label → cai no caption (pode centralizar, mas não quebra)
+    return _textclip_robusto(TextClip, texto, font_size, color, stroke_width,
+                             0.92, fonte, stroke_color=stroke_color, text_align="West")
+
+
 # ── EMOJI COLORIDO NO HOOK (Noto Color Emoji) ─────────────────────
 _NOTO_EMOJI = "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf"
 
@@ -934,9 +958,7 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
     texto_x = logo_x + logo_tam - 32
 
     # ── 'TopShop' PRETO (Bold) com contorno BRANCO ──
-    nome = _textclip_robusto(TextClip, MARCA_NOME, font_size=56,
-                             color=C_NOME, stroke_width=SW_NOME, stroke_color=SC_NOME,
-                             largura_frac=0.32, fonte=fonte_bold, text_align="West")
+    nome = _textclip_esq(TextClip, MARCA_NOME, 56, C_NOME, SW_NOME, SC_NOME, fonte_bold)
     fim_topshop_x = texto_x + 235  # fallback se não der pra medir
     if nome is not None:
         nome = _with_duration(nome, dur_total)
@@ -981,10 +1003,8 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
     # lê o handle em tempo de render (multi-conta): a produção seta TOPSHOP_HANDLE
     # por vídeo antes de renderizar; cai no MARCA_HANDLE default se não setado.
     _handle_txt = os.environ.get("TOPSHOP_HANDLE", MARCA_HANDLE) or MARCA_HANDLE
-    handle = _textclip_robusto(TextClip, _handle_txt, font_size=46,
-                               color=C_HANDLE, stroke_width=(0 if _claro else 3),
-                               stroke_color="black",
-                               largura_frac=0.34, fonte=fonte_bold, text_align="West")
+    handle = _textclip_esq(TextClip, _handle_txt, 46, C_HANDLE,
+                           (0 if _claro else 3), "black", fonte_bold)
     if handle is not None:
         handle = _with_duration(handle, dur_total)
         handle = _with_start(handle, 0.0)
@@ -1028,9 +1048,7 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
     _hk = None
     for _i, _linha in enumerate(_linhas):
         _y = HK_Y + _i * HK_ALTURA_LINHA
-        _hk = _textclip_robusto(TextClip, _linha, font_size=HK_FONT,
-                                color=C_HOOK, stroke_width=SW_HOOK, stroke_color=SC_HOOK,
-                                largura_frac=0.92, fonte=_hk_fonte, text_align="West")
+        _hk = _textclip_esq(TextClip, _linha, HK_FONT, C_HOOK, SW_HOOK, SC_HOOK, _hk_fonte)
         if _hk is not None:
             _hk = _with_duration(_hk, dur_total)
             _hk = _with_start(_hk, 0.0)
