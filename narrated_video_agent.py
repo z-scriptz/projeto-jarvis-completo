@@ -1070,8 +1070,8 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
     # UMA frase (junta \n do gerador antigo), quebra GULOSA — enche a linha 1 até o
     # limite e SÓ ENTÃO desce o resto pra linha 2 — e encolhe a fonte até caber em
     # EXATAMENTE 2 linhas. Nunca 1 linha; frase curta demais recebe corte equilibrado.
-    _todo = " ".join(l.strip() for l in hook_txt_limpo.split("\n") if l.strip()) \
-        or hook_txt_limpo
+    _todo = (" ".join(l.strip() for l in hook_txt_limpo.split("\n") if l.strip())
+             or hook_txt_limpo)
     while HK_FONT > HK_FONT_MIN and len(_wrap(_todo, HK_FONT)) > 2:
         HK_FONT -= 2
     _linhas = _wrap(_todo, HK_FONT)
