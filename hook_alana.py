@@ -51,49 +51,56 @@ FORMULAS = [
 HOOKS_RESERVA = {
     "casa": [
         '"Minha casa vivia uma bagunça" 😩\n{tag}',
-        'Pov: A melhor compra que fiz pra minha casa 😍',
-        'Não mostre isso pra quem ama organização 👀',
-        'Toda pessoa que odeia bagunça precisa ter isso 🙌',
+        '"Queria uma casa mais aconchegante" 🥺\n{tag}',
+        'Não mostre isso pra quem ama deixar a casa sempre organizada 👀',
+        'Toda pessoa que sofre com bagunça dentro de casa precisa ver isso 🙌',
+        'Pov: a comprinha barata que transformou a minha casa inteira 😍',
     ],
     "cozinha": [
         '"Passo horas na cozinha à toa" 😮‍💨\n{tag}',
-        'Pov: A melhor compra que fiz pra minha cozinha 🍳',
-        'Toda pessoa que cozinha todo dia precisa ter isso 😍',
-        'O segredo pra facilitar a cozinha que ninguém te conta 🤫',
+        '"Odiava perder tempo cozinhando" 😩\n{tag}',
+        'Não mostre isso pra quem passa o dia inteiro na cozinha cozinhando 👀',
+        'Toda pessoa que cozinha todo santo dia precisa ter isso na cozinha 😍',
+        'Pov: a melhor compra que fiz pra facilitar a minha cozinha 🍳',
     ],
     "beleza": [
         '"Minha make vivia um caos" 😩\n{tag}',
-        'Toda mulher que ama maquiagem precisa ter isso 😍',
-        'Pov: O achadinho que mudou minha rotina de beleza ✨',
-        'O segredo do glow que ninguém te conta 🤫',
+        '"Queria me sentir mais bonita" 🥺\n{tag}',
+        'Toda mulher que ama se cuidar e ficar linda precisa ter isso 😍',
+        'Não mostre isso pra quem é viciada em skincare e maquiagem 👀',
+        'Pov: o achadinho que mudou a minha rotina de beleza inteira ✨',
     ],
     "tech": [
         '"Meu setup vivia um caos de fios" 😩\n{tag}',
-        'Pov: O gadget que parece coisa do futuro 🤯',
-        'Não mostre isso pra quem ama tecnologia 👀',
-        'Toda pessoa viciada em gadget precisa ter isso 🔌',
+        '"Vivia sem espaço no meu setup" 😮‍💨\n{tag}',
+        'Não mostre isso pra quem é apaixonado por tecnologia e gadget 👀',
+        'Toda pessoa viciada em tecnologia precisa ter esse gadget agora 🔌',
+        'Pov: o gadget que parece coisa do futuro bem na sua mão 🤯',
     ],
     "pets": [
-        'Não mostre isso pra donos de cachorro 😱',
-        '"Meu pet merecia mais" 🥺\n{tag}',
-        'Toda pessoa que ama pet precisa ter isso 🐶',
+        '"Meu pet merecia bem mais" 🥺\n{tag}',
+        'Não mostre isso pra quem ama e cuida de cachorro dentro de casa 😱',
+        'Toda pessoa que ama o seu pet como um filho precisa ter isso 🐶',
+        'Pov: a comprinha barata que deixou o meu pet muito mais feliz 🐾',
     ],
     "moda": [
-        '"Nunca me sentia bem na roupa" 🥲\n{tag}',
-        'Pov: A peça que me deu autoestima de novo 😍',
-        'O segredo pra se vestir melhor sem esforço 🤫',
+        '"Nunca me sentia bem vestida" 🥲\n{tag}',
+        'Não mostre isso pra quem ama se arrumar e se sentir linda 👀',
+        'Toda mulher que quer se vestir bem sem gastar muito precisa ver 😍',
+        'Pov: a peça que me devolveu a autoestima na hora de me arrumar 😍',
     ],
     "academia": [
         '"Minhas costas vivem doendo" 😩\n{tag}',
-        'Pov: O alívio que meu corpo precisava 😮‍💨',
-        'Toda pessoa que treina precisa ter isso 💪',
+        'Toda pessoa que treina pesado e sente muita dor precisa ter isso 💪',
+        'Não mostre isso pra quem é viciado em treino e academia 👀',
+        'Pov: o alívio que o meu corpo todo estava precisando há tempos 😮‍💨',
     ],
     "geral": [
-        '"Nunca imaginei que eu ia precisar disso" 😳\n{tag}',
-        'Pov: A melhor compra que fiz esse mês 😍',
-        'Não mostre isso pra quem gosta de gastar pouco 👀',
-        'O achadinho que ninguém sabe que existe 🤫',
-        'Comprei sem esperar nada e me surpreendeu demais 🤯',
+        '"Nunca imaginei precisar disso" 😳\n{tag}',
+        'Não mostre isso pra quem ama economizar e achar promoção 👀',
+        'Toda pessoa que ama um bom achadinho baratinho precisa ver isso 🤫',
+        'Pov: a melhor comprinha que eu fiz nesse mês inteiro 😍',
+        'Comprei sem esperar nada e me surpreendeu demais com isso 🤯',
     ],
 }
 
@@ -130,8 +137,17 @@ def _chave_nicho(nicho: str) -> str:
     return _NICHO_ALIAS.get((nicho or "").strip().lower(), "geral")
 
 
+def _eh_2linhas(h: str) -> bool:
+    """True se o hook renderiza em 2 linhas: tem tag/quebra explícita OU é uma
+    frase longa o bastante pra quebrar em 2 no vídeo (blindagem do formato)."""
+    if "\n" in h or "{tag}" in h:
+        return True
+    return len(_EMOJI_RX.sub("", h).strip()) >= int(os.environ.get("HOOK_MIN_CHARS", 44))
+
+
 def _fallback(nicho: str) -> str:
     pool = HOOKS_RESERVA.get(_chave_nicho(nicho)) or HOOKS_RESERVA["geral"]
+    pool = [h for h in pool if _eh_2linhas(h)] or pool   # só entradas de 2 linhas
     recentes = set(_ler_recentes())
     frescas = [h for h in pool if h not in recentes] or pool
     escolha = random.choice(frescas).replace("{tag}", TAG_PADRAO)
@@ -153,9 +169,18 @@ def _limpar_saida(txt: str) -> Optional[str]:
             break
     if not linhas:
         return None
-    # nao deixa a 1a linha gigante (curiosity-gap e curto)
-    if len(linhas[0]) > 90:
-        return None
+    # GARANTE 2 LINHAS no video (formato TopShop e GRANDE — hook curto fica pequeno):
+    #   • frase UNICA (1 linha): precisa ser LONGA o bastante pra QUEBRAR em 2.
+    #   • frase + TAG (2 linhas): a frase precisa CABER em 1 linha (senao vira 3L).
+    _min  = int(os.environ.get("HOOK_MIN_CHARS", 44))   # piso da frase unica
+    _maxL1 = int(os.environ.get("HOOK_MAX_L1", 40))     # teto da frase antes da tag
+    _vis0 = len(_EMOJI_RX.sub("", linhas[0]).strip())
+    if len(linhas) == 1:
+        if _vis0 < _min:            # 1 linha curta -> nao enche 2 linhas -> rejeita
+            return None
+    else:                           # frase + tag
+        if _vis0 > _maxL1:          # frase longa -> quebraria e viraria 3 linhas -> rejeita
+            return None
     return "\n".join(linhas)
 
 
@@ -181,6 +206,10 @@ def _via_gemini(produto: str, descricao: str, nicho: str) -> Optional[str]:
             "REGRAS:\n"
             "- Responda APENAS o hook, nada mais (sem explicar, sem aspas em volta "
             "de tudo, sem hashtag, sem markdown).\n"
+            "- O hook DEVE ocupar 2 LINHAS no video: OU uma frase relatable/curiosidade "
+            "com CORPO (~8 a 12 palavras, que encha 2 linhas), OU frase + tag curta na "
+            "2a linha (ex.: a frase com emoji na 1a linha e '" + TAG_PADRAO + "' na 2a).\n"
+            "- NAO faca hook curto que caiba em 1 linha so (fica pequeno no nosso formato).\n"
             "- Se a formula tiver 2 partes, use 2 linhas (a 2a linha curtinha).\n"
             "- 1a pessoa, tom de desabafo/humor/curiosidade. Portugues BR.\n"
             "- NAO cite o nome do produto. Termine a frase principal com 1 emoji "
