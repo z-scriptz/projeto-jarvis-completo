@@ -146,6 +146,37 @@ Jarvis a copiar essa fórmula (dor/público + "isso" sem revelar o produto). Rep
   `.venv/bin/pip install instaloader`. Instagram como fonte agora roda AUTOMÁTICO. 🎉
 - Preferir **fontes sem texto** na tela (a edição fica mais limpa).
 
+### 4. Sourcing por FONTE + nichos LARGOS + descoberta autônoma 🔜 FORTE (2026-07-15)
+Insight do Dre: a @topshopbeauty._ está com **0 post** e a tech quase parada. Causa
+achada no código: o roteamento é **100% por palavra-chave do PRODUTO**
+(`_nicho_da_pasta` → `roteador_contas.nicho_do_produto`), então um Reels do "mundo
+feminino" com produto não-beleza cai em **geral** e a beauty passa fome. Nichos não
+são só o produto: **beleza = mundo feminino + produtos**; **tech = tecnologia +
+games + celulares + produtos**.
+- **Alavanca 1 (rápida, desbloqueia a beauty já):** rotear pela **FONTE**, não só
+  pelo produto. Marcar cada perfil-fonte com um nicho (`@perfil #beleza` nos
+  `instagram_perfis.txt`/`tiktok_perfis.txt`); o coletor grava o nicho da fonte no
+  `plano.json`; `_nicho_da_pasta` passa a **priorizar o nicho da fonte** (cai no
+  produto só se a fonte não declarar). + alargar `_BELEZA`/`_TECH` (mundo feminino /
+  games+celular) como reforço. Assim: curar fontes femininas → tudo delas vai pra
+  beauty, mesmo produto de cozinha.
+- **Alavanca 2 (projeto):** **descoberta autônoma** — Jarvis varre hashtags/explore
+  do IG+TikTok por nicho (#achadinhos, #techtok, #maquiagem, #organização…), acha
+  perfis/vídeos novos, avalia (views/relevância) e alimenta as fontes sozinho. O
+  `ig_playwright.py` já faz a parte difícil (Chromium stealth + proxy + cookies) pra
+  perfil; estender pra hashtag é o próximo passo. ⚠️ hashtag/explore são MUITO mais
+  bloqueados que perfil (IG principalmente) — frágil, precisa tuning/paciência.
+- Ordem: Alavanca 1 primeiro (baixo risco, mata a fome da beauty), depois a 2 escala.
+
+### 5. Template do hook — SEMPRE 2 linhas (greedy) ✅ 2026-07-15
+Regra fixa: **todo hook é 2 linhas**, linha 1 preenchida até o limite e o resto
+DESCE pra linha 2 (greedy), nunca 1 linha só nem corte no meio. A fonte encolhe até
+caber em exatamente 2 linhas; frase curta demais recebe corte equilibrado forçado.
+Emoji sempre no fim da 2ª linha. (`narrated_video_agent._criar_camadas_topo`.)
+Ex.: "O segredo pra ter um iPhone 17 sem gastar / uma fortuna ✨".
+- ⏳ **geral (@topshop.__)** ainda saiu no template ANTIGO (fundo preto, quebra
+  equilibrada) — precisa do mesmo tratamento/âncora que a tech já tem.
+
 ---
 
 ## 🐞 Observações do dia (2026-07-12) — a resolver

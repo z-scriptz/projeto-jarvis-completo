@@ -1066,19 +1066,18 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
             out.append(" ".join(cur))
         return out or [txt]
 
-    # parágrafos = quebra EXPLÍCITA "\n" (formato Alana: frase / A Shopee:); senão 1.
-    _paras = [l.strip() for l in hook_txt_limpo.split("\n") if l.strip()] or [hook_txt_limpo]
-    # encolhe a fonte só até a MAIOR palavra caber (piso de segurança); a quebra
-    # por largura cuida do resto — assim frase longa VIRA 2 linhas em vez de vazar.
-    while HK_FONT > HK_FONT_MIN and max(
-            (_larg(w, HK_FONT) for p in _paras for w in p.split()), default=0) > HK_MAX_LARG:
+    # HOOK SEMPRE em 2 LINHAS (regra fixa do template TopShop): trata o hook como
+    # UMA frase (junta \n do gerador antigo), quebra GULOSA — enche a linha 1 até o
+    # limite e SÓ ENTÃO desce o resto pra linha 2 — e encolhe a fonte até caber em
+    # EXATAMENTE 2 linhas. Nunca 1 linha; frase curta demais recebe corte equilibrado.
+    _todo = " ".join(l.strip() for l in hook_txt_limpo.split("\n") if l.strip()) \
+        or hook_txt_limpo
+    while HK_FONT > HK_FONT_MIN and len(_wrap(_todo, HK_FONT)) > 2:
         HK_FONT -= 2
-    _linhas, _emoji_linha = [], 0
-    for _pi, _p in enumerate(_paras):
-        _wl = _wrap(_p, HK_FONT)
-        if _pi == 0:
-            _emoji_linha = len(_wl) - 1   # emoji no fim da 1ª frase (sua última linha)
-        _linhas += _wl
+    _linhas = _wrap(_todo, HK_FONT)
+    if len(_linhas) < 2:                       # frase curta → força 2 linhas
+        _linhas = _quebrar_hook_2linhas(_todo)
+    _emoji_linha = len(_linhas) - 1            # emoji SEMPRE no fim da última linha
     _n = len(_linhas)
 
     # POSIÇÃO VERTICAL: ancora o RODAPÉ do hook logo acima do topo do vídeo
