@@ -21,8 +21,16 @@ converte → repete. **Objetivo: virar máquina de dinheiro, dia após dia.**
   silêncio no fim; aceita `.mp4/.mov` (Reels Sound) direto.
 - **VFX aleatório por vídeo** (rotação/zoom/brilho/saturação/grão) → cada post
   sai único (anti-copyright / algoritmo).
-- **Hook sempre 1 linha** + auto-encolhe a fonte pra caber, posição regulável
-  (`HK_Y`); acabou o hook em 2 linhas tampando o header.
+- **Hook estilo Alana (template TopShop CONGELADO 2026-07-15):** hook de 1–3
+  linhas com quebra GULOSA por largura (não vaza pela direita), fonte bold no
+  fundo preto + margem anti-corte (`TXT_MARGEM`), emoji colorido escolhido pelo
+  PRODUTO. O rodapé do hook fica ANCORADO logo acima do vídeo
+  (`VIDEO_Y` − `HK_GAP_VIDEO` − nº de linhas), então 1, 2 ou 3 linhas colam
+  sempre certo — sem calibrar `HK_Y` (REMOVIDO do `.env`; um `HK_Y=340` fixo
+  travava tudo e cortava a 2ª linha). Ajuste fino SEMPRE via `preview_layout.py`
+  (1 frame em segundos, sem gastar narração/crédito). Valores congelados:
+  `VIDEO_Y=540` · `HK_GAP_VIDEO=20` · `HK_MARGEM_DIR=100` · `TXT_MARGEM=20` ·
+  `HK_EMOJI_DY=6`. ⚠️ Template FIXO p/ centenas de vídeos — não mexer sem preview.
 - **Texto sem erro de gênero:** legendas com o nome como aposto
   ("achadinho: {nome}") + prompt da narração reforçado (masc/fem, ortografia,
   fechamentos naturais).
@@ -189,6 +197,21 @@ Jarvis a copiar essa fórmula (dor/público + "isso" sem revelar o produto). Rep
 
 ## 🧠 Backlog / avançado
 
+- **TikTok POSTING — fechar o ciclo (futuro, pós-CEO)** 🧠 combinado 2026-07-15:
+  hoje a máquina COLETA do TikTok mas posta só no Meta/YT; a evolução natural é
+  postar de volta NO TikTok. **Não é agora** (Dre) — só quando a base estiver
+  sólida (CEO rodando + atribuição confiável por canal + volume estável nas
+  contas novas) e com tempo sobrando, porque a parte pesada é BUROCRÁTICA, não
+  código:
+  - Exige a **Content Posting API** (TikTok for Developers): criar app, passar
+    por **audit/review** da TikTok, começa em *sandbox* (só posta privado/
+    rascunho até liberarem o "direct post"). Precisa **domínio verificado** +
+    política de privacidade. Leva dias/semanas de vai-e-volta com eles.
+  - **OAuth por conta** (cada @topshop autoriza) + refresh de token.
+  - **Encaixe limpo quando chegar a hora:** vira só mais um "canal" no
+    `roteador_contas`/uploader, ao lado do Meta/YT — o vídeo renderizado é o
+    MESMO, muda só o destino do post. Decidir por DADO (o TikTok converte?)
+    antes de gastar a burocracia.
 - **Multiplataforma de afiliados (Amazon + outras):** 🚧 em construção.
   - ✅ **Camada 1 (coletor):** Shopee falhou → tenta Amazon via LINK DE BUSCA
     afiliado (`/s?k=produto&tag=SUATAG`, sem PA-API, só a tag), com filtro
