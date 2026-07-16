@@ -30,7 +30,15 @@ converte → repete. **Objetivo: virar máquina de dinheiro, dia após dia.**
   travava tudo e cortava a 2ª linha). Ajuste fino SEMPRE via `preview_layout.py`
   (1 frame em segundos, sem gastar narração/crédito). Valores congelados:
   `VIDEO_Y=540` · `HK_GAP_VIDEO=20` · `HK_MARGEM_DIR=100` · `TXT_MARGEM=20` ·
-  `HK_EMOJI_DY=6`. ⚠️ Template FIXO p/ centenas de vídeos — não mexer sem preview.
+  `HK_EMOJI_DY=6`. **Header (2026-07-16):** `LOGO_X=86` · `LOGO_Y=210` ·
+  `LOGO_TAM=118` · `TEXTO_DX=8` (logo colado no nome) · `SELO_DX=28` (selo ✓ fora
+  do nome) · `NOME_FONT=52` · `HANDLE_FONT=42`. **CTA:** `CTA_Y=1740` (embaixo do
+  vídeo). **Fundo por conta:** geral agora BRANCO (`BG_GERAL=branco`) — o preto foi
+  aposentado (header sumia no vídeo). Emoji do hook vai pro fim da ÚLTIMA linha
+  (junta `\n` artificial do Gemini) + categoria câmera 📷 / óculos 😎.
+  ⚠️ Template FIXO p/ centenas de vídeos — não mexer sem `preview_layout.py`.
+  💡 `preview_layout` é FIEL no HEADER (logo/selo/nome); a área do vídeo/CTA ele só
+  APROXIMA (retângulo menor que o vídeo real 3:4) — validar CTA no frame real.
 - **Texto sem erro de gênero:** legendas com o nome como aposto
   ("achadinho: {nome}") + prompt da narração reforçado (masc/fem, ortografia,
   fechamentos naturais).
