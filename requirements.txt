@@ -32,3 +32,6 @@ gspread
 # --- Providers de vídeo/IA ---
 fal-client
 google-generativeai
+
+# memoria vetorial do CEO/agentes (tier leve: embedder ONNX default, sem torch)
+chromadb
