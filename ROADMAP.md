@@ -305,6 +305,17 @@ Ex.: "O segredo pra ter um iPhone 17 sem gastar / uma fortuna ✨".
     adulterado). Gemini segue escrevendo a prosa; as propostas aplicáveis vêm de
     código (confiável). 🔜 Nível 2: auto-aplicar as de baixo risco quando o
     Confidence subir.
+  - ✅ **MEMÓRIA DE LONGO PRAZO — o loop de aprendizado** (2026-07-16): o CEO
+    ganhou "hipocampo" via `memory_agent` (best-effort; funciona sem). **ESCREVE**
+    cada relatório + cada decisão aplicada (com snapshot da métrica) na memória
+    (`agente=ceo`). **LÊ** relatórios/decisões/veredictos anteriores e injeta no
+    prompt do Gemini (não repete conselho; considera o que já rolou). **CONFERE**
+    (outcome-check): decisão aplicada há ≥7d compara vendas/comissão do momento vs
+    agora → veredito AJUDOU/NEUTRO/PIOROU, marca `conferido` no decisoes.jsonl e
+    grava na memória; o veredito entra no relatório. Deixou de ser conselheiro
+    amnésico. Confirmado na VPS: cabeçalho mostra `🧠 memória ativa`. Hoje a busca
+    é keyword (TF-IDF); 🔜 fast-follow: instalar `chromadb` (tier vetorial leve,
+    embedder ONNX ~80MB, sem torch) → busca semântica real p/ todos os agentes.
   - ✅ Cron semanal (domingo 09h) já instalado.
   Modo CONSELHEIRO permanece o default. **1º conselho já aplicado:** o CEO apontou que o ledger saía
   'sem_categoria'/'?' → agora `produzir_tiktok` grava SEMPRE categoria (cai no
