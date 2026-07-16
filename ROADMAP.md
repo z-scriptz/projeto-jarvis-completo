@@ -314,8 +314,11 @@ Ex.: "O segredo pra ter um iPhone 17 sem gastar / uma fortuna ✨".
     agora → veredito AJUDOU/NEUTRO/PIOROU, marca `conferido` no decisoes.jsonl e
     grava na memória; o veredito entra no relatório. Deixou de ser conselheiro
     amnésico. Confirmado na VPS: cabeçalho mostra `🧠 memória ativa`. Hoje a busca
-    é keyword (TF-IDF); 🔜 fast-follow: instalar `chromadb` (tier vetorial leve,
-    embedder ONNX ~80MB, sem torch) → busca semântica real p/ todos os agentes.
+    era keyword (TF-IDF); ✅ **chromadb instalado (2026-07-16)** — tier vetorial
+    leve (embedder ONNX all-MiniLM-L6-v2 ~80MB, SEM torch). Busca agora é
+    SEMÂNTICA (acha por significado) p/ CEO + todos os agentes. `backfill_vector.py`
+    re-indexou as 15 memórias antigas do JSONL no vetor (senão a busca vetorial as
+    perderia). Confirmado: `Fonte: vector`. `chromadb` no requirements.txt.
   - ✅ Cron semanal (domingo 09h) já instalado.
   Modo CONSELHEIRO permanece o default. **1º conselho já aplicado:** o CEO apontou que o ledger saía
   'sem_categoria'/'?' → agora `produzir_tiktok` grava SEMPRE categoria (cai no
