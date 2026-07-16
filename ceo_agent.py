@@ -41,6 +41,24 @@ def _carregar_env():
 _carregar_env()
 
 
+# ── Memória de LONGO PRAZO (best-effort; o CEO funciona sem ela) ────────────
+# Dá ao CEO um "hipocampo": ele ESCREVE cada relatório/decisão, LÊ o próprio
+# passado antes de aconselhar de novo, e CONFERE o resultado das decisões.
+try:
+    from agents.memory_agent import registrar_memoria, buscar_memorias
+    _MEM_OK = True
+except Exception:
+    try:
+        from memory_agent import registrar_memoria, buscar_memorias
+        _MEM_OK = True
+    except Exception:
+        _MEM_OK = False
+        def registrar_memoria(*a, **k):
+            return {"sucesso": False}
+        def buscar_memorias(*a, **k):
+            return {"resultados": []}
+
+
 def _brl(v):
     return ("R$ " + f"{float(v or 0):,.2f}").replace(",", "X").replace(".", ",").replace("X", ".")
 
@@ -146,6 +164,98 @@ def _confidence(a: dict) -> tuple:
     return score, nivel
 
 
+# ── MEMÓRIA DO CEO: ler passado, conferir resultado, gravar ─────────────────
+def _ler_memoria_ceo(a: dict, limite: int = 6) -> str:
+    """Puxa relatórios/decisões/veredictos anteriores do CEO pra ele NÃO repetir
+    conselho e referenciar o que já aconteceu. Vazio se não houver memória."""
+    if not _MEM_OK:
+        return ""
+    try:
+        cats = " ".join(c["categoria"] for c in a.get("cruzamento_categorias", [])[:3])
+        r = buscar_memorias(query=f"ceo relatorio decisao resultado {cats}",
+                            colecao="lessons", limite=limite, filtros={"agente": "ceo"})
+        itens = r.get("resultados", [])
+        if not itens:
+            return ""
+        return "\n".join(f"- {m.get('texto', '')[:220]}" for m in itens)
+    except Exception:
+        return ""
+
+
+def _conferir_resultados() -> str:
+    """OUTCOME-CHECK — o fechamento do loop de aprendizado. Pra cada decisão
+    aplicada há >=7 dias e ainda não conferida, compara a métrica-alvo (vendas/
+    comissão) do momento da aplicação vs AGORA, escreve um veredito, marca
+    'conferido' no decisoes.jsonl e grava na memória. Retorna bloco Markdown."""
+    if not DECISOES.exists():
+        return ""
+    regs = []
+    for l in DECISOES.read_text(encoding="utf-8").splitlines():
+        if not l.strip():
+            continue
+        try:
+            regs.append(json.loads(l))
+        except Exception:
+            regs.append(None)
+    agora = _analisar(30)
+    v_now, c_now = agora["vendas_video"], round(agora["comissao_video"], 2)
+    veredictos, mudou = [], False
+    LIMITE = 7 * 86400
+    for i, d in enumerate(regs):
+        if not d or d.get("acao") != "aplicar" or d.get("conferido"):
+            continue
+        if "snap_vendas" not in d:            # decisão antiga sem snapshot → não mede
+            continue
+        if int(time.time()) - int(d.get("ts", 0)) < LIMITE:
+            continue                          # ainda cedo (< 7 dias)
+        dv = v_now - int(d.get("snap_vendas", 0))
+        dc = round(c_now - float(d.get("snap_comissao", 0)), 2)
+        vd = "AJUDOU" if (dv > 0 or dc > 0) else ("PIOROU" if (dv < 0 or dc < 0) else "NEUTRO")
+        txt = (f"Veredito: '{d.get('proposta')}' ({d.get('env')}: "
+               f"{d.get('de') or '(vazio)'}→{d.get('para')}) aplicada em {d.get('data')} → "
+               f"vendas {d.get('snap_vendas')}→{v_now} ({'+' if dv >= 0 else ''}{dv}), "
+               f"comissão {'+' if dc >= 0 else ''}{dc}. {vd}.")
+        veredictos.append(txt)
+        d.update({"conferido": True, "veredito": vd, "conferido_ts": int(time.time())})
+        regs[i] = d
+        mudou = True
+        if _MEM_OK:
+            try:
+                registrar_memoria(tipo="estrategia", texto=txt,
+                    metadata={"agente": "ceo", "tipo_ceo": "resultado", "env": d.get("env"),
+                              "veredito": vd, "delta_vendas": dv, "delta_comissao": dc},
+                    colecao="lessons", tags=["ceo", "resultado", vd.lower()])
+            except Exception:
+                pass
+    if mudou:
+        DECISOES.write_text(
+            "\n".join(json.dumps(r, ensure_ascii=False) for r in regs if r) + "\n",
+            encoding="utf-8")
+    if not veredictos:
+        return ""
+    return ("## 📈 Resultado das decisões anteriores (auto-conferido)\n"
+            + "\n".join(f"- {v}" for v in veredictos) + "\n")
+
+
+def _gravar_memoria_relatorio(a: dict, score: int, nivel: str, propostas: list) -> None:
+    """CEO ESCREVE: registra o retrato do relatório desta semana na memória."""
+    if not _MEM_OK:
+        return
+    try:
+        aplicaveis = [p["titulo"] for p in propostas if p.get("tipo") == "config"]
+        texto = (f"Relatório CEO ({a['dias']}d): Confidence {score}/100 "
+                 f"({nivel.split('—')[0].strip()}). Comissão vídeo {_brl(a['comissao_video'])}, "
+                 f"{a['vendas_video']} venda(s), {a['posts_periodo']} posts. "
+                 f"Propostas: {'; '.join(aplicaveis) or 'nenhuma'}.")
+        registrar_memoria(tipo="estrategia", texto=texto,
+            metadata={"agente": "ceo", "tipo_ceo": "relatorio", "score": score,
+                      "comissao_video": a["comissao_video"], "vendas_video": a["vendas_video"],
+                      "posts": a["posts_periodo"], "dias": a["dias"]},
+            colecao="lessons", tags=["ceo", "relatorio"])
+    except Exception:
+        pass
+
+
 _PROMPT = (
     "Você é o CEO IA da TopShop (marketing de afiliados, vídeos de achadinhos em "
     "IG/FB/YouTube). Fale como um conselheiro estratégico DIRETO e honesto, em "
@@ -162,13 +272,17 @@ _PROMPT = (
     "sustentam.\n"
     "## ⚠️ Ressalva\n(1-2 linhas sobre a confiança dos dados)\n"
     "Sem inventar números que não estão nos dados. Devolva SÓ o Markdown.\n\n"
+    "MEMÓRIA (seus relatórios/decisões/veredictos anteriores). NÃO repita conselho "
+    "já dado; se uma decisão passada já foi conferida, leve o RESULTADO dela em conta "
+    "(reforce o que AJUDOU, recue no que PIOROU):\n{memoria}\n\n"
     "DADOS (JSON):\n{dados}\n\nJarvis Confidence Score: {score}/100 ({nivel})")
 
 
-def _relatorio_gemini(a: dict, score: int, nivel: str) -> str:
+def _relatorio_gemini(a: dict, score: int, nivel: str, memoria: str = "") -> str:
     api_key = os.getenv("GEMINI_API_KEY", "")
     dados = json.dumps(a, ensure_ascii=False, indent=2)
-    prompt = _PROMPT.format(dados=dados, score=score, nivel=nivel)
+    prompt = _PROMPT.format(dados=dados, score=score, nivel=nivel,
+                            memoria=(memoria or "(sem memória anterior — 1º relatório)"))
     if api_key:
         for tent in (1, 2):
             try:
@@ -417,9 +531,22 @@ def _aplicar(n: int) -> int:
         print(f"❌ valor inválido pra {env}: {e}")
         return 1
     antigo = _escrever_env(env, valor)
+    _snap = _analisar(30)          # foto da métrica AGORA → o outcome-check compara depois
     _log_decisao({"ts": int(time.time()), "data": time.strftime("%Y-%m-%d %H:%M"),
                   "acao": "aplicar", "proposta": alvo["titulo"], "env": env,
-                  "de": antigo, "para": valor})
+                  "de": antigo, "para": valor,
+                  "snap_vendas": _snap["vendas_video"], "snap_comissao": _snap["comissao_video"],
+                  "snap_posts": _snap["posts_periodo"], "conferido": False})
+    if _MEM_OK:
+        try:
+            registrar_memoria(tipo="estrategia",
+                texto=(f"CEO aplicou (Nível 1): {alvo['titulo']}. "
+                       f"{env}: {antigo or '(vazio)'} -> {valor}. Motivo: {alvo.get('motivo', '')}"),
+                metadata={"agente": "ceo", "tipo_ceo": "decisao", "env": env,
+                          "de": str(antigo), "para": str(valor), "aplicado_ts": int(time.time())},
+                colecao="lessons", tags=["ceo", "decisao", env])
+        except Exception:
+            pass
     print(f"✅ APLICADO: {alvo['titulo']}\n   {env}: {antigo or '(vazio)'} → {valor}")
     print("   (backup do .env criado; reverte com `ceo_agent.py --desfazer`)")
     print("   ⚠️ reinicie o serviço p/ valer no daemon:  systemctl restart jarvis")
@@ -495,16 +622,23 @@ def main():
 
     a = _analisar(dias)
     score, nivel = _confidence(a)
-    relatorio = _relatorio_gemini(a, score, nivel)
+    bloco_resultados = _conferir_resultados()        # CONFERE: outcome-check das decisões
+    memoria = _ler_memoria_ceo(a)                    # LÊ: o que o CEO já aconselhou/aprendeu
+    relatorio = _relatorio_gemini(a, score, nivel, memoria)
     propostas = _propostas_estruturadas(a)
     _salvar_propostas(dias, propostas)
     bloco_props = _render_propostas(propostas)
+    _gravar_memoria_relatorio(a, score, nivel, propostas)   # ESCREVE: registra este relatório
 
     cabecalho = (f"# 👑 CEO TopShop — Conselheiro\n"
                  f"Período: últimos {dias} dias · "
                  f"**Jarvis Confidence Score: {score}/100** ({nivel})\n"
-                 f"Gerado: {time.strftime('%Y-%m-%d %H:%M')}\n\n---\n\n")
-    doc = cabecalho + relatorio + "\n\n---\n\n" + bloco_props
+                 f"Gerado: {time.strftime('%Y-%m-%d %H:%M')}"
+                 f"{' · 🧠 memória ativa' if _MEM_OK else ''}\n\n---\n\n")
+    doc = cabecalho + relatorio + "\n\n---\n\n"
+    if bloco_resultados:
+        doc += bloco_resultados + "\n---\n\n"
+    doc += bloco_props
 
     print("\n" + "=" * 66)
     print(doc)
