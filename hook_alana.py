@@ -169,6 +169,11 @@ def _limpar_saida(txt: str) -> Optional[str]:
             break
     if not linhas:
         return None
+    # se veio em 2 linhas mas a 2a NAO e uma tag (nao termina com ":"), o \n foi
+    # quebra ARTIFICIAL no meio de uma frase unica -> junta e deixa o render quebrar
+    # por largura (o emoji vai pro fim da ULTIMA linha, nao pro meio do hook).
+    if len(linhas) == 2 and not linhas[1].rstrip().endswith(":"):
+        linhas = [" ".join(linhas)]
     # GARANTE 2 LINHAS no video (formato TopShop e GRANDE — hook curto fica pequeno):
     #   • frase UNICA (1 linha): precisa ser LONGA o bastante pra QUEBRAR em 2.
     #   • frase + TAG (2 linhas): a frase precisa CABER em 1 linha (senao vira 3L).

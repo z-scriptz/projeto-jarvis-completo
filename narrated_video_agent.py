@@ -875,6 +875,10 @@ def _quebrar_hook_2linhas(texto: str):
 
 # Emoji colorido por NICHO do produto (1 codepoint = renderiza no Noto).
 _EMOJI_POR_PRODUTO = [
+    (("camera", "câmera", "filmadora", "gravador", "gravaç", "espiã", "espião",
+      "espia", "gopro", "webcam", "óculos câmera", "oculos camera", "mini camera",
+      "mini câmera", "dvr", "vigilância", "vigilancia"), "📷"),
+    (("óculos de sol", "oculos de sol", "óculos", "oculos", "solar"), "😎"),
     (("cozinha", "panela", "fritad", "air fryer", "utensil", "copo", "garrafa",
       "talher", "fatiad", "ralad", "chaleira", "cafeteira", "liquidif",
       "descasc", "jantar", "prato", "tigela", "faca"), "🍳"),
@@ -895,7 +899,7 @@ _EMOJI_POR_PRODUTO = [
     (("roupa", "jaqueta", "parka", "casaco", "macacao", "macacão", "moletom",
       "blusa", "camisa", "vestido", "calça", "short", "biquini", "biquíni",
       "pijama", "lingerie", "tênis", "tamanco", "chinelo", "bota", "meia",
-      "modelador", "bolsa", "mochila", "óculos", "oculos", "relógio",
+      "modelador", "bolsa", "mochila", "relógio",
       "relogio", "boné", "cinto"), "👕"),
     (("moto", "capacete", "carro", "automot", "bike", "bicicleta"), "🛵"),
     (("limpeza", "esponja", "vassoura", "rodo", "escova"), "🧽"),
