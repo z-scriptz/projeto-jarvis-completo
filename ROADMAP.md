@@ -154,20 +154,21 @@ Jarvis a copiar essa fórmula (dor/público + "isso" sem revelar o produto). Rep
   `.venv/bin/pip install instaloader`. Instagram como fonte agora roda AUTOMÁTICO. 🎉
 - Preferir **fontes sem texto** na tela (a edição fica mais limpa).
 
-### 4. Sourcing por FONTE + nichos LARGOS + descoberta autônoma 🔜 FORTE (2026-07-15)
+### 4. Sourcing por FONTE + nichos LARGOS + descoberta autônoma (Alavanca 1 ✅ 2026-07-16)
 Insight do Dre: a @topshopbeauty._ está com **0 post** e a tech quase parada. Causa
 achada no código: o roteamento é **100% por palavra-chave do PRODUTO**
 (`_nicho_da_pasta` → `roteador_contas.nicho_do_produto`), então um Reels do "mundo
 feminino" com produto não-beleza cai em **geral** e a beauty passa fome. Nichos não
 são só o produto: **beleza = mundo feminino + produtos**; **tech = tecnologia +
 games + celulares + produtos**.
-- **Alavanca 1 (rápida, desbloqueia a beauty já):** rotear pela **FONTE**, não só
-  pelo produto. Marcar cada perfil-fonte com um nicho (`@perfil #beleza` nos
-  `instagram_perfis.txt`/`tiktok_perfis.txt`); o coletor grava o nicho da fonte no
-  `plano.json`; `_nicho_da_pasta` passa a **priorizar o nicho da fonte** (cai no
-  produto só se a fonte não declarar). + alargar `_BELEZA`/`_TECH` (mundo feminino /
-  games+celular) como reforço. Assim: curar fontes femininas → tudo delas vai pra
-  beauty, mesmo produto de cozinha.
+- **Alavanca 1 ✅ FEITO (2026-07-16):** rotear pela **FONTE**. `tiktok_coletor`
+  lê tag `#nicho` no fim da linha do perfil (`@perfil #beleza`), grava
+  `nicho_fonte` no `plano.json`; `produzir_tiktok._nicho_da_pasta` **prioriza o
+  nicho da fonte** (cai no produto só se a fonte não declarar). `_BELEZA` alargado
+  (mundo feminino/autocuidado), `_TECH` alargado (games/console/celular — SEM
+  "tablet" p/ não regredir o NexGard). Fontes tagueadas: 17 `#beleza` + 14 `#tech`
+  (o resto sem tag roteia pelo produto). Assim: curar fontes femininas → tudo delas
+  vai pra @topshopbeauty, mesmo produto de cozinha.
 - **Alavanca 2 (projeto):** **descoberta autônoma** — Jarvis varre hashtags/explore
   do IG+TikTok por nicho (#achadinhos, #techtok, #maquiagem, #organização…), acha
   perfis/vídeos novos, avalia (views/relevância) e alimenta as fontes sozinho. O
