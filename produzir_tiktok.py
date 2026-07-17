@@ -422,6 +422,12 @@ def _nicho_da_pasta(pj: Path) -> str:
     """Nicho do produto de uma pasta da fila (pra filtrar produção por conta)."""
     try:
         info = json.loads(pj.read_text(encoding="utf-8"))
+        # 1) nicho HERDADO da fonte (curadoria manda): '@perfil #beleza' → beleza,
+        #    mesmo que o produto não bata palavra-chave de beleza.
+        nf = (info.get("nicho_fonte") or "").strip().lower()
+        if nf in ("beleza", "tech", "geral"):
+            return nf
+        # 2) senão, roteia pelo PRODUTO (comportamento antigo).
         nome = info.get("produto") or info.get("termo") or ""
         cat = ""
         try:

@@ -44,6 +44,10 @@ _BELEZA = (
     "batom", "serum", "sérum", "depila", "cilios", "cílios", "sobrancelha",
     "gloss", "cosmetic", "esmalte", "secador de cabelo", "chapinha", "prancha",
     "cabelo", "unha", "pele", "labial", "rímel", "rimel", "delineador",
+    # mundo feminino / autocuidado (nicho beleza = mais que só produto de beleza)
+    "autocuidado", "auto cuidado", "estetica", "estética", "modelador", "babyliss",
+    "alisador", "necessaire", "nécessaire", "corporal", "facial", "protetor solar",
+    "hialuron", "bronzead", "pincéis de maquiagem", "pincel de maquiagem",
 )
 _TECH = (
     "fone", "headset", "earbud", "carregador", "smartwatch", "smart watch",
@@ -56,6 +60,10 @@ _TECH = (
     "magsafe", "pelicula", "película", "suporte de celular", "suporte celular",
     "suporte veicular", "cabo usb", "cabo tipo c", "cabo lightning",
     "carregador sem fio", "hub usb", "adaptador usb",
+    # games + tecnologia (nicho tech = tecnologia + games + celulares)
+    "games", "gaming", "console", "playstation", "xbox", "nintendo", "joystick",
+    "mousepad", "mouse pad", "cadeira gamer", "headset gamer", "notebook", "cooler",
+    "placa de video", "placa de vídeo", "controle sem fio", "fone gamer",
 )
 
 

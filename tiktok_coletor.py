@@ -592,18 +592,31 @@ def _fonte_do_arg(a: str) -> tuple:
     'ig:@x' ou url do instagram → instagram; senão tiktok (compat)."""
     low = a.lower()
     if low.startswith("ig:") or low.startswith("instagram:"):
-        return a.split(":", 1)[1].strip(), "instagram"
+        return a.split(":", 1)[1].strip(), "instagram", ""
     if "instagram.com" in low:
-        return a, "instagram"
-    return a, "tiktok"
+        return a, "instagram", ""
+    return a, "tiktok", ""
 
 
 def _perfis_do_arquivo(caminho: Path, fonte: str) -> list:
+    """Lê 1 perfil por linha. Nicho OPCIONAL via '#nicho' no fim da linha
+    (ex.: '@bgbeautyloja #beleza') — o vídeo herda esse nicho na produção.
+    Sem tag → nicho '' (aí a produção roteia pelo produto). Retorna
+    (perfil, fonte, nicho)."""
     if not caminho.exists():
         return []
-    return [(l.strip(), fonte)
-            for l in caminho.read_text(encoding="utf-8").splitlines()
-            if l.strip() and not l.strip().startswith("#")]
+    out = []
+    for l in caminho.read_text(encoding="utf-8").splitlines():
+        l = l.strip()
+        if not l or l.startswith("#"):
+            continue
+        nicho = ""
+        m = re.search(r"#(\w+)\s*$", l)      # tag de nicho no fim: "@perfil #beleza"
+        if m:
+            nicho = m.group(1).lower()
+            l = l[:m.start()].strip()
+        out.append((l, fonte, nicho))
+    return out
 
 
 def _detectar_caixa(frames, thr_std=8.0, frac=0.06, pad=6):
@@ -767,8 +780,8 @@ def main():
     vistos = _carregar_vistos()
     produtos_vistos = _carregar_produtos_vistos()
     achados = 0
-    for perfil, fonte in perfis:
-        _log(f"perfil {perfil} [{fonte}] …")
+    for perfil, fonte, nicho_fonte in perfis:
+        _log(f"perfil {perfil} [{fonte}{'/' + nicho_fonte if nicho_fonte else ''}] …")
         for url in _listar_videos(perfil, limite, fonte):
             meta = _metadados(url)
             vid = meta.get("id")
@@ -873,7 +886,7 @@ def main():
                 continue
             produtos_vistos[chave_prod] = int(time.time())   # só marca o que FICOU
             (pasta / "plano.json").write_text(json.dumps({
-                "fonte": fonte, "plataforma": plataforma,
+                "fonte": fonte, "nicho_fonte": nicho_fonte, "plataforma": plataforma,
                 "url": meta["url"], "uploader": meta["uploader"],
                 "views": meta["views"], "descricao": meta["descricao"],
                 "termo": termo, "produto": produto_nome,
