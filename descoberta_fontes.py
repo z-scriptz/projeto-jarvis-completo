@@ -41,6 +41,40 @@ HASHTAGS = {
 MIN_VIEWS_CAND = int(os.environ.get("DESC_MIN_VIEWS", 30000))  # viral p/ contar o autor
 POR_HASHTAG = int(os.environ.get("DESC_POR_HASHTAG", 30))      # vídeos por hashtag
 
+# O sinal mais forte de "conta de PRODUTO/afiliado" (não creator) está no @ dela:
+# quem vende anuncia no próprio nome. A frequência entre hashtags é fraca (o feed do
+# TikTok é personalizado demais p/ repetir autor), então o nome é o que separa
+# vendedor de creator/gringo/psicóloga que só aparece no meio da hashtag.
+_KW_PRODUTO = (
+    "achadinho", "achadin", "achados", "achadit", "achei", "indica", "recomend",
+    "comprinha", "compras", "oferta", "promo", "promoc", "vitrine", "picks", "loja",
+    "shop", "store", "mania", "dicas", "tips", "resenha", "review", "desconto",
+    "cupom", "barato", "utilidade", "produto", "importad", "tem.de.tudo", "temdetudo",
+)
+_KW_NICHO = {
+    "beleza": ("belez", "beauty", "makeup", "maquiag", "perfume", "cosmetic",
+               "skincare", "glow", "glam", "batom", "cabelo"),
+    "tech":   ("tech", "gadget", "eletro", "digital", "games", "gamer", "geek",
+               "setup"),
+    "geral":  (),
+}
+
+
+def _sem_acento(s: str) -> str:
+    return (s or "").translate(str.maketrans(
+        "áàâãäéèêëíìîïóòôõöúùûüç", "aaaaaeeeeiiiiooooouuuuc"))
+
+
+def _bonus_nome(handle: str, nicho: str) -> int:
+    """Bônus de score pelo @: nome de conta de produto/afiliado (+45) ou do nicho
+    (+30). É o que faz um perfil de venda aparecer forte mesmo aparecendo 1x só."""
+    h = _sem_acento((handle or "").lower())
+    if any(k in h for k in _KW_PRODUTO):
+        return 45
+    if any(k in h for k in _KW_NICHO.get(nicho, ())):
+        return 30
+    return 0
+
 
 def _log(m):
     print(f"[descoberta] {m}", flush=True)
@@ -115,12 +149,14 @@ def descobrir_nicho(nicho: str) -> list:
     for up, f in freq.items():
         if up in conhecidos:
             continue
-        # score: aparecer em VÁRIOS virais/hashtags pesa (sinal de conta de produto)
-        # + bônus por views. Piso/teto 1..100.
-        score = min(100, f * 22 + min(56, maxv[up] // 6000))
+        # score = NOME de conta de produto/afiliado (sinal forte) + frequência entre
+        # hashtags (fraco no TikTok, mas conta) + bônus de views. Piso/teto 1..100.
+        bn = _bonus_nome(up, nicho)
+        score = min(100, bn + f * 18 + min(40, maxv[up] // 6000))
         cands.append({"perfil": up, "nicho": nicho, "freq": f,
-                      "max_views": maxv[up], "score": score})
-    cands.sort(key=lambda c: (c["score"], c["freq"]), reverse=True)
+                      "max_views": maxv[up], "score": score, "nome": bool(bn)})
+    # ordena por score; empate → quem tem nome de produto primeiro, depois freq
+    cands.sort(key=lambda c: (c["score"], c["nome"], c["freq"]), reverse=True)
     return cands
 
 
