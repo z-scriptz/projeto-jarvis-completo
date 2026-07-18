@@ -332,6 +332,22 @@ Ex.: "O segredo pra ter um iPhone 17 sem gastar / uma fortuna ✨".
     SEMÂNTICA (acha por significado) p/ CEO + todos os agentes. `backfill_vector.py`
     re-indexou as 15 memórias antigas do JSONL no vetor (senão a busca vetorial as
     perderia). Confirmado: `Fonte: vector`. `chromadb` no requirements.txt.
+  - ✅ **APRENDER POR FONTE — fecha o ciclo da descoberta (2026-07-18):** a máquina
+    descobre fontes (Alavanca 2), agora sabe **quais VENDEM** e corta as mortas.
+    **Atribuição:** a fonte (perfil de origem) vira o **sub_id[3]** do link de
+    afiliado (ordem canônica `[canal, nicho, produto, FONTE]`) — `tiktok_coletor`
+    grava `perfil_fonte` no plano + no link base; `produzir_tiktok` propaga pro
+    ledger e pro link do canal fb; `metricas_agent._fonte(utm)` lê do
+    conversionReport. **CEO:** `_analisar_fontes` cruza posts/fonte (ledger) ×
+    vendas/fonte (Shopee) → veredito **VENDE / MORTA (≥`CEO_PODA_MIN_POSTS`=6 posts,
+    0 venda) / NOVA**. O relatório ganhou bloco "Desempenho por FONTE" e o Gemini
+    propõe podar as mortas / priorizar as que vendem. **Poda:** `ceo_agent.py
+    --podar-fontes` comenta as mortas nos `*_perfis.txt` (REVERSÍVEL, não apaga);
+    `CEO_PODA_AUTO=1` deixa o relatório semanal podar sozinho. Links antigos sem a
+    etiqueta de fonte são ignorados — a atribuição acumula com o tempo. Isso mata o
+    problema do "gringo-tech" (fonte importada que não converte na Shopee BR) sem
+    curadoria manual. ⚠️ precisa de TEMPO: fonte nova só é julgada depois de
+    acumular posts+vendas etiquetados (semanas), então a poda é conservadora.
   - ✅ Cron semanal (domingo 09h) já instalado.
   Modo CONSELHEIRO permanece o default. **1º conselho já aplicado:** o CEO apontou que o ledger saía
   'sem_categoria'/'?' → agora `produzir_tiktok` grava SEMPRE categoria (cai no
