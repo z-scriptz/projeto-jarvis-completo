@@ -174,6 +174,23 @@ def main():
             tag = args[args.index("--teste") + 1]
         except IndexError:
             print("uso: descoberta_fontes.py --teste \"#hashtag\""); return 1
+        if "--raw" in args:      # diagnóstico cru: o que o yt-dlp REALMENTE devolveu
+            t = tag.lstrip("#").strip()
+            from tiktok_coletor import _ytdlp
+            r = _ytdlp(["--flat-playlist", "-J", "--playlist-end", "10",
+                        f"https://www.tiktok.com/tag/{t}"], timeout=150, fonte="tiktok")
+            print("returncode:", r.returncode)
+            print("stderr:", (r.stderr or "")[:600])
+            print("stdout (len):", len(r.stdout or ""))
+            try:
+                d = json.loads(r.stdout or "{}")
+                ents = d.get("entries") or []
+                print("entries:", len(ents), "| chaves do topo:", list(d.keys())[:8])
+                for e in ents[:3]:
+                    print("  entry:", (list(e.keys())[:10] if isinstance(e, dict) else e))
+            except Exception as ex:
+                print("json falhou:", ex, "| stdout[:200]:", (r.stdout or "")[:200])
+            return 0
         autores = _autores_da_hashtag_tiktok(tag, 20)
         print(f"hashtag {tag}: {len(autores)} vídeo(s)")
         for up, vw in autores[:20]:
