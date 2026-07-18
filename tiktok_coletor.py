@@ -274,6 +274,14 @@ def _slug(s: str) -> str:
     return s[:40] or "video"
 
 
+def _subid(x, padrao: str = "") -> str:
+    """Etiqueta de sub_id da Shopee: SÓ alfanumérico, <=16 chars (a Shopee rejeita
+    _/-/espaço → erro 11001). É a MESMA regra do produzir_tiktok — a fonte vira o
+    sub_id[3] (canal, nicho, produto, FONTE) pro CEO cruzar venda × fonte."""
+    v = re.sub(r"[^A-Za-z0-9]", "", str(x or ""))[:16]
+    return v or padrao
+
+
 def _url_perfil(perfil: str, fonte: str) -> str:
     """Monta a URL do perfil pela fonte. Instagram → /reels/ (só Reels);
     TikTok → /@handle. Se já vier http, usa como está."""
@@ -830,11 +838,14 @@ def main():
                         shutil.rmtree(pasta, ignore_errors=True)
                     continue
                 origem = camp.get("product_link") or camp.get("offer_link")
-                # sub_id SÓ alfanumérico (a Shopee rejeita _/-/etc → erro 11001)
-                sub_termo = re.sub(r"[^A-Za-z0-9]", "", termo)[:16] or "viral"
+                # sub_ids na ordem canônica [canal, nicho, produto, FONTE] — o índice 3
+                # (fonte) é o que o CEO cruza com a venda p/ saber qual perfil converte.
+                sub_termo = _subid(termo, "viral")
+                sub_fonte = _subid(perfil, "")
                 link = ""
                 if origem:
-                    lk = gerar_link_afiliado(origem, sub_ids=["tiktok", sub_termo])
+                    lk = gerar_link_afiliado(origem, sub_ids=[
+                        "tiktok", _subid(nicho_fonte, "geral"), sub_termo, sub_fonte])
                     if isinstance(lk, dict) and lk.get("ok"):
                         link = lk.get("short_link") or lk.get("link") or ""
                 if not link:   # fallbacks: link já gerado pela mineração / offer cru
@@ -887,6 +898,7 @@ def main():
             produtos_vistos[chave_prod] = int(time.time())   # só marca o que FICOU
             (pasta / "plano.json").write_text(json.dumps({
                 "fonte": fonte, "nicho_fonte": nicho_fonte, "plataforma": plataforma,
+                "perfil_fonte": perfil.lstrip("@").lower(),   # PERFIL curado (p/ CEO medir/podar)
                 "url": meta["url"], "uploader": meta["uploader"],
                 "views": meta["views"], "descricao": meta["descricao"],
                 "termo": termo, "produto": produto_nome,

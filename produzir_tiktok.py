@@ -67,23 +67,29 @@ def _log(m):
     print(f"[produzir_tiktok] {m}")
 
 
-def _subids(canal: str, nicho: str, nome: str) -> list:
-    """Sub-IDs padronizados p/ atribuição por CANAL: [canal, nicho, produto].
-    Só alfanumérico e ≤16 chars cada (a Shopee rejeita _/-/espaço → erro 11001)."""
+def _subids(canal: str, nicho: str, nome: str, fonte: str = "") -> list:
+    """Sub-IDs na ordem canônica: [canal, nicho, produto, FONTE]. O índice 3
+    (fonte = perfil de origem) é o que o CEO cruza com a venda pra saber qual
+    perfil converte. Só alfanumérico e ≤16 chars cada (a Shopee rejeita
+    _/-/espaço → erro 11001). Fonte vazia → slot omitido (link de canal sem fonte)."""
     import re
     def s(x, padrao):
         v = re.sub(r"[^A-Za-z0-9]", "", str(x or ""))[:16]
         return v or padrao
-    return [s(canal, "x"), s(nicho, "geral"), s(nome, "prod")]
+    ids = [s(canal, "x"), s(nicho, "geral"), s(nome, "prod")]
+    if str(fonte or "").strip():
+        ids.append(s(fonte, "fonte"))
+    return ids
 
 
-def _link_do_canal(canal: str, origem_url: str, nicho: str, nome: str, base: str) -> str:
-    """Gera um link de afiliado etiquetado pro CANAL (ex: 'fb'). Se não der, usa
-    o link base (best-effort — nunca quebra a produção)."""
+def _link_do_canal(canal: str, origem_url: str, nicho: str, nome: str, base: str,
+                   fonte: str = "") -> str:
+    """Gera um link de afiliado etiquetado pro CANAL (ex: 'fb') + FONTE. Se não der,
+    usa o link base (best-effort — nunca quebra a produção)."""
     if not (_gerar_link and origem_url):
         return base
     try:
-        r = _gerar_link(origem_url, sub_ids=_subids(canal, nicho, nome))
+        r = _gerar_link(origem_url, sub_ids=_subids(canal, nicho, nome, fonte))
         if isinstance(r, dict) and r.get("ok"):
             return r.get("short_link") or r.get("link") or base
     except Exception as e:
@@ -254,6 +260,7 @@ def _produzir(pasta: Path, pj: Path, video_src: Path) -> bool:
     info = json.loads(pj.read_text(encoding="utf-8"))
     nome = info.get("produto") or info.get("termo") or pasta.name
     link = info.get("link_afiliado", "")
+    perfil_fonte = (info.get("perfil_fonte") or "").strip().lower()  # p/ CEO medir/podar
     plataforma = (info.get("plataforma") or "shopee").strip().lower()
     if not link:
         _log(f"   sem link de afiliado em {pasta.name} — pulo (não monetiza)")
@@ -383,7 +390,8 @@ def _produzir(pasta: Path, pj: Path, video_src: Path) -> bool:
     try:
         link_fb = link
         if plataforma == "shopee":
-            link_fb = _link_do_canal("fb", info.get("origem_url", ""), nicho, nome, link)
+            link_fb = _link_do_canal("fb", info.get("origem_url", ""), nicho, nome,
+                                     link, fonte=perfil_fonte)
         eng = {"link": link_fb, "link_post": link, "produto": nome,
                "handle": (conta.get("handle") if conta else "") or "",
                "plataforma": plataforma, "nicho": nicho}
@@ -409,6 +417,7 @@ def _produzir(pasta: Path, pj: Path, video_src: Path) -> bool:
              legenda=legenda, slug=slug, sub_ids=["tiktok"],
              plataforma=plataforma,                # shopee / amazon
              extra={"fonte": "tiktok", "nicho": nicho,
+                    "perfil_fonte": perfil_fonte,   # PERFIL de origem (o CEO mede/poda)
                     "plataforma_afiliado": plataforma,
                     "fonte_views": info.get("views", 0)})
     except Exception:

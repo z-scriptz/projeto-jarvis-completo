@@ -98,6 +98,14 @@ def _canal(utm: str) -> str:
     return u.split("-")[0] or "direto"
 
 
+def _fonte(utm: str) -> str:
+    """4ª etiqueta do sub_id (índice 3) = a FONTE (perfil de origem, alfanumérico).
+    Ordem canônica: [canal, nicho, produto, FONTE]. Links antigos (2-3 sub_ids) não
+    têm → ''. É a chave que o CEO cruza com o ledger p/ saber qual perfil converte."""
+    parts = (utm or "").strip().lower().split("-")
+    return parts[3].strip() if len(parts) > 3 else ""
+
+
 def _pagina(ini, fim, scroll_id=None, limite=100):
     scroll = f', scrollId: "{scroll_id}"' if scroll_id else ""
     q = ("query { conversionReport(purchaseTimeStart: %d, purchaseTimeEnd: %d, "

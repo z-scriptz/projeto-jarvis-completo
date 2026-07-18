@@ -9,6 +9,7 @@
 # Uso (VPS):  cd ~/jarvis && .venv/bin/python ceo_agent.py [dias]   (padrão 30)
 # Saída: imprime, salva shared/ceo/relatorio_<data>.md e manda resumo no Telegram.
 import os
+import re
 import sys
 import json
 import time
@@ -19,6 +20,8 @@ BASE_DIR = Path(__file__).resolve().parent
 LEDGER = BASE_DIR / "shared" / "posts_ledger.jsonl"
 NICHOS = BASE_DIR / "shared" / "nichos_quentes.json"
 CEO_DIR = BASE_DIR / "shared" / "ceo"
+TIKTOK_PERFIS = BASE_DIR / "tiktok_perfis.txt"       # fontes do TikTok (podáveis)
+IG_PERFIS = BASE_DIR / "instagram_perfis.txt"        # fontes do Instagram (podáveis)
 
 
 def _carregar_env():
@@ -138,6 +141,124 @@ def _analisar(dias: int) -> dict:
         "producao_por_hora": dict(sorted(prod_hora.items(), key=lambda x: -x[1])[:6]),
         "nichos_gerado_em": nichos.get("gerado_em"),
     }
+
+
+# ── APRENDER POR FONTE: qual PERFIL de origem converte (e podar os mortos) ───
+# O ciclo da descoberta autônoma só fecha se a máquina souber quais fontes VENDEM.
+# Cruza posts/fonte (ledger, campo perfil_fonte) × vendas/fonte (Shopee, sub_id[3]).
+def _san_fonte(h: str) -> str:
+    """Handle → chave de sub_id (mesma regra do coletor/produtor): só a-z0-9, ≤16.
+    É a chave de JOIN entre o ledger (perfil original) e a venda (sub_id[3])."""
+    return re.sub(r"[^a-z0-9]", "", (h or "").lower())[:16]
+
+
+def _vendas_por_fonte(dias: int) -> dict:
+    """{chave_san: {'vendas': n, 'comissao': R$}} lido do conversionReport da Shopee.
+    Best-effort: sem métricas/credencial → {} (o CEO segue sem a parte de venda)."""
+    out = defaultdict(lambda: {"vendas": 0, "comissao": 0.0})
+    try:
+        import metricas_agent as M
+        itens = M.puxar_conversoes(dias)
+    except Exception as e:
+        print(f"(vendas por fonte off: {str(e)[:70]}) — só produção")
+        return {}
+    for it in itens:
+        f = M._fonte(it.get("utm", ""))
+        if not f:                       # link antigo sem a etiqueta de fonte → ignora
+            continue
+        out[f]["vendas"] += 1
+        out[f]["comissao"] += float(it.get("comissao") or 0)
+    return {k: {"vendas": v["vendas"], "comissao": round(v["comissao"], 2)}
+            for k, v in out.items()}
+
+
+def _analisar_fontes(dias: int) -> list:
+    """Cruza produção × venda POR PERFIL-FONTE. Retorna lista ordenada com veredito:
+    VENDE (converteu) · MORTA (≥N posts, 0 venda → poda) · NOVA (pouco dado ainda)."""
+    min_posts = int(os.getenv("CEO_PODA_MIN_POSTS", 6))
+    # posts por fonte (do ledger; perfil_fonte foi gravado pela produção)
+    posts = defaultdict(int)
+    nicho_de = {}
+    for r in _ler_ledger(dias):
+        pf = (r.get("perfil_fonte") or "").strip().lower()
+        if not pf:
+            continue
+        posts[pf] += 1
+        nicho_de.setdefault(pf, (r.get("nicho") or r.get("nicho_fonte") or "?"))
+    vendas = _vendas_por_fonte(dias)
+    fontes = []
+    for pf, n in posts.items():
+        vk = vendas.get(_san_fonte(pf), {"vendas": 0, "comissao": 0.0})
+        if vk["vendas"] > 0:
+            vd = "VENDE"
+        elif n >= min_posts:
+            vd = "MORTA"
+        else:
+            vd = "NOVA"
+        fontes.append({"fonte": pf, "nicho": nicho_de.get(pf, "?"), "posts": n,
+                       "vendas": vk["vendas"], "comissao": vk["comissao"],
+                       "veredito": vd})
+    fontes.sort(key=lambda x: (x["comissao"], x["vendas"], x["posts"]), reverse=True)
+    return fontes
+
+
+def _perfil_da_linha(linha: str) -> str:
+    """@handle de uma linha de perfil (sem tag #nicho / comentário)."""
+    l = linha.strip()
+    if not l or l.startswith("#"):
+        return ""
+    l = re.split(r"[\s#]", l)[0]
+    return l.lstrip("@").lower()
+
+
+def _podar_fontes(fontes: list, executar: bool) -> list:
+    """As fontes MORTAS (≥N posts, 0 venda) são comentadas nos arquivos de perfis
+    (o coletor para de puxar delas). REVERSÍVEL: comenta a linha com o motivo, não
+    apaga. executar=False só LISTA os candidatos (dry-run)."""
+    mortas = {f["fonte"] for f in fontes if f["veredito"] == "MORTA"}
+    if not mortas:
+        return []
+    podados = []
+    hoje = time.strftime("%Y-%m-%d")
+    detalhe = {f["fonte"]: f for f in fontes}
+    for arq in (TIKTOK_PERFIS, IG_PERFIS):
+        if not arq.exists():
+            continue
+        linhas = arq.read_text(encoding="utf-8").splitlines()
+        mudou = False
+        for i, l in enumerate(linhas):
+            h = _perfil_da_linha(l)
+            if h and h in mortas:
+                d = detalhe.get(h, {})
+                linhas[i] = (f"# {l.strip()}   # PODADO CEO {hoje}: "
+                             f"{d.get('posts', '?')} posts, 0 vendas em vários dias")
+                podados.append(h)
+                mudou = True
+        if mudou and executar:
+            arq.write_text("\n".join(linhas) + "\n", encoding="utf-8")
+    return sorted(set(podados))
+
+
+def _render_fontes(fontes: list) -> str:
+    """Bloco Markdown do desempenho por fonte + candidatos a poda."""
+    if not fontes:
+        return ""
+    linhas = ["## 🔎 Desempenho por FONTE (perfil de origem)"]
+    vende = [f for f in fontes if f["veredito"] == "VENDE"]
+    mortas = [f for f in fontes if f["veredito"] == "MORTA"]
+    novas = [f for f in fontes if f["veredito"] == "NOVA"]
+    for f in fontes[:12]:
+        emo = {"VENDE": "✅", "MORTA": "💀", "NOVA": "🌱"}.get(f["veredito"], "•")
+        linhas.append(f"- {emo} @{f['fonte']} ({f['nicho']}): {f['posts']} posts · "
+                      f"{f['vendas']} vendas · {_brl(f['comissao'])}")
+    if mortas:
+        alvos = ", ".join("@" + f["fonte"] for f in mortas[:12])
+        linhas += ["", f"**💀 {len(mortas)} fonte(s) MORTA(s)** ({alvos}) — muito post, "
+                   "zero venda. Pra podar (comenta nos perfis, reversível): "
+                   "`ceo_agent.py --podar-fontes`"]
+    linhas.append(f"\n_({len(vende)} vendendo · {len(mortas)} mortas · {len(novas)} "
+                  "novas/sem dado ainda)_")
+    return "\n".join(linhas)
 
 
 # ── Jarvis Confidence Score (0-100): quão confiável é a recomendação ────────
@@ -271,7 +392,10 @@ _PROMPT = (
     "'repostar o produto Y'), e o impacto esperado. Só proponha o que os dados "
     "sustentam.\n"
     "## ⚠️ Ressalva\n(1-2 linhas sobre a confiança dos dados)\n"
-    "Sem inventar números que não estão nos dados. Devolva SÓ o Markdown.\n\n"
+    "Sem inventar números que não estão nos dados. Devolva SÓ o Markdown.\n"
+    "OBS: o campo 'fontes' traz o desempenho por PERFIL de origem (posts × vendas). "
+    "Se houver fonte com muitos posts e ZERO venda (veredito MORTA), proponha PODAR; "
+    "se alguma converte bem (VENDE), proponha PRIORIZAR/curar mais parecidas.\n\n"
     "MEMÓRIA (seus relatórios/decisões/veredictos anteriores). NÃO repita conselho "
     "já dado; se uma decisão passada já foi conferida, leve o RESULTADO dela em conta "
     "(reforce o que AJUDOU, recue no que PIOROU):\n{memoria}\n\n"
@@ -620,8 +744,22 @@ def main():
             dias = max(1, int(arg))
             break
 
+    # PODAR FONTES sob demanda: comenta as fontes MORTAS nos arquivos de perfis.
+    if "--podar-fontes" in argv:
+        fontes = _analisar_fontes(dias)
+        podados = _podar_fontes(fontes, executar=True)
+        if podados:
+            print(f"💀 {len(podados)} fonte(s) podada(s) (comentadas, reversível): "
+                  + ", ".join("@" + p for p in podados))
+        else:
+            print("✅ nenhuma fonte MORTA pra podar (todas vendem ou ainda têm poucos "
+                  "posts). Rode o relatório pra ver o desempenho por fonte.")
+        return 0
+
     a = _analisar(dias)
     score, nivel = _confidence(a)
+    fontes = _analisar_fontes(dias)                  # APRENDE: qual perfil-fonte converte
+    a["fontes"] = fontes                             # entra no JSON que o Gemini lê
     bloco_resultados = _conferir_resultados()        # CONFERE: outcome-check das decisões
     memoria = _ler_memoria_ceo(a)                    # LÊ: o que o CEO já aconselhou/aprendeu
     relatorio = _relatorio_gemini(a, score, nivel, memoria)
@@ -636,6 +774,15 @@ def main():
                  f"Gerado: {time.strftime('%Y-%m-%d %H:%M')}"
                  f"{' · 🧠 memória ativa' if _MEM_OK else ''}\n\n---\n\n")
     doc = cabecalho + relatorio + "\n\n---\n\n"
+    # bloco de desempenho por fonte + poda automática opcional (CEO_PODA_AUTO=1)
+    bloco_fontes = _render_fontes(fontes)
+    if bloco_fontes:
+        if os.getenv("CEO_PODA_AUTO", "0").strip().lower() in ("1", "true", "sim"):
+            podados = _podar_fontes(fontes, executar=True)
+            if podados:
+                bloco_fontes += ("\n\n**✂️ Poda automática (CEO_PODA_AUTO):** "
+                                 + ", ".join("@" + p for p in podados) + " — comentadas.")
+        doc += bloco_fontes + "\n\n---\n\n"
     if bloco_resultados:
         doc += bloco_resultados + "\n---\n\n"
     doc += bloco_props
