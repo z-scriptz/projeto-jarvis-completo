@@ -154,7 +154,7 @@ Jarvis a copiar essa fórmula (dor/público + "isso" sem revelar o produto). Rep
   `.venv/bin/pip install instaloader`. Instagram como fonte agora roda AUTOMÁTICO. 🎉
 - Preferir **fontes sem texto** na tela (a edição fica mais limpa).
 
-### 4. Sourcing por FONTE + nichos LARGOS + descoberta autônoma (Alavanca 1 ✅ 2026-07-16)
+### 4. Sourcing por FONTE + nichos LARGOS + descoberta autônoma (Alavancas 1 ✅ + 2 ✅)
 Insight do Dre: a @topshopbeauty._ está com **0 post** e a tech quase parada. Causa
 achada no código: o roteamento é **100% por palavra-chave do PRODUTO**
 (`_nicho_da_pasta` → `roteador_contas.nicho_do_produto`), então um Reels do "mundo
@@ -169,12 +169,24 @@ games + celulares + produtos**.
   "tablet" p/ não regredir o NexGard). Fontes tagueadas: 17 `#beleza` + 14 `#tech`
   (o resto sem tag roteia pelo produto). Assim: curar fontes femininas → tudo delas
   vai pra @topshopbeauty, mesmo produto de cozinha.
-- **Alavanca 2 (projeto):** **descoberta autônoma** — Jarvis varre hashtags/explore
-  do IG+TikTok por nicho (#achadinhos, #techtok, #maquiagem, #organização…), acha
-  perfis/vídeos novos, avalia (views/relevância) e alimenta as fontes sozinho. O
-  `ig_playwright.py` já faz a parte difícil (Chromium stealth + proxy + cookies) pra
-  perfil; estender pra hashtag é o próximo passo. ⚠️ hashtag/explore são MUITO mais
-  bloqueados que perfil (IG principalmente) — frágil, precisa tuning/paciência.
+- **Alavanca 2 ✅ FEITO (2026-07-18):** **descoberta autônoma** — `descoberta_fontes.py`
+  varre hashtags-semente por nicho no TikTok, extrai os `@` dos autores, tira os que
+  já temos, pontua e escreve candidatos (+ auto-adiciona os fortes com a tag do nicho).
+  - **Scraping via navegador real:** o extractor de hashtag do **yt-dlp morreu**
+    ("marked as broken / No working app info"), então `ig_playwright.autores_hashtag_tiktok`
+    abre `/tag/<hashtag>` num Chromium stealth (reusa proxy + cookies + UA do
+    `listar_reels`), rola e lê os `@` dos links `/@user/video/`. Sem captcha nos testes.
+  - **Pontuação pelo NOME (a virada):** a frequência entre hashtags colapsou (o feed
+    do TikTok é personalizado demais — todo autor aparece 1x), então o sinal que separa
+    **vendedor de creator** é o próprio `@`: `_bonus_nome` dá +45 p/ nome de
+    produto/afiliado (achadinhos, indica, loja, shop, ofertas, promo, vitrine, tips…)
+    e +30 p/ nome do nicho. `score = bonus_nome + freq*18 + views`. Contas de venda
+    batem 63/48 (passam no `--auto 60`); creator/gringo/ruído fica em 18 (só revisão).
+  - **1ª colheita real (beleza):** 9 auto-adicionados, todos afiliado de verdade
+    (`euvinashopee.__`, `achadinhos.noemi`, `achadosincriveiseofertas`, `indica.jheny`,
+    `casapraticashop_`, `achadinhosgirls45`…). É ferramenta manual/cron — não posta nada,
+    só sugere/adiciona fonte, então é segura. Rodar 2-3x acumula base (dedupe via
+    `shared/fontes_descobertas.json`). Falta: rodar `--nicho tech` e `--nicho geral`.
 - Ordem: Alavanca 1 primeiro (baixo risco, mata a fome da beauty), depois a 2 escala.
 
 ### 5. Template do hook — SEMPRE 2 linhas (greedy) ✅ 2026-07-15
