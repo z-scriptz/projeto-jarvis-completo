@@ -63,6 +63,8 @@ def _autores_da_hashtag_tiktok(tag: str, limite: int) -> list:
         return []
     out = []
     for e in (data.get("entries") or []):
+        if not isinstance(e, dict):      # yt-dlp às vezes mete None (vídeo indisponível)
+            continue
         up = (e.get("uploader") or e.get("uploader_id") or e.get("channel") or "")
         up = str(up).lstrip("@").strip()
         try:
