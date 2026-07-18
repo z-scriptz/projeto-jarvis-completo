@@ -155,13 +155,131 @@ def listar_reels(perfil: str, limite: int = 8, headless: bool = True, timeout: i
     return urls[:limite]
 
 
+# ── TikTok: autores de uma hashtag (ALAVANCA 2) ─────────────────────────────
+# yt-dlp morreu pra hashtag do TikTok ("marked as broken"). Aqui abrimos a página
+# /tag/HASHTAG num Chromium real, rolamos e lemos os @handles direto dos links de
+# vídeo (/@handle/video/…). Reusa proxy + cookies + stealth do IG. Best-effort nas
+# views (o container do TikTok muda de nome direto), então retorna 0 quando não acha
+# — a descoberta pontua por frequência mesmo, então views é só um bônus.
+def autores_hashtag_tiktok(tag: str, limite: int = 30, headless: bool = True,
+                           timeout: int = 45) -> list:
+    """Abre https://www.tiktok.com/tag/<tag> num navegador real e devolve
+    [(handle, views)] dos vídeos que aparecerem (rolando a página)."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except Exception:
+        _log("playwright não instalado — .venv/bin/pip install playwright "
+             "&& .venv/bin/playwright install chromium")
+        return []
+    t = (tag or "").lstrip("#").strip()
+    if not t:
+        return []
+    proxy = _proxy_playwright()
+    vistos, out = set(), []
+    _log(f"abrindo #{t}" + (" via proxy" if proxy else "") + " (Chromium real)…")
+    with sync_playwright() as pw:
+        exe = (os.environ.get("PLAYWRIGHT_CHROMIUM") or "").strip() or None
+        browser = pw.chromium.launch(
+            headless=headless, proxy=proxy, executable_path=exe,
+            args=["--no-sandbox", "--disable-blink-features=AutomationControlled",
+                  "--disable-dev-shm-usage"])
+        ctx = browser.new_context(user_agent=_UA, locale="pt-BR",
+                                  viewport={"width": 1280, "height": 900})
+        ctx.add_init_script(_STEALTH_JS)
+        cks = _cookies_playwright()
+        if cks:
+            try:
+                ctx.add_cookies(cks)
+            except Exception as e:
+                _log(f"cookies não aplicaram: {str(e)[:80]}")
+        page = ctx.new_page()
+        try:
+            page.goto(f"https://www.tiktok.com/tag/{t}",
+                      timeout=timeout * 1000, wait_until="domcontentloaded")
+            page.wait_for_timeout(4500)
+            for _ in range(14):
+                # JS que anda do link de vídeo pro card e pega o strong de views ao lado
+                try:
+                    itens = page.evaluate(
+                        """() => {
+                            const seen = {}, res = [];
+                            document.querySelectorAll('a[href*="/video/"]').forEach(a => {
+                                const m = (a.getAttribute('href')||'').match(/\\/@([^\\/?#]+)\\/video\\//);
+                                if (!m) return;
+                                const h = m[1].toLowerCase();
+                                if (seen[h]) return; seen[h] = 1;
+                                let v = 0, node = a;
+                                for (let i = 0; i < 6 && node; i++) {
+                                    const s = node.querySelector &&
+                                        node.querySelector('strong[data-e2e="video-views"]');
+                                    if (s) { v = s.textContent.trim(); break; }
+                                    node = node.parentElement;
+                                }
+                                res.push([h, v]);
+                            });
+                            return res;
+                        }"""
+                    ) or []
+                except Exception:
+                    itens = []
+                for h, vtxt in itens:
+                    if h and h not in vistos:
+                        vistos.add(h)
+                        out.append((h, _views_para_int(vtxt)))
+                if len(out) >= limite:
+                    break
+                page.mouse.wheel(0, 6000)
+                page.wait_for_timeout(2500)
+        except Exception as e:
+            _log(f"erro em #{t}: {str(e)[:150]}")
+        finally:
+            browser.close()
+    _log(f"{len(out)} autores em #{t}")
+    return out[:limite]
+
+
+def _views_para_int(v) -> int:
+    """'1.2M' / '340.5K' / '12,3 mil' → int. Devolve 0 se não der."""
+    if isinstance(v, (int, float)):
+        return int(v)
+    s = str(v or "").strip().upper().replace(",", ".")
+    if not s:
+        return 0
+    # ordem importa: MIL/MI antes de M, senão 'MIL' casa só o 'M' e vira milhão
+    m = re.match(r"([\d.]+)\s*(MIL|MI|K|M|B)?", s)
+    if not m:
+        return 0
+    try:
+        n = float(m.group(1))
+    except ValueError:
+        return 0
+    mult = {"K": 1e3, "MIL": 1e3, "M": 1e6, "MI": 1e6, "B": 1e9}.get(m.group(2) or "", 1)
+    return int(n * mult)
+
+
 if __name__ == "__main__":
     _carregar_env()
-    perfil = sys.argv[1] if len(sys.argv) > 1 else ""
-    lim = int(sys.argv[2]) if len(sys.argv) > 2 else 8
     hl = "--headed" not in sys.argv
+    # modo hashtag do TikTok:  python3 ig_playwright.py --tag "#maquiagem" [limite]
+    if "--tag" in sys.argv:
+        i = sys.argv.index("--tag")
+        tag = sys.argv[i + 1] if len(sys.argv) > i + 1 else ""
+        lim = 30
+        for a in sys.argv[i + 2:]:
+            if a.isdigit():
+                lim = int(a); break
+        if not tag:
+            print("uso: python3 ig_playwright.py --tag \"#hashtag\" [limite]")
+            sys.exit(1)
+        autores = autores_hashtag_tiktok(tag, lim, headless=hl)
+        print(f"#{tag.lstrip('#')}: {len(autores)} autor(es)")
+        for h, vw in autores:
+            print(f"  @{h}  {vw:,} views" if vw else f"  @{h}  (views ?)")
+        sys.exit(0)
+    perfil = sys.argv[1] if len(sys.argv) > 1 else ""
+    lim = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2].isdigit() else 8
     if not perfil:
-        print("uso: python3 ig_playwright.py <perfil> [limite]")
+        print("uso: python3 ig_playwright.py <perfil> [limite]  |  --tag \"#hashtag\"")
         sys.exit(1)
     for u in listar_reels(perfil, lim, headless=hl):
         print(u)

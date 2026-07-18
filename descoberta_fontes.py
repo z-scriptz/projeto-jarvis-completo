@@ -4,14 +4,15 @@
 # Varre HASHTAGS-semente por nicho no TikTok, extrai os PERFIS-AUTORES dos virais,
 # tira os que a gente já tem, pontua (frequência + views) e escreve CANDIDATOS num
 # arquivo de revisão (+ auto-adiciona os fortes na lista de fontes, com a tag do
-# nicho). Reusa o yt-dlp do coletor (cookies/proxy). NÃO roda no pipeline principal
+# nicho). Usa navegador real (ig_playwright, cookies/proxy). NÃO roda no pipeline principal
 # — é ferramenta manual/cron, então é seguro (não posta nada, só sugere fontes).
 #
 # Uso (VPS):
 #   python3 descoberta_fontes.py                    # todos os nichos → candidatos_fontes.txt
 #   python3 descoberta_fontes.py --nicho beleza     # só um nicho
 #   python3 descoberta_fontes.py --auto 60          # auto-adiciona quem tiver score >= 60
-#   python3 descoberta_fontes.py --teste "#maquiagem"   # DEBUG: testa o scraping de 1 hashtag
+#   python3 descoberta_fontes.py --teste "#maquiagem"          # DEBUG: scraping de 1 hashtag
+#   python3 descoberta_fontes.py --teste "#maquiagem" --raw    # DEBUG: janela do navegador aberta
 #
 # >>> PRA EDITAR: mexa em HASHTAGS (semente por nicho). São 100% suas. <<<
 import os
@@ -45,35 +46,20 @@ def _log(m):
     print(f"[descoberta] {m}", flush=True)
 
 
-# ── scraping (reusa o yt-dlp do coletor) ────────────────────────────────────
+# ── scraping (Playwright/Chromium real — yt-dlp morreu pra hashtag do TikTok) ─
 def _autores_da_hashtag_tiktok(tag: str, limite: int) -> list:
-    """Retorna [(uploader, views)] dos vídeos de uma hashtag no TikTok via yt-dlp
-    (flat-playlist). views pode vir 0 (o flat nem sempre traz) — aí não filtra."""
+    """Retorna [(uploader, views)] dos vídeos de uma hashtag no TikTok.
+    Usa o navegador real (ig_playwright.autores_hashtag_tiktok) porque o extractor
+    de hashtag do yt-dlp foi marcado como 'broken'. views pode vir 0 — aí não filtra."""
     t = tag.lstrip("#").strip()
     if not t:
         return []
-    url = f"https://www.tiktok.com/tag/{t}"
     try:
-        from tiktok_coletor import _ytdlp
-        r = _ytdlp(["--flat-playlist", "-J", "--playlist-end", str(limite), url],
-                   timeout=150, fonte="tiktok")
-        data = json.loads(r.stdout or "{}")
+        from ig_playwright import autores_hashtag_tiktok
+        return autores_hashtag_tiktok(t, limite, headless=True)
     except Exception as e:
-        _log(f"  ⚠️  hashtag {tag} falhou no yt-dlp: {str(e)[:80]}")
+        _log(f"  ⚠️  hashtag {tag} falhou no Playwright: {str(e)[:100]}")
         return []
-    out = []
-    for e in (data.get("entries") or []):
-        if not isinstance(e, dict):      # yt-dlp às vezes mete None (vídeo indisponível)
-            continue
-        up = (e.get("uploader") or e.get("uploader_id") or e.get("channel") or "")
-        up = str(up).lstrip("@").strip()
-        try:
-            vw = int(e.get("view_count") or 0)
-        except Exception:
-            vw = 0
-        if up:
-            out.append((up, vw))
-    return out
 
 
 # ── fontes já conhecidas (não repropor) ─────────────────────────────────────
@@ -168,35 +154,26 @@ def registrar(cands: list, auto_thr=None) -> tuple:
 def main():
     args = sys.argv[1:]
 
-    # DEBUG: testa o scraping de UMA hashtag (a prova de que o yt-dlp pega a hashtag)
+    # DEBUG: testa o scraping de UMA hashtag (a prova de que o navegador pega a hashtag)
     if "--teste" in args:
         try:
             tag = args[args.index("--teste") + 1]
         except IndexError:
             print("uso: descoberta_fontes.py --teste \"#hashtag\""); return 1
-        if "--raw" in args:      # diagnóstico cru: o que o yt-dlp REALMENTE devolveu
-            t = tag.lstrip("#").strip()
-            from tiktok_coletor import _ytdlp
-            r = _ytdlp(["--flat-playlist", "-J", "--playlist-end", "10",
-                        f"https://www.tiktok.com/tag/{t}"], timeout=150, fonte="tiktok")
-            print("returncode:", r.returncode)
-            print("stderr:", (r.stderr or "")[:600])
-            print("stdout (len):", len(r.stdout or ""))
-            try:
-                d = json.loads(r.stdout or "{}")
-                ents = d.get("entries") or []
-                print("entries:", len(ents), "| chaves do topo:", list(d.keys())[:8])
-                for e in ents[:3]:
-                    print("  entry:", (list(e.keys())[:10] if isinstance(e, dict) else e))
-            except Exception as ex:
-                print("json falhou:", ex, "| stdout[:200]:", (r.stdout or "")[:200])
+        if "--raw" in args:      # diagnóstico: janela do navegador ABERTA (headed) p/ ver
+            from ig_playwright import autores_hashtag_tiktok
+            autores = autores_hashtag_tiktok(tag.lstrip("#").strip(), 15, headless=False)
+            print(f"[raw/headed] {len(autores)} autor(es):")
+            for h, vw in autores:
+                print(f"  @{h}  {vw:,} views" if vw else f"  @{h}  (views ?)")
             return 0
         autores = _autores_da_hashtag_tiktok(tag, 20)
         print(f"hashtag {tag}: {len(autores)} vídeo(s)")
         for up, vw in autores[:20]:
             print(f"  @{up}  {vw:,} views" if vw else f"  @{up}  (views ?)")
         if not autores:
-            print("  ⚠️  0 vídeos — o yt-dlp não pegou a hashtag (bloqueio/precisa cookies TikTok).")
+            print("  ⚠️  0 autores — o TikTok pode ter bloqueado/captcha. Tente com "
+                  "cookies do TikTok no YTDLP_COOKIES, ou rode --raw p/ ver a janela.")
         return 0
 
     nichos = list(HASHTAGS.keys())
