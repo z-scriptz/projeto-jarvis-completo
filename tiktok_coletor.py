@@ -18,6 +18,7 @@ import time
 import shutil
 import subprocess
 from pathlib import Path
+from collections import defaultdict
 
 BASE_DIR = Path(__file__).resolve().parent
 PERFIS_TXT = BASE_DIR / "tiktok_perfis.txt"
@@ -553,6 +554,95 @@ def _salvar_vistos(ids: set):
         pass
 
 
+# ── SAÚDE DAS FONTES: poda por COLETA (o 1º estágio do funil de fontes) ──────
+# A descoberta joga largo (por nome), mas muita fonte é ZUMBI (conta morta de ~100
+# views → tudo cai no filtro) ou IG que só dá 429. Aqui: fonte que não rende NENHUM
+# vídeo aproveitável por N rodadas SEGUIDAS é comentada nos *_perfis.txt (reversível,
+# não apaga). Trava: só penaliza numa rodada que PROVOU funcionar (rendeu ≥1 keeper
+# em ALGUMA fonte) — se a rodada inteira flopou (rede/proxy caiu), ninguém é punido.
+SAUDE_FONTES = BASE_DIR / "shared" / "fontes_saude.json"
+COLETA_ZUMBI_RUNS = int(os.environ.get("COLETA_ZUMBI_RUNS", 3))     # rodadas 0-keeper p/ podar
+
+
+def _norm_perfil(p: str) -> str:
+    return (p or "").strip().lstrip("@").rstrip("/").lower().split("/")[-1]
+
+
+def _ler_saude() -> dict:
+    try:
+        return json.loads(SAUDE_FONTES.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _salvar_saude(d: dict):
+    try:
+        SAUDE_FONTES.parent.mkdir(parents=True, exist_ok=True)
+        SAUDE_FONTES.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _comentar_fonte(perfil: str, fonte: str, motivo: str) -> bool:
+    """Comenta a linha do perfil no arquivo certo (tiktok/instagram). Reversível:
+    prefixa com '# ' + motivo, não apaga. Retorna True se comentou."""
+    arq = IG_PERFIS_TXT if fonte == "instagram" else PERFIS_TXT
+    if not arq.exists():
+        return False
+    alvo = _norm_perfil(perfil)
+    linhas = arq.read_text(encoding="utf-8").splitlines()
+    mudou = False
+    for i, l in enumerate(linhas):
+        ls = l.strip()
+        if not ls or ls.startswith("#"):
+            continue
+        h = re.split(r"[\s#]", ls)[0].strip()
+        if _norm_perfil(h) == alvo:
+            linhas[i] = f"# {ls}   # {motivo}"
+            mudou = True
+    if mudou:
+        arq.write_text("\n".join(linhas) + "\n", encoding="utf-8")
+    return mudou
+
+
+def _atualizar_saude_e_podar(perfis: list, keepers: dict, dry: bool):
+    """Atualiza o contador de rodadas 0-keeper por fonte e poda os zumbis. Só roda
+    de verdade (não-dry) e só se a rodada PROVOU funcionar (algum keeper no total)."""
+    if dry:
+        return
+    auto = os.environ.get("COLETA_PODA_AUTO", "1").strip().lower() in ("1", "true", "sim")
+    total_keepers = sum(keepers.values())
+    if total_keepers <= 0:
+        _log("saúde das fontes: rodada sem NENHUM keeper (rede/proxy?) — não penalizo "
+             "ninguém desta vez.")
+        return
+    saude = _ler_saude()
+    hoje = time.strftime("%Y-%m-%d")
+    podados = []
+    for perfil, fonte, _nf in perfis:
+        k = _norm_perfil(perfil)
+        if not k:
+            continue
+        s = saude.get(k) or {"zero_seguidas": 0, "fonte": fonte}
+        s["fonte"] = fonte
+        s["checado"] = hoje
+        if keepers.get(k, 0) > 0:
+            s["zero_seguidas"] = 0
+            s["ultimo_ok"] = hoje
+        else:
+            s["zero_seguidas"] = int(s.get("zero_seguidas", 0)) + 1
+            if auto and s["zero_seguidas"] >= COLETA_ZUMBI_RUNS:
+                motivo = (f"ZUMBI-COLETA {hoje}: {s['zero_seguidas']} rodadas sem vídeo "
+                          f"aproveitável (view baixa/429) — reative tirando este #")
+                if _comentar_fonte(perfil, fonte, motivo):
+                    podados.append(k)
+        saude[k] = s
+    _salvar_saude(saude)
+    if podados:
+        _log(f"🧹 poda por coleta: {len(podados)} fonte(s) zumbi comentada(s) "
+             f"(reversível): {', '.join('@' + p for p in podados)}")
+
+
 # ── Dedup por PRODUTO: o mesmo item (2 vídeos diferentes → mesmo produto) não
 # vira 2 posts. Janela de DEDUP_DIAS: depois disso o produto pode voltar. ──
 PRODUTOS_VISTOS = BASE_DIR / "shared" / "produtos_vistos.json"
@@ -788,6 +878,7 @@ def main():
     vistos = _carregar_vistos()
     produtos_vistos = _carregar_produtos_vistos()
     achados = 0
+    keepers = defaultdict(int)     # vídeos aproveitados por fonte (p/ poda por coleta)
     for perfil, fonte, nicho_fonte in perfis:
         _log(f"perfil {perfil} [{fonte}{'/' + nicho_fonte if nicho_fonte else ''}] …")
         for url in _listar_videos(perfil, limite, fonte):
@@ -907,12 +998,14 @@ def main():
                 "comissao_valor": comissao,
                 "video": str(arq),
             }, ensure_ascii=False, indent=2), encoding="utf-8")
+            keepers[_norm_perfil(perfil)] += 1      # rendeu vídeo → fonte viva
             _log(f"     ⬇️  baixado em {pasta.name}/ [{plataforma}]")
 
     # no --dry NÃO persiste o cache (senão a rodada real pula tudo que o teste viu)
     if not dry:
         _salvar_vistos(vistos)
         _salvar_produtos_vistos(produtos_vistos)
+    _atualizar_saude_e_podar(perfis, keepers, dry)   # poda por coleta (zumbis/429)
     _log(f"fim. {achados} produto(s) casado(s) na Shopee "
          f"{'(dry — nada baixado, cache intacto)' if dry else ''}")
     return 0
