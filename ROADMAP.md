@@ -187,6 +187,23 @@ games + celulares + produtos**.
     `casapraticashop_`, `achadinhosgirls45`…). É ferramenta manual/cron — não posta nada,
     só sugere/adiciona fonte, então é segura. Rodar 2-3x acumula base (dedupe via
     `shared/fontes_descobertas.json`). Falta: rodar `--nicho tech` e `--nicho geral`.
+- **Poda por COLETA ✅ FEITO (2026-07-19):** o 1º estágio do funil de fontes. A
+  descoberta joga largo (por NOME, sem ver alcance — as views vinham "?"), então
+  entrou muita fonte ZUMBI: conta de ~100 views cujo vídeo cai todo no filtro
+  (`MIN_VIEWS=50k`), ou IG que só dá 429. O `tiktok_coletor` conta *keepers* por
+  fonte e, quando uma passa `COLETA_ZUMBI_RUNS` (3) rodadas SEGUIDAS sem nenhum
+  vídeo aproveitável, comenta a linha no `*_perfis.txt` (reversível). Trava:
+  só penaliza numa rodada que PROVOU funcionar (≥1 keeper no total) — se a rodada
+  inteira flopou (rede/proxy), ninguém apanha. Estado em `shared/fontes_saude.json`;
+  `COLETA_PODA_AUTO=0` deixa só contando. **Funil de fontes de 3 estágios:**
+  descoberta (larga) → poda por COLETA (corta quem não rende vídeo) → poda por
+  VENDA no CEO (corta quem rende e não vende).
+  - ⚠️ **Sintoma que motivou (2026-07-19):** produção escassa. Diagnóstico: inbox
+    tinha 114 e a fila 52 (máquina viva), MAS a coleta das 03h moía 126 fontes
+    (83 TikTok + 43 IG) e a maioria era lixo — as 43 de IG TODAS em 429 (+ sessão
+    do instaloader sumida no `/tmp`) e vários TikTok descobertos com ~100 views.
+    A poda por coleta limpa isso sozinha em ~3 dias. IG (429/sessão) fica como
+    dívida à parte — ressuscitar depois (regenerar sessão + cookies/proxy).
 - Ordem: Alavanca 1 primeiro (baixo risco, mata a fome da beauty), depois a 2 escala.
 
 ### 5. Template do hook — SEMPRE 2 linhas (greedy) ✅ 2026-07-15
