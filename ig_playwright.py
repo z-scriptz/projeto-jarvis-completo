@@ -103,6 +103,76 @@ def _user_do_perfil(perfil: str) -> str:
     return p.lstrip("@")
 
 
+def _cookies_do_dominio(dominio: str) -> int:
+    """Quantos cookies carregados pertencem ao domínio (ex.: 'instagram')."""
+    return sum(1 for c in _cookies_playwright() if dominio in (c.get("domain") or "").lower())
+
+
+def diagnosticar(perfil: str, timeout: int = 45) -> dict:
+    """DIAGNÓSTICO do IG: abre o /reels/ e reporta o que o Instagram REALMENTE
+    serviu (login-wall? vazio? challenge?), quantos cookies de IG entraram, e
+    salva um print da tela. É a prova de por que o Playwright volta 0 reels."""
+    out = {"perfil": perfil}
+    try:
+        from playwright.sync_api import sync_playwright
+    except Exception:
+        _log("playwright não instalado.")
+        return out
+    user = _user_do_perfil(perfil)
+    proxy = _proxy_playwright()
+    cook_total = len(_cookies_playwright())
+    cook_ig = _cookies_do_dominio("instagram")
+    out.update({"user": user, "proxy": bool(proxy),
+                "cookies_total": cook_total, "cookies_instagram": cook_ig,
+                "cookies_file": (os.environ.get("YTDLP_COOKIES")
+                                 or os.environ.get("IG_COOKIES") or "(nenhum)")})
+    shot = BASE_DIR / "shared" / f"diag_ig_{user or 'x'}.png"
+    shot.parent.mkdir(parents=True, exist_ok=True)
+    with sync_playwright() as pw:
+        exe = (os.environ.get("PLAYWRIGHT_CHROMIUM") or "").strip() or None
+        browser = pw.chromium.launch(
+            headless=True, proxy=proxy, executable_path=exe,
+            args=["--no-sandbox", "--disable-blink-features=AutomationControlled",
+                  "--disable-dev-shm-usage"])
+        ctx = browser.new_context(user_agent=_UA, locale="pt-BR",
+                                  viewport={"width": 1280, "height": 900})
+        ctx.add_init_script(_STEALTH_JS)
+        cks = _cookies_playwright()
+        if cks:
+            try:
+                ctx.add_cookies(cks)
+            except Exception as e:
+                out["cookies_erro"] = str(e)[:120]
+        page = ctx.new_page()
+        try:
+            page.goto(f"https://www.instagram.com/{user}/reels/",
+                      timeout=timeout * 1000, wait_until="domcontentloaded")
+            page.wait_for_timeout(4500)
+            out["url_final"] = page.url
+            out["titulo"] = (page.title() or "")[:120]
+            out["reels_links"] = len(page.query_selector_all('a[href*="/reel/"]'))
+            out["post_links"] = len(page.query_selector_all('a[href*="/p/"]'))
+            out["links_total"] = len(page.query_selector_all("a"))
+            corpo = (page.inner_text("body") or "").lower()
+            out["parece_login"] = any(t in corpo for t in
+                                      ("entrar", "log in", "senha", "password",
+                                       "criar conta", "sign up")) or "/login" in page.url
+            out["parece_challenge"] = any(t in corpo for t in
+                                          ("suspeita", "suspicious", "confirme", "confirm",
+                                           "robô", "not a robot", "tente novamente mais tarde",
+                                           "try again later"))
+            try:
+                page.screenshot(path=str(shot))
+                out["screenshot"] = str(shot)
+            except Exception:
+                pass
+        except Exception as e:
+            out["erro"] = str(e)[:150]
+        finally:
+            browser.close()
+    return out
+
+
 def listar_reels(perfil: str, limite: int = 8, headless: bool = True, timeout: int = 45) -> list:
     """Abre o /reels/ do perfil num Chromium real, rola e extrai os links dos reels."""
     try:
@@ -275,6 +345,29 @@ if __name__ == "__main__":
         print(f"#{tag.lstrip('#')}: {len(autores)} autor(es)")
         for h, vw in autores:
             print(f"  @{h}  {vw:,} views" if vw else f"  @{h}  (views ?)")
+        sys.exit(0)
+    # DIAGNÓSTICO do IG: por que volta 0 reels?  ig_playwright.py --diag <perfil>
+    if "--diag" in sys.argv:
+        i = sys.argv.index("--diag")
+        perfil = sys.argv[i + 1] if len(sys.argv) > i + 1 else "instagram"
+        d = diagnosticar(perfil)
+        print("\n=== DIAGNÓSTICO IG ===")
+        for k in ("perfil", "user", "cookies_file", "cookies_total",
+                  "cookies_instagram", "proxy", "url_final", "titulo",
+                  "reels_links", "post_links", "links_total", "parece_login",
+                  "parece_challenge", "screenshot", "erro", "cookies_erro"):
+            if k in d:
+                print(f"  {k:18}: {d[k]}")
+        print("\n📖 leitura:")
+        if d.get("cookies_instagram", 0) == 0:
+            print("  ⚠️  ZERO cookies de instagram → o YTDLP_COOKIES não tem sessão do IG "
+                  "(provável cookie de TikTok). É PRECISO um cookies.txt logado no IG.")
+        if d.get("parece_login"):
+            print("  ⚠️  caiu no MURO DE LOGIN → sem sessão válida, o IG esconde os reels.")
+        if d.get("parece_challenge"):
+            print("  ⚠️  CHALLENGE/anti-bot → IP do proxy pode estar queimado.")
+        if d.get("reels_links", 0) > 0:
+            print("  ✅ tem reels no DOM — o problema não é login; pode ser o seletor/scroll.")
         sys.exit(0)
     perfil = sys.argv[1] if len(sys.argv) > 1 else ""
     lim = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2].isdigit() else 8
