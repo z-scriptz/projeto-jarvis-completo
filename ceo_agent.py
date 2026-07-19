@@ -242,7 +242,11 @@ def _podar_fontes(fontes: list, executar: bool) -> list:
 def _render_fontes(fontes: list) -> str:
     """Bloco Markdown do desempenho por fonte + candidatos a poda."""
     if not fontes:
-        return ""
+        # histórico não carimbava a fonte; só a produção nova preenche isto.
+        return ("## 🔎 Desempenho por FONTE (perfil de origem)\n"
+                "_Ainda coletando — a atribuição por fonte é nova; o histórico não "
+                "carimbava o perfil de origem. Conforme os vídeos novos postam e "
+                "vendem, cada fonte aparece aqui com veredito VENDE/MORTA/NOVA._")
     linhas = ["## 🔎 Desempenho por FONTE (perfil de origem)"]
     vende = [f for f in fontes if f["veredito"] == "VENDE"]
     mortas = [f for f in fontes if f["veredito"] == "MORTA"]
