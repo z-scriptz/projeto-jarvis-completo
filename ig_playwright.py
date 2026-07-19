@@ -149,14 +149,24 @@ def diagnosticar(perfil: str, timeout: int = 45) -> dict:
                       timeout=timeout * 1000, wait_until="domcontentloaded")
             page.wait_for_timeout(4500)
             out["url_final"] = page.url
-            out["titulo"] = (page.title() or "")[:120]
+            titulo = (page.title() or "")
+            out["titulo"] = titulo[:120]
             out["reels_links"] = len(page.query_selector_all('a[href*="/reel/"]'))
             out["post_links"] = len(page.query_selector_all('a[href*="/p/"]'))
             out["links_total"] = len(page.query_selector_all("a"))
+            # o perfil CARREGOU se o @handle (ou o user) aparece no título da aba
+            out["perfil_carregou"] = bool(user and user.lower() in titulo.lower())
             corpo = (page.inner_text("body") or "").lower()
-            out["parece_login"] = any(t in corpo for t in
-                                      ("entrar", "log in", "senha", "password",
-                                       "criar conta", "sign up")) or "/login" in page.url
+            # LOGIN DURO = redirect pro /login OU título de página de login (não só o
+            # texto de rodapé "Entrar/Criar conta" que aparece em perfil público).
+            out["login_duro"] = ("/login" in page.url or "/accounts/login" in page.url
+                                 or "entrar" in titulo.lower()
+                                 or "log in" in titulo.lower())
+            # SESSÃO FRACA = perfil carrega mas a grade de mídia não vem (0 reels/posts)
+            out["midia_bloqueada"] = (out["perfil_carregou"]
+                                      and out["reels_links"] == 0
+                                      and out["post_links"] == 0)
+            out["parece_login"] = out["login_duro"]
             out["parece_challenge"] = any(t in corpo for t in
                                           ("suspeita", "suspicious", "confirme", "confirm",
                                            "robô", "not a robot", "tente novamente mais tarde",
@@ -354,20 +364,26 @@ if __name__ == "__main__":
         print("\n=== DIAGNÓSTICO IG ===")
         for k in ("perfil", "user", "cookies_file", "cookies_total",
                   "cookies_instagram", "proxy", "url_final", "titulo",
-                  "reels_links", "post_links", "links_total", "parece_login",
-                  "parece_challenge", "screenshot", "erro", "cookies_erro"):
+                  "perfil_carregou", "reels_links", "post_links", "links_total",
+                  "login_duro", "midia_bloqueada", "parece_challenge",
+                  "screenshot", "erro", "cookies_erro"):
             if k in d:
                 print(f"  {k:18}: {d[k]}")
         print("\n📖 leitura:")
         if d.get("cookies_instagram", 0) == 0:
-            print("  ⚠️  ZERO cookies de instagram → o YTDLP_COOKIES não tem sessão do IG "
-                  "(provável cookie de TikTok). É PRECISO um cookies.txt logado no IG.")
-        if d.get("parece_login"):
-            print("  ⚠️  caiu no MURO DE LOGIN → sem sessão válida, o IG esconde os reels.")
+            print("  ⚠️  ZERO cookies de instagram → o cookies.txt não tem sessão do IG. "
+                  "É PRECISO um cookies.txt logado no IG.")
+        if d.get("login_duro"):
+            print("  ⚠️  LOGIN DURO (redirect/título de login) → sem sessão válida.")
+        elif d.get("midia_bloqueada"):
+            print("  ⚠️  SESSÃO FRACA: o perfil CARREGA mas a grade de mídia está BLOQUEADA "
+                  "(0 reels/posts). Causa provável: sessionid expirado OU o IG desconfia do "
+                  "IP do proxy (sessão criada noutro IP/dispositivo). Conserto: renovar o "
+                  "ig_cookies.txt logado no IG — de preferência gerando a sessão JÁ pelo proxy.")
         if d.get("parece_challenge"):
             print("  ⚠️  CHALLENGE/anti-bot → IP do proxy pode estar queimado.")
         if d.get("reels_links", 0) > 0:
-            print("  ✅ tem reels no DOM — o problema não é login; pode ser o seletor/scroll.")
+            print("  ✅ tem reels no DOM — sessão OK; o problema é seletor/scroll.")
         sys.exit(0)
     perfil = sys.argv[1] if len(sys.argv) > 1 else ""
     lim = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2].isdigit() else 8
