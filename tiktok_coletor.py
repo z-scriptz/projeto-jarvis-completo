@@ -384,16 +384,25 @@ def _listar_videos(perfil: str, limite: int, fonte: str = "tiktok") -> list:
         low = perfil.lower()
         if perfil.startswith("http") and ("/reel/" in low or "/p/" in low or "/tv/" in low):
             return [perfil]
-        # 1) Playwright (navegador real) — o approach que o IG não bloqueia fácil
+        # 1) Playwright (navegador real) — com RETRY: o IG é flaky (vimos 0→12 reels
+        #    no MESMO perfil sem trocar nada), então uma 2ª tentativa recupera muito.
         urls = _listar_ig_playwright(perfil, limite)
+        if not urls:
+            time.sleep(int(os.environ.get("IG_RETRY_SEG", 6)))
+            urls = _listar_ig_playwright(perfil, limite)
         if urls:
             return urls
-        # 2) instaloader (API) — funciona quando a conta não está limitada
-        urls = _listar_ig_instaloader(perfil, limite)
-        if urls:
-            return urls
-        _log("   (listagem do IG vazia — tente Playwright com cookies+proxy, "
-             "ou use links de reel DIRETOS pra curadoria manual)")
+        # 2) instaloader (API) SÓ se explicitamente ligado. O fallback yt-dlp do IG
+        #    dá 429 e QUEIMA o IP do proxy (foi o que estrangulou tudo) — desligado
+        #    por padrão. IG_FALLBACK_YTDLP=1 religa o comportamento antigo.
+        if os.environ.get("IG_FALLBACK_YTDLP", "0").strip().lower() in ("1", "true", "sim"):
+            urls = _listar_ig_instaloader(perfil, limite)
+            if urls:
+                return urls
+        else:
+            _log("   (IG vazio nesta rodada — Playwright 0; NÃO martelo yt-dlp p/ não "
+                 "tomar 429. IG_FALLBACK_YTDLP=1 religa os fallbacks.)")
+            return []
     url = _url_perfil(perfil, fonte)
     r = _ytdlp(["--flat-playlist", "-J", "--playlist-end", str(limite), url], fonte=fonte)
     try:
@@ -562,6 +571,34 @@ def _salvar_vistos(ids: set):
 # em ALGUMA fonte) — se a rodada inteira flopou (rede/proxy caiu), ninguém é punido.
 SAUDE_FONTES = BASE_DIR / "shared" / "fontes_saude.json"
 COLETA_ZUMBI_RUNS = int(os.environ.get("COLETA_ZUMBI_RUNS", 3))     # rodadas 0-keeper p/ podar
+IG_ROTACAO = BASE_DIR / "shared" / "ig_rotacao.json"               # janela rotativa de fontes IG
+
+
+def _rotacionar_ig(perfis: list) -> list:
+    """O IG estrangula (429) se a gente martela dezenas de perfis por rodada. Aqui
+    a coleta processa no MÁXIMO IG_MAX_PERFIS_RUN perfis de IG por rodada, numa
+    JANELA ROTATIVA — cobre todos ao longo de várias rodadas sem burst. TikTok passa
+    inteiro (não estrangula assim)."""
+    cap = int(os.environ.get("IG_MAX_PERFIS_RUN", 12))
+    ig = [p for p in perfis if p[1] == "instagram"]
+    outros = [p for p in perfis if p[1] != "instagram"]
+    if cap <= 0 or len(ig) <= cap:
+        return perfis
+    try:
+        st = json.loads(IG_ROTACAO.read_text(encoding="utf-8"))
+    except Exception:
+        st = {}
+    off = int(st.get("offset", 0)) % len(ig)
+    sel = [ig[(off + i) % len(ig)] for i in range(cap)]
+    st["offset"] = (off + cap) % len(ig)
+    try:
+        IG_ROTACAO.parent.mkdir(parents=True, exist_ok=True)
+        IG_ROTACAO.write_text(json.dumps(st, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+    _log(f"IG: {len(ig)} fontes → rodando {cap} nesta rodada (rotação, offset {off}); "
+         f"TikTok: {len(outros)}")
+    return outros + sel
 
 
 def _norm_perfil(p: str) -> str:
@@ -875,12 +912,17 @@ def main():
         _log("(ou crie tiktok_perfis.txt e/ou instagram_perfis.txt — 1 perfil por linha)")
         return 1
 
+    perfis = _rotacionar_ig(perfis)      # limita/rotaciona IG p/ não tomar 429
+    ig_delay = int(os.environ.get("IG_DELAY_SEG", 8))   # respiro entre perfis de IG
+
     vistos = _carregar_vistos()
     produtos_vistos = _carregar_produtos_vistos()
     achados = 0
     keepers = defaultdict(int)     # vídeos aproveitados por fonte (p/ poda por coleta)
     for perfil, fonte, nicho_fonte in perfis:
         _log(f"perfil {perfil} [{fonte}{'/' + nicho_fonte if nicho_fonte else ''}] …")
+        if fonte == "instagram" and ig_delay > 0 and not dry:
+            time.sleep(ig_delay)     # espaça os requests de IG (anti-429)
         for url in _listar_videos(perfil, limite, fonte):
             meta = _metadados(url)
             vid = meta.get("id")
