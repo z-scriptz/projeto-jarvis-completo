@@ -87,6 +87,11 @@ DEFAULTS = {
     "horarios":                   ["09:00", "14:00", "17:00", "21:00"],
     "plataformas":                ["youtube"],
     "publico":                    True,
+    # 1 vídeo de CADA conta por slot (balanceado), com teto diário por conta.
+    # OFF por padrão = comportamento antigo (1 vídeo/slot, total). Ligue e ajuste
+    # o teto pra abrir a torneira em rampa (2 → 3 → 4-5/conta/dia).
+    "post_por_conta":             False,
+    "max_posts_por_conta_dia":    4,
     "tolerancia_min":             10,
     "janela_inicio":              "08:00",   # não posta antes
     "janela_fim":                 "23:00",   # não posta depois
@@ -609,7 +614,31 @@ def ciclo_postagem(cfg: dict, hist: dict, dry_run: bool) -> dict:
     log.info("─" * 60)
     log.info(f"📤 CICLO POSTAGEM — horário devido: {horario}")
 
-    # Escolhe um produto pronto que ainda não foi postado
+    # MODO BALANCEADO (opt-in): posta 1 vídeo de CADA conta neste slot, respeitando
+    # o teto diário por conta. Assim beauty/tech/geral saem no mesmo ritmo.
+    if cfg.get("post_por_conta"):
+        teto = int(cfg.get("max_posts_por_conta_dia", 4))
+        alvos = _um_por_conta_sob_teto(hist, teto)
+        if not alvos:
+            log.warning("   ⚠️  Nada pra postar (esteira vazia ou todas as contas "
+                        f"já no teto de {teto}/dia)")
+            resultado["motivo"] = "vazio_ou_teto"
+            return resultado
+        log.info(f"   🎯 {len(alvos)} conta(s) neste slot (teto {teto}/dia): "
+                 + ", ".join(f"{c}" for _s, c in alvos))
+        ok_slugs = []
+        for slug, conta in alvos:
+            log.info(f"   🎬 Postando '{slug}' → {conta}")
+            if dry_run or _postar_produto(slug, cfg):
+                ok_slugs.append(slug)
+        if ok_slugs:
+            _registrar_postagem(hist, horario, ok_slugs)
+            resultado.update(postou=True, produtos=ok_slugs, dry_run=dry_run)
+        else:
+            resultado["motivo"] = "todas_plataformas_falharam"
+        return resultado
+
+    # MODO CLÁSSICO: 1 vídeo por slot (o "próximo da fila").
     produto = _proximo_para_postar(hist)
     if not produto:
         log.warning("   ⚠️  Nenhum vídeo pronto pra postar (esteira vazia)")
@@ -624,30 +653,7 @@ def ciclo_postagem(cfg: dict, hist: dict, dry_run: bool) -> dict:
         resultado.update(postou=True, produto=produto, dry_run=True)
         return resultado
 
-    # Posta em cada plataforma configurada — agora com retry + verificação +
-    # guard + alerta Telegram (Frente C). Importa aqui pra não acoplar o
-    # daemon ao publish_guard quando só se roda --status, etc.
-    try:
-        from agents.publish_guard import publicar_com_garantia
-    except Exception as e:
-        log.error(f"   ❌ Não consegui importar publish_guard: {e}")
-        resultado["motivo"] = "publish_guard_indisponivel"
-        return resultado
-
-    sucesso_algum = False
-    detalhes = {}
-    for plataforma in cfg["plataformas"]:
-        r = publicar_com_garantia(plataforma, produto, plano=None,
-                                  publico=cfg["publico"])
-        detalhes[plataforma] = r
-        if r.get("sucesso"):
-            sucesso_algum = True
-        elif r.get("pulado"):
-            log.info(f"   ⏭️  {plataforma} pulado (sem uploader ainda)")
-        # falha real já gerou alerta dentro do publish_guard
-
-    resultado["detalhes"] = detalhes
-    if sucesso_algum:
+    if _postar_produto(produto, cfg):
         _registrar_postagem(hist, horario, produto)
         resultado.update(postou=True, produto=produto)
     else:
@@ -656,30 +662,89 @@ def ciclo_postagem(cfg: dict, hist: dict, dry_run: bool) -> dict:
     return resultado
 
 
+def _prontos_nao_postados(hist: dict) -> list:
+    """Slugs prontos (com video.mp4) que ainda não foram postados, em ordem."""
+    if not PRONTO_DIR.exists():
+        return []
+    postados = set(hist.get("postados", []))
+    out = []
+    for pasta in sorted(PRONTO_DIR.iterdir()):
+        if pasta.is_dir() and (pasta / "video.mp4").exists() and pasta.name not in postados:
+            out.append(pasta.name)
+    return out
+
+
 def _proximo_para_postar(hist: dict) -> str | None:
     """Retorna o slug de um vídeo pronto que ainda não foi postado."""
-    if not PRONTO_DIR.exists():
-        return None
-    postados = set(hist.get("postados", []))
-    for pasta in sorted(PRONTO_DIR.iterdir()):
-        if not pasta.is_dir():
-            continue
-        if not (pasta / "video.mp4").exists():
-            continue
-        if pasta.name in postados:
-            continue
-        return pasta.name
-    return None
+    prontos = _prontos_nao_postados(hist)
+    return prontos[0] if prontos else None
 
 
-def _registrar_postagem(hist: dict, horario: str, produto: str):
-    """Marca no histórico que postou (nunca repete)."""
+def _conta_do_slug(slug: str) -> str:
+    """Handle/nicho da conta de um vídeo pronto (lê conta.json ao lado)."""
+    try:
+        d = json.loads((PRONTO_DIR / slug / "conta.json").read_text(encoding="utf-8"))
+        return d.get("handle") or d.get("nicho") or "?"
+    except Exception:
+        return "?"
+
+
+def _postados_hoje_por_conta(hist: dict) -> dict:
+    """{conta: nº postado HOJE} — derivado do histórico do dia (aceita formato
+    antigo string e o novo lista)."""
     hoje = str(date.today())
-    hist["por_dia"].setdefault(hoje, {})[horario] = produto
-    if produto not in hist["postados"]:
-        hist["postados"].append(produto)
+    cont = {}
+    for v in hist.get("por_dia", {}).get(hoje, {}).values():
+        for slug in (v if isinstance(v, list) else [v]):
+            c = _conta_do_slug(slug)
+            cont[c] = cont.get(c, 0) + 1
+    return cont
+
+
+def _um_por_conta_sob_teto(hist: dict, teto: int) -> list:
+    """1 vídeo pronto de CADA conta que ainda não bateu o teto diário. Ordem estável."""
+    hoje_cont = _postados_hoje_por_conta(hist)
+    escolhidos, vistas = [], set()
+    for slug in _prontos_nao_postados(hist):
+        c = _conta_do_slug(slug)
+        if c in vistas:                       # já peguei 1 dessa conta neste slot
+            continue
+        if hoje_cont.get(c, 0) >= teto:       # conta já bateu o teto de hoje
+            continue
+        escolhidos.append((slug, c))
+        vistas.add(c)
+    return escolhidos
+
+
+def _postar_produto(produto: str, cfg: dict) -> bool:
+    """Posta 1 vídeo em todas as plataformas configuradas. True se alguma deu certo."""
+    try:
+        from agents.publish_guard import publicar_com_garantia
+    except Exception as e:
+        log.error(f"   ❌ Não consegui importar publish_guard: {e}")
+        return False
+    ok = False
+    for plataforma in cfg["plataformas"]:
+        r = publicar_com_garantia(plataforma, produto, plano=None, publico=cfg["publico"])
+        if r.get("sucesso"):
+            ok = True
+        elif r.get("pulado"):
+            log.info(f"   ⏭️  {plataforma} pulado (sem uploader ainda)")
+    return ok
+
+
+def _registrar_postagem(hist: dict, horario: str, produto):
+    """Marca no histórico que postou (nunca repete). 'produto' pode ser 1 slug
+    (str) ou vários (list) quando o slot posta 1 por conta."""
+    hoje = str(date.today())
+    slugs = produto if isinstance(produto, list) else [produto]
+    hist["por_dia"].setdefault(hoje, {})[horario] = (
+        list(slugs) if isinstance(produto, list) else produto)
+    for s in slugs:
+        if s not in hist["postados"]:
+            hist["postados"].append(s)
     _salvar_historico(hist)
-    log.info(f"   📝 Registrado: {hoje} {horario} → {produto}")
+    log.info(f"   📝 Registrado: {hoje} {horario} → {', '.join(slugs)}")
 
 
 # =====================================================================
