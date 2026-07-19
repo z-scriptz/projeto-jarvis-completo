@@ -1,0 +1,6 @@
+# Caddy: HTTPS automático (Let's Encrypt) pro mini-painel do TikTok.
+# Copie pra /etc/caddy/Caddyfile e rode: systemctl restart caddy
+# Pré-requisito: registro A  jarvis.topshopoficial.com.br -> 217.216.53.243
+jarvis.topshopoficial.com.br {
+    reverse_proxy 127.0.0.1:8770
+}
