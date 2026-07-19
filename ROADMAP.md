@@ -215,6 +215,24 @@ games + celulares + produtos**.
     ferramenta (URL/título/cookies/login_duro/midia_bloqueada + screenshot).
 - Ordem: Alavanca 1 primeiro (baixo risco, mata a fome da beauty), depois a 2 escala.
 
+### 4.5 Painel de saúde + gargalo da POSTAGEM (2026-07-19)
+- **`jarvis_status.py` ✅:** painel num comando (coleta/inbox/fontes/funil,
+  produção 7d, fila por conta, postagem 7d, dinheiro). Só lê arquivo local (rápido);
+  `--full` cruza fonte×venda na Shopee. Companheiro do período de decantação.
+- **Gargalo real da escassez descoberto pelo painel:** produção ~20/dia vs postagem
+  **~3,4/dia**. Causa: o daemon postava **1 vídeo por slot** (4 slots = 4/dia TOTAL,
+  ordem alfabética), não por conta → cada conta saía ~1/dia. O sourcing (dia todo)
+  era pra QUALIDADE/auto-limpeza; a torneira que faltava abrir era a POSTAGEM.
+- **Postagem balanceada ✅ (opt-in):** `daemon_maestro` ganhou `post_por_conta`
+  (OFF por padrão). Ligado, cada slot posta 1 vídeo de CADA conta que ainda não bateu
+  `max_posts_por_conta_dia` → beauty/tech/geral no mesmo ritmo; volume = slots×contas.
+  **Rampa recomendada:** teto 2 → 3 → 4-5 conforme as contas (novas) provam que não
+  tomam flag de spam. Ligar no `agendador_config.json` (recarrega sozinho; código
+  novo precisa `systemctl restart jarvis.service`).
+- ⚠️ **Ruído externo visto no log:** Gemini dando **503 UNAVAILABLE** intermitente
+  (visão/narração caem pro fallback simples) + alguns renders em **timeout**. Lado
+  Google/carga do VPS — não é bug nosso, só conviver; explica parte do "?" de nicho.
+
 ### 5. Template do hook — SEMPRE 2 linhas (greedy) ✅ 2026-07-15
 Regra fixa: **todo hook é 2 linhas**, linha 1 preenchida até o limite e o resto
 DESCE pra linha 2 (greedy), nunca 1 linha só nem corte no meio. A fonte encolhe até
