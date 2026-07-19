@@ -202,8 +202,17 @@ games + celulares + produtos**.
     tinha 114 e a fila 52 (máquina viva), MAS a coleta das 03h moía 126 fontes
     (83 TikTok + 43 IG) e a maioria era lixo — as 43 de IG TODAS em 429 (+ sessão
     do instaloader sumida no `/tmp`) e vários TikTok descobertos com ~100 views.
-    A poda por coleta limpa isso sozinha em ~3 dias. IG (429/sessão) fica como
-    dívida à parte — ressuscitar depois (regenerar sessão + cookies/proxy).
+    A poda por coleta limpa isso sozinha em ~3 dias.
+  - ✅ **IG consertado (2026-07-19) — era RATE-LIMIT, não cookie:** o `ig_playwright
+    --diag` provou que o MESMO perfil voltava 0 reels e depois 12 sem trocar nada no
+    cookie (que nem tem `sessionid` — o IG mostra reel de perfil público sem login,
+    contanto que não te throttle). A causa era martelar 43 perfis de IG por rodada +
+    o fallback yt-dlp do IG (429) queimando o IP do proxy. Conserto SEM cookie novo:
+    (1) RETRY do Playwright em 0 (IG é flaky); (2) cortar o fallback yt-dlp que dava
+    429 (`IG_FALLBACK_YTDLP=1` religa); (3) `_rotacionar_ig` — máx `IG_MAX_PERFIS_RUN`
+    (12) perfis de IG/rodada em janela rotativa (cobre todos em ~4 rodadas); (4) delay
+    `IG_DELAY_SEG` (8s) entre perfis de IG. `ig_playwright --diag <perfil>` fica de
+    ferramenta (URL/título/cookies/login_duro/midia_bloqueada + screenshot).
 - Ordem: Alavanca 1 primeiro (baixo risco, mata a fome da beauty), depois a 2 escala.
 
 ### 5. Template do hook — SEMPRE 2 linhas (greedy) ✅ 2026-07-15
