@@ -275,5 +275,26 @@ def health():
     return {"ok": True, "contas": len(_ler_tokens())}
 
 
+@app.route("/tiktok/debug")
+def debug():
+    """Mostra o que o TikTok REALMENTE enxerga de cada conta conectada (creator_info):
+    privacy_level_options, se a conta está private, limites. É a prova de causa do
+    erro 'unaudited_client_can_only_post_to_private_accounts'."""
+    out = {}
+    for oid in _ler_tokens():
+        token = _token_valido(oid)
+        if not token:
+            out[oid] = {"erro": "sem token válido"}
+            continue
+        try:
+            ci = requests.post(CREATOR_URL, headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json; charset=UTF-8"}, timeout=30).json()
+            out[oid] = ci
+        except Exception as e:
+            out[oid] = {"erro": str(e)[:150]}
+    return out
+
+
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=int(os.environ.get("TIKTOK_PANEL_PORT", 8770)))
