@@ -92,6 +92,9 @@ DEFAULTS = {
     # o teto pra abrir a torneira em rampa (2 → 3 → 4-5/conta/dia).
     "post_por_conta":             False,
     "max_posts_por_conta_dia":    4,
+    # TikTok via API oficial (Content Posting API). OFF até o app ser aprovado —
+    # ligue depois da aprovação (+ conta pública + credenciais de produção no .env).
+    "postar_tiktok":              False,
     "tolerancia_min":             10,
     "janela_inicio":              "08:00",   # não posta antes
     "janela_fim":                 "23:00",   # não posta depois
@@ -689,6 +692,15 @@ def _conta_do_slug(slug: str) -> str:
         return "?"
 
 
+def _nicho_do_slug(slug: str) -> str:
+    """Nicho da conta de um vídeo pronto (p/ mapear a conta TikTok certa)."""
+    try:
+        d = json.loads((PRONTO_DIR / slug / "conta.json").read_text(encoding="utf-8"))
+        return (d.get("nicho") or "").strip().lower()
+    except Exception:
+        return ""
+
+
 def _postados_hoje_por_conta(hist: dict) -> dict:
     """{conta: nº postado HOJE} — derivado do histórico do dia (aceita formato
     antigo string e o novo lista)."""
@@ -730,6 +742,19 @@ def _postar_produto(produto: str, cfg: dict) -> bool:
             ok = True
         elif r.get("pulado"):
             log.info(f"   ⏭️  {plataforma} pulado (sem uploader ainda)")
+    # TikTok via API oficial (Content Posting API) — gated até o app ser aprovado.
+    # Liga com "postar_tiktok": true no config (+ conta pública + creds de produção).
+    if cfg.get("postar_tiktok"):
+        try:
+            import tiktok_poster
+            tr = tiktok_poster.postar_video(produto, nicho=_nicho_do_slug(produto))
+            if tr.get("ok"):
+                ok = True
+                log.info(f"   🎵 TikTok: {tr.get('publish_id')} ({tr.get('privacidade')})")
+            else:
+                log.warning(f"   ⚠️  TikTok falhou: {tr.get('erro')}")
+        except Exception as e:
+            log.warning(f"   ⚠️  TikTok poster indisponível: {str(e)[:80]}")
     return ok
 
 
