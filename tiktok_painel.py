@@ -218,7 +218,14 @@ def _postar(open_id: str, slug: str, legenda: str) -> dict:
     ci = requests.post(CREATOR_URL, headers=H, timeout=30).json()
     dados = ci.get("data") or {}
     niveis = dados.get("privacy_level_options") or ["SELF_ONLY"]
-    privacidade = "PUBLIC_TO_EVERYONE" if "PUBLIC_TO_EVERYONE" in niveis else niveis[0]
+    # app AUDITADO → público; NÃO auditado → SELF_ONLY (o único que a TikTok aceita
+    # de client não auditado; mandar FOLLOWER_OF_CREATOR/etc. ainda dá erro de trava).
+    if "PUBLIC_TO_EVERYONE" in niveis:
+        privacidade = "PUBLIC_TO_EVERYONE"
+    elif "SELF_ONLY" in niveis:
+        privacidade = "SELF_ONLY"
+    else:
+        privacidade = niveis[0]
     tam = video.stat().st_size
     # 2) init (push_by_file, arquivo inteiro num chunk só)
     body = {
