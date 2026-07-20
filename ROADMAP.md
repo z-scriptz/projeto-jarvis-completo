@@ -251,10 +251,18 @@ caminho era PyAutoGUI (PC-only) — agora é a **API oficial**, do VPS.
   produção só depois de aprovado; (2) redirect URI tem que estar no Login Kit DO
   SANDBOX, idêntico; (3) app não auditado só posta em conta **privada**; (4) e só como
   **SELF_ONLY** (não `FOLLOWER_OF_CREATOR` — o `niveis[0]` estava errado).
-- ✅ **1º post real pela API confirmado** (SELF_ONLY, sandbox). Falta: gravar o vídeo
-  demo, submeter o review; após aprovado → trocar p/ credenciais de produção + conta
-  pública + `PUBLIC_TO_EVERYONE`, e plugar o poster no daemon (add "tiktok" em
-  `plataformas`).
+- ✅ **1º post real pela API confirmado** (SELF_ONLY, sandbox) + **review SUBMETIDO
+  (2026-07-19) — aguardando resultado do TikTok.**
+- ✅ **PRÉ-POSICIONADO pra aprovação (2026-07-19):** `tiktok_poster.py` é o motor
+  ÚNICO (token/refresh, creator_info, privacidade auditado→público / sandbox→SELF_ONLY,
+  init+upload+status, mapa nicho→conta via `TIKTOK_CONTA_<NICHO>`, CLI de teste). O
+  painel foi refatorado pra importar esse motor. O `daemon_maestro._postar_produto`
+  ganhou bloco TikTok **gated por `postar_tiktok`** (OFF). **Na aprovação, é só flip:**
+  (1) creds de produção no `.env`; (2) conta pública; (3) `postar_tiktok: true` no
+  config → TikTok entra no rodízio junto com IG/FB/YT. Zero build.
+  - ⏳ multi-conta TikTok: hoje só `@topshopoficial_` conectada (serve todos os nichos).
+    Se quiser 1 conta TikTok por nicho, conectar cada uma no painel + setar
+    `TIKTOK_CONTA_BELEZA/TECH/GERAL` no `.env`.
 
 ### 5. Template do hook — SEMPRE 2 linhas (greedy) ✅ 2026-07-15
 Regra fixa: **todo hook é 2 linhas**, linha 1 preenchida até o limite e o resto
