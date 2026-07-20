@@ -233,6 +233,29 @@ games + celulares + produtos**.
   (visão/narração caem pro fallback simples) + alguns renders em **timeout**. Lado
   Google/carga do VPS — não é bug nosso, só conviver; explica parte do "?" de nicho.
 
+### 4.6 Postagem no TikTok via Content Posting API (2026-07-19)
+Maior canal de distribuição que faltava (a gente só COLETAVA do TikTok). O antigo
+caminho era PyAutoGUI (PC-only) — agora é a **API oficial**, do VPS.
+- **`tiktok_painel.py` (Flask):** OAuth (Login Kit, scopes `user.info.basic,video.publish`)
+  + Content Posting API (Direct Post, `push_by_file`). Rotas: `/tiktok/login`,
+  `/tiktok/callback` (guarda token por conta em `shared/tiktok_tokens.json`, gitignored),
+  `/` (conectar + form de post), `/tiktok/postar` (creator_info → init → PUT upload →
+  publish_id), `/tiktok/debug` (creator_info bruto). Serve de UI pro review E de motor
+  de post pro daemon depois.
+- **Infra:** subdomínio `jarvis.topshopoficial.com.br` → VPS; **Caddy** (HTTPS auto,
+  Let's Encrypt) → `127.0.0.1:8770`; systemd `tiktok_painel.service`. Registro A + o
+  domínio já verificado no TikTok (cobre subdomínio).
+- **Legal:** `site_legal/termos.html` + `privacidade.html` publicados no GitHub Pages
+  (`topshopoficial.com.br/termos.html`, `/privacidade.html`) — requisito do review.
+- **Pegadinhas resolvidas (todas):** (1) sandbox tem client key/secret PRÓPRIAS —
+  produção só depois de aprovado; (2) redirect URI tem que estar no Login Kit DO
+  SANDBOX, idêntico; (3) app não auditado só posta em conta **privada**; (4) e só como
+  **SELF_ONLY** (não `FOLLOWER_OF_CREATOR` — o `niveis[0]` estava errado).
+- ✅ **1º post real pela API confirmado** (SELF_ONLY, sandbox). Falta: gravar o vídeo
+  demo, submeter o review; após aprovado → trocar p/ credenciais de produção + conta
+  pública + `PUBLIC_TO_EVERYONE`, e plugar o poster no daemon (add "tiktok" em
+  `plataformas`).
+
 ### 5. Template do hook — SEMPRE 2 linhas (greedy) ✅ 2026-07-15
 Regra fixa: **todo hook é 2 linhas**, linha 1 preenchida até o limite e o resto
 DESCE pra linha 2 (greedy), nunca 1 linha só nem corte no meio. A fonte encolhe até
