@@ -939,8 +939,9 @@ def _reproduzir_video_sync(src: Path, dst: Path, produto: str,
                 _criar_camadas_topo, _criar_cta_fixo,
                 _import_moviepy as _brand_mp_import)
             _mp_brand = _brand_mp_import()   # 7-tuple (inclui ColorClip, TextClip)
-            hook_txt = (_HOOK[0](nome_produto, plano=plano)
-                        if _HOOK_OK else "OLHA ISSO")
+            # usa o hook JÁ definido no plano (Alana, 2 linhas) — só recalcula se vazio
+            hook_txt = (plano.get("hook")
+                        or (_HOOK[0](nome_produto, plano=plano) if _HOOK_OK else "OLHA ISSO"))
             for camada in _criar_camadas_topo(alvo, hook_txt, _mp_brand, produto=nome_produto):
                 if camada is not None:
                     overlays.append(camada)
@@ -956,8 +957,8 @@ def _reproduzir_video_sync(src: Path, dst: Path, produto: str,
         if not _marca_ok:
             try:
                 if CFG_HOOK_OVERLAY:
-                    _hk = (_HOOK[0](nome_produto, plano=plano)
-                           if _HOOK_OK else "Olha isso!")
+                    _hk = (plano.get("hook")
+                           or (_HOOK[0](nome_produto, plano=plano) if _HOOK_OK else "Olha isso!"))
                     _oi = _overlay(ImageClip, _txt_png(_hk, "hook"), 0.0, min(CFG_HOOK_SEG, alvo))
                     if _oi:
                         overlays.append(_oi)
@@ -1300,10 +1301,53 @@ async def processar_mensagem_telegram(msg, sub_id: str = "hunter_radar"):
         atualizar_produto(termo, status="erro", erro="falha no download")
         return None
 
-    # 3) Monta plano parcial (pra hook/roteiro/legenda usarem contexto)
+    # 3) Monta plano parcial — ALINHADO ao produzir_tiktok (template congelado):
+    #    categoria → nicho → conta → fundo/logo/@handle → hook Alana (2 linhas).
     nome_produto = campeao.get("nome", termo)
     preco = tratar_preco(campeao.get("preco", 0))
+
+    # categoria + nicho decidem a CONTA antes de renderizar (grid consistente).
+    categoria = ""
+    try:
+        from creative_engine.narration_script_builder import _categoria_do_produto
+        categoria = _categoria_do_produto(nome_produto) or ""
+    except Exception:
+        pass
+    conta = None
+    if os.getenv("MULTI_CONTA", "0").strip().lower() in ("1", "true", "sim"):
+        try:
+            import roteador_contas as _RC
+            conta = _RC.conta_do_produto(nome_produto, categoria)
+            if conta.get("handle"):
+                os.environ["TOPSHOP_HANDLE"] = conta["handle"]
+        except Exception:
+            conta = None
+    nicho = (conta.get("nicho") if conta else "") or ""
+    if not nicho:
+        try:
+            import roteador_contas as _RC
+            nicho = _RC.nicho_do_produto(nome_produto, categoria)
+        except Exception:
+            nicho = "geral"
+    # FUNDO + LOGO por nicho (idêntico ao produzir_tiktok → feed uniforme)
+    _bg_padrao = "preto" if nicho in ("geral", "") else "branco"
+    os.environ["TOPSHOP_BG"] = (os.environ.get("FORCE_BG")
+                                or os.environ.get("BG_" + nicho.upper(), _bg_padrao))
+    _LOGO_NICHO = {"beleza": "logo_ts_beauty.png", "tech": "logo_ts_tech.png"}
+    os.environ["TOPSHOP_LOGO"] = (os.environ.get("FORCE_LOGO")
+                                  or _LOGO_NICHO.get(nicho, "logo_ts.png"))
+
+    # HOOK estilo Alana (2 linhas, variado, anti-repetição) — MESMO gerador do
+    # produzir_tiktok. Cai no hook_builder só se o Alana falhar.
     hook_preview = (_HOOK[0](nome_produto, plano={}) if _HOOK_OK else "Olha isso!")
+    if os.getenv("HOOK_ALANA", "1").strip().lower() in ("1", "true", "sim"):
+        try:
+            from hook_alana import gerar_hook_alana
+            _ha = gerar_hook_alana(nome_produto, campeao.get("descricao", ""), nicho)
+            if _ha:
+                hook_preview = _ha
+        except Exception:
+            pass
 
     plano = {
         "produto":        nome_produto,
@@ -1333,14 +1377,7 @@ async def processar_mensagem_telegram(msg, sub_id: str = "hunter_radar"):
         return None
 
     # 5) Legenda + hashtags dinâmicas + descrições por plataforma
-    categoria = ""
-    if _NARR_OK:
-        try:
-            from creative_engine.narration_script_builder import _categoria_do_produto
-            categoria = _categoria_do_produto(nome_produto) or ""
-        except Exception:
-            log.debug("Não foi possível determinar categoria via narration_script_builder")
-
+    #    (categoria/nicho já calculados na etapa 3, antes de renderizar)
     legenda = _legenda_dinamica(nome_produto, hook_preview)
     hashtags = _hashtags_para(categoria)
 
@@ -1358,6 +1395,8 @@ async def processar_mensagem_telegram(msg, sub_id: str = "hunter_radar"):
         "narracao_propria":    resultado.get("narracao", False),
         "duracao_video":       resultado.get("duracao"),
         "categoria":           categoria,
+        "nicho":               nicho,
+        "nicho_fonte":         nicho,
         "status_producao":     "video_gerado",
     })
 
@@ -1392,6 +1431,16 @@ async def processar_mensagem_telegram(msg, sub_id: str = "hunter_radar"):
         pp_dir = BASE_DIR / "pronto_para_postar" / slug
         pp_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(str(video_final), str(pp_dir / "video.mp4"))
+        # conta.json ao lado do vídeo → o daemon posta na conta certa (mata o "?"
+        # do roteamento; sem isso o hunter caía sempre na conta padrão).
+        if conta:
+            try:
+                import roteador_contas as _RC
+                (pp_dir / "conta.json").write_text(
+                    json.dumps(_RC.conta_para_json(conta), ensure_ascii=False, indent=2),
+                    encoding="utf-8")
+            except Exception:
+                log.debug("conta.json não gravado (segue sem)")
         # IG/FB usam a legenda do plano; o YouTube lê estes .txt daqui:
         _hashtags_txt = plano.get("hashtags", "") or ""
         (pp_dir / "titulo_youtube.txt").write_text(
@@ -1414,8 +1463,9 @@ async def processar_mensagem_telegram(msg, sub_id: str = "hunter_radar"):
     try:
         from posts_ledger import registrar as _reg_post
         _reg_post(produto=nome_produto, link=meu_link, url_shopee=url_shopee,
-                  categoria=categoria, hook=hook_preview, legenda=legenda,
-                  slug=slug, sub_ids=_subs)
+                  categoria=categoria or nicho, hook=hook_preview, legenda=legenda,
+                  slug=slug, sub_ids=_subs,
+                  extra={"fonte": "telegram", "nicho": nicho})
     except Exception:
         log.debug("posts_ledger indisponível (segue sem logar)")
 
