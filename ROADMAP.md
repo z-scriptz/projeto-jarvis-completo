@@ -447,9 +447,23 @@ Ex.: "O segredo pra ter um iPhone 17 sem gastar / uma fortuna ✨".
 
 - **VPS:** Contabo · daemon `jarvis.service` (`python -m agents.daemon_maestro`)
   · venv em `/root/jarvis/.venv`.
-- **Padrão de deploy:** arquivos raiz (`~/jarvis/*.py`, `.sh`) por scp; arquivos
-  de pacote (`integrations/`, `agents/`, `creative_engine/`) por **patcher**
-  (backup + verificação + idempotente). A VPS **não** dá git-sync com o repo.
+- **Padrão de deploy (git-deploy, o `pjc`):** a VPS `/root/jarvis` é um git repo que
+  faz `git fetch pjc claude/opa-clau-dgs591` e `git show FETCH_HEAD:arquivo.py > destino`.
+  ⚠️⚠️ **O REPO É ACHATADO (tudo na raiz), mas a VPS usa PACOTES.** Deploy no destino
+  ERRADO = o código nunca roda (foi o que travou a postagem balanceada por dias:
+  editávamos `daemon_maestro.py` na raiz, mas o daemon roda `agents/daemon_maestro.py`).
+  **Mapa de destino (SEMPRE conferir com `find` / `ExecStart` antes):**
+  - `daemon_maestro.py` → **`agents/daemon_maestro.py`** (o serviço roda `-m agents.daemon_maestro`)
+  - `narrated_video_agent.py` → **`agents/narrated_video_agent.py`** (render; import `agents.`)
+  - `memory_agent.py` → **`agents/memory_agent.py`**
+  - `telegram_repurpose_hunter.py` → **`integrations/telegram_repurpose_hunter.py`** (log `integrations.*`)
+  - `shopee_affiliate.py` → **`integrations/`** · builders → **`creative_engine/`**
+  - **Raiz** (`~/jarvis/*.py`) só o que roda DIRETO: `ceo_agent`, `produzir_tiktok`,
+    `tiktok_coletor`, `descoberta_fontes`, `jarvis_status`, `hook_alana`, `ig_playwright`,
+    `tiktok_poster`, `tiktok_painel`, `roteador_contas`, `metricas_agent`, `posts_ledger`.
+  - Depois de deployar módulo de pacote: **backup (`.bak`) + `py_compile` + restart** do serviço.
+  - ⏳ dívida: `agents/narrated_video_agent.py` está em Jul16 — o fix do emoji ☕ (e outros)
+    foi pra raiz e não chegou nele; redeployar em `agents/` com cuidado quando for mexer.
 - **Segurança:** nunca colar tokens/segredos no chat; segredos no `.env` da VPS
   / Bitwarden; PAT do GitHub com escopo mínimo.
 - **Contas por nicho:**
