@@ -404,18 +404,68 @@ def _slugify(texto: str) -> str:
 
 
 # ── Legendas / hashtags dinâmicas ----------------------------------------
-_HASHTAGS_BASE = ["#achadinhos", "#shopee", "#achadinhosshopee", "#ofertas"]
+# ESCADA DE HASHTAGS (reach): a máquina não pode só jogar tudo em #shopee (milhões
+# de posts → conta nova afunda em segundos). Misturamos 3 degraus:
+#   GRANDES  → teto de alcance (saturadas, poucas)
+#   MÉDIAS   → por categoria; dá pra rankear de verdade
+#   PRODUTO  → extraída do NOME (nicho, traz não-seguidor COM intenção de compra)
+_HASHTAGS_GRANDES = ["#achadinhos", "#achadinhosshopee", "#shopee"]
 _HASHTAGS_CAT = {
-    "cozinha": ["#cozinha", "#casa", "#utilidades", "#organizacao"],
-    "beleza":  ["#beleza", "#skincare", "#autocuidado", "#makeup"],
-    "casa":    ["#casa", "#decor", "#organizacao", "#donadecasa"],
-    "tech":    ["#gadgets", "#tecnologia", "#achadostech"],
-    "fitness": ["#fitness", "#treino", "#saude"],
-    "pet":     ["#pet", "#cachorro", "#gato", "#petlovers"],
+    "cozinha":  ["#cozinha", "#utilidadesdomesticas", "#organizacaodacozinha",
+                 "#cozinhacriativa", "#donadecasa", "#achadinhosdecozinha"],
+    "beleza":   ["#beleza", "#skincare", "#autocuidado", "#makeup",
+                 "#dicasdebeleza", "#achadinhosdebeleza"],
+    "casa":     ["#casa", "#decor", "#organizacao", "#donadecasa",
+                 "#casaorganizada", "#achadinhosdecoracao"],
+    "tech":     ["#gadgets", "#tecnologia", "#eletronicos", "#achadostech",
+                 "#gadgetsuteis", "#tecnologiadodia"],
+    "fitness":  ["#fitness", "#treino", "#vidasaudavel", "#academia",
+                 "#foconotreino", "#projetoverao"],
+    "academia": ["#academia", "#treino", "#fitness", "#foconotreino",
+                 "#projetoverao", "#suplementos"],
+    "pet":      ["#pet", "#cachorro", "#gato", "#petlovers",
+                 "#maedepet", "#achadinhosparapet"],
+    "moda":     ["#moda", "#look", "#lookdodia", "#modafeminina",
+                 "#tendencia", "#achadinhosdemoda"],
+    "infantil": ["#maternidade", "#bebe", "#maedemenino", "#maedemenina",
+                 "#enxoval", "#achadinhosinfantis"],
+    "geral":    ["#ofertas", "#promocao", "#compras", "#desejo",
+                 "#queroquero", "#dicadecompra"],
 }
+# Ruído de listagem da Shopee que NÃO vira hashtag de produto (adjetivos/medidas).
+_STOP_PROD = {
+    "kit", "com", "para", "pra", "de", "da", "do", "dos", "das", "e", "o", "a",
+    "os", "as", "em", "un", "und", "unidade", "unidades", "pcs", "pcas", "pecas",
+    "peca", "novo", "nova", "original", "portatil", "eletrico", "eletrica",
+    "recarregavel", "automatico", "profissional", "premium", "luxo", "cor",
+    "cores", "tamanho", "conjunto", "super", "mega", "top", "promocao", "frete",
+    "gratis", "barato", "barata", "achadinho", "produto", "led", "usb", "inox",
+    "bivolt", "para", "the",
+}
+
+
+def _tag_produto(nome: str) -> list:
+    """Extrai 1-2 hashtags do PRÓPRIO nome do produto (ex.: 'Cafeteira Elétrica'
+    → #cafeteira). É a tag que faz quem procura o produto ACHAR o vídeo."""
+    if not nome:
+        return []
+    limpo = unicodedata.normalize("NFKD", nome.lower())
+    limpo = limpo.encode("ascii", "ignore").decode("ascii")
+    palavras = [re.sub(r"[^a-z0-9]", "", w) for w in limpo.split()]
+    palavras = [w for w in palavras if len(w) >= 4 and w not in _STOP_PROD]
+    out = []
+    if palavras:
+        out.append("#" + palavras[0])                       # #cafeteira
+        # combo só com 2ª palavra alfabética (evita #cafeteira220v, medidas etc.)
+        if len(palavras) >= 2 and palavras[1].isalpha():
+            out.append("#" + palavras[0] + palavras[1])      # #organizadorgaveta
+    return out[:2]
+
+
 # Frases que DESENVOLVEM o hook na legenda (2ª linha), com o nome do produto.
 # A legenda começa com o MESMO hook do vídeo e depois desenvolve — aumenta a
-# retenção no feed (a pessoa lê e continua assistindo).
+# retenção no feed (a pessoa lê e continua assistindo) E indexa o NOME (SEO do
+# Instagram lê o texto da legenda, não só a hashtag).
 _LEGENDA_DESENVOLVIMENTO = [
     "Achei esse achadinho e me surpreendi: {nome} 👇",
     "Precisava te mostrar esse achado — {nome} 👇",
@@ -427,20 +477,24 @@ _LEGENDA_DESENVOLVIMENTO = [
 ]
 
 
-def _hashtags_para(categoria: str) -> str:
+def _hashtags_para(categoria: str, nome: str = "") -> str:
     cat = (categoria or "").lower()
     extra = []
     for chave, tags in _HASHTAGS_CAT.items():
         if chave in cat:
             extra = tags
             break
-    tags = _HASHTAGS_BASE + extra
+    if not extra:
+        extra = _HASHTAGS_CAT["geral"]
+    # Ordem = prioridade na deduplicação: produto (nicho) → categoria → grandes.
+    tags = _tag_produto(nome) + extra + _HASHTAGS_GRANDES
     vistos, out = set(), []
     for t in tags:
-        if t not in vistos:
-            vistos.add(t)
+        tl = t.lower()
+        if tl not in vistos:
+            vistos.add(tl)
             out.append(t)
-    return " ".join(out[:8])
+    return " ".join(out[:14])
 
 
 def _legenda_dinamica(nome: str, hook: str) -> str:
@@ -1379,7 +1433,7 @@ async def processar_mensagem_telegram(msg, sub_id: str = "hunter_radar"):
     # 5) Legenda + hashtags dinâmicas + descrições por plataforma
     #    (categoria/nicho já calculados na etapa 3, antes de renderizar)
     legenda = _legenda_dinamica(nome_produto, hook_preview)
-    hashtags = _hashtags_para(categoria)
+    hashtags = _hashtags_para(categoria, nome_produto)
 
     plano.update({
         "video_path_sugerido": str(video_final),

@@ -348,7 +348,7 @@ def _produzir(pasta: Path, pj: Path, video_src: Path) -> bool:
 
     # 2) Legenda + hashtags + plano (espelha os passos 5-6 do hunter)
     legenda = H._legenda_dinamica(nome, hook)
-    hashtags = H._hashtags_para(categoria)
+    hashtags = H._hashtags_para(categoria, nome)
     plano.update({
         "video_path_sugerido": str(destino),
         "roteiro_narrado": resultado.get("frases", []),
