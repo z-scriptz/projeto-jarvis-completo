@@ -367,6 +367,149 @@ def gerar_hook_alana(produto: str, descricao: str = "", nicho: str = "") -> str:
     return _fallback(nicho)
 
 
+# ═════════════════════════════════════════════════════════════════════════════
+# LEGENDA DE CURIOSIDADE (o padrão dos perfis que MAIS vendem)
+# Legenda que ENSINA/curioseia sobre o produto → a pessoa SALVA e COMPARTILHA →
+# save/share é dos maiores sinais de ALCANCE do Instagram. É diferente do hook
+# (que é o texto na TELA do vídeo): a curiosidade vai na LEGENDA, embaixo.
+# ═════════════════════════════════════════════════════════════════════════════
+
+# Reserva por nicho (quando o Gemini cai). {nome} = nome curto do produto.
+# Tom: "pouca gente sabe que…", agrega valor, claim SUAVE (nada de promessa
+# médica/absoluta), 1 emoji no fim. 2-4 frases.
+LEGENDAS_RESERVA = {
+    "casa": [
+        "Pouca gente repara, mas viver num ambiente organizado reduz o cansaço "
+        "mental do dia — o cérebro relaxa mais fácil sem bagunça visual pra "
+        "processar. Um detalhe simples como {nome} já ajuda a manter tudo no "
+        "lugar sem esforço. 🏡",
+        "Tem um motivo pra casa arrumada dar aquela sensação de leveza: menos "
+        "estímulo desorganizado à vista, menos tensão acumulada no fim do dia. "
+        "É aí que {nome} faz diferença no dia a dia. 🌿",
+    ],
+    "cozinha": [
+        "Poucas pessoas sabem, mas ter as coisas certas à mão na cozinha faz o "
+        "preparo render bem mais — menos tempo procurando, menos bagunça, mais "
+        "vontade de cozinhar. {nome} resolve exatamente esse detalhe. 🍳",
+        "O segredo de quem cozinha sem estresse quase nunca é talento: é ter o "
+        "utensílio certo pra cada tarefa. {nome} é um desses que você não sabia "
+        "que precisava. 👩‍🍳",
+    ],
+    "beleza": [
+        "Muita gente não percebe, mas constância importa mais que produto caro "
+        "no cuidado com a pele e o cabelo — pequenos hábitos diários é que "
+        "aparecem no espelho. {nome} deixa esse cuidado mais fácil de manter. ✨",
+        "Autocuidado não precisa ser complicado: às vezes é só o item certo "
+        "pra transformar a rotina numa coisa gostosa de fazer. É o caso de "
+        "{nome}. 💆‍♀️",
+    ],
+    "tech": [
+        "Pouca gente imagina o tanto de tempo que a gente perde com pequenos "
+        "perrengues do dia — cabo bagunçado, bateria acabando, celular sem "
+        "apoio. {nome} é daqueles que resolve isso e você não larga mais. 🔌",
+        "Nem sempre é a tecnologia mais cara que muda o dia: às vezes é um "
+        "acessório simples e barato que facilita tudo. {nome} é um exemplo "
+        "disso. 📱",
+    ],
+    "pets": [
+        "Quem tem pet sabe: o bicho sente o ambiente. Pequenos cuidados no dia "
+        "a dia deixam ele mais tranquilo e a casa mais limpa ao mesmo tempo. "
+        "{nome} ajuda nos dois. 🐾",
+        "Pouca gente comenta, mas metade do trabalho de cuidar de um pet é ter "
+        "o item certo pra facilitar a rotina. {nome} é um desses que resolve. 🐶",
+    ],
+    "moda": [
+        "Tem uma coisa que todo mundo que se arruma bem sabe: não é ter muita "
+        "roupa, é ter as peças certas que combinam com tudo. {nome} é dessas "
+        "que valorizam qualquer look. 👗",
+        "Estilo é menos sobre tendência e mais sobre se sentir bem no que veste. "
+        "Uma peça como {nome} resolve o look sem complicar. ✨",
+    ],
+    "academia": [
+        "Pouca gente fala, mas constância no treino vem muito de reduzir "
+        "atrito: quando o item certo tá ali pronto, fica mais fácil manter o "
+        "hábito. {nome} ajuda nisso. 💪",
+        "Resultado no treino é soma de pequenos detalhes — e ter o acessório "
+        "certo é um deles. {nome} é simples e faz diferença na rotina. 🏋️",
+    ],
+    "geral": [
+        "Pouca gente conhece, mas às vezes é um item simples e baratinho que "
+        "resolve um probleminha que a gente carrega há anos sem nem perceber. "
+        "{nome} é um desses achados. 👀",
+        "Tem coisa que a gente só entende que precisava depois que tem: facilita "
+        "o dia, custa pouco e você passa a usar toda hora. É o caso de {nome}. 😍",
+    ],
+}
+
+
+def _limpar_legenda(txt: str) -> str:
+    """Tira hashtag, markdown, aspas em volta e CTA que o Gemini às vezes cola."""
+    t = (txt or "").strip()
+    t = re.sub(r"[#*_`>]+", "", t)                       # markdown/hashtag
+    t = re.sub(r"\b(link na bio|link da bio|garanta|corre[ ]?la|compre)\b.*$",
+               "", t, flags=re.IGNORECASE | re.DOTALL)   # CTA vaza às vezes
+    t = t.strip().strip('"').strip("'").strip()
+    return t
+
+
+def _legenda_reserva(nome: str, nicho: str) -> str:
+    nome_curto = " ".join((nome or "esse achadinho").split()[:5])
+    banco = LEGENDAS_RESERVA.get((nicho or "").lower()) or LEGENDAS_RESERVA["geral"]
+    return random.choice(banco).format(nome=nome_curto)
+
+
+def _legenda_via_gemini(produto: str, descricao: str, nicho: str) -> Optional[str]:
+    key = os.getenv("GEMINI_API_KEY", "")
+    if not key:
+        return None
+    try:
+        from google import genai
+        cli = genai.Client(api_key=key)
+        prompt = (
+            "Voce escreve LEGENDAS de Instagram/Reels pra uma loja de afiliados "
+            "(achadinhos da Shopee), no estilo das criadoras que mais vendem. A "
+            "legenda NAO e o texto do video: e um paragrafo de CURIOSIDADE que "
+            "ENSINA algo interessante ligado ao produto, pra pessoa SALVAR e "
+            "COMPARTILHAR (isso e o que da alcance).\n\n"
+            "REGRAS:\n"
+            "- 2 a 4 frases, 1 ou 2 paragrafos curtos. Portugues BR, tom de amiga "
+            "que descobriu uma curiosidade legal.\n"
+            "- Comece tipo 'Pouca gente sabe que…', 'Tem um motivo pra…', "
+            "'Poucas pessoas reparam…' — curiosidade REAL e plausivel.\n"
+            "- Amarre a curiosidade ao beneficio do produto de leve, sem parecer "
+            "anuncio. Pode citar o produto UMA vez, natural.\n"
+            "- Claim SUAVE: use 'costuma', 'ajuda', 'muita gente sente'. NUNCA "
+            "prometa cura, resultado garantido nem faca afirmacao medica.\n"
+            "- Responda SO a legenda: sem hashtag, sem 'link na bio', sem CTA, "
+            "sem aspas em volta, sem markdown. Pode terminar com 1 emoji.\n\n"
+            f"Produto: {produto}\n"
+            f"Descricao: {(descricao or '')[:300]}\n"
+            f"Nicho: {nicho or 'geral'}\n"
+        )
+        r = cli.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[{"parts": [{"text": prompt}]}],
+        )
+        out = _limpar_legenda(getattr(r, "text", "") or "")
+        # sanidade: precisa ter corpo (senao cai pra reserva)
+        return out if len(out) >= 40 else None
+    except Exception:
+        return None
+
+
+def gerar_legenda_curiosidade(produto: str, descricao: str = "",
+                              nicho: str = "") -> str:
+    """Retorna 1 paragrafo de curiosidade pra legenda. Tenta Gemini
+    (LEGENDA_CURIOSIDADE=1 + key); senao usa o banco de reserva por nicho."""
+    ligado = os.getenv("LEGENDA_CURIOSIDADE", "1").strip().lower() in (
+        "1", "true", "sim")
+    if ligado:
+        via = _legenda_via_gemini(produto, descricao, nicho)
+        if via:
+            return via
+    return _legenda_reserva(produto, nicho)
+
+
 if __name__ == "__main__":
     # teste rapido: python hook_alana.py "Produto" nicho  [N]
     import sys
@@ -376,3 +519,4 @@ if __name__ == "__main__":
     for i in range(n):
         print(f"--- {i+1} ---")
         print(gerar_hook_alana(prod, nicho=nic))
+        print("LEGENDA:", gerar_legenda_curiosidade(prod, nicho=nic))

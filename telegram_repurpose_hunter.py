@@ -497,13 +497,30 @@ def _hashtags_para(categoria: str, nome: str = "") -> str:
     return " ".join(out[:14])
 
 
-def _legenda_dinamica(nome: str, hook: str) -> str:
-    """Legenda = MESMO hook do vídeo + frase que o desenvolve (na linha de
-    baixo). Ex: 'Como ninguém me mostrou isso antes?\\n\\nAchei esse ... 👇'."""
-    nome_curto = " ".join((nome or "produto").split()[:5])
+def _legenda_dinamica(nome: str, hook: str, descricao: str = "",
+                      nicho: str = "", item_id: str = "") -> str:
+    """Legenda no padrão dos perfis que vendem:
+       1ª linha  = HOOK  (preserva o aprendizado de hooks-vencedores, que lê a
+                          1ª linha da legenda no reach.jsonl)
+       parágrafo = CURIOSIDADE que agrega valor → faz SALVAR/COMPARTILHAR (alcance)
+       CTA       = LINK DA BIO (sempre rastreado) + ID de afiliado (opcional)
+    O ID só entra com LEGENDA_ID_AFILIADO=1 — default OFF até confirmarmos que o
+    item_id credita comissão (senão manda gente comprar sem rastreio)."""
     hook = (hook or "Olha isso!").strip()
-    desenv = random.choice(_LEGENDA_DESENVOLVIMENTO).format(nome=nome_curto)
-    return f"{hook}\n\n{desenv}"
+    curiosidade = ""
+    try:
+        from hook_alana import gerar_legenda_curiosidade
+        curiosidade = (gerar_legenda_curiosidade(nome, descricao, nicho) or "").strip()
+    except Exception:
+        curiosidade = ""
+    if not curiosidade:      # fallback duro se o hook_alana falhar
+        nome_curto = " ".join((nome or "produto").split()[:5])
+        curiosidade = random.choice(_LEGENDA_DESENVOLVIMENTO).format(nome=nome_curto)
+    cta = "👉 Garanta o seu no LINK DA BIO!"
+    if item_id and os.getenv("LEGENDA_ID_AFILIADO", "0").strip().lower() in (
+            "1", "true", "sim"):
+        cta += f"\n🔥 Ou procure pelo ID do produto: {item_id}"
+    return "\n\n".join([hook, curiosidade, cta])
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -1432,7 +1449,9 @@ async def processar_mensagem_telegram(msg, sub_id: str = "hunter_radar"):
 
     # 5) Legenda + hashtags dinâmicas + descrições por plataforma
     #    (categoria/nicho já calculados na etapa 3, antes de renderizar)
-    legenda = _legenda_dinamica(nome_produto, hook_preview)
+    legenda = _legenda_dinamica(nome_produto, hook_preview,
+                                descricao=campeao.get("descricao", ""),
+                                nicho=nicho, item_id=str(campeao.get("item_id", "")))
     hashtags = _hashtags_para(categoria, nome_produto)
 
     plano.update({
