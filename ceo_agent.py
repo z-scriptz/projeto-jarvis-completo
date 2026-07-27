@@ -19,6 +19,7 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent
 LEDGER = BASE_DIR / "shared" / "posts_ledger.jsonl"
 NICHOS = BASE_DIR / "shared" / "nichos_quentes.json"
+REACH_JSONL = BASE_DIR / "shared" / "reach.jsonl"    # alcance por post (reach_agent)
 CEO_DIR = BASE_DIR / "shared" / "ceo"
 TIKTOK_PERFIS = BASE_DIR / "tiktok_perfis.txt"       # fontes do TikTok (podáveis)
 IG_PERFIS = BASE_DIR / "instagram_perfis.txt"        # fontes do Instagram (podáveis)
@@ -265,6 +266,77 @@ def _render_fontes(fontes: list) -> str:
     return "\n".join(linhas)
 
 
+# ── ALCANCE: o que foi VISTO (reach_agent) — o gargalo da fase de crescimento ─
+def _ler_reach() -> list:
+    """Lê shared/reach.jsonl e DEDUPLICA por media_id (o reach_agent roda todo dia;
+    o reach só cresce → fica com o MAIOR por post)."""
+    if not REACH_JSONL.exists():
+        return []
+    por_id = {}
+    for l in REACH_JSONL.read_text(encoding="utf-8").splitlines():
+        l = l.strip()
+        if not l:
+            continue
+        try:
+            r = json.loads(l)
+        except Exception:
+            continue
+        mid = r.get("media_id")
+        if not mid:
+            continue
+        ant = por_id.get(mid)
+        if ant is None or (r.get("reach") or 0) >= (ant.get("reach") or 0):
+            por_id[mid] = r
+    return list(por_id.values())
+
+
+def _analisar_reach() -> dict:
+    reach = _ler_reach()
+    if not reach:
+        return {}
+    por_conta = defaultdict(lambda: {"posts": 0, "reach": [], "likes": 0, "comments": 0})
+    for r in reach:
+        c = por_conta[r.get("handle") or r.get("nicho") or "?"]
+        c["posts"] += 1
+        if isinstance(r.get("reach"), int):
+            c["reach"].append(r["reach"])
+        c["likes"] += int(r.get("likes") or 0)
+        c["comments"] += int(r.get("comments") or 0)
+    contas = []
+    for h, d in por_conta.items():
+        rs = d["reach"]
+        contas.append({"handle": h, "posts": d["posts"],
+                       "reach_medio": round(sum(rs) / len(rs)) if rs else 0,
+                       "reach_max": max(rs) if rs else 0,
+                       "likes": d["likes"], "comments": d["comments"]})
+    contas.sort(key=lambda x: x["reach_medio"], reverse=True)
+    com_reach = [r for r in reach if isinstance(r.get("reach"), int)]
+    top = sorted(com_reach, key=lambda r: r["reach"], reverse=True)[:5]
+    return {"contas": contas, "top": top, "total_posts": len(reach),
+            "reach_medio_geral": (round(sum(r["reach"] for r in com_reach) / len(com_reach))
+                                  if com_reach else 0)}
+
+
+def _render_reach(a: dict) -> str:
+    if not a:
+        return ("## 👀 Alcance por post\n_Ainda sem dados de reach — rode `reach_agent.py` "
+                "(e coloque no cron diário). É o número que diz o que foi VISTO._")
+    linhas = [f"## 👀 Alcance (o que foi VISTO) — reach médio geral: "
+              f"**{a['reach_medio_geral']}** / post"]
+    for c in a["contas"]:
+        linhas.append(f"- {c['handle']}: {c['posts']} posts · reach médio "
+                      f"**{c['reach_medio']}** (top {c['reach_max']}) · "
+                      f"{c['likes']}❤ {c['comments']}💬")
+    if a["top"]:
+        linhas.append("\n**🔝 Posts de maior alcance (aprender o que engaja):**")
+        for t in a["top"]:
+            linhas.append(f"- {t.get('reach', 0)} reach — \"{(t.get('caption') or '')[:55]}…\"")
+    linhas.append("\n_O alcance é o gargalo da fase de crescimento: sem ser VISTO, "
+                  "não vende. Compare o reach dos formatos novos (áudio original, trending "
+                  "sound) contra este baseline._")
+    return "\n".join(linhas)
+
+
 # ── Jarvis Confidence Score (0-100): quão confiável é a recomendação ────────
 def _confidence(a: dict) -> tuple:
     """Baixa confiança com pouco dado (honesto). Cresce com volume + sinal."""
@@ -399,7 +471,11 @@ _PROMPT = (
     "Sem inventar números que não estão nos dados. Devolva SÓ o Markdown.\n"
     "OBS: o campo 'fontes' traz o desempenho por PERFIL de origem (posts × vendas). "
     "Se houver fonte com muitos posts e ZERO venda (veredito MORTA), proponha PODAR; "
-    "se alguma converte bem (VENDE), proponha PRIORIZAR/curar mais parecidas.\n\n"
+    "se alguma converte bem (VENDE), proponha PRIORIZAR/curar mais parecidas.\n"
+    "FASE ATUAL = CRESCIMENTO: o campo 'reach' mostra o ALCANCE por conta (quantos "
+    "VIRAM cada post). Com venda ~zero, o gargalo é ALCANCE, não conversão — priorize "
+    "propostas que aumentem reach (formato/áudio/hook/horário), e trate o reach baixo "
+    "(~90/post) como o problema nº 1. Não recomende otimizar conversão antes do alcance.\n\n"
     "MEMÓRIA (seus relatórios/decisões/veredictos anteriores). NÃO repita conselho "
     "já dado; se uma decisão passada já foi conferida, leve o RESULTADO dela em conta "
     "(reforce o que AJUDOU, recue no que PIOROU):\n{memoria}\n\n"
@@ -764,6 +840,8 @@ def main():
     score, nivel = _confidence(a)
     fontes = _analisar_fontes(dias)                  # APRENDE: qual perfil-fonte converte
     a["fontes"] = fontes                             # entra no JSON que o Gemini lê
+    reach = _analisar_reach()                        # VÊ: o que foi visto (o gargalo real)
+    a["reach"] = reach
     bloco_resultados = _conferir_resultados()        # CONFERE: outcome-check das decisões
     memoria = _ler_memoria_ceo(a)                    # LÊ: o que o CEO já aconselhou/aprendeu
     relatorio = _relatorio_gemini(a, score, nivel, memoria)
@@ -778,6 +856,7 @@ def main():
                  f"Gerado: {time.strftime('%Y-%m-%d %H:%M')}"
                  f"{' · 🧠 memória ativa' if _MEM_OK else ''}\n\n---\n\n")
     doc = cabecalho + relatorio + "\n\n---\n\n"
+    doc += _render_reach(reach) + "\n\n---\n\n"       # 👀 alcance primeiro (o que importa agora)
     # bloco de desempenho por fonte + poda automática opcional (CEO_PODA_AUTO=1)
     bloco_fontes = _render_fontes(fontes)
     if bloco_fontes:
