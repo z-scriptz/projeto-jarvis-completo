@@ -497,15 +497,45 @@ def _hashtags_para(categoria: str, nome: str = "") -> str:
     return " ".join(out[:14])
 
 
+_IDS_AFILIADO = BASE_DIR / "shared" / "ids_afiliado.json"  # {item_id|slug: "ABE-XNB-CFF"}
+
+
+def _id_afiliado(item_id: str = "", nome: str = "") -> str:
+    """Devolve o ID de AFILIADO (ex.: 'ABE-XNB-CFF') que a Shopee gera no
+    'Copiar ID' do app — é o que credita comissão na busca. A API NÃO gera esse
+    código (só link), então ele vem de um banco manual: shared/ids_afiliado.json,
+    chaveado por item_id (ou pelo nome do produto). Sem entrada → não injeta nada
+    (a legenda fica só com o link da bio, que já é rastreado). É esse o desenho
+    que preserva a autonomia: você cadastra o ID uma vez por produto e todo post
+    daquele produto passa a carregar o ID sozinho. ATENÇÃO: o item_id numérico
+    NÃO é o código que credita — por isso nunca usamos ele como ID."""
+    if os.getenv("LEGENDA_ID_AFILIADO", "1").strip().lower() in ("0", "false", "nao"):
+        return ""
+    try:
+        bank = json.loads(_IDS_AFILIADO.read_text(encoding="utf-8"))
+        assert isinstance(bank, dict)
+    except Exception:
+        return ""
+    k = str(item_id or "").strip()
+    if k and k in bank:
+        return str(bank[k]).strip()
+    slug = re.sub(r"[^a-z0-9]+", "", (nome or "").lower())[:40]
+    if slug:
+        for kk, vv in bank.items():
+            if re.sub(r"[^a-z0-9]+", "", str(kk).lower())[:40] == slug:
+                return str(vv).strip()
+    return ""
+
+
 def _legenda_dinamica(nome: str, hook: str, descricao: str = "",
                       nicho: str = "", item_id: str = "") -> str:
     """Legenda no padrão dos perfis que vendem:
        1ª linha  = HOOK  (preserva o aprendizado de hooks-vencedores, que lê a
                           1ª linha da legenda no reach.jsonl)
        parágrafo = CURIOSIDADE que agrega valor → faz SALVAR/COMPARTILHAR (alcance)
-       CTA       = LINK DA BIO (sempre rastreado) + ID de afiliado (opcional)
-    O ID só entra com LEGENDA_ID_AFILIADO=1 — default OFF até confirmarmos que o
-    item_id credita comissão (senão manda gente comprar sem rastreio)."""
+       CTA       = LINK DA BIO (sempre rastreado) + ID de afiliado (se cadastrado)
+    O ID entra só quando existe no banco shared/ids_afiliado.json (o 'Copiar ID'
+    do app). Sem cadastro, a legenda sai só com o link — que já credita."""
     hook = (hook or "Olha isso!").strip()
     curiosidade = ""
     try:
@@ -517,9 +547,9 @@ def _legenda_dinamica(nome: str, hook: str, descricao: str = "",
         nome_curto = " ".join((nome or "produto").split()[:5])
         curiosidade = random.choice(_LEGENDA_DESENVOLVIMENTO).format(nome=nome_curto)
     cta = "👉 Garanta o seu no LINK DA BIO!"
-    if item_id and os.getenv("LEGENDA_ID_AFILIADO", "0").strip().lower() in (
-            "1", "true", "sim"):
-        cta += f"\n🔥 Ou procure pelo ID do produto: {item_id}"
+    idaf = _id_afiliado(item_id, nome)
+    if idaf:
+        cta += f"\n🔥 Ou procure pelo ID do produto: {idaf}"
     return "\n\n".join([hook, curiosidade, cta])
 
 
