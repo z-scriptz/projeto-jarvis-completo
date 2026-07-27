@@ -25,6 +25,7 @@ TAG_PADRAO = os.environ.get("HOOK_ALANA_TAG", "A Shopee:")
 
 _RECENTES_PATH = Path(__file__).resolve().parent / "hooks_alana_recentes.json"
 _RECENTES_MAX = 80
+_REACH_JSONL = Path(__file__).resolve().parent / "shared" / "reach.jsonl"  # alcance (reach_agent)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CATALOGO DE FORMULAS VIRAIS (moldes). O Gemini escolhe a que combina com o
@@ -259,6 +260,47 @@ def _limpar_saida(txt: str) -> Optional[str]:
     return "\n".join(linhas)
 
 
+def _hooks_vencedores(n: int = 4) -> list:
+    """Os hooks das NOSSAS contas que MAIS alcançaram (reach_agent → reach.jsonl),
+    pro Gemini APRENDER com os próprios vencedores. Só entra quem passou de um piso
+    REAL (não ruído). Vazio se o dado ainda for ralo — aí o gerador segue como antes.
+    Retorna [(hook, reach)]."""
+    try:
+        por_id = {}
+        for l in _REACH_JSONL.read_text(encoding="utf-8").splitlines():
+            l = l.strip()
+            if not l:
+                continue
+            r = json.loads(l)
+            mid = r.get("media_id")
+            if not mid or not isinstance(r.get("reach"), int):
+                continue
+            if r["reach"] >= por_id.get(mid, {}).get("reach", -1):
+                por_id[mid] = r
+        posts = list(por_id.values())
+    except Exception:
+        return []
+    if len(posts) < 8:                       # dado ralo demais pra aprender (vira ruído)
+        return []
+    reaches = sorted(p["reach"] for p in posts)
+    mediana = reaches[len(reaches) // 2] or 0
+    piso = max(int(os.getenv("HOOK_REACH_PISO", 150)), int(mediana * 1.5))
+    venc = sorted((p for p in posts if p["reach"] >= piso),
+                  key=lambda p: p["reach"], reverse=True)
+    hooks, vistos = [], set()
+    for p in venc:
+        cap = (p.get("caption") or "").strip()
+        # a legenda começa com o HOOK ("hook\n\ndesenvolvimento") → pega a 1ª parte
+        hook = re.split(r"\n\n|\n", cap)[0].strip()
+        chave = _EMOJI_RX.sub("", hook).strip().lower()
+        if hook and len(hook) > 8 and chave not in vistos:
+            vistos.add(chave)
+            hooks.append((hook, p["reach"]))
+        if len(hooks) >= n:
+            break
+    return hooks
+
+
 def _via_gemini(produto: str, descricao: str, nicho: str) -> Optional[str]:
     key = os.getenv("GEMINI_API_KEY", "")
     if not key:
@@ -270,11 +312,23 @@ def _via_gemini(produto: str, descricao: str, nicho: str) -> Optional[str]:
         amostra = random.sample(FORMULAS, k=min(5, len(FORMULAS)))
         moldes = "\n".join(f"- {nome}: {molde.replace('{tag}', TAG_PADRAO)}"
                            for nome, molde in amostra)
+        # APRENDE COM OS PRÓPRIOS VENCEDORES: injeta os hooks que MAIS alcançaram nas
+        # nossas contas, pro Gemini seguir o espírito do que JÁ funcionou aqui.
+        _venc = _hooks_vencedores(4)
+        bloco_venc = ""
+        if _venc:
+            _lst = "\n".join(f'- "{h}" (alcancou {rc} pessoas)' for h, rc in _venc)
+            bloco_venc = (
+                "IMPORTANTE — estes hooks das NOSSAS contas foram os que MAIS "
+                "ALCANCARAM pessoas de verdade. Gere no MESMO espirito/energia deles "
+                "(o que ja funcionou AQUI), mas sob medida pra ESTE produto, sem "
+                "copiar:\n" + _lst + "\n\n")
         prompt = (
             "Voce e copywriter de videos virais de afiliado (Shopee), estilo das "
             "criadoras que mais vendem no Reels/TikTok. Crie UM gancho (hook) "
             "curtissimo pro produto abaixo, no estilo curiosity-gap que faz a "
             "pessoa PARAR de rolar e comentar.\n\n"
+            f"{bloco_venc}"
             "Escolha a FORMULA que melhor combina com ESTE produto (adapte, nao "
             "copie literal). Formulas disponiveis:\n"
             f"{moldes}\n\n"
