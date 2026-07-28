@@ -113,6 +113,31 @@ def _escape_md(texto: str) -> str:
     return texto
 
 
+def _link_telegram(produto: dict) -> str:
+    """Se o produto trouxer a URL de ORIGEM (Shopee), gera um link de afiliado
+    etiquetado 'telegram' — é o que faz o CEO medir QUANTO o canal fatura
+    (metricas._canal lê a 1ª etiqueta do sub_id). Sem origem, ou se a geração
+    falhar, devolve o link que já veio — nunca quebra a postagem."""
+    atual = _txt(produto.get("link") or produto.get("link_afiliado"))
+    origem = _txt(produto.get("origem"))
+    if not origem:
+        return atual
+    try:
+        try:
+            from integrations.shopee_affiliate import gerar_link_afiliado
+        except Exception:
+            from shopee_affiliate import gerar_link_afiliado
+        import re as _re
+        nome = _txt(produto.get("nome") or produto.get("titulo"))
+        sub = ["telegram", _re.sub(r"[^a-z0-9]", "", nome.lower())[:16] or "achado"]
+        r = gerar_link_afiliado(origem, sub_ids=sub)
+        if r.get("ok") and r.get("short_link"):
+            return r["short_link"]
+    except Exception as e:
+        log.debug(f"   _link_telegram falhou, mantém link atual: {e}")
+    return atual
+
+
 def postar_achado(produto: dict) -> dict:
     """
     Posta um achado no grupo do Telegram (foto + legenda + link).
@@ -126,6 +151,8 @@ def postar_achado(produto: dict) -> dict:
     except Exception:
         return {"ok": False, "erro": "biblioteca requests não instalada"}
 
+    # Reetiqueta o link como 'telegram' (atribuição do canal), se houver origem.
+    produto = {**produto, "link": _link_telegram(produto)}
     legenda = _montar_legenda(produto)
     imagem = _txt(produto.get("imagem"))
     link = _txt(produto.get("link") or produto.get("link_afiliado"))

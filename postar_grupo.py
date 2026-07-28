@@ -108,6 +108,7 @@ def main():
             "preco_real": "",            # a fila do site não guarda preço
             "link": it.get("link", ""),
             "imagem": it.get("imagem", ""),
+            "origem": it.get("origem", ""),  # p/ reetiquetar o link como 'telegram'
         }
         r = postar_achado(produto)
         if r.get("ok"):

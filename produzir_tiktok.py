@@ -408,7 +408,8 @@ def _produzir(pasta: Path, pj: Path, video_src: Path) -> bool:
 
     # 4) Site (passo 8) — Shopee pega foto oficial; Amazon vai sem foto (Camada 3)
     H._registrar_no_site(nome, link, imagem=info.get("imagem", ""),
-                         plataforma=plataforma)
+                         plataforma=plataforma,
+                         origem=info.get("origem_url", "") or info.get("product_link", ""))
 
     # 5) Ledger (passo 9) — tag SEMPRE categoria + plataforma + nicho (o CEO
     #    precisa disso; antes saía "sem_categoria"/"?" e cegava a análise).

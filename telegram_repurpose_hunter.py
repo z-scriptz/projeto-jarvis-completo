@@ -1271,7 +1271,7 @@ def _foto_oficial_do_link(link: str) -> str:
 
 
 def _registrar_no_site(nome: str, link: str, imagem: str = "", max_itens: int = 80,
-                       plataforma: str = "shopee"):
+                       plataforma: str = "shopee", origem: str = ""):
     """Grava o produto + link de afiliado no produtos_fila.json que o SITE
     (bio_page_builder) lê. É a PONTE que faz a bio (topshopoficial) mostrar
     EXATAMENTE o produto do vídeo — sem isso, o post e o site ficam descasados
@@ -1294,6 +1294,7 @@ def _registrar_no_site(nome: str, link: str, imagem: str = "", max_itens: int = 
         fila.insert(0, {
             "produto": nome, "campeao": nome, "link": link,
             "imagem": imagem or "", "classe": "", "plataforma": plataforma,
+            "origem": origem or "",   # URL Shopee p/ reetiquetar o link (canal Telegram)
             "ts": int(time.time()),
         })
         fila = fila[:max_itens]
@@ -1558,7 +1559,7 @@ async def processar_mensagem_telegram(msg, sub_id: str = "hunter_radar"):
 
     # 8) PONTE PRO SITE — grava o produto + link de afiliado na vitrine que o
     # site lê, pra a bio mostrar o mesmo produto do vídeo (fecha o funil $).
-    _registrar_no_site(nome_produto, meu_link)
+    _registrar_no_site(nome_produto, meu_link, origem=url_shopee or "")
 
     # 9) LEDGER — loga o post (produto, hook, categoria, item_id, sub_id) no
     # diário. É a fundação do aprendizado: depois cruza com a comissão (por
