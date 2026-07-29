@@ -529,28 +529,36 @@ def _id_afiliado(item_id: str = "", nome: str = "") -> str:
 
 def _legenda_dinamica(nome: str, hook: str, descricao: str = "",
                       nicho: str = "", item_id: str = "") -> str:
-    """Legenda no padrão dos perfis que vendem:
-       1ª linha  = HOOK  (preserva o aprendizado de hooks-vencedores, que lê a
-                          1ª linha da legenda no reach.jsonl)
-       parágrafo = CURIOSIDADE que agrega valor → faz SALVAR/COMPARTILHAR (alcance)
-       CTA       = LINK DA BIO (sempre rastreado) + ID de afiliado (se cadastrado)
-    O ID entra só quando existe no banco shared/ids_afiliado.json (o 'Copiar ID'
-    do app). Sem cadastro, a legenda sai só com o link — que já credita."""
-    hook = (hook or "Olha isso!").strip()
+    """Legenda no padrão que MAIS ALCANÇA (visto no campo — vai pro Explorar mais
+    rápido quando o texto é informativo):
+       ABRE  = CURIOSIDADE informativa ('Pouca gente sabe que…', 2 parágrafos) →
+               faz LER/SALVAR/COMPARTILHAR (alcance). Constante em todo vídeo.
+       CTA   = LINK DA BIO (sempre rastreado) + ID de afiliado (se cadastrado)
+       FIM   = 'Publi' (transparência de publicidade + padrão dos que vendem)
+    O 'hook' NÃO entra mais na legenda (ele já está na TELA do vídeo; aqui o que
+    ganha alcance é começar pela curiosidade). O ID entra só quando existe no
+    banco shared/ids_afiliado.json (o 'Copiar ID' do app)."""
     curiosidade = ""
     try:
         from hook_alana import gerar_legenda_curiosidade
         curiosidade = (gerar_legenda_curiosidade(nome, descricao, nicho) or "").strip()
     except Exception:
         curiosidade = ""
-    if not curiosidade:      # fallback duro se o hook_alana falhar
-        nome_curto = " ".join((nome or "produto").split()[:5])
-        curiosidade = random.choice(_LEGENDA_DESENVOLVIMENTO).format(nome=nome_curto)
+    if not curiosidade:      # fallback duro, mas AINDA no estilo informativo
+        curiosidade = ("Pouca gente sabe, mas pequenos detalhes do dia a dia "
+                       "mudam mais coisa do que parece — e quase ninguém repara "
+                       "nisso até testar de verdade.")
     cta = "👉 Garanta o seu no LINK DA BIO!"
     idaf = _id_afiliado(item_id, nome)
     if idaf:
         cta += f"\n🔥 Ou procure pelo ID do produto: {idaf}"
-    return "\n\n".join([hook, curiosidade, cta])
+    # 'Publi' no fim: transparência de publicidade E o padrão dos perfis que
+    # vendem. Sempre presente (configurável via LEGENDA_PUBLI; "" desliga).
+    publi = os.getenv("LEGENDA_PUBLI", "#Publi").strip()
+    partes = [curiosidade, cta]
+    if publi:
+        partes.append(publi)
+    return "\n\n".join(partes)
 
 
 # ══════════════════════════════════════════════════════════════════════════

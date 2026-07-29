@@ -265,6 +265,12 @@ def _hooks_vencedores(n: int = 4) -> list:
     pro Gemini APRENDER com os próprios vencedores. Só entra quem passou de um piso
     REAL (não ruído). Vazio se o dado ainda for ralo — aí o gerador segue como antes.
     Retorna [(hook, reach)]."""
+    # DESLIGADO por padrão: a legenda passou a começar pela CURIOSIDADE (não pelo
+    # hook), então a 1ª linha do caption no reach.jsonl não é mais o hook da tela —
+    # aprender com ela poluiria o gerador. Religa com HOOK_LEARN=1 só se voltarmos
+    # a cruzar reach × hook por outra fonte (ex.: ledger).
+    if os.getenv("HOOK_LEARN", "0").strip().lower() not in ("1", "true", "sim"):
+        return []
     try:
         por_id = {}
         for l in _REACH_JSONL.read_text(encoding="utf-8").splitlines():
@@ -452,10 +458,34 @@ def _limpar_legenda(txt: str) -> str:
     return t
 
 
+# Reserva GENÉRICA no estilo informativo (quando o Gemini cai). Mesmo padrão dos
+# perfis que vendem: abre com "Pouca gente...", 2 parágrafos, NÃO cita o produto,
+# claim suave. Garante que a legenda sai informativa mesmo sem o Gemini.
+LEGENDAS_RESERVA_INFO = [
+    "Pouca gente imagina que os pequenos hábitos do dia a dia moldam muito mais o "
+    "nosso bem-estar do que as grandes decisões. O corpo e a mente respondem à "
+    "repetição, e é na constância que a diferença aparece.\n\nO mais curioso é que "
+    "quase ninguém percebe isso acontecendo — só sente o resultado depois de um tempo.",
+
+    "Pouca gente sabe que o ambiente ao nosso redor influencia diretamente o humor "
+    "e a energia. Detalhes que parecem irrelevantes vão, aos poucos, mudando como a "
+    "gente se sente dentro de casa.\n\nO mais curioso é que o cérebro registra essas "
+    "mudanças mesmo sem a gente perceber conscientemente.",
+
+    "Pouca gente imagina que a forma como a gente organiza as coisas afeta quanto de "
+    "energia mental sobra pro resto do dia. Menos desordem à vista costuma significar "
+    "menos cansaço no fim do dia.\n\nEm termos práticos, o cérebro gasta menos "
+    "processando o que está bagunçado — e isso libera foco pro que importa.",
+
+    "Pouca gente sabe que resolver um pequeno incômodo que a gente carrega há tempos "
+    "costuma ter um efeito bem maior do que parece. O alívio não é só prático: ele "
+    "mexe também com o humor.\n\nO mais curioso é que a gente só entende o tamanho do "
+    "problema depois que ele deixa de existir.",
+]
+
+
 def _legenda_reserva(nome: str, nicho: str) -> str:
-    nome_curto = " ".join((nome or "esse achadinho").split()[:5])
-    banco = LEGENDAS_RESERVA.get((nicho or "").lower()) or LEGENDAS_RESERVA["geral"]
-    return random.choice(banco).format(nome=nome_curto)
+    return random.choice(LEGENDAS_RESERVA_INFO)
 
 
 def _legenda_via_gemini(produto: str, descricao: str, nicho: str) -> Optional[str]:
@@ -466,23 +496,26 @@ def _legenda_via_gemini(produto: str, descricao: str, nicho: str) -> Optional[st
         from google import genai
         cli = genai.Client(api_key=key)
         prompt = (
-            "Voce escreve LEGENDAS de Instagram/Reels pra uma loja de afiliados "
-            "(achadinhos da Shopee), no estilo das criadoras que mais vendem. A "
-            "legenda NAO e o texto do video: e um paragrafo de CURIOSIDADE que "
-            "ENSINA algo interessante ligado ao produto, pra pessoa SALVAR e "
-            "COMPARTILHAR (isso e o que da alcance).\n\n"
+            "Voce escreve a LEGENDA de um Reels. A legenda NAO vende: ela ENSINA "
+            "uma CURIOSIDADE interessante ligada ao TEMA do produto. Esse formato "
+            "'informativo' e o que faz o Instagram levar o video pro EXPLORAR mais "
+            "rapido — a pessoa LE, SALVA e COMPARTILHA. E o padrao dos perfis que "
+            "mais vendem.\n\n"
+            "ESTRUTURA OBRIGATORIA — 2 paragrafos:\n"
+            "- Paragrafo 1: comece EXATAMENTE com 'Pouca gente imagina que...' ou "
+            "'Pouca gente sabe que...' e revele um efeito/fato surpreendente sobre "
+            "o TEMA, com uma explicacao curta.\n"
+            "- Paragrafo 2: comece com 'O mais curioso e que...' e aprofunde; "
+            "inclua uma frase no formato 'Em termos de [area/ciencia], ...' com a "
+            "conclusao.\n\n"
             "REGRAS:\n"
-            "- 2 a 4 frases, 1 ou 2 paragrafos curtos. Portugues BR, tom de amiga "
-            "que descobriu uma curiosidade legal.\n"
-            "- Comece tipo 'Pouca gente sabe que…', 'Tem um motivo pra…', "
-            "'Poucas pessoas reparam…' — curiosidade REAL e plausivel.\n"
-            "- Amarre a curiosidade ao beneficio do produto de leve, sem parecer "
-            "anuncio. Pode citar o produto UMA vez, natural.\n"
-            "- Claim SUAVE: use 'costuma', 'ajuda', 'muita gente sente'. NUNCA "
-            "prometa cura, resultado garantido nem faca afirmacao medica.\n"
-            "- Responda SO a legenda: sem hashtag, sem 'link na bio', sem CTA, "
-            "sem aspas em volta, sem markdown. Pode terminar com 1 emoji.\n\n"
-            f"Produto: {produto}\n"
+            "- Portugues BR, tom informativo e curioso (um 'voce sabia'), NADA "
+            "comercial. NAO cite o produto, NAO fale em comprar/link/oferta/preco.\n"
+            "- Curiosidade REAL e plausivel. Claim SUAVE ('costuma', 'pode', "
+            "'tende a'). NUNCA prometa cura nem faca afirmacao medica categorica.\n"
+            "- Responda SO os 2 paragrafos: sem titulo, sem hashtag, sem CTA, sem "
+            "a palavra 'Publi', sem aspas, sem markdown, sem emoji.\n\n"
+            f"Tema/Produto: {produto}\n"
             f"Descricao: {(descricao or '')[:300]}\n"
             f"Nicho: {nicho or 'geral'}\n"
         )
@@ -492,7 +525,7 @@ def _legenda_via_gemini(produto: str, descricao: str, nicho: str) -> Optional[st
         )
         out = _limpar_legenda(getattr(r, "text", "") or "")
         # sanidade: precisa ter corpo (senao cai pra reserva)
-        return out if len(out) >= 40 else None
+        return out if len(out) >= 80 else None   # 2 parágrafos: exige corpo
     except Exception:
         return None
 
