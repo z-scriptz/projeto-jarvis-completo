@@ -1,13 +1,30 @@
 import React from 'react';
 import {AbsoluteFill, Series, useCurrentFrame, useVideoConfig} from 'remotion';
+import {cssFontes} from './fontes.js';
 import {cores, fontes} from './theme.js';
 import {Slide} from './Slide.jsx';
 
-// Regras usadas pelo texto rico dos slides (<g> = palavra em dourado, <b> = destaque).
-const estiloTextoRico = `
-  g { color: ${cores.goldSoft}; }
-  b { color: ${cores.ink}; font-weight: 600; }
-`;
+// Fontes da marca + a regra do <b> dentro dos textos de apoio.
+const estilos = `${cssFontes}\nb { color: ${cores.ink}; font-weight: 600; }`;
+
+// O fundo não reinicia a cada slide: ele deriva devagar durante o vídeo inteiro,
+// o que costura os slides num movimento único em vez de seis quadros parados.
+const Fundo = () => {
+  const frame = useCurrentFrame();
+  const {durationInFrames} = useVideoConfig();
+  const t = frame / durationInFrames;
+  const x = 78 - 22 * Math.sin(t * Math.PI);
+  const y = 12 + 16 * Math.sin(t * Math.PI * 0.8);
+  const tamanho = 120 + 14 * Math.sin(t * Math.PI * 1.3);
+
+  return (
+    <AbsoluteFill
+      style={{
+        background: `radial-gradient(${tamanho}% ${tamanho}% at ${x}% ${y}%, ${cores.verdeClaro} 0%, ${cores.bg1} 42%, ${cores.bg2} 100%)`,
+      }}
+    />
+  );
+};
 
 const Marca = () => (
   <div
@@ -27,7 +44,6 @@ const Marca = () => (
   </div>
 );
 
-// Barra de progresso da aula inteira, no rodapé.
 const Progresso = () => {
   const frame = useCurrentFrame();
   const {durationInFrames} = useVideoConfig();
@@ -46,19 +62,15 @@ const Progresso = () => {
 };
 
 export const Deck = ({slides, frames}) => (
-  <AbsoluteFill
-    style={{
-      background: `radial-gradient(120% 120% at 78% 12%, ${cores.verdeClaro} 0%, ${cores.bg1} 42%, ${cores.bg2} 100%)`,
-      color: cores.ink,
-      fontFamily: fontes.sans,
-    }}
-  >
-    <style>{estiloTextoRico}</style>
+  <AbsoluteFill style={{color: cores.ink, fontFamily: fontes.sans}}>
+    <style>{estilos}</style>
+
+    <Fundo />
 
     <Series>
       {slides.map((slide, i) => (
         <Series.Sequence key={i} durationInFrames={frames[i]}>
-          <Slide slide={slide} indice={i} />
+          <Slide slide={slide} indice={i} duracao={frames[i]} />
         </Series.Sequence>
       ))}
     </Series>

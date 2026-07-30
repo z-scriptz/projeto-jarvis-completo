@@ -1,6 +1,6 @@
 // Tokens da marca TopShop Academy — os mesmos valores dos decks HTML das aulas.
-// Os tamanhos em px correspondem ao que o deck HTML mostra em tela cheia 1920x1080
-// (os clamp() do CSS chegam no teto nessa largura), então o vídeo sai igual ao que foi aprovado.
+// Os tamanhos em px correspondem ao deck HTML em tela cheia 1920x1080
+// (os clamp() do CSS chegam no teto nessa largura).
 
 export const cores = {
   bg1: '#0c1512',
@@ -14,18 +14,23 @@ export const cores = {
   vermelhoSuave: '#c98a72',
 };
 
+// As três famílias são carregadas em src/fontes.js e vêm dentro do projeto.
 export const fontes = {
-  // Georgia é fonte da Microsoft: no Linux cai em Liberation Serif (métrica Times).
-  serif: 'Georgia, "Liberation Serif", "Times New Roman", serif',
-  sans: 'system-ui, -apple-system, "Segoe UI", Roboto, "Liberation Sans", Helvetica, Arial, sans-serif',
-  mono: 'ui-monospace, "SF Mono", Menlo, "Liberation Mono", Consolas, monospace',
+  serif: '"TS Serif", Georgia, "Liberation Serif", serif',
+  sans: '"TS Sans", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+  mono: '"TS Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace',
 };
 
 export const FPS = 30;
 
-// Ritmo da entrada dos elementos, em segundos — espelha os transition-delay do deck HTML.
+// Ritmo da animação, em segundos.
 export const ritmo = {
-  fadeSlide: 0.5,
-  duracaoElemento: 0.55,
-  atrasos: { eyebrow: 0.12, h1: 0.28, sub: 0.46, two: 0.46, cta: 0.66 },
+  entrada: 0.6, // quanto dura a entrada de cada elemento
+  saida: 0.5, // quanto dura a saída no fim do slide
+  palavra: 0.13, // atraso entre uma palavra e a próxima no título (~4 frames: dá pra perceber)
+  // atraso de entrada por papel
+  // o texto de apoio só entra depois de o título terminar de se montar
+  atrasos: {eyebrow: 0.1, h1: 0.26, sub: 1.0, two: 1.0, cta: 1.3},
+  // ordem de saída: sai de baixo pra cima (o que entrou por último sai primeiro)
+  saidas: {cta: 0, two: 0.06, sub: 0.06, h1: 0.12, eyebrow: 0.18},
 };

@@ -57,9 +57,23 @@ npx remotion still src/index.jsx Aula1 out/frame.png --frame=1300
 Verifique: texto não estourando a caixa, dourado só na palavra-chave, marca d'água do número
 correta, e o rodapé de progresso avançando.
 
+## Ajustar a animação
+
+Todos os tempos estão em `src/theme.js`, no objeto `ritmo`: `entrada`, `saida`, `palavra`
+(atraso entre palavras do título), `atrasos` (por papel) e `saidas` (ordem da saída).
+Mexer ali muda o ritmo de todas as aulas de uma vez — não edite tempo dentro dos componentes.
+
+O texto de apoio entra só depois de o título terminar de se montar. Se aumentar
+`ritmo.palavra` ou títulos ficarem mais longos, suba `atrasos.sub` na mesma medida.
+
+## Fontes
+
+A família Source vai embutida em base64 (`src/fontes-embutidas.js`), gerada por
+`scripts/subset-fontes.py`. Não use `delayRender()` para carregar fonte aqui: o Remotion
+controla os timers do ambiente de render e a espera trava o processo no meio.
+Se um caractere novo aparecer nos slides, acrescente em `CARACTERES` no script e rode de novo.
+
 ## Limites conhecidos
 
-- Georgia não existe no Linux: o render cai em Liberation Serif. Renderize no Windows/Mac
-  para a fonte original, ou embuta a fonte no projeto.
 - O Remotion é grátis para pessoa física e empresa com até 3 funcionários (uso comercial
   incluído); com 4+ exige licença paga.

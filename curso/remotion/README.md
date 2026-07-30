@@ -66,12 +66,43 @@ npx remotion render src/index.jsx Aula1 out/aula1.mp4 \
 Tem que ser o binário **`headless_shell`**, não o `chrome` completo — o Chrome novo removeu
 o modo headless antigo que o Remotion usa, e falha com "Old Headless mode has been removed".
 
+## Animação
+
+O que mantém o vídeo vivo, em vez de seis quadros parados:
+
+- **título palavra por palavra** — cada palavra sobe e aparece, ~4 frames de diferença
+- **entrada em cascata** — rótulo, título, texto e CTA entram em sequência
+- **saída em cascata** — no fim do slide os elementos saem de baixo pra cima, então a
+  troca de slide é uma transição autoral e não um corte seco
+- **deriva contínua** — o bloco de conteúdo sobe alguns pixels e cresce 1,6% ao longo do
+  slide; o número da marca d'água deriva no sentido oposto, criando profundidade
+- **fundo que nunca reinicia** — o gradiente verde caminha durante o vídeo inteiro,
+  costurando os slides num movimento único
+- **anel dourado** girando e respirando devagar
+- **brilho na palavra dourada**, que acende depois de a palavra assentar
+
+Os tempos ficam todos em `src/theme.js`, no objeto `ritmo` — é lá que se acelera ou
+desacelera tudo de uma vez.
+
 ## Fontes
 
-Os decks usam Georgia, que é fonte da Microsoft e não existe no Linux — lá cai em
-Liberation Serif (métrica Times). O resultado continua elegante, mas **não é idêntico**:
-renderize no Windows/Mac se quiser a Georgia de verdade, ou embuta a fonte via `@font-face`
-para o render ficar igual em qualquer máquina.
+O projeto embute a família **Source** (Serif 4, Sans 3, Code Pro — licença SIL OFL),
+subsetada para latino + acentos do português e convertida em base64 dentro de
+`src/fontes-embutidas.js`. Assim o render sai idêntico em qualquer máquina e não depende
+de fonte instalada nem de rede.
+
+Georgia não é usada: é proprietária da Microsoft, não existe no Linux e não pode ser
+empacotada junto do projeto.
+
+Para regerar (por exemplo, se aparecer um caractere novo nos slides):
+
+```bash
+pip install fonttools brotli
+python3 scripts/subset-fontes.py
+```
+
+O script baixa as fontes se faltarem. Os `.ttf` originais não vão pro git — só o
+módulo base64, que é o que o render usa.
 
 ## Licença do Remotion
 
