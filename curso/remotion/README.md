@@ -14,6 +14,40 @@ npm run aula2                   # gera out/aula2.mp4, já sincronizado
 
 Saída: 1920x1080, 30 fps, H.264, CRF 18.
 
+## Instalar no VPS
+
+**Não troque a branch do checkout que roda o Jarvis.** Esta branch parte de `main` e o
+`git checkout` reverteria o código em produção. Use uma pasta separada:
+
+```bash
+cd ~/projeto-jarvis-completo
+git fetch origin
+git worktree add ~/curso-video claude/curso-video-aulas
+```
+
+O Node do apt do Ubuntu é antigo demais para o Remotion (que precisa de 18+).
+Instale pela NodeSource:
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs        # traz node e npm juntos
+node -v                           # tem que ser v18 ou maior
+```
+
+Credenciais: copie o `.env` para dentro do projeto do curso (o `.gitignore` daqui já
+protege esse arquivo):
+
+```bash
+cp ~/projeto-jarvis-completo/.env ~/curso-video/curso/remotion/.env
+```
+
+Se o Chromium reclamar de biblioteca faltando ao renderizar:
+
+```bash
+sudo apt install -y libnss3 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 \
+  libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libasound2
+```
+
 ## Narração (ElevenLabs)
 
 O texto que a voz fala mora no campo `narracao` de cada slide, ao lado do próprio slide.
