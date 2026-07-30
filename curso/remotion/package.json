@@ -1,0 +1,18 @@
+{
+  "name": "curso-afiliado-online",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Renderizacao das aulas do curso Afiliado Online (TopShop Academy) com Remotion",
+  "scripts": {
+    "studio": "remotion studio",
+    "render": "remotion render",
+    "aula1": "remotion render Aula1 out/aula1.mp4"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.501",
+    "@remotion/media-utils": "^4.0.501",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "remotion": "^4.0.501"
+  }
+}

@@ -1,0 +1,65 @@
+---
+name: aula-video
+description: Gera o MP4 de uma aula do curso Afiliado Online (TopShop Academy) a partir dos slides em código, com as animações e o sync da narração. Use quando pedirem para renderizar, gerar ou atualizar o vídeo de uma aula, criar os slides de uma aula nova, ou ajustar o tempo dos slides à narração.
+---
+
+# Vídeo de aula do curso
+
+O projeto Remotion fica em `curso/remotion`. Ele produz o MP4 de cada aula com o visual da
+marca (verde-escuro + dourado, Georgia + mono) e a entrada escalonada dos elementos.
+
+## Renderizar uma aula existente
+
+```bash
+cd curso/remotion
+npx remotion render src/index.jsx Aula1 out/aula1.mp4
+```
+
+Em ambiente com egress restrito o download do Chrome do Remotion é bloqueado. Nesse caso
+adicione a flag apontando para o **`headless_shell`** do Playwright (o `chrome` completo
+falha, porque o Chrome novo removeu o modo headless antigo):
+
+```bash
+--browser-executable=/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell
+```
+
+## Criar os slides de uma aula nova
+
+1. Copie `src/aulas/aula1.js`, renomeie o `id` (`Aula2`) e escreva os slides.
+2. Importe o arquivo em `src/Root.jsx` e acrescente na lista `aulas`.
+3. Renderize com o `id` novo.
+
+Regras de escrita dos slides, para manter a coerência com o Módulo 0 já produzido:
+
+- Um slide sustenta **uma ideia**. Título curto (cabe em ~16 caracteres por linha).
+- `<g>` marca em dourado **a palavra-chave da frase**, nunca mais de uma por título.
+- `eyebrow` diz onde o aluno está ("Engrenagem 3 · A distribuição"), não repete o título.
+- Numeração só quando existe sequência real (as engrenagens, os módulos).
+- Sem promessa de resultado, sem "fique rico": o curso se posiciona como método honesto,
+  e os slides de honestidade (o que é / o que não é) são parte da proposta.
+- O último slide é sempre o gancho para a aula seguinte, com `cta`.
+
+## Ajustar o tempo à narração
+
+Escreva a narração **um parágrafo por slide**, gere um MP3 por parágrafo, salve em
+`curso/remotion/public/` e declare `audio: 'nome.mp3'` no slide. A duração passa a vir do
+áudio (+0,5s de respiro), então o vídeo fica sincronizado sem ajuste manual.
+Sem áudio, vale o campo `segundos`.
+
+## Conferir o resultado
+
+Antes de entregar, renderize 2–3 frames em pontos diferentes e olhe as imagens:
+
+```bash
+npx remotion still src/index.jsx Aula1 out/frame.png --frame=1300
+```
+
+Verifique: texto não estourando a caixa, dourado só na palavra-chave, marca d'água do número
+correta, e o rodapé de progresso avançando.
+
+## Limites conhecidos
+
+- Georgia não existe no Linux: o render cai em Liberation Serif. Renderize no Windows/Mac
+  para a fonte original, ou embuta a fonte no projeto.
+- O Remotion é grátis para pessoa física e empresa com até 3 funcionários (uso comercial
+  incluído); com 4+ exige licença paga.
