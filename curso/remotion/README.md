@@ -3,21 +3,45 @@
 Gera o MP4 de cada aula a partir de código, com as mesmas animações dos decks HTML.
 Substitui o passo manual de tirar print dos slides e montar no CapCut.
 
-## Renderizar
+## O fluxo completo
 
 ```bash
 cd curso/remotion
-npm install          # só na primeira vez
-npm run aula1        # gera out/aula1.mp4
+npm install                     # só na primeira vez
+npm run narrar Aula2            # gera a narração no ElevenLabs (um MP3 por slide)
+npm run aula2                   # gera out/aula2.mp4, já sincronizado
 ```
 
 Saída: 1920x1080, 30 fps, H.264, CRF 18.
 
+## Narração (ElevenLabs)
+
+O texto que a voz fala mora no campo `narracao` de cada slide, ao lado do próprio slide.
+`scripts/narrar.mjs` lê esse campo, sintetiza no ElevenLabs e grava
+`public/Aula2_slide1.mp3`, `public/Aula2_slide2.mp3`… — que é exatamente o nome que o
+`Root.jsx` procura. Não há nada pra ligar na mão: existindo o MP3, ele entra no vídeo e a
+duração do slide passa a ser a do áudio.
+
+```bash
+npm run narrar Aula2              # só o que ainda não existe
+npm run narrar Aula2 -- --refazer # regrava tudo
+npm run narrar Aula2 -- --slide 3 # só o slide 3
+```
+
+Credenciais: as mesmas que o `narracao_ia.py` do Jarvis já usa, lidas do `.env` da raiz
+do projeto — `ELEVENLABS_API_KEY` e `ELEVENLABS_VOICE_ID` (obrigatórias), mais
+`ELEVENLABS_MODEL`, `_STABILITY`, `_SIMILARITY`, `_STYLE` e `_SPEED` (opcionais).
+
+Enquanto a narração não existe, vale o campo `segundos` de cada slide e o render funciona
+igual — só sem voz. No console aparece um 404 por slide sem MP3: é a checagem de
+existência, e é esperado.
+
 ## Criar uma aula nova
 
-1. Copie `src/aulas/aula1.js` para `src/aulas/aula2.js` e troque os textos.
+1. Copie `src/aulas/aula1.mjs` para `src/aulas/aula4.mjs`, troque o `id` e os textos
+   (inclusive o `narracao` de cada slide).
 2. Em `src/Root.jsx`, importe e adicione na lista `aulas`.
-3. `npx remotion render src/index.jsx Aula2 out/aula2.mp4`
+3. `npm run narrar Aula4 && npx remotion render src/index.jsx Aula4 out/aula4.mp4`
 
 Campos de cada slide:
 
@@ -29,20 +53,8 @@ Campos de cada slide:
 | `two` | bloco de duas colunas (`is` / `isnot`) |
 | `cta` | linha final em mono dourado |
 | `ring` | `'um'` ou `'dois'` — posição do círculo de fundo |
-| `segundos` | quanto o slide fica no ar |
-| `audio` | opcional: MP3 da narração daquele slide, em `public/` |
-
-## Sync automático com a narração
-
-Escreva a narração **um parágrafo por slide**, gere **um MP3 por parágrafo** (ElevenLabs),
-salve em `public/` e declare no slide:
-
-```js
-{ eyebrow: '...', h1: '...', audio: 'aula1_slide1.mp3', segundos: 10 }
-```
-
-A duração do slide passa a vir do próprio MP3 (+0,5s de respiro) — sem ajustar nada na mão.
-O campo `segundos` continua servindo de reserva pra quando não existe áudio.
+| `segundos` | duração de reserva, usada só enquanto não há narração |
+| `narracao` | o que a voz fala neste slide — é daqui que sai o MP3 |
 
 ## Pré-visualizar antes de renderizar
 

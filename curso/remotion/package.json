@@ -4,9 +4,12 @@
   "private": true,
   "description": "Renderizacao das aulas do curso Afiliado Online (TopShop Academy) com Remotion",
   "scripts": {
-    "studio": "remotion studio",
-    "render": "remotion render",
-    "aula1": "remotion render Aula1 out/aula1.mp4"
+    "studio": "remotion studio src/index.jsx",
+    "render": "remotion render src/index.jsx",
+    "aula1": "remotion render src/index.jsx Aula1 out/aula1.mp4",
+    "aula2": "remotion render src/index.jsx Aula2 out/aula2.mp4",
+    "aula3": "remotion render src/index.jsx Aula3 out/aula3.mp4",
+    "narrar": "node scripts/narrar.mjs"
   },
   "dependencies": {
     "@remotion/cli": "^4.0.501",

@@ -39,12 +39,24 @@ Regras de escrita dos slides, para manter a coerência com o Módulo 0 já produ
   e os slides de honestidade (o que é / o que não é) são parte da proposta.
 - O último slide é sempre o gancho para a aula seguinte, com `cta`.
 
-## Ajustar o tempo à narração
+## Narração e sincronia
 
-Escreva a narração **um parágrafo por slide**, gere um MP3 por parágrafo, salve em
-`curso/remotion/public/` e declare `audio: 'nome.mp3'` no slide. A duração passa a vir do
-áudio (+0,5s de respiro), então o vídeo fica sincronizado sem ajuste manual.
-Sem áudio, vale o campo `segundos`.
+O texto falado mora no campo `narracao` de cada slide, junto do próprio slide. Para gerar:
+
+```bash
+npm run narrar Aula2              # só o que falta
+npm run narrar Aula2 -- --refazer # regrava tudo
+```
+
+O script grava `public/Aula2_slide1.mp3`, `…slide2.mp3` — o nome que o `Root.jsx` procura.
+Existindo o MP3, ele entra no vídeo e a duração do slide vira a do áudio (+0,5s de respiro),
+sem nenhuma ligação manual. Sem MP3, vale o campo `segundos`, e o 404 no console é esperado.
+
+Credenciais: `ELEVENLABS_API_KEY` e `ELEVENLABS_VOICE_ID` no `.env` da raiz do projeto —
+as mesmas do `narracao_ia.py`. Nunca peça a chave por chat nem a escreva em arquivo do repo.
+
+Ao escrever a `narracao`: um parágrafo por slide, e o parágrafo tem que caber no slide —
+é ele que define quanto tempo aquele slide fica no ar.
 
 ## Conferir o resultado
 
