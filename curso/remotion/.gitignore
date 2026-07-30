@@ -1,0 +1,14 @@
+node_modules/
+out/
+.remotion/
+
+# credenciais: a branch do curso parte de main, que ainda nao tem .gitignore na raiz
+.env
+*.env
+
+# os .ttf originais nao vao pro git: o render usa o base64 em src/fontes-embutidas.js
+# e scripts/subset-fontes.py rebaixa se precisar
+public/fontes/*.ttf
+
+# narracao gerada: audio pesado, refaz com npm run narrar
+public/*.mp3
