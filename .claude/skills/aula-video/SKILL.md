@@ -23,9 +23,27 @@ falha, porque o Chrome novo removeu o modo headless antigo):
 --browser-executable=/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell
 ```
 
+## Ritmo: o Módulo 0 é exceção
+
+O Módulo 0 (Aulas 1 a 3) é manifesto — slide inteiro, ~12s cada, narração em parágrafo.
+Fica assim de propósito: o aluno acabou de comprar e está no pico de atenção.
+**Não reescreva o Módulo 0 sem pedido explícito.**
+
+Do Módulo 1 em diante o formato muda, porque ali se ensina execução e o aluno decide se
+continua ou abandona:
+
+- **Um slide sustenta uma frase, não um parágrafo.** Alvo de 4 a 8 segundos por slide.
+  Parágrafo de narração longo vira três slides, não um.
+- **Gravação de tela é a base da aula**, não o slide. Módulo 1 em diante ensina coisas que
+  acontecem numa tela (achar produto, gerar link, subir vídeo) — descrever isso em texto é
+  a pior versão. Os slides viram abertura, rótulos, destaques e encerramento por cima da
+  captura.
+- **Quebra de padrão a cada ~25s**: muda o enquadramento, entra um número grande, um card.
+- Sem rosto e sem voz do autor: a tela mostra a execução, o ElevenLabs narra.
+
 ## Criar os slides de uma aula nova
 
-1. Copie `src/aulas/aula1.js`, renomeie o `id` (`Aula2`) e escreva os slides.
+1. Copie `src/aulas/aula1.mjs`, renomeie o `id` (`Aula4`) e escreva os slides.
 2. Importe o arquivo em `src/Root.jsx` e acrescente na lista `aulas`.
 3. Renderize com o `id` novo.
 
