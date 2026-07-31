@@ -84,11 +84,17 @@ _BELEZA = (
     "depilador", "epilador", "aparador de pelos", "barbeador",
     "escova de dente eletrica", "escova de dente elétrica", "clareador dental",
     "gua sha", "rolo de jade", "dermaroller", "led facial",
+    # vistos na fila de producao real
+    "cuticle", "clareador", "toner", "tonico facial", "tônico facial",
+    "esponja de maquiagem", "esponja para maquiagem", "modelador de cachos",
+    "hidratante labial", "balm labial", "mascara de cilios", "máscara de cílios",
+    "centella", "acido hialuronico", "ácido hialurônico", "niacinamida",
+    "sabonete", "esfoliante corporal", "perfume", "eau de parfum",
 )
 _TECH = (
     "fone", "headset", "earbud", "carregador", "smartwatch", "smart watch",
     "powerbank", "power bank", "projetor", "drone", "caixa de som", "bluetooth",
-    "webcam", "mouse", "teclado", "ring light", "luminária led", "luminaria led",
+    "webcam", "mouse", "teclado", "ring light",
     "gamer", "smart tv", "roteador wi", "ssd", "pendrive", "gadget",
     "celular", "smartphone", "iphone", "android", "telefone", "capinha",
     "capa de celular", "capa de telefone", "capa magnetica", "capa magnética",
@@ -114,6 +120,9 @@ _TECH = (
     "caneta touch", "teclado sem fio", "monitor", "kindle", "e-reader",
     "relogio inteligente", "relógio inteligente", "pulseira inteligente",
     "smart band", "oximetro", "oxímetro",
+    # vistos na fila de producao real
+    "xiaomi", "redmi", "poco x", "motorola", "ipad", "tablet", "airpods",
+    "capa antichoque", "capa para iphone", "capa para samsung", "iwo",
 )
 # 'casa' ainda NÃO tem conta própria no contas.json — classificar aqui só serve
 # pra medir o volume e decidir se vale abrir a quarta conta. Sem conta, cai em geral.
@@ -129,6 +138,10 @@ _CASA = (
     "porta-escova", "chuveiro", "ducha", "tapete de banheiro",
     "umidificador", "difusor de aroma", "aromatizador", "vela aromatica",
     "vela aromática", "purificador de ar", "desumidificador",
+    # vistos na fila de producao real
+    "luminaria", "luminária", "taça", "taca", "xicara", "xícara",
+    "porta treco", "porta-treco", "garrafa termica", "garrafa térmica",
+    "jogo de copos", "jogo de tacas", "jogo de taças", "bandeja",
 )
 
 _NICHOS_VALIDOS = ("beleza", "tech", "casa", "geral")
