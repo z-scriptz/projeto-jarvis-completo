@@ -16,6 +16,7 @@
 # Entrada: o dict do plano (ultimo_plano.json), que já traz legenda, hashtags,
 #          link_afiliado, titulo_real, links_espelho.
 
+import os
 import re
 from typing import Optional
 
@@ -132,6 +133,14 @@ def montar_descricao(plano: dict, plataforma: Optional[str] = None) -> dict:
                       or "")
     reservas = {k: v for k, v in links_espelho.items() if k != "principal"}
 
+    # O aviso de publicidade ("#Publi") começa com # e por isso era varrido junto
+    # com as hashtags logo abaixo — a legenda saía sem ele, terminando na parede
+    # de hashtags. Ele não é hashtag de alcance: é transparência de publicidade,
+    # e tem que fechar a legenda. Guardamos aqui e reanexamos no fim de tudo.
+    publi = os.getenv("LEGENDA_PUBLI", "#Publi").strip()
+    tinha_publi = bool(publi) and re.search(
+        rf"(?<!\w){re.escape(publi)}(?!\w)", legenda, flags=re.IGNORECASE)
+
     # Remove hashtags da legenda (pra não duplicar — elas vão no fim)
     legenda_sem_tags = re.sub(r"#\S+", "", legenda).strip()
     legenda_sem_tags = re.sub(r"\s+", " ", legenda_sem_tags).strip()
@@ -160,6 +169,10 @@ def montar_descricao(plano: dict, plataforma: Optional[str] = None) -> dict:
     if hashtags:
         linhas.append("")
         linhas.append(hashtags)
+
+    if tinha_publi:
+        linhas.append("")
+        linhas.append(publi)
 
     descricao = "\n".join(linhas).strip()
 

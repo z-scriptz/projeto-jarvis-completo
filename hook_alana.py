@@ -21,6 +21,53 @@ import random
 from pathlib import Path
 from typing import Optional
 
+try:
+    from shared.logger import get_logger
+    log = get_logger(__name__)
+except Exception:
+    import logging
+    log = logging.getLogger("hook_alana")
+
+BASE_DIR = Path(__file__).resolve().parent
+
+
+def _carregar_env():
+    """Lê o .env pra dentro do os.environ.
+
+    Este módulo era o único da cadeia que NÃO carregava o .env: dependia de quem
+    o importasse ter feito isso antes. O telegram_repurpose_hunter não faz — e o
+    resultado era GEMINI_API_KEY vazia, com hook e legenda caindo no banco de
+    reserva em silêncio (a conta de beleza publicando curiosidade genérica sobre
+    organização da casa).
+
+    Diferente dos outros carregadores do projeto, este também preenche quando a
+    variável existe mas está VAZIA: variável vazia esconde o problema do mesmo
+    jeito que a ausente.
+    """
+    for candidato in (BASE_DIR / ".env", Path(".env")):
+        try:
+            if not candidato.exists():
+                continue
+            linhas = candidato.read_text(encoding="utf-8").splitlines()
+        except Exception as erro:        # .env ilegível não pode derrubar o import
+            log.warning("não consegui ler %s: %s", candidato, str(erro)[:120])
+            continue
+        for linha in linhas:
+            linha = linha.strip()
+            if not linha or linha.startswith("#") or "=" not in linha:
+                continue
+            if linha.lower().startswith("export "):
+                linha = linha[7:]
+            chave, _, valor = linha.partition("=")
+            chave = chave.strip()
+            valor = valor.strip().strip('"').strip("'")
+            if chave and not os.environ.get(chave):
+                os.environ[chave] = valor
+        break
+
+
+_carregar_env()
+
 TAG_PADRAO = os.environ.get("HOOK_ALANA_TAG", "A Shopee:")
 
 _RECENTES_PATH = Path(__file__).resolve().parent / "hooks_alana_recentes.json"
@@ -310,6 +357,7 @@ def _hooks_vencedores(n: int = 4) -> list:
 def _via_gemini(produto: str, descricao: str, nicho: str) -> Optional[str]:
     key = os.getenv("GEMINI_API_KEY", "")
     if not key:
+        log.warning("GEMINI_API_KEY ausente — HOOK sai do banco de reserva")
         return None
     try:
         from google import genai
@@ -357,7 +405,9 @@ def _via_gemini(produto: str, descricao: str, nicho: str) -> Optional[str]:
             contents=[{"parts": [{"text": prompt}]}],
         )
         return _limpar_saida(getattr(r, "text", "") or "")
-    except Exception:
+    except Exception as erro:
+        log.warning("Gemini falhou no HOOK (%s: %s) — usando reserva",
+                    type(erro).__name__, str(erro)[:140])
         return None
 
 
@@ -491,6 +541,8 @@ def _legenda_reserva(nome: str, nicho: str) -> str:
 def _legenda_via_gemini(produto: str, descricao: str, nicho: str) -> Optional[str]:
     key = os.getenv("GEMINI_API_KEY", "")
     if not key:
+        log.warning("GEMINI_API_KEY ausente — LEGENDA sai do banco de reserva "
+                    "(genérico, sem relação com o nicho)")
         return None
     try:
         from google import genai
@@ -525,8 +577,14 @@ def _legenda_via_gemini(produto: str, descricao: str, nicho: str) -> Optional[st
         )
         out = _limpar_legenda(getattr(r, "text", "") or "")
         # sanidade: precisa ter corpo (senao cai pra reserva)
-        return out if len(out) >= 80 else None   # 2 parágrafos: exige corpo
-    except Exception:
+        if len(out) < 80:                        # 2 parágrafos: exige corpo
+            log.warning("Gemini devolveu legenda curta demais (%d chars) — "
+                        "usando reserva", len(out))
+            return None
+        return out
+    except Exception as erro:
+        log.warning("Gemini falhou na LEGENDA (%s: %s) — usando reserva",
+                    type(erro).__name__, str(erro)[:140])
         return None
 
 
