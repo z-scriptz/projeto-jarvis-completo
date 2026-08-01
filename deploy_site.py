@@ -109,7 +109,7 @@ def _ids_do_link(link: str):
     return pares[-1] if pares else (None, None)
 
 
-def _checar_online(link, obter, nome="", H=None, hist=None):
+def _checar_online(link, obter, nome="", H=None, hist=None, achados=None):
     """'vivo' | 'morto' | 'incerto'. Só devolve 'morto' quando a API CONFIRMA
     que o produto não existe mais (delistado).
 
@@ -118,6 +118,8 @@ def _checar_online(link, obter, nome="", H=None, hist=None):
     nova. Falha ao anotar nunca derruba o health-check."""
     try:
         shop_id, item_id = _ids_do_link(link)
+        if achados is not None and item_id:
+            achados[link] = str(item_id)
         if not item_id:
             return "incerto"
         d = obter(str(item_id), shop_id=int(shop_id))
@@ -170,6 +172,7 @@ def _filtrar_vivos(produtos):
 
     cache = _load_cache()
     agora = int(time.time())
+    achados = {}
     vivos, mortos, checados = [], 0, 0
     for p in produtos:
         link = p.get("link", "")
@@ -178,10 +181,13 @@ def _filtrar_vivos(produtos):
             estado = ent.get("estado", "incerto")
         else:
             estado = _checar_online(link, obter, nome=p.get("nome", ""),
-                                    H=H, hist=hist)
+                                    H=H, hist=hist, achados=achados)
             checados += 1
             if estado in ("vivo", "morto"):     # só cacheia resultado confiável
-                cache[link] = {"estado": estado, "ts": agora}
+                # guarda o itemId junto: é a identidade real do produto e é o
+                # que permite achar dois links de afiliado pro mesmo anúncio
+                cache[link] = {"estado": estado, "ts": agora,
+                               "item": achados.get(link, "")}
         if estado == "morto":
             mortos += 1
             _log(f"   💀 fora do ar, escondido: {p.get('nome', '?')[:45]}")
@@ -208,6 +214,40 @@ def _filtrar_vivos(produtos):
         _log("health-check esconderia TUDO — ignorando (mantém vitrine atual)")
         return produtos
     return vivos
+
+
+def _deduplicar(produtos, cache):
+    """Um card por produto — a identidade é o itemId da Shopee.
+
+    Não dá pra deduplicar por nome: o campo `produto` da fila é o termo que o
+    extrator tirou do vídeo, e na fila real existe entrada chamada "2 mil
+    vendidos". Comparar nome fundiria produtos diferentes que por acaso caíram
+    no mesmo texto ruim. Dois links de afiliado apontando pro mesmo itemId, ao
+    contrário, são o mesmo anúncio sem chance de engano.
+
+    O itemId sai do cache do health-check, que já resolveu o link — nenhuma
+    requisição nova. Produto cujo cache ainda não tem itemId (entrada gravada
+    antes disto existir) simplesmente não deduplica nesta rodada.
+    """
+    vistos, saida, repetidos = {}, [], 0
+    for p in produtos:
+        item = (cache.get(p.get("link", "")) or {}).get("item")
+        if item and item in vistos:
+            # o repetido ainda serve de doador: se tem foto ou preço que
+            # faltam no que fica, aproveita antes de descartar
+            mantido = vistos[item]
+            for campo in ("imagem", "preco"):
+                if not mantido.get(campo) and p.get(campo):
+                    mantido[campo] = p[campo]
+            repetidos += 1
+            _log(f"   👯 mesmo produto em 2 links: {p.get('nome', '?')[:40]}")
+            continue
+        if item:
+            vistos[item] = p
+        saida.append(p)
+    if repetidos:
+        _log(f"deduplicação: {repetidos} link(s) repetido(s) do mesmo produto")
+    return saida
 
 
 def _git(*args):
@@ -237,6 +277,9 @@ def main():
     if not produtos:
         _log("nenhum produto ativo — nada a publicar")
         return 1
+
+    # 1 card por produto (o cache do health-check acabou de gravar os itemIds)
+    produtos = _deduplicar(produtos, _load_cache())
 
     # cola média/queda/data em cada produto (campo `preco_resumo`)
     H = _historico()
