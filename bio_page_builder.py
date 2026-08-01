@@ -45,7 +45,8 @@ GRUPO_TELEGRAM = "https://t.me/achadinhosrelampagoh"
 # Ordem FIXA das categorias no filtro da vitrine (sempre aparecem, mesmo sem
 # produto no momento — assim a loja fica organizada e a categoria não "some").
 # "Tudo" e "Outros" são adicionados automaticamente pelo _filtros_html.
-_CATEGORIAS_FIXAS = ["Cozinha", "Beleza", "Tech", "Fitness", "Pet", "Utilidades", "Casa"]
+_CATEGORIAS_FIXAS = ["Cozinha", "Beleza", "Tech", "Fitness", "Moda", "Pet",
+                     "Utilidades", "Casa"]
 
 # Palavras-chave por categoria (o produto cai na 1ª que casar — ordem importa).
 _CATEGORIAS_FILTRO = [
@@ -54,7 +55,8 @@ _CATEGORIAS_FILTRO = [
     ("Pet",        ("antipulgas", "carrapato", "vermifugo", "vermífugo", "ração",
                     "racao", "coleira", "comedouro", "bebedouro", "cachorro",
                     "cão", "cães", "gato", "gatos", "filhote", "petisco",
-                    "arranhador", "aquário", "aquario", "canino", "felino")),
+                    "arranhador", "aquário", "aquario", "canino", "felino",
+                    "pets")),   # "pets" e não "pet": "pet" pegaria "petisco"
     ("Cozinha",    ("cortador", "legumes", "liquidificador", "balanca", "balança",
                     "garrafa", "caneca", "termica", "térmica", "descascador",
                     "processador", "fatiador", "espremedor", "água", "agua",
@@ -70,6 +72,19 @@ _CATEGORIAS_FILTRO = [
                     "corda", "pular", "cervical", "fisioterapia", "academia",
                     "treino", "elastica", "elástica", "halter", "abdominal",
                     "musculac", "musculaç", "luva de treino")),
+    # Moda DEPOIS de Fitness: "Kit 2 Shorts Femininos Academia Yoga" é roupa,
+    # mas quem procura isso procura em Fitness. Antes daqui não havia categoria
+    # de roupa/calçado nenhuma e sandália, scarpin, vestido e cropped caíam
+    # todos em "Outros" — 7 produtos da fila real.
+    ("Moda",       ("sandalia", "sandália", "sapato", "tenis", "tênis",
+                    "scarpin", "papete", "babuche", "chinelo", "bota",
+                    "sapatilha", "rasteirinha", "salto", "vestido", "blusa",
+                    "camiseta", "camisa", "cropped", "calça", "calca", "saia",
+                    "macacao", "macacão", "moletom", "jaqueta", "casaco",
+                    "legging", "pijama", "biquini", "biquíni", "sutia",
+                    "sutiã", "lingerie", "bolsa", "mochila", "carteira",
+                    "cinto", "boné", "bone", "chapeu", "chapéu", "oculos",
+                    "óculos", "bermuda", "conjunto feminino")),
     ("Tech",       ("mouse", "power bank", "powerbank", "carregador", "projetor",
                     "notebook", "cabo", "fone", "usb", "celular", "induç",
                     "induc", "teclado", "headset", "camera", "câmera",
@@ -94,13 +109,72 @@ _CATEGORIAS_FILTRO = [
 ]
 
 
+# A palavra-chave tem que começar no COMEÇO de uma palavra. Sem isso,
+# "plataFORMA" casava com "forma" e mandava sandália pra Cozinha, e "maCACÃO"
+# casava com "cão" e mandava roupa pra Pet — os dois vistos na fila real.
+# Sem \b no fim, de propósito: "induç" precisa pegar "indução" e "escova"
+# precisa pegar "escovas".
+_CATEGORIAS_RE = [
+    (rotulo, re.compile(r"\b(?:" + "|".join(re.escape(k) for k in kws) + r")",
+                        re.IGNORECASE))
+    for rotulo, kws in _CATEGORIAS_FILTRO
+]
+
+
 def _inferir_categoria(p: dict) -> str:
-    texto = f"{p.get('nome','')} {p.get('titulo','')}".lower()
-    for rotulo, kws in _CATEGORIAS_FILTRO:
-        for kw in kws:
-            if kw in texto:
-                return rotulo
+    texto = f"{p.get('nome','')} {p.get('titulo','')}"
+    for rotulo, rx in _CATEGORIAS_RE:
+        if rx.search(texto):
+            return rotulo
     return "Outros"
+
+
+# O nome que chega na fila é o TERMO que o extrator tirou do vídeo, não o nome
+# do produto. Às vezes ele pega o texto errado do anúncio: na fila real havia
+# "2 mil vendidos" e "60 mil vendidos" — produto com link bom e card que
+# ninguém clica. Quando isso acontece, o título OFICIAL da Shopee (que o
+# historico_precos já guardou) entra no lugar.
+#
+# Só casa quando a string INTEIRA é número/contagem. "6 Pçs/set Kawaii Animal"
+# e "20/30/50 Nécessaire" começam com número e são nomes de verdade — medido
+# na fila de produção, 2 nomes ruins em 80, sem falso positivo.
+_SO_NUMERO = re.compile(
+    r"^\s*(r\$\s*)?[\d.,]+\s*(mil|k|m)?\s*"
+    r"(vendidos?|vendas?|avalia\w*|un|unidades?|reais|off|%)?\s*$",
+    re.IGNORECASE)
+
+
+def _nome_ruim(t: str) -> bool:
+    """Nome que não diz nada pro comprador. Não apaga nada: só decide se vale
+    a pena preferir o título oficial da loja."""
+    t = (t or "").strip()
+    if not t or _SO_NUMERO.match(t):
+        return True
+    if not re.search(r"[A-Za-zÀ-ÿ]{3}", t):
+        return True
+    return len(re.findall(r"[A-Za-zÀ-ÿ]{3,}", t)) < 3
+
+
+def _corrigir_titulos(produtos: list) -> list:
+    """Troca nome ruim pelo título oficial da Shopee, quando existe.
+
+    Mexe no `titulo` e no `nome`, não só no que aparece no card: a categoria do
+    filtro e a busca da vitrine saem daí também, e um produto chamado "2 mil
+    vendidos" caía em 'Outros' e não era encontrado por busca nenhuma.
+    """
+    trocados = 0
+    for p in produtos:
+        oficial = (p.get("titulo_oficial") or "").strip()
+        if not oficial or _nome_ruim(oficial):
+            continue
+        if _nome_ruim(p.get("titulo") or p.get("nome", "")):
+            p["titulo"] = oficial
+            p["nome"] = oficial
+            trocados += 1
+    if trocados:
+        log.info(f"   🏷️  {trocados} nome(s) sem sentido trocado(s) pelo "
+                 f"título oficial da Shopee")
+    return produtos
 
 
 def _titulo_legivel(titulo: str, limite: int = 64) -> str:
@@ -316,6 +390,7 @@ def _grupos_html() -> str:
 
 
 def gerar_site(produtos: list) -> str:
+    _corrigir_titulos(produtos)
     vitrine = _vitrine_html(produtos)
     grupos = _grupos_html()
     total = len(produtos)

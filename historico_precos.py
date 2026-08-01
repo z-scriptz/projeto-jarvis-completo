@@ -258,7 +258,14 @@ def enriquecer(produtos: list, janela: int = JANELA_PADRAO) -> list:
     """
     dados = carregar()
     for p in produtos:
-        r = resumo(p.get("link", ""), janela=janela, dados=dados)
+        link = p.get("link", "")
+        # o título OFICIAL da Shopee veio de carona no health-check e está
+        # guardado aqui. Quem usa é o bio_page_builder, pra consertar card com
+        # nome sem sentido ("2 mil vendidos").
+        oficial = (dados.get(link) or {}).get("nome")
+        if oficial:
+            p["titulo_oficial"] = oficial
+        r = resumo(link, janela=janela, dados=dados)
         if not r and p.get("preco"):
             try:
                 unico = float(p["preco"])
