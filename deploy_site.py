@@ -125,7 +125,8 @@ def _checar_online(link, obter, nome="", H=None, hist=None):
             if H is not None and hist is not None:
                 try:
                     H.registrar(link, d.get("preco"),
-                                nome=d.get("titulo") or nome, dados=hist)
+                                nome=d.get("titulo") or nome,
+                                de=d.get("preco_de"), dados=hist)
                 except Exception as e:
                     _log(f"   (preço não anotado: {str(e)[:60]})")
             return "vivo"

@@ -73,9 +73,34 @@ def salvar(dados: dict) -> bool:
 
 
 # ── escrita ───────────────────────────────────────────────────────────────
+def _numero(v, padrao=0.0):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return padrao
+
+
+def ler_leitura(v) -> tuple:
+    """Uma leitura gravada vira (preço, preço_de).
+
+    Aceita os dois formatos por compatibilidade: número solto é o formato
+    antigo (só preço, de quando a gente ainda não tinha o desconto da loja);
+    lista [preço, de] é o atual. As leituras já coletadas continuam valendo.
+    """
+    if isinstance(v, (list, tuple)) and v:
+        p = _numero(v[0])
+        d = _numero(v[1]) if len(v) > 1 else 0.0
+        return p, (d if d > p else 0.0)
+    return _numero(v), 0.0
+
+
 def registrar(link: str, preco, nome: str = "", quando: date = None,
-              dados: dict = None) -> dict:
+              dados: dict = None, de=0) -> dict:
     """Anota a leitura de hoje de um produto.
+
+    `de` é o preço antes do desconto da loja (vem do priceDiscountRate da API).
+    Guardado junto porque o desconto muda com o tempo igual o preço — usar o
+    desconto de hoje num preço que é média de 7 dias daria uma conta torta.
 
     Passe `dados` pra acumular várias leituras em memória e salvar uma vez só
     no fim (é o que o deploy_site faz); sem ele, lê e grava na hora.
@@ -83,12 +108,10 @@ def registrar(link: str, preco, nome: str = "", quando: date = None,
     Preço zero/negativo/ilegível é ignorado: a API devolve 0 quando não
     conseguiu o valor, e um zero no histórico estragaria a média.
     """
-    try:
-        preco = float(preco)
-    except (TypeError, ValueError):
-        return dados if dados is not None else {}
+    preco = _numero(preco)
     if preco <= 0 or not link:
         return dados if dados is not None else {}
+    de = _numero(de)
 
     sozinho = dados is None
     if sozinho:
@@ -99,7 +122,8 @@ def registrar(link: str, preco, nome: str = "", quando: date = None,
     if nome:
         reg["nome"] = nome
     # a última leitura do dia vence — o cron rodando 4x/dia não vira 4 pontos
-    reg.setdefault("leituras", {})[dia] = round(preco, 2)
+    reg.setdefault("leituras", {})[dia] = (
+        [round(preco, 2), round(de, 2)] if de > preco else round(preco, 2))
 
     if sozinho:
         salvar(dados)
@@ -170,20 +194,30 @@ def resumo(link: str, janela: int = JANELA_PADRAO, dados: dict = None,
         dentro = leituras
 
     dias = sorted(dentro)
-    vals = [dentro[d] for d in dias]
+    lidos = [ler_leitura(dentro[d]) for d in dias]
+    vals = [p for p, _ in lidos]
     obs = len(vals)
     media_real = obs >= MIN_LEITURAS
 
     preco = round(sum(vals) / obs, 2) if media_real else vals[-1]
     maior, menor = max(vals), min(vals)
 
-    # riscado: o maior preço que a gente REALMENTE viu no período. Não usamos
-    # priceMax da API porque lá ele é o teto entre variações (cor/tamanho), não
-    # preço antigo — comparar variação cara com barata inventaria desconto.
+    # Riscado, por duas fontes — vale a MAIOR das duas, porque as duas são
+    # verdade sobre o mesmo produto:
+    #   a) o "de" da própria loja (priceDiscountRate), na média do período —
+    #      média porque o desconto muda de dia pro dia igual o preço, e cruzar
+    #      o desconto de hoje com a média de 7 dias daria conta torta;
+    #   b) o maior preço que a gente REALMENTE observou.
+    # Nunca usamos priceMax da API: lá ele é o teto entre variações (cor,
+    # tamanho), e comparar a variação cara com a barata inventaria desconto.
+    des = [d if d > 0 else p for p, d in lidos]
+    de_loja = round(sum(des) / len(des), 2) if media_real else des[-1]
+
     de, off = 0.0, 0
-    if maior > preco * 1.05:
-        de = maior
-        off = int(round((1 - preco / maior) * 100))
+    candidato = max(de_loja, maior)
+    if candidato > preco * 1.05:
+        de = candidato
+        off = int(round((1 - preco / candidato) * 100))
 
     # queda dentro do período: última leitura contra a primeira
     caiu = 0
@@ -246,7 +280,8 @@ def _ver(link_filtro: str = ""):
         reg = dados.get(link_filtro) or {}
         print(f"{reg.get('nome', '?')}\n{link_filtro}")
         for d in sorted((reg.get('leituras') or {})):
-            print(f"   {d}  R$ {reg['leituras'][d]:.2f}")
+            p, dd = ler_leitura(reg['leituras'][d])
+            print(f"   {d}  R$ {p:.2f}" + (f"   (de R$ {dd:.2f})" if dd else ""))
         print(f"\nresumo: {json.dumps(r, ensure_ascii=False)}")
         return 0
 

@@ -46,6 +46,11 @@ except Exception:
 SHOPEE_GRAPHQL_URL = "https://open-api.affiliate.shopee.com.br/graphql"
 TIMEOUT_SEG = 30
 
+# priceDiscountRate existe na API hoje (conferido em produção). Se um dia sumir,
+# obter_dados_produto derruba esta chave sozinho e segue sem o campo, em vez de
+# quebrar a query inteira e junto o health-check do site.
+_TEM_DESCONTO = True
+
 
 def _credenciais() -> tuple:
     """Lê App ID e App Secret das env vars. Retorna (app_id, secret) ou (None, None)."""
@@ -495,14 +500,27 @@ def obter_dados_produto(url_ou_item: str,
         shop_id, item_id = ids["shop_id"], ids["item_id"]
 
     # productOfferV2 aceita filtrar por itemId. Pedimos os campos que importam.
-    query = (
-        "query { productOfferV2(itemId: " + str(item_id) + ") { nodes { "
-        "itemId productName priceMin priceMax imageUrl "
-        "commissionRate commission offerLink productLink ratingStar sales "
-        "} } }"
-    )
+    # priceDiscountRate é o % de desconto da PRÓPRIA loja (inteiro: 41 = 41%
+    # off). É o que permite mostrar "de R$ 299,98 por R$ 176,99" no site com um
+    # número real, em vez de deduzir desconto do histórico.
+    def _query(com_desconto: bool) -> str:
+        extra = "priceDiscountRate " if com_desconto else ""
+        return (
+            "query { productOfferV2(itemId: " + str(item_id) + ") { nodes { "
+            "itemId productName priceMin priceMax imageUrl " + extra +
+            "commissionRate commission offerLink productLink ratingStar sales "
+            "} } }"
+        )
 
-    resp = _executar_graphql(query)
+    # GraphQL rejeita a query INTEIRA quando um campo não existe. Se a Shopee
+    # tirar priceDiscountRate um dia, isso derrubaria o health-check do site
+    # junto — daí a tentativa única de refazer sem o campo, lembrada no módulo
+    # pra não pagar a query dobrada em toda chamada seguinte.
+    global _TEM_DESCONTO
+    resp = _executar_graphql(_query(_TEM_DESCONTO))
+    if _TEM_DESCONTO and resp.get("errors") and "priceDiscountRate" in str(resp["errors"]):
+        _TEM_DESCONTO = False
+        resp = _executar_graphql(_query(False))
     if resp.get("_erro"):
         return {"ok": False, "erro": resp["_erro"]}
 
@@ -524,11 +542,21 @@ def obter_dados_produto(url_ou_item: str,
         except (TypeError, ValueError):
             return 0.0
 
+    # preço "de": o desconto vem como inteiro, então o valor reconstruído é
+    # aproximado (rate 41 pode ser 41,4% de verdade). Serve pro riscado, que é
+    # número de vitrine — não serve pra conta de comissão.
+    desconto = _num(p.get("priceDiscountRate"))
+    preco_agora = _num(p.get("priceMin"))
+    preco_de = round(preco_agora / (1 - desconto / 100), 2) \
+        if 0 < desconto < 100 and preco_agora > 0 else 0.0
+
     return {
         "ok": True,
         "titulo": p.get("productName", ""),
-        "preco": _num(p.get("priceMin")),
+        "preco": preco_agora,
         "preco_max": _num(p.get("priceMax")),
+        "desconto": int(desconto),      # % da própria loja (0 = sem desconto)
+        "preco_de": preco_de,           # preço antes do desconto (aproximado)
         "imagem": p.get("imageUrl", ""),
         "comissao_rate": _num(p.get("commissionRate")),   # 0.38 = 38%
         "comissao_valor": _num(p.get("commission")),       # em BRL
