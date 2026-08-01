@@ -139,11 +139,15 @@ def _carregar_produtos() -> list:
                         "imagem": item.get("imagem", ""),
                         "link": item.get("link", ""),
                         "plataforma": (item.get("plataforma") or "shopee").lower(),
+                        # preço do dia em que o produto entrou. Serve de ponto
+                        # de partida até o histórico ter leituras suficientes
+                        # pra virar média (historico_precos.enriquecer).
+                        "preco": item.get("preco", 0) or 0,
                     })
                 elif isinstance(item, str):
                     _add({"nome": item, "titulo": item, "classe": "",
                           "comissao_valor": 0, "imagem": "", "link": "",
-                          "plataforma": "shopee"})
+                          "plataforma": "shopee", "preco": 0})
         except Exception as e:
             log.warning(f"   erro lendo fila JSON: {e}")
 
@@ -160,6 +164,7 @@ def _carregar_produtos() -> list:
                         "classe": p.get("classe", ""),
                         "comissao_valor": p.get("comissao_valor", 0),
                         "imagem": "", "link": "", "plataforma": "shopee",
+                        "preco": p.get("preco", 0) or 0,
                     })
         except Exception as e:
             log.warning(f"   erro lendo validação: {e}")
@@ -189,6 +194,7 @@ def _gerar_links_afiliado(produtos: list) -> list:
                         p["link"] = lk["short_link"]
                         p["titulo"] = m["campeao"].get("nome", p["titulo"])
                         p["imagem"] = m["campeao"].get("imagem", "") or p.get("imagem", "")
+                        p["preco"] = m["campeao"].get("preco", 0) or p.get("preco", 0)
                         com_link.append(p)
                         log.info(f"   🔗 link gerado: {p['nome']}")
                         time.sleep(1.0)

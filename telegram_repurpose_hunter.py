@@ -1248,13 +1248,33 @@ def _termo_eh_spam(termo: str) -> bool:
     return any(s in t for s in _TERMOS_SPAM)
 
 
-def _foto_oficial_do_link(link: str) -> str:
-    """Foto REAL do produto pela API de afiliado da Shopee. A Shopee bloqueia
+def _anotar_preco(link: str, preco, nome: str = ""):
+    """Primeira leitura de preço do produto, no dia em que ele entra na vitrine.
+    Daí em diante quem alimenta é o deploy_site, a cada health-check. Nunca
+    derruba o registro do produto: sem histórico o site só fica sem preço."""
+    if not preco:
+        return
+    try:
+        try:
+            import historico_precos as _H
+        except Exception:
+            from creative_engine import historico_precos as _H
+        _H.registrar(link, preco, nome=nome)
+    except Exception:
+        log.debug("Histórico de preços não anotado (segue sem).")
+
+
+def _dados_oficiais_do_link(link: str) -> dict:
+    """Dados REAIS do produto pela API de afiliado da Shopee. A Shopee bloqueia
     raspar a página (não tem og:image) e a API interna (403), mas a API OFICIAL
-    de afiliado devolve a imagem: segue o link -> pega o itemId -> productOfferV2.
-    Best-effort: se falhar, devolve "" e a vitrine usa o placeholder."""
+    de afiliado devolve tudo: segue o link -> pega o itemId -> productOfferV2.
+    Best-effort: se falhar, devolve {} e a vitrine usa o placeholder.
+
+    Devolve o dicionário inteiro (imagem, preço, título...) porque a resposta
+    já vinha com tudo isso e a gente só aproveitava a foto — o preço daqui é a
+    primeira leitura do histórico, sem custar chamada nenhuma."""
     if not link:
-        return ""
+        return {}
     try:
         import re as _re
         import requests as _rq
@@ -1268,26 +1288,38 @@ def _foto_oficial_do_link(link: str) -> str:
             pares = _re.findall(r"/(\d+)/(\d+)", final.split("?")[0])
             shop_id, item_id = pares[-1] if pares else (None, None)
         if not item_id:
-            return ""
+            return {}
         from integrations.shopee_affiliate import obter_dados_produto
         d = obter_dados_produto(str(item_id), shop_id=int(shop_id))
         if d.get("ok"):
-            return d.get("imagem") or ""
+            return d
     except Exception:
-        log.debug("Não consegui a foto oficial do produto (segue sem foto).")
-    return ""
+        log.debug("Não consegui os dados oficiais do produto (segue sem foto).")
+    return {}
+
+
+def _foto_oficial_do_link(link: str) -> str:
+    """Só a foto — mantido porque outros pontos do projeto chamam por este nome."""
+    return _dados_oficiais_do_link(link).get("imagem") or ""
 
 
 def _registrar_no_site(nome: str, link: str, imagem: str = "", max_itens: int = 80,
-                       plataforma: str = "shopee", origem: str = ""):
+                       plataforma: str = "shopee", origem: str = "",
+                       preco: float = 0.0):
     """Grava o produto + link de afiliado no produtos_fila.json que o SITE
     (bio_page_builder) lê. É a PONTE que faz a bio (topshopoficial) mostrar
     EXATAMENTE o produto do vídeo — sem isso, o post e o site ficam descasados
     e a comissão vaza. Mais recente primeiro, sem duplicar link, cap em max_itens."""
     if not link:
         return
+    # Mesma condição de antes: só bate na API quando falta a foto. Assim esta
+    # mudança não acrescenta NENHUMA chamada nova — o preço vem de carona na
+    # resposta que já era buscada. Produto que chega com foto entra sem preço e
+    # ganha o dele no primeiro health-check do deploy_site, poucas horas depois.
     if not imagem and plataforma == "shopee":
-        imagem = _foto_oficial_do_link(link)   # foto oficial (API de afiliado Shopee)
+        d = _dados_oficiais_do_link(link)      # API de afiliado Shopee
+        imagem = d.get("imagem") or ""
+        preco = preco or d.get("preco") or 0.0
     try:
         import json as _json
         fila = []
@@ -1303,8 +1335,10 @@ def _registrar_no_site(nome: str, link: str, imagem: str = "", max_itens: int = 
             "produto": nome, "campeao": nome, "link": link,
             "imagem": imagem or "", "classe": "", "plataforma": plataforma,
             "origem": origem or "",   # URL Shopee p/ reetiquetar o link (canal Telegram)
+            "preco": float(preco or 0.0),   # 1ª leitura; vira média com o tempo
             "ts": int(time.time()),
         })
+        _anotar_preco(link, preco, nome)
         fila = fila[:max_itens]
         SITE_FILA.parent.mkdir(parents=True, exist_ok=True)
         _salvar_json_atomico(SITE_FILA, fila)

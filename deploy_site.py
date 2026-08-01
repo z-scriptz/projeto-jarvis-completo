@@ -80,6 +80,21 @@ def _obter_dados_produto():
             return None
 
 
+def _historico():
+    """Módulo de histórico de preços (ou None). Nunca é obrigatório: sem ele o
+    deploy roda igual, só sem preço na vitrine."""
+    try:
+        import historico_precos as H                         # vizinho deste arquivo
+        return H
+    except Exception:
+        try:
+            from creative_engine import historico_precos as H
+            return H
+        except Exception:
+            _log("historico_precos indisponível — vitrine sai sem preço")
+            return None
+
+
 # ── Health-check dos links ────────────────────────────────────────────────
 def _ids_do_link(link: str):
     """Segue o link de afiliado até a página do produto e extrai (shop_id, item_id)."""
@@ -94,15 +109,25 @@ def _ids_do_link(link: str):
     return pares[-1] if pares else (None, None)
 
 
-def _checar_online(link, obter):
+def _checar_online(link, obter, nome="", H=None, hist=None):
     """'vivo' | 'morto' | 'incerto'. Só devolve 'morto' quando a API CONFIRMA
-    que o produto não existe mais (delistado)."""
+    que o produto não existe mais (delistado).
+
+    De quebra guarda o preço que veio na resposta: essa chamada já acontecia
+    de qualquer jeito, então o histórico sai de graça, sem nenhuma requisição
+    nova. Falha ao anotar nunca derruba o health-check."""
     try:
         shop_id, item_id = _ids_do_link(link)
         if not item_id:
             return "incerto"
         d = obter(str(item_id), shop_id=int(shop_id))
         if d.get("ok"):
+            if H is not None and hist is not None:
+                try:
+                    H.registrar(link, d.get("preco"),
+                                nome=d.get("titulo") or nome, dados=hist)
+                except Exception as e:
+                    _log(f"   (preço não anotado: {str(e)[:60]})")
             return "vivo"
         erro = str(d.get("erro", "")).lower()
         if "não encontrado" in erro or "nao encontrado" in erro or "not found" in erro:
@@ -139,6 +164,9 @@ def _filtrar_vivos(produtos):
         _log("API de afiliado indisponível — pulo o health-check (mantém tudo)")
         return produtos
 
+    H = _historico()
+    hist = H.carregar() if H else None
+
     cache = _load_cache()
     agora = int(time.time())
     vivos, mortos, checados = [], 0, 0
@@ -148,7 +176,8 @@ def _filtrar_vivos(produtos):
         if ent and (agora - ent.get("ts", 0)) < HEALTH_TTL:
             estado = ent.get("estado", "incerto")
         else:
-            estado = _checar_online(link, obter)
+            estado = _checar_online(link, obter, nome=p.get("nome", ""),
+                                    H=H, hist=hist)
             checados += 1
             if estado in ("vivo", "morto"):     # só cacheia resultado confiável
                 cache[link] = {"estado": estado, "ts": agora}
@@ -161,6 +190,18 @@ def _filtrar_vivos(produtos):
     _save_cache(cache)
     if checados:
         _log(f"health-check: {checados} verificados · {mortos} fora do ar")
+
+    # histórico: poda pela vitrine ATUAL (não pelos vivos) — produto escondido
+    # por estar fora do ar pode voltar, e aí o histórico dele ainda está lá
+    if H and hist is not None:
+        try:
+            H.podar(links_vivos=[p.get("link", "") for p in produtos], dados=hist)
+            H.salvar(hist)
+            leituras = sum(len(v.get("leituras") or {}) for v in hist.values())
+            _log(f"preços: {len(hist)} produtos · {leituras} leituras no histórico")
+        except Exception as e:
+            _log(f"histórico de preços não salvo: {str(e)[:80]}")
+
     # rede de segurança: nunca deixa a vitrine vazia por causa do check
     if produtos and not vivos:
         _log("health-check esconderia TUDO — ignorando (mantém vitrine atual)")
@@ -195,6 +236,19 @@ def main():
     if not produtos:
         _log("nenhum produto ativo — nada a publicar")
         return 1
+
+    # cola média/queda/data em cada produto (campo `preco_resumo`)
+    H = _historico()
+    if H:
+        try:
+            H.enriquecer(produtos)
+            com_preco = sum(1 for p in produtos if p.get("preco_resumo"))
+            com_media = sum(1 for p in produtos
+                            if (p.get("preco_resumo") or {}).get("media"))
+            _log(f"preço: {com_preco}/{len(produtos)} com valor · "
+                 f"{com_media} já com média de verdade")
+        except Exception as e:
+            _log(f"não consegui enriquecer preços: {str(e)[:80]}")
 
     html = B.gerar_site(produtos)
     idx = SITE_REPO / "index.html"
