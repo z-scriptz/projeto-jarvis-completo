@@ -33,6 +33,7 @@ import os
 import sys
 import json
 import time
+import shutil
 import signal
 import argparse
 from pathlib import Path
@@ -92,6 +93,11 @@ DEFAULTS = {
     # o teto pra abrir a torneira em rampa (2 → 3 → 4-5/conta/dia).
     "post_por_conta":             False,
     "max_posts_por_conta_dia":    4,
+    # Validade da esteira, em dias. Oferta de afiliado envelhece: preço muda e o
+    # link morre, então publicar pacote velho queima alcance com oferta vencida.
+    # O que passar disso sai da fila (vai pra fila_vencida/, não é apagado).
+    # 0 = desliga a validade.
+    "fila_validade_dias":         7,
     # TikTok via API oficial (Content Posting API). OFF até o app ser aprovado —
     # ligue depois da aprovação (+ conta pública + credenciais de produção no .env).
     "postar_tiktok":              False,
@@ -617,6 +623,9 @@ def ciclo_postagem(cfg: dict, hist: dict, dry_run: bool) -> dict:
     log.info("─" * 60)
     log.info(f"📤 CICLO POSTAGEM — horário devido: {horario}")
 
+    if not dry_run:
+        _expurgar_vencidos()
+
     # MODO BALANCEADO (opt-in): posta 1 vídeo de CADA conta neste slot, respeitando
     # o teto diário por conta. Assim beauty/tech/geral saem no mesmo ritmo.
     if cfg.get("post_por_conta"):
@@ -665,16 +674,70 @@ def ciclo_postagem(cfg: dict, hist: dict, dry_run: bool) -> dict:
     return resultado
 
 
+def _validade_dias() -> int:
+    try:
+        return int(carregar_config().get("fila_validade_dias", 7))
+    except Exception:
+        return 7
+
+
+def _vencido(pasta: Path, dias: int) -> bool:
+    if dias <= 0:
+        return False
+    idade = time.time() - pasta.stat().st_mtime
+    return idade > dias * 86400
+
+
 def _prontos_nao_postados(hist: dict) -> list:
-    """Slugs prontos (com video.mp4) que ainda não foram postados, em ordem."""
+    """Slugs prontos (com video.mp4) que ainda não foram postados.
+
+    Ordem: MAIS NOVO PRIMEIRO. Era alfabética, e isso matava de fome o fim do
+    alfabeto — enquanto entrasse pacote em 'a', o que começava com 'v' nunca era
+    alcançado. Além disso, achadinho é oferta perecível: o mais fresco converte
+    melhor, então ele tem que sair na frente.
+
+    Pacote vencido não entra na lista (o expurgo tira ele da pasta no ciclo).
+    """
     if not PRONTO_DIR.exists():
         return []
     postados = set(hist.get("postados", []))
-    out = []
-    for pasta in sorted(PRONTO_DIR.iterdir()):
-        if pasta.is_dir() and (pasta / "video.mp4").exists() and pasta.name not in postados:
-            out.append(pasta.name)
-    return out
+    dias = _validade_dias()
+
+    candidatos = []
+    for pasta in PRONTO_DIR.iterdir():
+        if not (pasta.is_dir() and (pasta / "video.mp4").exists()):
+            continue
+        if pasta.name in postados or _vencido(pasta, dias):
+            continue
+        candidatos.append((pasta.stat().st_mtime, pasta.name))
+
+    # mais novo primeiro; nome como desempate, pra ordem ser estável
+    candidatos.sort(key=lambda p: (-p[0], p[1]))
+    return [nome for _mtime, nome in candidatos]
+
+
+def _expurgar_vencidos() -> int:
+    """Tira da esteira o que passou da validade. Move pra fila_vencida/ em vez de
+    apagar — assim dá pra conferir o que saiu antes de descartar de vez."""
+    dias = _validade_dias()
+    if dias <= 0 or not PRONTO_DIR.exists():
+        return 0
+
+    destino = PRONTO_DIR.parent / "fila_vencida"
+    movidos = 0
+    for pasta in list(PRONTO_DIR.iterdir()):
+        if not (pasta.is_dir() and _vencido(pasta, dias)):
+            continue
+        try:
+            destino.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(pasta), str(destino / pasta.name))
+            movidos += 1
+        except Exception as erro:
+            log.warning(f"   ⚠️  não consegui mover '{pasta.name}': {str(erro)[:100]}")
+
+    if movidos:
+        log.info(f"   🗑️  {movidos} pacote(s) além de {dias} dias → fila_vencida/")
+    return movidos
 
 
 def _proximo_para_postar(hist: dict) -> str | None:
