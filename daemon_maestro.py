@@ -98,6 +98,10 @@ DEFAULTS = {
     # O que passar disso sai da fila (vai pra fila_vencida/, não é apagado).
     # 0 = desliga a validade.
     "fila_validade_dias":         7,
+    # Colchão de segurança POR CONTA, em dias de postagem. A produção corre pra
+    # conta que está abaixo disso e ignora a que já passou — assim nenhuma seca
+    # e nenhuma transborda. 0 = desliga (volta a produzir cego, só por comissão).
+    "estoque_alvo_dias":          3,
     # TikTok via API oficial (Content Posting API). OFF até o app ser aprovado —
     # ligue depois da aprovação (+ conta pública + credenciais de produção no .env).
     "postar_tiktok":              False,
@@ -512,7 +516,7 @@ def _produzir_lote(cfg: dict, estado: dict, quantidade: int) -> int:
     from agents.production_runner_agent import (processar_produto,
                                                 _dir_saida_rodada)
 
-    produtos = _carregar_produtos_para_produzir(quantidade)
+    produtos = _carregar_produtos_para_produzir(quantidade, cfg)
     if not produtos:
         log.warning("   ⚠️  Nenhum produto disponível pra produzir")
         return 0
@@ -563,11 +567,92 @@ def _produzir_lote(cfg: dict, estado: dict, quantidade: int) -> int:
     return produzidos
 
 
-def _carregar_produtos_para_produzir(quantidade: int) -> list:
+def _estoque_por_conta() -> dict:
+    """{nicho da conta: nº de pacotes prontos, não postados e dentro da validade}."""
+    hist = _carregar_historico()
+    cont = {}
+    for slug in _prontos_nao_postados(hist):
+        n = _nicho_do_slug(slug) or "geral"
+        cont[n] = cont.get(n, 0) + 1
+    return cont
+
+
+def _priorizar_por_estoque(candidatos: list, quantidade: int, cfg: dict) -> list:
+    """Escolhe o que produzir olhando o estoque de CADA conta.
+
+    A seleção era cega à conta: pegava os N produtos de maior comissão e
+    produzia. Como a maioria dos achadinhos classifica como 'geral', o geral
+    empilhava semanas de estoque enquanto beleza secava e perdia slot de
+    postagem. Aqui a produção corre pra quem está abaixo do colchão e ignora
+    quem já passou dele — mantendo o estoque de segurança, mas do tamanho certo
+    em cada conta.
+
+    A ordem de comissão é preservada dentro de cada conta: continua produzindo
+    os melhores produtos, só que distribuídos pelo destino.
+    """
+    dias = int(cfg.get("estoque_alvo_dias", 3))
+    if dias <= 0:
+        return candidatos[:quantidade]
+
+    try:
+        import roteador_contas as _RC
+    except Exception as erro:
+        log.warning(f"   ⚠️  roteador indisponível ({str(erro)[:80]}) — "
+                    "produzindo só por comissão")
+        return candidatos[:quantidade]
+
+    alvo = max(1, dias * int(cfg.get("max_posts_por_conta_dia", 3)))
+    estoque = _estoque_por_conta()
+
+    # No contas.json o nicho é a CHAVE ("beleza", "tech"); só o "_default" traz o
+    # campo "nicho" dentro. Ler o campo em todas colapsaria tudo em "geral".
+    try:
+        nichos = set()
+        for chave, conta in _RC.carregar_contas().items():
+            nichos.add((conta.get("nicho") or "geral") if chave == "_default" else chave)
+    except Exception:
+        nichos = {"geral"}
+    falta = {n: max(0, alvo - estoque.get(n, 0)) for n in nichos}
+
+    resumo = ", ".join(f"{n}={estoque.get(n, 0)}/{alvo}" for n in sorted(nichos))
+    log.info(f"   📦 estoque por conta: {resumo}")
+
+    if not any(falta.values()):
+        log.info(f"   ✋ todas as contas no colchão de {alvo} pacotes — "
+                 "nada a produzir neste ciclo")
+        return []
+
+    escolhidos, adiados = [], 0
+    for p in candidatos:
+        if len(escolhidos) >= quantidade:
+            break
+        try:
+            nicho = _RC.conta_do_produto(p.get("nome", ""))["nicho"]
+        except Exception:
+            nicho = "geral"
+        if falta.get(nicho, 0) > 0:
+            escolhidos.append(p)
+            falta[nicho] -= 1
+        else:
+            adiados += 1
+
+    faltando = ", ".join(f"{n}:{q}" for n, q in sorted(falta.items()) if q > 0)
+    if faltando:
+        log.info(f"   🔎 ainda faltam pacotes ({faltando}) mas não há produto "
+                 "desses nichos na fila — produzindo o que dá")
+    if adiados:
+        log.info(f"   ⏭️  {adiados} produto(s) adiado(s): a conta deles já está no alvo")
+    return escolhidos
+
+
+def _carregar_produtos_para_produzir(quantidade: int, cfg: dict | None = None) -> list:
     """
     Carrega produtos pra produzir, priorizando o relatório validado
     (validacao_fila.json — campeões primeiro). Fallback: produtos_fila.json.
+
+    A lista sai filtrada pelo estoque de cada conta (ver _priorizar_por_estoque).
     """
+    cfg = cfg or {}
     # 1) Relatório validado (tem comissão real, ordena por potencial)
     relatorio = PLANS_DIR / "validacao_fila.json"
     if relatorio.exists():
@@ -582,7 +667,7 @@ def _carregar_produtos_para_produzir(quantidade: int) -> list:
                     })
             if produtos:
                 # mina_ouro já vem primeiro no relatório ordenado
-                return produtos[:quantidade]
+                return _priorizar_por_estoque(produtos, quantidade, cfg)
         except Exception as e:
             log.warning(f"   ⚠️  erro lendo validacao_fila ({e})")
 
@@ -596,7 +681,7 @@ def _carregar_produtos_para_produzir(quantidade: int) -> list:
                 nome = item.get("produto") if isinstance(item, dict) else item
                 if nome:
                     produtos.append({"nome": nome, "comissao_valor": 0})
-            return produtos[:quantidade]
+            return _priorizar_por_estoque(produtos, quantidade, cfg)
         except Exception as e:
             log.warning(f"   ⚠️  erro lendo produtos_fila ({e})")
 
