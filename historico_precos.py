@@ -38,6 +38,10 @@ JANELA_PADRAO = 7
 # Abaixo de 3 leituras não existe média — é uma observação só, e o site avisa
 # isso com "conferido em <data>" em vez de fingir precisão.
 MIN_LEITURAS = 3
+# Desconto mínimo pra ganhar selo. Não é frescura: um "-5%" ao lado de um
+# "-58%" ensina o olho que o selo amarelo não quer dizer nada, e aí o selo bom
+# perde força junto. Produto abaixo disso aparece normal, só sem o selo.
+MIN_DESCONTO = 15
 
 _MESES = ("jan", "fev", "mar", "abr", "mai", "jun",
           "jul", "ago", "set", "out", "nov", "dez")
@@ -213,11 +217,16 @@ def resumo(link: str, janela: int = JANELA_PADRAO, dados: dict = None,
     des = [d if d > 0 else p for p, d in lidos]
     de_loja = round(sum(des) / len(des), 2) if media_real else des[-1]
 
+    # Descontos enormes (70%+) NÃO são aparados: esse é o número que a própria
+    # Shopee mostra na página. Se o card dissesse menos, o cliente chegaria lá
+    # e veria um desconto MAIOR que o anunciado — quebra a confiança do lado
+    # errado. Coerência com o destino vale mais que sobriedade.
     de, off = 0.0, 0
     candidato = max(de_loja, maior)
-    if candidato > preco * 1.05:
-        de = candidato
-        off = int(round((1 - preco / candidato) * 100))
+    if candidato > preco > 0:
+        pct = int(round((1 - preco / candidato) * 100))
+        if pct >= MIN_DESCONTO:
+            de, off = candidato, pct
 
     # queda dentro do período: última leitura contra a primeira
     caiu = 0

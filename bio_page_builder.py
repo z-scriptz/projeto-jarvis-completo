@@ -16,6 +16,7 @@ import json
 import html
 import time
 import argparse
+import unicodedata
 from pathlib import Path
 
 try:
@@ -110,18 +111,50 @@ def _titulo_legivel(titulo: str, limite: int = 64) -> str:
     return t[:limite].rsplit(" ", 1)[0] + "…"
 
 
+def _titulo_chave(texto: str) -> str:
+    """Título reduzido a uma forma comparável: sem acento, sem pontuação,
+    minúsculo, espaços colapsados.
+
+    Serve pra achar o MESMO produto anunciado com dois links diferentes (dá pra
+    acontecer quando o mesmo achado chega por dois canais). A comparação é do
+    título INTEIRO de propósito: comparar só o começo juntaria "Capa MagSafe
+    ... iPhone 14" com "... iPhone 15", que são produtos diferentes — e a
+    vitrine é cheia de capa de celular com nome quase igual."""
+    t = unicodedata.normalize("NFKD", texto or "")
+    t = "".join(c for c in t if not unicodedata.combining(c))
+    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9]+", " ", t.lower())).strip()
+
+
 def _carregar_produtos() -> list:
     """Junta as fontes SEM duplicar. PRIORIDADE pros produtos que o Jarvis
     REALMENTE postou (produtos_fila.json — já vêm com o link de afiliado, mais
     recente primeiro); depois complementa com a curadoria (validacao_fila)."""
     produtos = []
     vistos = set()
+    por_titulo = {}
+    repetidos = 0
 
     def _add(p):
+        nonlocal repetidos
         chave = (p.get("link") or "").strip() or (p.get("nome") or "").strip().lower()
         if not chave or chave in vistos:
             return
         vistos.add(chave)
+
+        titulo = _titulo_chave(p.get("titulo") or p.get("nome", ""))
+        if titulo and titulo in por_titulo:
+            # Mesmo produto, outro link. Fica o primeiro (a fila vem do mais
+            # recente pro mais antigo), mas o repetido ainda serve de doador:
+            # se ele tem foto ou preço que faltam no que ficou, aproveita.
+            mantido = produtos[por_titulo[titulo]]
+            for campo in ("imagem", "preco", "comissao_valor"):
+                if not mantido.get(campo) and p.get(campo):
+                    mantido[campo] = p[campo]
+            repetidos += 1
+            return
+
+        if titulo:
+            por_titulo[titulo] = len(produtos)
         produtos.append(p)
 
     # 1) PRIORIDADE: produtos_fila.json (o que foi postado — com link pronto)
@@ -169,6 +202,9 @@ def _carregar_produtos() -> list:
         except Exception as e:
             log.warning(f"   erro lendo validação: {e}")
 
+    if repetidos:
+        log.info(f"   🧹 {repetidos} produto(s) repetido(s) com outro link — "
+                 f"1 card por produto")
     return produtos
 
 
