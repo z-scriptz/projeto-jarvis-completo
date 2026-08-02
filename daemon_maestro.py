@@ -126,6 +126,10 @@ DEFAULTS = {
     # envelhece é o PRODUTO. E com a pirâmide (12 posts/conta/semana) a esteira
     # leva ~23 dias pra drenar, então 7 jogava fora vídeo bom por idade.
     "fila_validade_dias":         27,
+    # Segunda chance pro que venceu: confere se o produto ainda está vivo e,
+    # se morreu, procura o MESMO produto em outro vendedor antes de desistir.
+    # Roda junto do expurgo, no ciclo de postagem. 0 desliga.
+    "repescagem_por_ciclo":       5,
     # Colchão de segurança POR CONTA, em dias de postagem. A produção corre pra
     # conta que está abaixo disso e ignora a que já passou — assim nenhuma seca
     # e nenhuma transborda. 0 = desliga (volta a produzir cego, só por comissão).
@@ -853,6 +857,7 @@ def ciclo_postagem(cfg: dict, hist: dict, dry_run: bool) -> dict:
 
     if not dry_run:
         _expurgar_vencidos()
+        _repescar(cfg)      # o que venceu tenta voltar antes de virar prejuízo
 
     # MODO BALANCEADO (opt-in): posta 1 vídeo de CADA conta neste slot, respeitando
     # o teto diário por conta. Assim beauty/tech/geral saem no mesmo ritmo.
@@ -981,6 +986,23 @@ def _expurgar_vencidos() -> int:
     if movidos:
         log.info(f"   🗑️  {movidos} pacote(s) além de {dias} dias → fila_vencida/")
     return movidos
+
+
+def _repescar(cfg: dict) -> int:
+    """Segunda chance pro que acabou de vencer. Nunca obrigatório: se o módulo
+    ou a API não estiverem lá, o ciclo de postagem segue igual."""
+    quantos = int(cfg.get("repescagem_por_ciclo", 0) or 0)
+    if quantos <= 0:
+        return 0
+    try:
+        try:
+            import repescagem as _R
+        except Exception:
+            from agents import repescagem as _R
+        return sum(_R.repescar(limite=quantos).values())
+    except Exception as erro:
+        log.debug(f"   repescagem não rodou ({str(erro)[:80]}) — segue sem")
+        return 0
 
 
 def _proximo_para_postar(hist: dict) -> str | None:
