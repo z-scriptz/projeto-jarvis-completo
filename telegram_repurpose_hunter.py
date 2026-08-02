@@ -341,6 +341,40 @@ _PALAVRAS_RUIDO = {"promo", "promoção", "oferta", "desconto", "cupom", "frete"
                    "grátis", "gratis", "link", "bio", "shopee", "achadinho",
                    "achadinhos", "compre", "corre", "imperdível", "imperdivel"}
 
+# Prova social: "2 mil vendidos", "4.9 (3 mil avaliações)". Linha feita SÓ disso
+# não é nome de produto — é o selo em cima dele. Era daqui que saíam os nomes
+# bizarros na vitrine: o score antigo era a contagem de palavras, então
+# "2 mil vendidos" (3 palavras) ganhava de "Suporte celular" (2).
+_PROVA_SOCIAL = {"vendido", "vendidos", "venda", "vendas", "avaliação",
+                 "avaliações", "avaliacao", "avaliacoes", "estrela", "estrelas",
+                 "pedido", "pedidos", "curtida", "curtidas", "mil", "unidades",
+                 "vendendo", "esgotando", "estoque", "restam", "últimas",
+                 "ultimas", "sobrando"}
+
+# Papo de vendedor. Nenhuma dessas aparece em título de anúncio da Shopee —
+# título de anúncio é sintagma nominal, sem pronome e sem verbo conjugado.
+# Inclui espanhol porque parte das fontes é de perfil hispano repostado.
+_PALAVRAS_PITCH = {
+    # pronomes e tratamento (PT)
+    "você", "voce", "vc", "seu", "sua", "seus", "suas", "meu", "minha", "eu",
+    "te", "tu", "teu", "tua", "nós", "nos", "a gente",
+    # verbos de gancho (PT)
+    "olha", "olhe", "veja", "vejam", "sabia", "descobri", "comprei", "testei",
+    "precisa", "precisava", "deve", "deveria", "devia", "vai", "fazer", "faça",
+    "ficar", "fica", "aproveite", "garanta", "aprenda", "pare", "evite",
+    # gancho (ES) — "cosas que deberías hacer para mejorar tu apariencia"
+    "cosas", "que", "deberías", "deberias", "debes", "hacer", "mejorar",
+    "tus", "esto", "esta", "estos", "el", "la", "los", "las", "dia", "día",
+    "tips", "trucos", "cómo", "como",
+}
+
+# Sinais de que a linha É um anúncio: medida, quantidade, formato de kit.
+_MEDIDA_RE = re.compile(
+    r"\b\d+\s?(?:ml|l|g|kg|mg|cm|mm|m|w|v|mah|gb|tb|pol|polegadas|"
+    r"peças|pecas|pçs|un|und|unidades|gavetas|lâminas|laminas|níveis|niveis)\b"
+    r"|\b\d+\s?em\s?\d+\b|\bkit\b",
+    re.IGNORECASE)
+
 
 def _limpar_linha(linha: str) -> str:
     linha = re.sub(r"https?://\S+", "", linha)
@@ -355,6 +389,38 @@ def _parece_preco(linha: str) -> bool:
         len(re.sub(r"[^\w]", "", linha)) <= 8
 
 
+def _so_prova_social(palavras: list) -> bool:
+    """A linha é só o selo ('2 mil vendidos', '12 mil avaliações')?
+    Números e prova social não contam como substância."""
+    substancia = [p for p in palavras
+                  if p.lower() not in _PROVA_SOCIAL
+                  and not re.fullmatch(r"[\d.,]+", p)]
+    return not substancia
+
+
+def _pontuar_linha(c: str) -> int:
+    """Quanto essa linha parece o NOME de um produto.
+
+    O score antigo era a contagem de palavras, o que premiava exatamente a
+    linha errada: gancho de venda é sempre mais comprido que nome de produto.
+    Aqui o comprimento só desempata, e no fim ainda perde da substância.
+    """
+    palavras = c.split()
+    baixo = [p.lower().strip(".,") for p in palavras]
+    score = 0
+    score -= 3 * sum(1 for p in baixo if p in _PALAVRAS_PITCH)
+    score -= 2 * sum(1 for p in baixo if p in _PALAVRAS_RUIDO)
+    score -= 1 * sum(1 for p in baixo if p in _PROVA_SOCIAL)
+    if _MEDIDA_RE.search(c):
+        score += 3                      # "500ml", "4 em 1", "Kit", "7 gavetas"
+    # anúncio vem em Caixa De Título; gancho vem em frase normal
+    maiusculas = sum(1 for p in palavras if p[:1].isupper())
+    if len(palavras) >= 3 and maiusculas >= len(palavras) - 1:
+        score += 2
+    score += min(len(palavras), 6)      # comprimento pesa, mas com teto
+    return score
+
+
 def extrair_termo_produto(texto: str) -> str:
     """Escolhe a linha que mais parece NOME DE PRODUTO (não a 1ª cegamente)."""
     if not texto:
@@ -366,17 +432,22 @@ def extrair_termo_produto(texto: str) -> str:
         if not c or _parece_preco(c):
             continue
         palavras = c.split()
-        if len(palavras) < 2 or len(palavras) > 9:
+        if len(palavras) < 2 or len(palavras) > 12:
             continue
-        ruido = sum(1 for p in palavras if p.lower() in _PALAVRAS_RUIDO)
-        score = len(palavras) - 2 * ruido
-        cands.append((score, c[:60]))
+        if _so_prova_social(palavras):
+            continue                    # é o selo do produto, não o produto
+        cands.append((_pontuar_linha(c), c[:60]))
     if cands:
         cands.sort(key=lambda x: x[0], reverse=True)
+        # o texto do post não é guardado em lugar nenhum — sem isso aqui, um
+        # nome errado na vitrine não tem como ser rastreado depois
+        if len(cands) > 1:
+            log.debug("Termo escolhido entre: "
+                      + " | ".join(f"{s}:{t[:34]}" for s, t in cands[:3]))
         return cands[0][1]
     for l in brutas:
         c = _limpar_linha(l)
-        if c:
+        if c and not _so_prova_social(c.split()):
             return c[:60]
     return ""
 
