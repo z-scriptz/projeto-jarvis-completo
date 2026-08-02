@@ -103,15 +103,29 @@ DEFAULTS = {
     # Índice = dia da semana (0=segunda ... 6=domingo). Vale POR CONTA.
     # Lista vazia/ausente = desliga e volta a usar max_posts_por_conta_dia.
     "posts_por_dia_semana":       [3, 2, 1, 3, 2, 1, 0],
-    # Em dia de volume baixo, QUAIS horários usar. Os primeiros da lista são
-    # escolhidos primeiro; o que não estiver aqui entra depois, na ordem do
-    # relógio. Vazio = ordem cronológica (o de sempre).
+    # Os horários NÃO são um subconjunto de uma lista fixa: eles mudam com o
+    # volume do dia. Em dia de 2 posts o intervalo precisa ser grande o
+    # bastante pra entrega do primeiro esgotar antes do segundo entrar (~9h),
+    # senão um canibaliza o outro. Em dia de 3, o do meio vai pro almoço.
+    #   1 post  → manhã
+    #   2 posts → manhã + fim de tarde (9h de intervalo)
+    #   3 posts → manhã + almoço + fim de tarde
+    # Chave = quantos posts o dia tem. Ausente = cai na lista "horarios".
+    "horarios_por_volume": {
+        "1": ["09:00"],
+        "2": ["09:00", "18:00"],
+        "3": ["09:00", "13:00", "18:30"],
+    },
+    # Só vale quando horarios_por_volume não cobre o volume do dia: os
+    # primeiros da lista são escolhidos primeiro. Vazio = ordem cronológica.
     "prioridade_horarios":        [],
-    # Validade da esteira, em dias. Oferta de afiliado envelhece: preço muda e o
-    # link morre, então publicar pacote velho queima alcance com oferta vencida.
-    # O que passar disso sai da fila (vai pra fila_vencida/, não é apagado).
-    # 0 = desliga a validade.
-    "fila_validade_dias":         7,
+    # Validade da esteira, em dias. O que passar disso sai da fila (vai pra
+    # fila_vencida/, não é apagado). 0 = desliga a validade.
+    # Eram 7 dias, herdados da ideia de que o pacote envelhece. Não envelhece:
+    # o vídeo não tem preço nem link dentro dele, só a legenda tem — quem
+    # envelhece é o PRODUTO. E com a pirâmide (12 posts/conta/semana) a esteira
+    # leva ~23 dias pra drenar, então 7 jogava fora vídeo bom por idade.
+    "fila_validade_dias":         27,
     # Colchão de segurança POR CONTA, em dias de postagem. A produção corre pra
     # conta que está abaixo disso e ignora a que já passou — assim nenhuma seca
     # e nenhuma transborda. 0 = desliga (volta a produzir cego, só por comissão).
@@ -270,11 +284,20 @@ def _liberar_lock():
 # =====================================================================
 
 def _hora_para_min(hhmm: str) -> int:
+    """'09:30' → 570. -1 se não for hora de verdade.
+
+    Confere a faixa, não só se são números: '99:99' virava 6039, que o relógio
+    nunca alcança — o slot ficava configurado e nunca disparava, sem erro
+    nenhum no log. 24:00 passa de propósito, serve de fim de janela.
+    """
     try:
         h, m = hhmm.split(":")
-        return int(h) * 60 + int(m)
+        h, m = int(h), int(m)
     except Exception:
         return -1
+    if not (0 <= h <= 24 and 0 <= m <= 59) or h * 60 + m > 24 * 60:
+        return -1
+    return h * 60 + m
 
 
 def _agora_min() -> int:
@@ -335,15 +358,32 @@ def _posts_previstos(cfg: dict, dias: int, quando: date = None) -> int:
 
 
 def _slots_de_hoje(cfg: dict, quando: date = None) -> list:
-    """Os horários que valem hoje, já cortados pelo teto da pirâmide.
+    """Os horários que valem hoje, dado o volume da pirâmide.
 
-    Em dia de 1 post só, qual dos 4 slots usar é decisão de estratégia, não do
-    relógio — daí o prioridade_horarios. Sem ele, vale a ordem cronológica.
+    O horário não é escolha do relógio, é de estratégia: em dia de 2 posts eles
+    precisam ficar longe um do outro pra entrega do primeiro esgotar antes do
+    segundo entrar. Por isso o horário depende de QUANTOS posts o dia tem, e
+    não de cortar uma lista fixa.
     """
-    horarios = list(cfg.get("horarios") or [])
     n = _teto_do_dia(cfg, quando)
     if n <= 0:
-        return []
+        return []                          # dia de descanso
+
+    por_volume = cfg.get("horarios_por_volume") or {}
+    try:                                   # JSON só tem chave string; aceito as duas
+        lista = por_volume.get(str(n)) or por_volume.get(n)
+    except (TypeError, AttributeError):
+        lista = None
+    if lista:
+        validos = [h for h in lista if 0 <= _hora_para_min(h) < 24 * 60]
+        if validos:
+            return sorted(set(validos), key=_hora_para_min)
+        log.warning(f"   ⚠️  horarios_por_volume[{n}] não tem horário válido "
+                    f"({lista!r}) — caindo na lista 'horarios'")
+
+    # sem receita pra esse volume: corta a lista fixa, preferindo o que o
+    # prioridade_horarios mandar
+    horarios = list(cfg.get("horarios") or [])
     if n >= len(horarios):
         return horarios
     pref = [h for h in (cfg.get("prioridade_horarios") or []) if h in horarios]
