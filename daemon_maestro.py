@@ -78,7 +78,13 @@ DEFAULTS = {
     "grupos_descoberta_auto_add": True,   # False = só sugere (grupos_descobertos.json)
 
     # ── Produção (teto de gasto Fal) ──
-    "producao_max_videos_dia":    20,
+    # TETO, não meta. O dia mais pesado da pirâmide é segunda: 3 posts × 3
+    # contas = 9 vídeos. Um teto de 9 permite repor um dia de pico inteiro numa
+    # rodada, e não faz sentido passar disso — a demanda da semana é 36 vídeos
+    # (12 por conta), média de ~5/dia.
+    # Quem decide se produz de verdade é o estoque_alvo_dias, POR CONTA: com a
+    # esteira cheia isto aqui nunca é alcançado, porque a produção nem começa.
+    "producao_max_videos_dia":    9,
     "producao_max_downloads":     10,        # assets baixados por produto (autopilot)
     "producao_premium_campeoes":  True,
     "producao_premium_comissao_min": 15.0,   # R$ — acima disso vira premium

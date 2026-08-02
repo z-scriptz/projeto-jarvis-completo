@@ -138,6 +138,35 @@ def _entrada_do_pacote(slug: str, fila: list, idx: dict):
     return (i, fila[i]) if i is not None else (None, None)
 
 
+def _termo_do_pacote(pasta: Path) -> str:
+    """O nome do produto quando a fila não tem mais a entrada.
+
+    A fila é uma JANELA ROLANTE (~80 produtos): o que entrou há três semanas já
+    saiu dela. Medido na VPS: dos 28 pacotes vencidos, zero ainda tinham
+    entrada — mas 77 dos 119 da esteira tinham. Ou seja, quanto mais velho o
+    pacote, menor a chance de achar a origem, que é justamente o caso da
+    repescagem.
+
+    O pacote não guarda o link, mas guarda o NOME — e com o nome dá pra achar o
+    produto de novo na Shopee. É o mesmo caminho do 'produto morto', entrando
+    por outra porta.
+    """
+    f = pasta / "titulo_youtube.txt"
+    if f.exists():
+        try:
+            linha = f.read_text(encoding="utf-8", errors="replace").strip()
+            linha = linha.splitlines()[0] if linha else ""
+            # o título costuma vir com emoji e cauda de marketing
+            linha = re.sub(r"[^\w\s\-,.]", " ", linha)
+            linha = re.sub(r"\s+", " ", linha).strip()
+            if len(linha.split()) >= PALAVRAS_MIN:
+                return linha[:60]
+        except Exception:
+            pass
+    # o nome da pasta é o slug do produto: desfaço o underscore
+    return re.sub(r"\s+", " ", pasta.name.replace("_", " ")).strip()[:60]
+
+
 # ══════════════════════════════════════════════════════════════════════════
 # O SUBSTITUTO PRECISA SER O MESMO PRODUTO
 # ══════════════════════════════════════════════════════════════════════════
@@ -244,7 +273,8 @@ def _anotar(estado: dict, slug: str, motivo: str, extra: dict = None):
 
 
 def repescar(limite: int = LIMITE_PADRAO, simular: bool = False) -> dict:
-    resumo = {"revalidados": 0, "trocados": 0, "reserva": 0, "sem_origem": 0}
+    resumo = {"revalidados": 0, "trocados": 0, "reencontrados": 0,
+              "reserva": 0, "sem_origem": 0}
 
     if not RESERVA.exists():
         log.info("Nada na reserva — nenhum pacote venceu ainda.")
@@ -278,15 +308,42 @@ def repescar(limite: int = LIMITE_PADRAO, simular: bool = False) -> dict:
         slug = pasta.name
         if not _pode_tentar(slug, estado):
             continue
+        tentados += 1
         i, entrada = _entrada_do_pacote(slug, fila, idx)
+
         if entrada is None:
-            log.info(f"   ? '{slug}': não achei na fila — fica na reserva")
-            _anotar(estado, slug, "sem_origem")
-            resumo["sem_origem"] += 1
-            tentados += 1
+            # a fila rolou e perdeu este produto. Não é o fim: o nome está no
+            # pacote, e com ele dá pra procurar o produto de novo.
+            termo = _termo_do_pacote(pasta)
+            log.info(f"   ? '{slug}': fora da fila — procurando por "
+                     f"'{termo[:44]}'")
+            alts = _fornecedores(termo, api=api)
+            if not alts:
+                log.info("      não achei o produto na Shopee — fica na reserva")
+                _anotar(estado, slug, "sem_origem")
+                resumo["sem_origem"] += 1
+                continue
+            melhor = alts[0]
+            if not melhor["link"]:
+                _anotar(estado, slug, "sem_link")
+                resumo["reserva"] += 1
+                continue
+            log.info(f"      ↺ {melhor['titulo'][:50]}  R$ {melhor['preco']:.2f}"
+                     f"  ({melhor['vendas']} vendas)")
+            if not simular:
+                # volta pra fila: sem isso ele sai da esteira mas não aparece
+                # na vitrine, e o post manda pra um produto que o site não tem
+                fila.append({"produto": termo, "campeao": melhor["titulo"],
+                             "link": melhor["link"], "preco": melhor["preco"],
+                             "imagem": "", "plataforma": "shopee",
+                             "origem": "repescagem", "ts": int(time.time()),
+                             "fornecedores": alts})
+                idx[slug] = len(fila) - 1
+            if _devolver(pasta, simular):
+                _anotar(estado, slug, "reencontrado", {"item": melhor["item_id"]})
+                resumo["reencontrados"] += 1
             continue
 
-        tentados += 1
         link = (entrada.get("link") or "").strip()
         termo = (entrada.get("campeao") or entrada.get("produto") or "").strip()
 
@@ -344,8 +401,8 @@ def repescar(limite: int = LIMITE_PADRAO, simular: bool = False) -> dict:
         _gravar_json(ESTADO, estado)
 
     log.info(f"🎣 {resumo['revalidados']} revalidado(s), {resumo['trocados']} "
-             f"trocado(s) de vendedor, {resumo['reserva']} seguem na reserva"
-             + (f", {resumo['sem_origem']} sem origem" if resumo["sem_origem"] else ""))
+             f"trocado(s) de vendedor, {resumo['reencontrados']} reencontrado(s) "
+             f"pelo nome, {resumo['reserva'] + resumo['sem_origem']} seguem na reserva")
     return resumo
 
 
