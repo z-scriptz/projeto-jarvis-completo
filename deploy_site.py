@@ -181,6 +181,12 @@ def _filtrar_vivos(produtos):
     vivos, mortos, checados = [], 0, 0
     for p in produtos:
         link = p.get("link", "")
+        # O health-check é feito pela API de afiliado da SHOPEE: ela não tem
+        # como confirmar produto de outra loja. Passar a Amazon por aqui só
+        # gastava uma requisição por rodada sem responder nada.
+        if (p.get("plataforma") or "shopee").lower() != "shopee":
+            vivos.append(p)
+            continue
         ent = cache.get(link)
         if ent and (agora - ent.get("ts", 0)) < HEALTH_TTL:
             estado = ent.get("estado", "incerto")
