@@ -60,13 +60,28 @@ _EXTRAIR_JS = r"""
 
   const cartoes = [...document.querySelectorAll('[data-component-type="s-search-result"]')];
   const achados = [];
+  const marcadores = {sspa: 0, rotulo: 0, tipo: 0, texto: 0};
   for (const c of cartoes) {
     const asin = c.getAttribute('data-asin');
     if (!asin || asin.length < 8) continue;
+
     // Patrocinado é anúncio: pula. Nem sempre é o produto do vídeo, e a
     // primeira posição orgânica costuma casar melhor com o termo.
-    const patrocinado = !!c.querySelector('.puis-sponsored-label-text, [data-component-type="sp-sponsored-result"]')
-      || /Patrocinado|Sponsored/i.test((c.querySelector('.a-color-secondary')||{}).innerText || '');
+    //
+    // O sinal PRINCIPAL é o link passar por /sspa/click: todo anúncio da
+    // Amazon é rastreado por essa rota, e ela quase não muda. Rótulo de texto
+    // e nome de classe mudam sem aviso — na 1ª rodada em produção eles deram
+    // 0 patrocinados em 48 resultados, o que não existe numa busca popular.
+    const sspa = !!c.querySelector('a[href*="/sspa/click"]');
+    const rotulo = !!c.querySelector('.puis-sponsored-label-text, .s-sponsored-label-text, [aria-label*="Patrocinad"], [aria-label*="Sponsored"]');
+    const tipo = !!c.querySelector('[data-component-type="sp-sponsored-result"]');
+    const texto = /Patrocinad|Sponsored/i.test(c.innerText.slice(0, 300));
+    if (sspa) marcadores.sspa++;
+    if (rotulo) marcadores.rotulo++;
+    if (tipo) marcadores.tipo++;
+    if (texto) marcadores.texto++;
+    const patrocinado = sspa || rotulo || tipo || texto;
+
     const el = s => c.querySelector(s);
     const titulo = (el('h2 a span') || el('h2 span') || el('[data-cy="title-recipe"] span') || {}).innerText || '';
     const precoTxt = (el('.a-price > .a-offscreen') || el('.a-price .a-offscreen') || {}).textContent || '';
@@ -78,7 +93,7 @@ _EXTRAIR_JS = r"""
       imagem: img ? (img.getAttribute('src') || '') : '',
     });
   }
-  return {bloqueado: false, total: cartoes.length, achados};
+  return {bloqueado: false, total: cartoes.length, achados, marcadores};
 }
 """
 
@@ -122,6 +137,19 @@ def link_de_produto(asin: str) -> str:
     tag = _tag()
     base = f"https://www.{_dominio()}/dp/{asin}"
     return f"{base}?tag={tag}" if tag else base
+
+
+def _imagem_maior(url: str, lado: int = 640) -> str:
+    """Pede uma versão maior da mesma foto.
+
+    A busca devolve miniatura de 320px (…_AC_UL320_.jpg), que fica borrada num
+    card de celular retina. O tamanho é um pedaço da própria URL, então trocar
+    o número basta — não é raspagem extra, é a mesma imagem noutro corte.
+    640 é o meio-termo: nítido no 2x sem virar peso de página."""
+    if not url:
+        return ""
+    novo, n = re.subn(r"_(AC_)?U[LXYSF]\d+_", f"_\\g<1>UL{lado}_", url)
+    return novo if n else url
 
 
 def _preco(texto: str) -> float:
@@ -231,9 +259,16 @@ def buscar(termos: list, diag: bool = False) -> dict:
 
             achados = dados.get("achados") or []
             if diag:
+                m = dados.get("marcadores") or {}
                 _log(f"   [diag] {dados.get('total', 0)} cartões, "
                      f"{len(achados)} com ASIN, "
                      f"{sum(1 for a in achados if a['patrocinado'])} patrocinados")
+                _log(f"   [diag] quem detectou: sspa={m.get('sspa', 0)} "
+                     f"rotulo={m.get('rotulo', 0)} tipo={m.get('tipo', 0)} "
+                     f"texto={m.get('texto', 0)}")
+                if not any(m.values()):
+                    _log("   [diag] ⚠️  NENHUM marcador de anúncio bateu — ou a busca"
+                         " não tinha anúncio, ou a detecção precisa de ajuste")
                 for a in achados[:3]:
                     _log(f"      {'AD ' if a['patrocinado'] else '   '}{a['asin']} "
                          f"{a['precoTxt'] or '(sem preço)'}  {a['titulo'][:52]}")
@@ -247,7 +282,8 @@ def buscar(termos: list, diag: bool = False) -> dict:
             a = organicos[0]
             saida[termo] = {
                 "ok": True, "asin": a["asin"], "titulo": a["titulo"],
-                "preco": _preco(a["precoTxt"]), "imagem": a["imagem"],
+                "preco": _preco(a["precoTxt"]),
+                "imagem": _imagem_maior(a["imagem"]),
                 "link": link_de_produto(a["asin"]),
             }
             _log(f"   ✓ {a['asin']}  R$ {saida[termo]['preco']:.2f}  "
