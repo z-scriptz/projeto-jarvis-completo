@@ -70,6 +70,11 @@ ESPERA_NOVA_TENTATIVA_H = 48
 RELEVANCIA_MIN = 0.6
 PALAVRAS_MIN = 2
 
+# --diagnostico: mostra o que a busca devolveu e por que cada candidato
+# foi recusado. Sem isso, "não achei o produto" não diz se o problema é o
+# termo, a API ou as travas.
+DIAGNOSTICO = False
+
 
 # ══════════════════════════════════════════════════════════════════════════
 # ARQUIVOS
@@ -151,20 +156,58 @@ def _termo_do_pacote(pasta: Path) -> str:
     produto de novo na Shopee. É o mesmo caminho do 'produto morto', entrando
     por outra porta.
     """
+    bruto = ""
     f = pasta / "titulo_youtube.txt"
     if f.exists():
         try:
-            linha = f.read_text(encoding="utf-8", errors="replace").strip()
-            linha = linha.splitlines()[0] if linha else ""
-            # o título costuma vir com emoji e cauda de marketing
-            linha = re.sub(r"[^\w\s\-,.]", " ", linha)
-            linha = re.sub(r"\s+", " ", linha).strip()
-            if len(linha.split()) >= PALAVRAS_MIN:
-                return linha[:60]
+            t = f.read_text(encoding="utf-8", errors="replace").strip()
+            bruto = t.splitlines()[0] if t else ""
         except Exception:
-            pass
-    # o nome da pasta é o slug do produto: desfaço o underscore
-    return re.sub(r"\s+", " ", pasta.name.replace("_", " ")).strip()[:60]
+            bruto = ""
+    if len(re.findall(r"\w+", bruto)) < PALAVRAS_MIN:
+        bruto = pasta.name.replace("_", " ")     # o slug do produto
+    return _termo_de_busca(bruto)
+
+
+# Lixo de título de vídeo. Não é nome de produto e só atrapalha a busca —
+# "Capa transparente borda cromada shorts" não existe na Shopee.
+_LIXO_BUSCA = {"shorts", "short", "reels", "reel", "tiktok", "viral", "achadinho",
+               "achadinhos", "promo", "oferta", "barato", "compre", "link", "bio"}
+# Quantas palavras mandar pra busca. Título de anúncio é cheio de palavra, mas
+# ninguém procura na Shopee com 9 termos — e a relevância exige que a MAIORIA
+# das palavras do termo apareça no título do candidato, então termo comprido
+# reprova todo mundo.
+PALAVRAS_BUSCA = 5
+
+
+def _termo_de_busca(bruto: str) -> str:
+    """Transforma o nome cru num termo que a Shopee encontra.
+
+    Dois defeitos vistos na VPS, os dois causando 'não achei o produto':
+
+    1. cauda de YouTube: 'Capa transparente borda cromada shorts'.
+    2. corte no meio da palavra: o slug tem 40 caracteres, então sobra
+       'Fones De O', 'Porcelana Ko', 'Estreito Ces'. Palavra picada não casa
+       com nada e ainda conta contra a relevância.
+    """
+    t = re.sub(r"[^\w\s]", " ", bruto or "")
+    palavras = [p for p in t.split() if p]
+    # a última pode ser um pedaço de palavra, cortesia do corte em 40 chars
+    if len(palavras) > PALAVRAS_MIN and len(palavras[-1]) <= 3:
+        palavras.pop()
+    uteis = []
+    for p in palavras:
+        b = p.lower()
+        if b in _LIXO_BUSCA or b in _LIGACAO or len(p) < 2:
+            continue                         # 'de'/'para' só gastam vaga
+        uteis.append(p)
+        if len(uteis) >= PALAVRAS_BUSCA:
+            break                            # termo curto acha; termo longo não
+    return " ".join(uteis)
+
+
+_LIGACAO = {"de", "da", "do", "dos", "das", "para", "pra", "com", "em", "no",
+            "na", "nos", "nas", "e", "o", "a", "os", "as", "um", "uma", "por"}
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -212,13 +255,19 @@ def _fornecedores(termo: str, excluir_item=None, api=None) -> list:
     _obter, buscar, _link, relevancia = api
     r = buscar(termo, limite=20, ordenar_por=1)        # 1 = mais vendidos
     if not r.get("ok"):
+        if DIAGNOSTICO:
+            log.info(f"      [diag] a busca falhou: {str(r.get('erro'))[:100]}")
         return []
-    saida = []
-    for p in r.get("produtos") or []:
+    achados = r.get("produtos") or []
+    if DIAGNOSTICO:
+        log.info(f"      [diag] termo {termo!r} → {len(achados)} resultado(s)")
+    saida, recusados = [], []
+    for p in achados:
         if excluir_item and str(p.get("item_id")) == str(excluir_item):
             continue                                   # esse é o que morreu
         titulo = p.get("nome") or ""
         if not _equivalente(termo, titulo, relevancia):
+            recusados.append((titulo, relevancia(termo, titulo)))
             continue
         saida.append({
             "titulo": titulo,
@@ -229,6 +278,12 @@ def _fornecedores(termo: str, excluir_item=None, api=None) -> list:
             "link": p.get("offer_link") or p.get("product_link") or "",
             "relevancia": round(float(relevancia(termo, titulo)), 2),
         })
+    if DIAGNOSTICO and not saida and recusados:
+        log.info(f"      [diag] {len(recusados)} recusado(s) por não serem o "
+                 f"mesmo produto (precisa de rel>={RELEVANCIA_MIN} e "
+                 f"{PALAVRAS_MIN}+ palavras em comum):")
+        for tit, rel in sorted(recusados, key=lambda x: -x[1])[:5]:
+            log.info(f"               rel {rel:.2f}  {tit[:62]}")
     saida.sort(key=lambda x: (x["relevancia"], x["vendas"]), reverse=True)
     return saida[:3]                                   # top 1, top 2, top 3
 
@@ -431,7 +486,11 @@ def main():
     ap.add_argument("--limite", type=int, default=LIMITE_PADRAO,
                     help=f"quantos por rodada (padrão {LIMITE_PADRAO})")
     ap.add_argument("--status", action="store_true", help="só mostra o estado")
+    ap.add_argument("--diagnostico", action="store_true",
+                    help="mostra o que a busca devolveu e por que recusou")
     a = ap.parse_args()
+    global DIAGNOSTICO
+    DIAGNOSTICO = a.diagnostico
     if a.status:
         status()
         return 0

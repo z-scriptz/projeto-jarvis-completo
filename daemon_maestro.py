@@ -140,6 +140,11 @@ DEFAULTS = {
     # conta que está abaixo disso e ignora a que já passou — assim nenhuma seca
     # e nenhuma transborda. 0 = desliga (volta a produzir cego, só por comissão).
     "estoque_alvo_dias":          3,
+    # Piso diário POR CONTA, mesmo com a esteira cheia. Sem ele a produção fica
+    # semanas parada, a esteira envelhece inteira junto, e quando a conta seca a
+    # máquina volta do zero. Com 1/conta/dia: entram 3, saem ~5 — a esteira
+    # encolhe e ao mesmo tempo sempre tem material novo. 0 desliga.
+    "producao_minima_por_conta":  1,
     # TikTok via API oficial (Content Posting API). OFF até o app ser aprovado —
     # ligue depois da aprovação (+ conta pública + credenciais de produção no .env).
     "postar_tiktok":              False,
@@ -728,6 +733,33 @@ def _estoque_por_conta() -> dict:
     return cont
 
 
+def _produzidos_hoje_por_conta() -> dict:
+    """{nicho: pacotes que entraram na esteira HOJE}.
+
+    Contado pela data da pasta, não por um contador novo: o pacote é o próprio
+    registro, então reiniciar o daemon no meio do dia não zera a conta.
+
+    Efeito colateral consciente: pacote repescado também ganha data de hoje e
+    entra nesta conta. É o comportamento certo — o objetivo do piso é ter
+    material fresco na esteira, e um repescado teve a oferta revalidada agora.
+    """
+    if not PRONTO_DIR.exists():
+        return {}
+    hoje = date.today()
+    cont = {}
+    for p in PRONTO_DIR.iterdir():
+        if not (p.is_dir() and (p / "video.mp4").exists()):
+            continue
+        try:
+            if date.fromtimestamp(p.stat().st_mtime) != hoje:
+                continue
+        except (OSError, ValueError, OverflowError):
+            continue
+        n = _nicho_do_slug(p.name) or "geral"
+        cont[n] = cont.get(n, 0) + 1
+    return cont
+
+
 def _priorizar_por_estoque(candidatos: list, quantidade: int, cfg: dict) -> list:
     """Escolhe o que produzir olhando o estoque de CADA conta.
 
@@ -763,14 +795,26 @@ def _priorizar_por_estoque(candidatos: list, quantidade: int, cfg: dict) -> list
             nichos.add((conta.get("nicho") or "geral") if chave == "_default" else chave)
     except Exception:
         nichos = {"geral"}
+    # Piso: mesmo com a conta cheia, produz um pouco todo dia. Sem isso a
+    # produção fica semanas parada e a esteira envelhece inteira junto — e
+    # quando a conta enfim seca, ela volta do zero. Com o piso, a esteira
+    # encolhe (produz 3/dia contra ~5/dia postados) mas sempre com material
+    # fresco entrando.
+    piso = max(0, int(cfg.get("producao_minima_por_conta", 0) or 0))
+    ja_hoje = _produzidos_hoje_por_conta()
     falta = {n: max(0, alvo - estoque.get(n, 0)) for n in nichos}
+    if piso:
+        for n in nichos:
+            falta[n] = max(falta[n], piso - ja_hoje.get(n, 0))
 
     resumo = ", ".join(f"{n}={estoque.get(n, 0)}/{alvo}" for n in sorted(nichos))
-    log.info(f"   📦 estoque por conta: {resumo}")
+    log.info(f"   📦 estoque por conta: {resumo}"
+             + (f"  (piso de {piso}/dia)" if piso else ""))
 
     if not any(falta.values()):
-        log.info(f"   ✋ todas as contas no colchão de {alvo} pacotes — "
-                 "nada a produzir neste ciclo")
+        log.info(f"   ✋ todas as contas no colchão de {alvo} pacotes"
+                 + (f" e já com {piso}/dia produzido" if piso else "")
+                 + " — nada a produzir neste ciclo")
         return []
 
     escolhidos, adiados = [], 0
