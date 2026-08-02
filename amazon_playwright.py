@@ -93,7 +93,15 @@ _EXTRAIR_JS = r"""
       imagem: img ? (img.getAttribute('src') || '') : '',
     });
   }
-  return {bloqueado: false, total: cartoes.length, achados, marcadores};
+  // Evidência da PÁGINA inteira, não só dos cards: distingue "a detecção
+  // falhou" de "esta página realmente não tem anúncio". Sessão headless, sem
+  // cookie e de IP de datacenter costuma receber página sem colocação paga.
+  const pagina = {
+    sspaNaPagina: document.querySelectorAll('a[href*="/sspa/click"]').length,
+    palavraNaPagina: (document.body.innerText.match(/Patrocinad|Sponsored/gi) || []).length,
+    asinNaPagina: document.querySelectorAll('[data-asin]').length,
+  };
+  return {bloqueado: false, total: cartoes.length, achados, marcadores, pagina};
 }
 """
 
@@ -266,9 +274,18 @@ def buscar(termos: list, diag: bool = False) -> dict:
                 _log(f"   [diag] quem detectou: sspa={m.get('sspa', 0)} "
                      f"rotulo={m.get('rotulo', 0)} tipo={m.get('tipo', 0)} "
                      f"texto={m.get('texto', 0)}")
+                pg = dados.get("pagina") or {}
+                _log(f"   [diag] na página inteira: {pg.get('sspaNaPagina', 0)} link(s) "
+                     f"/sspa/click · a palavra 'Patrocinado' aparece "
+                     f"{pg.get('palavraNaPagina', 0)}x · "
+                     f"{pg.get('asinNaPagina', 0)} elementos com ASIN")
                 if not any(m.values()):
-                    _log("   [diag] ⚠️  NENHUM marcador de anúncio bateu — ou a busca"
-                         " não tinha anúncio, ou a detecção precisa de ajuste")
+                    if not pg.get("sspaNaPagina") and not pg.get("palavraNaPagina"):
+                        _log("   [diag] ✅ a página REALMENTE não tem anúncio — "
+                             "o 1º resultado é orgânico mesmo")
+                    else:
+                        _log("   [diag] ⚠️  tem anúncio na página mas o card não foi "
+                             "marcado: a detecção precisa de ajuste")
                 for a in achados[:3]:
                     _log(f"      {'AD ' if a['patrocinado'] else '   '}{a['asin']} "
                          f"{a['precoTxt'] or '(sem preço)'}  {a['titulo'][:52]}")
