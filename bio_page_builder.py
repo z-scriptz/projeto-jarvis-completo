@@ -279,60 +279,108 @@ def _gerar_links_afiliado(produtos: list) -> list:
     return com_link
 
 
-def _card_destaque(p: dict) -> str:
-    titulo = html.escape(_titulo_legivel(p.get("titulo") or p.get("nome", "")))
-    nome = html.escape(p.get("nome", ""))
-    link = html.escape(p.get("link", "#"))
-    cat = html.escape(_inferir_categoria(p))
+def _reais(v: float) -> str:
+    return f"R$ {v:,.2f}".replace(",", "@").replace(".", ",").replace("@", ".")
+
+
+def _preco_html(p: dict, grande: bool = False) -> str:
+    """Preço do card. Vazio quando não há dado — melhor não falar de preço do
+    que falar errado numa página estática."""
+    r = p.get("preco_resumo") or {}
+    if not r or not r.get("preco"):
+        return ""
+    # o til avisa que é média, não preço travado
+    til = "<i>~</i>" if r.get("media") else ""
+    linha = f'<div class="pr"><b>{til}{_reais(r["preco"])}</b>'
+    if r.get("de"):
+        linha += f'<s>{_reais(r["de"])}</s>'
+    linha += "</div>"
+
+    if r.get("media"):
+        texto = f'média de {r["obs"]} dias · {r["visto"]}'
+    else:
+        texto = f'conferido em {r["visto"]}'
+    classe = ""
+    if r.get("caiu"):
+        # no destaque a queda é a informação que vende; no card a linha fica
+        # longa demais e quebra em duas
+        texto = (f'caiu {r["caiu"]}% na semana'
+                 + (f' · média de {r["obs"]} dias' if grande else ''))
+        classe = " caindo"
+    return linha + f'<span class="afer{classe}">{html.escape(texto)}</span>'
+
+
+def _selos_html(p: dict, novo: bool = False) -> str:
+    r = p.get("preco_resumo") or {}
+    selos = []
+    if novo:
+        selos.append('<span class="selo novo">novo</span>')
+    if r.get("off"):
+        selos.append(f'<span class="selo off">-{r["off"]}%</span>')
+    plat = (p.get("plataforma") or "shopee").lower()
+    # classe `plat` e não `loja`: `.loja` já é o botão de aba lá em cima, e as
+    # duas regras de CSS brigavam pelo mesmo seletor
+    selos.append(f'<span class="selo plat">{"Amazon" if plat == "amazon" else "Shopee"}</span>')
+    return "".join(selos)
+
+
+def _foto_html(p: dict, titulo: str, novo: bool = False) -> str:
+    """Foto do produto com os três estados previstos: carregando (esqueleto),
+    ok, e sem-foto (a Amazon hoje não devolve imagem)."""
     img = html.escape(p.get("imagem", ""))
     plat = (p.get("plataforma") or "shopee").lower()
-    ph_emoji = "📦" if plat == "amazon" else "🛍️"
-    badge = "📦 Amazon" if plat == "amazon" else "🛒 Shopee"
-    img_html = (f'<img src="{img}" alt="{titulo}" loading="lazy" '
-                f'onerror="this.style.display=\'none\'">') if img else ""
+    emoji = "📦" if plat == "amazon" else "🛍️"
+    if not img:
+        return (f'<div class="foto sem-foto"><em class="fb">{emoji}</em>'
+                f'{_selos_html(p, novo)}</div>')
+    return (f'<div class="foto carregando">'
+            f'<img src="{img}" alt="{titulo}" loading="lazy" decoding="async">'
+            f'<em class="fb">{emoji}</em>{_selos_html(p, novo)}</div>')
+
+
+def _card_destaque(p: dict) -> str:
+    """O achado do dia, na moldura 9:16 — o formato do Reels de onde a pessoa
+    veio. Continua o vídeo em vez de recomeçar do zero."""
+    titulo = html.escape(_titulo_legivel(p.get("titulo") or p.get("nome", ""), 70))
+    link = html.escape(p.get("link", "#"))
+    img = html.escape(p.get("imagem", ""))
+    plat = (p.get("plataforma") or "shopee").lower()
+    capa = (f'<img class="capa" src="{img}" alt="{titulo}" decoding="async">'
+            if img else f'<em class="capa-fb">{"📦" if plat == "amazon" else "🛍️"}</em>')
     return f"""
-    <a class="prod-destaque" href="{link}" target="_blank" rel="noopener"
-       data-busca="{titulo.lower()} {nome.lower()}" data-categoria="{cat}"
-       data-plataforma="{plat}">
-      <div class="pd-img">{img_html}<span class="pd-ph">{ph_emoji}</span>
-        <span class="selo">⭐ Produto do dia</span>
-        <span class="plat-badge plat-{plat}">{badge}</span></div>
-      <div class="pd-body">
+    <a class="moldura" id="moldura" href="{link}" target="_blank" rel="noopener">
+      {capa}
+      <div class="brilho"></div>
+      <div class="live"><b></b> VISTO NO REELS</div>
+      <div class="pe">
         <h3>{titulo}</h3>
-        <span class="pd-cta">🛒 PEGAR MEU DESCONTO</span>
+        {_preco_html(p, grande=True)}
       </div>
     </a>"""
 
 
-def _card_grid(p: dict) -> str:
+def _card_grid(p: dict, novo: bool = False) -> str:
     titulo = html.escape(_titulo_legivel(p.get("titulo") or p.get("nome", "")))
     nome = html.escape(p.get("nome", ""))
     link = html.escape(p.get("link", "#"))
     cat = html.escape(_inferir_categoria(p))
-    img = html.escape(p.get("imagem", ""))
     plat = (p.get("plataforma") or "shopee").lower()
-    ph_emoji = "📦" if plat == "amazon" else "🛍️"
-    badge = "📦 Amazon" if plat == "amazon" else "🛒 Shopee"
-    img_html = (f'<img src="{img}" alt="{titulo}" loading="lazy" '
-                f'onerror="this.style.display=\'none\'">') if img else ""
     return f"""
-      <a class="glass prod" href="{link}" target="_blank" rel="noopener"
+      <a class="card" href="{link}" target="_blank" rel="noopener"
          data-busca="{titulo.lower()} {nome.lower()}" data-categoria="{cat}"
          data-plataforma="{plat}">
-        <div class="thumb">{img_html}<span class="pd-ph">{ph_emoji}</span>
-          <span class="selo">Achado topshop</span>
-          <span class="plat-badge plat-{plat}">{badge}</span></div>
-        <div class="body">
+        {_foto_html(p, titulo, novo)}
+        <div class="corpo">
           <h3>{titulo}</h3>
-          <span class="ver">Ver oferta →</span>
+          {_preco_html(p)}
+          <span class="ver">Ver oferta <span>&rarr;</span></span>
         </div>
       </a>"""
 
 
 def _filtros_html(produtos: list) -> str:
-    # Barra FIXA: Tudo + categorias fixas (sempre visíveis) + Outros (só se
-    # houver algum produto sem categoria). Clicar numa categoria vazia mostra
-    # o "nenhum produto encontrado" — normal, é a loja se enchendo aos poucos.
+    """Categorias FIXAS: sempre visíveis, mesmo sem produto no momento — assim
+    a loja parece organizada e a aba não some quando o estoque muda."""
     presentes = {_inferir_categoria(p) for p in produtos}
     ordem = ["todos"] + list(_CATEGORIAS_FIXAS)
     if "Outros" in presentes:
@@ -340,67 +388,111 @@ def _filtros_html(produtos: list) -> str:
     botoes = []
     for c in ordem:
         rotulo = "Tudo" if c == "todos" else c
-        ativo = " ativo" if c == "todos" else ""
-        botoes.append(f'<button class="filtro{ativo}" data-filtro="{html.escape(c)}">'
-                      f'{html.escape(rotulo)}</button>')
-    return '<div class="filtros" id="filtros">' + "".join(botoes) + "</div>"
+        ativo = "true" if c == "todos" else "false"
+        botoes.append(f'<button class="chip" aria-pressed="{ativo}" '
+                      f'data-filtro="{html.escape(c)}">{html.escape(rotulo)}</button>')
+    return '<div class="chips" id="filtros">' + "".join(botoes) + "</div>"
 
 
 def _toggle_plataforma_html(produtos: list) -> str:
-    """Toggle 🛒 Shopee / 📦 Amazon — só aparece se houver produto de mais de
-    uma plataforma (senão não polui a barra)."""
-    plats = {(p.get("plataforma") or "shopee").lower() for p in produtos}
-    if len(plats) < 2:
+    """Abas de loja. A contagem sai dos produtos de verdade, então nunca mente,
+    e a aba do Mercado Livre nasce sozinha quando o primeiro produto de lá
+    entrar na fila."""
+    conta = {}
+    for p in produtos:
+        conta[(p.get("plataforma") or "shopee").lower()] = \
+            conta.get((p.get("plataforma") or "shopee").lower(), 0) + 1
+    if len([k for k, v in conta.items() if v]) < 2:
         return ""
-    botoes = [
-        '<button class="filtro-plat ativo" data-plat="todos">Tudo</button>',
-        '<button class="filtro-plat" data-plat="shopee">🛒 Shopee</button>',
-        '<button class="filtro-plat" data-plat="amazon">📦 Amazon</button>',
-    ]
-    return ('<div class="filtros filtros-plat" id="filtros-plat">'
+    linhas = [("todos", "Tudo", len(produtos))]
+    for chave, rotulo in (("shopee", "Shopee"), ("amazon", "Amazon"),
+                          ("meli", "Mercado Livre")):
+        linhas.append((chave, rotulo, conta.get(chave, 0)))
+    botoes = []
+    for i, (chave, rotulo, n) in enumerate(linhas):
+        vazia = n == 0
+        desab = ' disabled title="Aparece sozinha quando o primeiro produto entrar"' if vazia else ""
+        botoes.append(
+            f'<button class="loja" role="tab" aria-selected="{"true" if i == 0 else "false"}"'
+            f' data-plat="{chave}"{desab}><span class="pil"></span>'
+            f'<span>{rotulo}<i class="n">{"em breve" if vazia else n}</i></span></button>')
+    return ('<div class="lojas" id="filtros-plat" role="tablist">'
             + "".join(botoes) + "</div>")
 
 
+def _esteira_html(produtos: list) -> str:
+    """Fita de novidades. Duplicada pra emendar sem salto na volta do loop."""
+    itens = []
+    for p in produtos[:12]:
+        nome = html.escape(" ".join(
+            (p.get("titulo") or p.get("nome", "")).split()[:5]))
+        itens.append(f"<span>acabou de sair: <b>{nome}</b></span>")
+    if not itens:
+        return ""
+    fita = "".join(itens) * 2
+    return f'<div class="esteira"><div class="fita">{fita}</div></div>'
+
+
+def _metricas(produtos: list) -> tuple:
+    """(achados, lojas, % off médio) — números do herói, calculados aqui e
+    animados no JS a partir daqui. Sem JS, o número certo já está no HTML."""
+    lojas = len({(p.get("plataforma") or "shopee").lower() for p in produtos})
+    offs = [(p.get("preco_resumo") or {}).get("off", 0) for p in produtos]
+    offs = [o for o in offs if o]
+    medio = int(round(sum(offs) / len(offs))) if offs else 0
+    return len(produtos), lojas, medio
+
+
 def _vitrine_html(produtos: list) -> str:
-    """Monta a vitrine completa: busca + toggle plataforma + filtros + destaque + grade."""
+    """Controles + grade. Os cards vêm prontos do servidor (aparecem no Google
+    e funcionam sem JS); o JS só mostra e esconde na hora de filtrar."""
     if not produtos:
-        return '<p style="text-align:center;color:var(--muted);padding:40px 0;">Em breve, novos achados ✨</p>'
-    busca = ('<div class="busca-wrap">'
-             '<input id="busca" type="search" placeholder="🔍 Buscar produto do vídeo..." '
-             'autocomplete="off"></div>')
-    toggle = _toggle_plataforma_html(produtos)
-    filtros = _filtros_html(produtos)
-    destaque = _card_destaque(produtos[0])
-    grade_cards = "\n".join(_card_grid(p) for p in produtos[1:])
-    grade = f'<div class="grid-3" id="grade-prod">{grade_cards}</div>' if grade_cards else ""
-    sem = '<p class="sem-res" id="sem-res" style="display:none;text-align:center;color:var(--muted);padding:24px;">Nenhum produto encontrado 🔍</p>'
-    return busca + toggle + filtros + destaque + grade + sem
+        return ('<p class="vazio"><b>Em breve, novos achados</b>'
+                'A vitrine enche toda semana.</p>')
+    controles = ('<div class="controles">' + _toggle_plataforma_html(produtos)
+                 + _filtros_html(produtos) + "</div>")
+    cards = "\n".join(_card_grid(p, novo=(i < 3))
+                      for i, p in enumerate(produtos))
+    grade = (f'<div class="palco"><div class="holofote" id="holofote"></div>'
+             f'<div class="grade" id="grade-prod">{cards}</div></div>')
+    vazio = ('<p class="vazio" id="sem-res" style="display:none">'
+             '<b>Esse a gente ainda não garimpou</b>'
+             'Tenta outra busca — a vitrine enche toda semana.</p>')
+    return controles + grade + vazio
 
 
 def _grupos_html() -> str:
-    """Linha extra de grupos de achadinhos no contato (se configurados)."""
+    """Grupos de achadinhos no contato (se configurados)."""
     itens = []
     if GRUPO_WHATSAPP:
-        itens.append(f'<div class="ci"><div class="ico">👥</div><span>Grupo no WhatsApp: '
-                     f'<a href="{html.escape(GRUPO_WHATSAPP)}" target="_blank">Entrar no grupo</a></span></div>')
+        itens.append(f'<a class="ci" href="{html.escape(GRUPO_WHATSAPP)}" target="_blank" '
+                     f'rel="noopener"><span class="ico">👥</span>'
+                     f'<span>Grupo no WhatsApp<i>entrar no grupo</i></span></a>')
     if GRUPO_TELEGRAM:
-        itens.append(f'<div class="ci"><div class="ico">📨</div><span>Canal no Telegram: '
-                     f'<a href="{html.escape(GRUPO_TELEGRAM)}" target="_blank">Entrar no canal</a></span></div>')
+        itens.append(f'<a class="ci" href="{html.escape(GRUPO_TELEGRAM)}" target="_blank" '
+                     f'rel="noopener"><span class="ico">📨</span>'
+                     f'<span>Canal no Telegram<i>entrar no canal</i></span></a>')
     return "".join(itens)
 
 
 def gerar_site(produtos: list) -> str:
     _corrigir_titulos(produtos)
-    vitrine = _vitrine_html(produtos)
-    grupos = _grupos_html()
-    total = len(produtos)
-    ano = time.strftime("%Y")
-    data = time.strftime("%d/%m/%Y")
-    return _TEMPLATE.replace("{{VITRINE}}", vitrine)\
-                    .replace("{{GRUPOS}}", grupos)\
+    total, lojas, off_medio = _metricas(produtos)
+    destaque = _card_destaque(produtos[0]) if produtos else ""
+    # imagem do 1º produto vira a prévia do link no WhatsApp/Instagram
+    og = (produtos[0].get("imagem", "") if produtos else "") or ""
+    grupo_topo = GRUPO_WHATSAPP or GRUPO_TELEGRAM or INSTAGRAM
+    return _TEMPLATE.replace("{{VITRINE}}", _vitrine_html(produtos))\
+                    .replace("{{DESTAQUE}}", destaque)\
+                    .replace("{{ESTEIRA}}", _esteira_html(produtos))\
+                    .replace("{{GRUPOS}}", _grupos_html())\
+                    .replace("{{GRUPO_TOPO}}", html.escape(grupo_topo))\
                     .replace("{{TOTAL}}", str(total))\
-                    .replace("{{ANO}}", ano)\
-                    .replace("{{DATA}}", data)\
+                    .replace("{{LOJAS}}", str(lojas))\
+                    .replace("{{OFF}}", str(off_medio))\
+                    .replace("{{OGIMG}}", html.escape(og))\
+                    .replace("{{ANO}}", time.strftime("%Y"))\
+                    .replace("{{DATA}}", time.strftime("%d/%m/%Y"))\
                     .replace("{{WHATSAPP}}", WHATSAPP)\
                     .replace("{{EMAIL}}", EMAIL)\
                     .replace("{{INSTAGRAM}}", INSTAGRAM)\
@@ -408,414 +500,617 @@ def gerar_site(produtos: list) -> str:
                     .replace("{{YOUTUBE}}", YOUTUBE)
 
 
-# ===== Template do site institucional (casca fixa + {{VITRINE}} dinâmica) =====
+# ===== Template do site (casca fixa + vitrine dinâmica) =====
+# A fonte vai num arquivo SEPARADO (topshop-fonte.woff2, escrito pelo
+# deploy_site) e não embutida em base64: embutida ela engorda o HTML em 85KB e
+# atrasa a primeira pintura. Com `swap`, o texto aparece na hora com a fonte do
+# sistema e troca quando a nossa chega — quem vem do Reels no 4G não espera.
 _TEMPLATE = r"""<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>topshop · Produtos inteligentes. Conteúdo estratégico.</title>
-<link rel="icon" type="image/png" href="/favicon-96x96.png?v=v1" sizes="96x96" />
-<link rel="shortcut icon" href="/favicon.ico?v=v1" />
-<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=v1" />
-<meta name="apple-mobile-web-app-title" content="TopShop" />
-<link rel="manifest" href="/site.webmanifest?v=v1" />
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>topshop — o que você viu no vídeo, achou aqui</title>
+<meta name="description" content="Os achados que aparecem nos nossos vídeos, com link direto e preço conferido. Shopee e Amazon.">
+<meta property="og:title" content="topshop — o garimpo">
+<meta property="og:description" content="O que você viu no vídeo, achou aqui.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="{{OGIMG}}">
+<meta name="theme-color" content="#09070E">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-  :root {
-    --bg: #0a0a12; --bg-soft: #12121f; --ink: #f4f4f8; --muted: #9a9ab0;
-    --pop: #6d5dfc; --pop2: #00d4ff; --gold: #ffc83d; --cta: #00e0b8;
-    --grad: linear-gradient(135deg, #6d5dfc 0%, #00d4ff 100%);
-    --glass: rgba(255,255,255,0.04); --glass-border: rgba(255,255,255,0.10);
-  }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html { scroll-behavior: smooth; overflow-x: hidden; max-width: 100%; }
-  body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-    background: var(--bg); color: var(--ink); line-height: 1.6;
-    -webkit-font-smoothing: antialiased; overflow-x: hidden;
-    max-width: 100%; position: relative; }
-  .wrap { max-width: 1140px; margin: 0 auto; padding: 0 24px; }
-  a { color: inherit; text-decoration: none; }
-  @media (prefers-reduced-motion: no-preference) {
-    .reveal { opacity: 0; transform: translateY(24px);
-              transition: opacity 0.7s ease, transform 0.7s ease; }
-    .reveal.in { opacity: 1; transform: none; }
-  }
-  nav { position: sticky; top: 0; z-index: 100;
-    background: rgba(10,10,18,0.72); backdrop-filter: blur(14px);
-    border-bottom: 1px solid var(--glass-border); }
-  .nav-in { display: flex; justify-content: space-between; align-items: center;
-            padding: 16px 24px; max-width: 1140px; margin: 0 auto; }
-  .logo { font-weight: 800; font-size: 1.3rem; letter-spacing: -0.02em; }
-  .logo b { background: var(--grad); -webkit-background-clip: text;
-            background-clip: text; color: transparent; }
-  .nav-links { display: flex; gap: 28px; }
-  .nav-links a { color: var(--muted); font-weight: 600; font-size: 0.92rem;
-                 transition: color 0.2s; }
-  .nav-links a:hover { color: var(--ink); }
-  @media (max-width: 760px) { .nav-links { display: none; } }
-  .hero { position: relative; text-align: center; padding: 110px 0 90px; overflow: hidden; }
-  .hero::before { content: ''; position: absolute; top: -10%; left: 50%;
-    transform: translateX(-50%); width: min(700px, 100vw); height: min(700px, 100vw);
-    max-width: 100%; background: radial-gradient(circle, rgba(109,93,252,0.22) 0%, transparent 60%);
-    z-index: -1; animation: float 8s ease-in-out infinite; pointer-events: none; }
-  @keyframes float { 0%,100% { transform: translateX(-50%) translateY(0); }
-                     50% { transform: translateX(-50%) translateY(-24px); } }
-  .badge { display: inline-block; background: var(--glass);
-    border: 1px solid var(--glass-border); color: var(--pop2);
-    font-weight: 600; font-size: 0.82rem; letter-spacing: 0.06em;
-    padding: 8px 18px; border-radius: 100px; margin-bottom: 30px;
-    text-transform: uppercase; }
-  .hero h1 { font-size: clamp(2.6rem, 6.5vw, 5rem); font-weight: 800;
-             letter-spacing: -0.03em; line-height: 1.04; margin-bottom: 26px; }
-  .hero h1 b { background: var(--grad); -webkit-background-clip: text;
-               background-clip: text; color: transparent; }
-  .hero p { font-size: 1.22rem; color: var(--muted); max-width: 600px;
-            margin: 0 auto 40px; }
-  .hero-cta { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
-  .btn { display: inline-flex; align-items: center; gap: 8px;
-    font-weight: 700; font-size: 1rem; padding: 15px 32px;
-    border-radius: 100px; cursor: pointer; border: none;
-    transition: transform 0.18s ease, box-shadow 0.18s ease; }
-  .btn-primary { background: var(--grad); color: #fff;
-                 box-shadow: 0 8px 30px rgba(109,93,252,0.4); }
-  .btn-primary:hover { transform: translateY(-2px);
-                       box-shadow: 0 14px 40px rgba(109,93,252,0.55); }
-  .btn-ghost { background: var(--glass); color: var(--ink);
-               border: 1px solid var(--glass-border); }
-  .btn-ghost:hover { transform: translateY(-2px); border-color: var(--pop2); }
-  section { padding: 90px 0; }
-  .eyebrow { color: var(--pop2); font-weight: 700; font-size: 0.85rem;
-             letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 14px; }
-  .sec-title { font-size: clamp(2rem, 4.5vw, 3rem); font-weight: 800;
-               letter-spacing: -0.02em; margin-bottom: 18px; }
-  .sec-sub { color: var(--muted); font-size: 1.12rem; max-width: 600px;
-             margin-bottom: 56px; }
-  .center { text-align: center; }
-  .center .sec-sub { margin-left: auto; margin-right: auto; }
-  .glass { background: var(--glass); border: 1px solid var(--glass-border);
-    border-radius: 20px; backdrop-filter: blur(12px);
-    transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease; }
-  .glass:hover { transform: translateY(-6px); border-color: rgba(109,93,252,0.5);
-                 box-shadow: 0 20px 50px rgba(0,0,0,0.4); }
-  .grid-3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 24px; }
-  .grid-2 { display: grid; grid-template-columns: repeat(2,1fr); gap: 24px; }
-  @media (max-width: 860px) { .grid-3, .grid-2 { grid-template-columns: 1fr 1fr; } }
-  /* no celular os cards de PRODUTO ficam 2-por-linha (menores/mais "shopáveis");
-     só os cards de texto (grid-2) é que passam pra 1 coluna. */
-  @media (max-width: 560px) {
-    .grid-2 { grid-template-columns: 1fr; }
-    .grid-3 { grid-template-columns: 1fr 1fr; gap: 12px; }
-  }
-  .feat { padding: 32px 28px; }
-  .feat .ico { width: 46px; height: 46px; border-radius: 12px;
-               background: var(--grad); display: flex; align-items: center;
-               justify-content: center; margin-bottom: 18px; font-size: 1.3rem; }
-  .feat h3 { font-size: 1.15rem; font-weight: 700; margin-bottom: 8px; }
-  .feat p { color: var(--muted); font-size: 0.96rem; }
-  .difs { display: grid; grid-template-columns: repeat(2,1fr); gap: 14px 32px; margin-top: 10px; }
-  @media (max-width: 760px) { .difs { grid-template-columns: 1fr; } }
-  .dif { display: flex; align-items: center; gap: 14px; padding: 16px 0;
-         border-bottom: 1px solid var(--glass-border); }
-  .dif .check { color: var(--pop2); font-weight: 800; font-size: 1.1rem; }
-  .dif span:last-child { font-weight: 600; }
-  /* ===== Vitrine (busca + filtros + destaque + grade) ===== */
-  .busca-wrap { max-width: 560px; margin: 0 auto 18px; }
-  #busca { width: 100%; padding: 14px 18px; border-radius: 14px;
-    border: 1px solid var(--glass-border); background: var(--glass);
-    color: var(--ink); font-size: 1rem; outline: none; font-family: inherit;
-    transition: border-color .2s, box-shadow .2s; }
-  #busca:focus { border-color: var(--pop); box-shadow: 0 0 0 3px rgba(109,93,252,0.25); }
-  #busca::placeholder { color: var(--muted); }
-  .filtros { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 40px; }
-  .filtros-plat { margin-bottom: 16px; }
-  .filtro, .filtro-plat { background: var(--glass); color: var(--muted);
-    border: 1px solid var(--glass-border); border-radius: 100px;
-    padding: 8px 18px; font-size: 0.88rem; font-weight: 600; cursor: pointer;
-    transition: all .2s; font-family: inherit; }
-  .filtro:hover, .filtro-plat:hover { color: var(--ink); border-color: var(--pop2); }
-  .filtro.ativo, .filtro-plat.ativo { background: var(--grad); color: #fff; border-color: transparent;
-    box-shadow: 0 6px 20px rgba(109,93,252,0.4); }
-  .plat-badge { position: absolute; top: 14px; right: 14px; z-index: 2;
-    font-size: 0.62rem; font-weight: 800; letter-spacing: .3px;
-    padding: 4px 9px; border-radius: 100px; color: #fff; white-space: nowrap;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
-  .plat-shopee { background: #ee4d2d; }
-  .plat-amazon { background: #ff9900; color: #131a22; }
-  .prod-destaque { display: grid; grid-template-columns: 1fr 1fr; gap: 0;
-    background: linear-gradient(135deg, rgba(109,93,252,0.12), var(--glass));
-    border: 1px solid var(--pop); border-radius: 24px; overflow: hidden;
-    margin-bottom: 50px; box-shadow: 0 0 40px rgba(109,93,252,0.25);
-    transition: transform .2s; }
-  .prod-destaque:hover { transform: translateY(-4px); }
-  @media (max-width: 760px) { .prod-destaque { grid-template-columns: 1fr; } }
-  .pd-img { position: relative; aspect-ratio: 1/1; background: linear-gradient(135deg,#1a1a2e,#16213e);
-    display: flex; align-items: center; justify-content: center; }
-  .pd-img img { width: 100%; height: 100%; object-fit: cover; }
-  .pd-ph { position: absolute; font-size: 3rem; opacity: 0.4; }
-  .pd-body { padding: 36px 32px; display: flex; flex-direction: column;
-    justify-content: center; gap: 18px; }
-  .pd-body h3 { font-size: 1.5rem; font-weight: 800; line-height: 1.25; }
-  .pd-cta { align-self: flex-start; background: var(--cta); color: #04201b;
-    font-weight: 800; padding: 13px 26px; border-radius: 100px; font-size: 1rem;
-    animation: pulsar 2.6s ease-in-out infinite; }
-  @keyframes pulsar { 0%,100% { box-shadow: 0 0 0 0 rgba(0,224,184,0); transform: scale(1); }
-    50% { box-shadow: 0 0 22px 3px rgba(0,224,184,0.5); transform: scale(1.03); } }
-  @media (prefers-reduced-motion: reduce) { .pd-cta { animation: none; } }
-  .selo { position: absolute; top: 14px; left: 14px; background: var(--gold);
-    color: #0a0a12; font-weight: 800; font-size: 0.72rem; padding: 6px 12px;
-    border-radius: 100px; letter-spacing: 0.03em; z-index: 3; }
-  .prod { overflow: hidden; display: flex; flex-direction: column; }
-  .prod .thumb { position: relative; aspect-ratio: 1/1;
-    background: linear-gradient(135deg,#1a1a2e,#16213e);
-    display: flex; align-items: center; justify-content: center; }
-  .prod .thumb img { width: 100%; height: 100%; object-fit: cover; }
-  .prod .body { padding: 20px; display: flex; flex-direction: column; gap: 12px; flex: 1; }
-  .prod h3 { font-size: 1rem; font-weight: 700; line-height: 1.35;
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  .prod .ver { margin-top: auto; display: block; text-align: center; background: var(--glass);
-    border: 1px solid var(--glass-border); padding: 11px; border-radius: 100px;
-    font-weight: 700; font-size: 0.92rem; transition: background 0.2s, border-color 0.2s; }
-  .prod .ver:hover { border-color: var(--pop2); background: rgba(0,212,255,0.08); }
-  .contact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; }
-  @media (max-width: 860px) { .contact-grid { grid-template-columns: 1fr; } }
-  .contact-info { display: flex; flex-direction: column; gap: 16px; }
-  .ci { display: flex; align-items: center; gap: 14px; color: var(--muted); }
-  .ci .ico { width: 40px; height: 40px; border-radius: 10px; background: var(--glass);
-    border: 1px solid var(--glass-border); display: flex; align-items: center;
-    justify-content: center; font-size: 1.1rem; flex-shrink: 0; }
-  .ci a { color: var(--ink); font-weight: 600; }
-  .contact-btns { display: flex; flex-direction: column; gap: 14px; }
-  .contact-btns .btn { justify-content: center; width: 100%; }
-  .btn-wa { background: #25d366; color: #052e16; }
-  .btn-tg { background: #29a9eb; color: #03263a; }
-  .btn-mail { background: var(--glass); border: 1px solid var(--glass-border); color: var(--ink); }
-  .contact-btns .btn:hover { transform: translateY(-2px); }
-  footer { background: var(--bg-soft); border-top: 1px solid var(--glass-border);
-           padding: 60px 0 30px; margin-top: 40px; }
-  .foot-top { display: flex; justify-content: space-between; flex-wrap: wrap;
-              gap: 30px; margin-bottom: 40px; }
-  .foot-brand { max-width: 320px; }
-  .foot-brand .logo { font-size: 1.5rem; margin-bottom: 12px; }
-  .foot-brand p { color: var(--muted); font-size: 0.95rem; }
-  .foot-links { display: flex; gap: 50px; flex-wrap: wrap; }
-  .foot-col h4 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.08em;
-                 color: var(--muted); margin-bottom: 14px; }
-  .foot-col a { display: block; color: var(--ink); font-weight: 600; font-size: 0.95rem;
-                margin-bottom: 10px; opacity: 0.85; transition: opacity 0.2s; }
-  .foot-col a:hover { opacity: 1; color: var(--pop2); }
-  .afiliado { color: var(--muted); font-size: 0.82rem; line-height: 1.6;
-              border-top: 1px solid var(--glass-border); padding-top: 24px; margin-bottom: 16px; }
-  .copy { color: var(--muted); font-size: 0.85rem; text-align: center; }
-  .copy a { color: var(--muted); margin: 0 8px; }
-  .copy a:hover { color: var(--pop2); }
+@font-face{font-family:'Arch';src:url('topshop-fonte.woff2') format('woff2');
+  font-weight:100 900;font-stretch:62% 125%;font-display:swap}
 
-  /* ===== AJUSTES MOBILE (telas pequenas) ===== */
-  @media (max-width: 600px) {
-    .wrap { padding: 0 18px; }
-    section { padding: 56px 0; }
-    .nav-in { padding: 14px 18px; }
-    .logo { font-size: 1.15rem; }
-    .hero { padding: 64px 0 56px; }
-    .hero h1 { font-size: clamp(2rem, 9vw, 2.8rem); line-height: 1.1; margin-bottom: 20px; }
-    .hero p { font-size: 1.02rem; padding: 0 4px; }
-    .badge { font-size: 0.7rem; padding: 7px 14px; margin-bottom: 22px; }
-    .sec-title { font-size: clamp(1.7rem, 7vw, 2.2rem); }
-    .sec-sub { font-size: 1rem; margin-bottom: 36px; }
-    .hero-cta { gap: 12px; }
-    .hero-cta .btn { width: 100%; justify-content: center; }
-    .btn { padding: 14px 26px; font-size: 0.98rem; }
-    .feat { padding: 26px 22px; }
-    .pd-body { padding: 26px 22px; }
-    .pd-body h3 { font-size: 1.25rem; }
-    .prod h3 { font-size: 0.9rem; line-height: 1.3; }
-    .prod .body { padding: 12px; gap: 8px; }
-    .prod .ver { padding: 9px; font-size: 0.85rem; }
-    .difs { gap: 4px 0; }
-    .dif { padding: 14px 0; }
-    /* trava qualquer vazamento horizontal */
-    section, .wrap, .hero, .prod-destaque, .grid-3, .grid-2 { max-width: 100%; }
-    img { max-width: 100%; height: auto; }
-  }
-  @media (max-width: 380px) {
-    .hero h1 { font-size: 1.85rem; }
-    .sec-title { font-size: 1.6rem; }
-  }
+:root{
+  --void:#09070E; --sup:#150F22; --sup2:#1E1631; --linha:rgba(255,215,240,.10);
+  --ink:#F7F2EC; --muted:#9C90AE;
+  --pink:#FF3D8A; --ouro:#FFD84D; --menta:#3DFFB0;
+  --r:16px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--void);color:var(--ink);
+  font-family:'Arch','Segoe UI',system-ui,-apple-system,sans-serif;
+  line-height:1.5;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+img{max-width:100%}
+.wrap{max-width:1240px;margin:0 auto;padding:0 clamp(16px,4vw,32px)}
+:where(a,button,input):focus-visible{outline:2px solid var(--menta);
+  outline-offset:3px;border-radius:10px}
+
+/* ══ fundo em 3 camadas (parallax só no desktop) ══════════════════════════ */
+.fundo{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+.cam{position:absolute;inset:-30vh -12vw;will-change:transform}
+.cam i{position:absolute;border-radius:50%;display:block}
+.longe i{filter:blur(100px);opacity:.30}
+.longe i:nth-child(1){width:54vw;height:54vw;background:#8B1E52;top:8vh;right:-12vw;
+  animation:deriva1 26s ease-in-out infinite alternate}
+.longe i:nth-child(2){width:46vw;height:46vw;background:#2B1E6B;bottom:6vh;left:-10vw;
+  animation:deriva2 32s ease-in-out infinite alternate}
+.meio i{filter:blur(46px);opacity:.20}
+.meio i:nth-child(1){width:20vw;height:20vw;background:#FF3D8A;top:52vh;left:14vw;
+  animation:deriva2 19s ease-in-out infinite alternate}
+.meio i:nth-child(2){width:15vw;height:15vw;background:#3DFFB0;top:22vh;right:26vw;
+  opacity:.13;animation:deriva1 23s ease-in-out infinite alternate}
+.perto{position:absolute;inset:0;opacity:.5;
+  background-image:linear-gradient(var(--linha) 1px,transparent 1px),
+                   linear-gradient(90deg,var(--linha) 1px,transparent 1px);
+  background-size:72px 72px;background-position:0 var(--vy,0px),0 0;
+  -webkit-mask-image:radial-gradient(70% 55% at 50% 34%,#000,transparent 78%);
+  mask-image:radial-gradient(70% 55% at 50% 34%,#000,transparent 78%)}
+@keyframes deriva1{to{transform:translate(-7vw,9vh) scale(1.14)}}
+@keyframes deriva2{to{transform:translate(9vw,-7vh) scale(1.1)}}
+body>*:not(.fundo){position:relative;z-index:1}
+
+/* ══ topo ═════════════════════════════════════════════════════════════════ */
+header{position:sticky;top:0;z-index:40;backdrop-filter:blur(20px);
+  background:rgba(9,7,14,.72);border-bottom:1px solid transparent;
+  transition:border-color .3s,background .3s}
+header.colado{border-bottom-color:var(--linha);background:rgba(9,7,14,.92)}
+.barra{display:flex;align-items:center;gap:clamp(10px,2.5vw,22px);padding-block:13px}
+.marca{font-size:21px;font-weight:800;font-stretch:112%;letter-spacing:-.045em;
+  white-space:nowrap;display:flex;align-items:center;gap:2px}
+.marca i{font-style:normal;color:var(--pink)}
+.marca .pt{color:var(--pink);animation:pisca 3.4s ease-in-out infinite}
+@keyframes pisca{0%,92%,100%{opacity:1}96%{opacity:.25}}
+.busca{flex:1;position:relative;max-width:520px}
+.busca input{width:100%;background:rgba(255,255,255,.045);border:1px solid var(--linha);
+  color:var(--ink);border-radius:999px;padding:11px 54px 11px 44px;font:inherit;
+  font-size:15px;transition:border-color .25s,background .25s,box-shadow .25s}
+.busca input::placeholder{color:var(--muted)}
+.busca input:focus{outline:none;border-color:var(--pink);background:rgba(255,61,138,.07);
+  box-shadow:0 0 0 4px rgba(255,61,138,.10)}
+.busca .lupa{position:absolute;left:16px;top:50%;transform:translateY(-50%);
+  width:17px;height:17px;stroke:var(--muted);fill:none;stroke-width:2;
+  stroke-linecap:round;transition:stroke .25s,transform .25s;pointer-events:none}
+.busca input:focus~.lupa{stroke:var(--pink);transform:translateY(-50%) scale(1.12)}
+.atalho{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:11px;
+  color:var(--muted);border:1px solid var(--linha);border-radius:6px;padding:2px 6px;
+  pointer-events:none}
+@media(max-width:640px){.atalho{display:none}}
+.zap{background:var(--menta);color:#03291B;font-weight:700;font-size:14px;
+  padding:10px 17px;border-radius:999px;white-space:nowrap;
+  transition:transform .2s,box-shadow .2s}
+.zap:hover{transform:translateY(-2px);box-shadow:0 8px 22px rgba(61,255,176,.26)}
+@media(max-width:860px){.zap{display:none}}
+
+/* ══ herói ════════════════════════════════════════════════════════════════ */
+.heroi{display:grid;grid-template-columns:1.15fr .85fr;gap:clamp(24px,5vw,56px);
+  align-items:center;padding:clamp(30px,6vw,64px) 0 clamp(24px,4vw,40px);
+  position:relative;isolation:isolate}
+@media(max-width:900px){.heroi{grid-template-columns:1fr;gap:26px}}
+.atmos{position:absolute;top:0;bottom:0;left:50%;transform:translateX(-50%);
+  width:100vw;max-width:100vw;overflow:hidden;z-index:-2;pointer-events:none;
+  -webkit-mask-image:linear-gradient(90deg,transparent,#000 9%,#000 91%,transparent);
+  mask-image:linear-gradient(90deg,transparent,#000 9%,#000 91%,transparent)}
+.vivo{position:absolute;inset:-24%;border-radius:50%;filter:blur(66px);opacity:.42;
+  background:conic-gradient(from 0deg,rgba(255,61,138,.34),rgba(123,44,255,.30),
+    rgba(61,255,176,.14),rgba(255,216,77,.20),rgba(255,61,138,.34));
+  animation:gira 24s linear infinite}
+@keyframes gira{to{transform:rotate(1turn)}}
+.luz{position:absolute;inset:0;opacity:0;transition:opacity .55s;
+  background:radial-gradient(430px circle at var(--hx,50%) var(--hy,50%),
+    rgba(255,61,138,.15),transparent 66%)}
+.heroi:hover .luz{opacity:1}
+.rotulo{display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:700;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--pink);margin-bottom:16px}
+.rotulo::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--pink);
+  box-shadow:0 0 0 0 rgba(255,61,138,.6);animation:pulso 2s infinite}
+@keyframes pulso{70%{box-shadow:0 0 0 11px rgba(255,61,138,0)}
+  100%{box-shadow:0 0 0 0 rgba(255,61,138,0)}}
+h1{font-size:clamp(38px,7.4vw,84px);font-weight:800;font-stretch:118%;
+  line-height:.92;letter-spacing:-.045em;text-wrap:balance;
+  background:linear-gradient(100deg,var(--ink) 40%,#FFFFFF 48%,var(--ink) 56%);
+  background-size:300% 100%;background-position:135% 0;
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  animation:varre 9s ease-in-out 1.8s infinite}
+@keyframes varre{0%,62%{background-position:135% 0}100%{background-position:-35% 0}}
+h1 .risca{position:relative;display:inline-block;color:var(--pink);padding-bottom:.1em}
+h1 .risca::after{content:"";position:absolute;left:0;right:0;bottom:0;height:.075em;
+  background:var(--ouro);transform:scaleX(0);transform-origin:left;border-radius:99px;
+  animation:risca 1s cubic-bezier(.2,.7,.2,1) .5s forwards}
+@keyframes risca{to{transform:scaleX(1)}}
+.heroi p.sub{color:var(--muted);font-size:clamp(15px,2vw,18px);max-width:42ch;margin-top:18px}
+.metricas{display:flex;gap:clamp(18px,4vw,40px);margin-top:28px;flex-wrap:wrap}
+.metricas div{display:flex;flex-direction:column}
+.metricas b{font-size:clamp(24px,3.4vw,34px);font-weight:800;font-stretch:110%;
+  letter-spacing:-.03em;font-variant-numeric:tabular-nums;line-height:1}
+.metricas span{font-size:12px;color:var(--muted);letter-spacing:.06em;
+  text-transform:uppercase;margin-top:5px}
+.cta-m{display:inline-flex;align-items:center;gap:9px;background:var(--pink);color:#fff;
+  font-weight:750;font-size:15px;padding:14px 26px;border-radius:999px;margin-top:24px;
+  transition:transform .18s,box-shadow .28s;box-shadow:0 10px 30px rgba(255,61,138,.28)}
+.cta-m:hover{box-shadow:0 16px 42px rgba(255,61,138,.42)}
+.cta-m .seta{transition:transform .3s}
+.cta-m:hover .seta{transform:translateX(5px)}
+
+/* moldura 9:16 — o formato do Reels de onde a pessoa veio */
+.moldura{position:relative;aspect-ratio:9/16;max-height:520px;margin:0 auto;width:100%;
+  max-width:300px;border-radius:26px;overflow:hidden;border:1px solid var(--linha);
+  background:linear-gradient(180deg,#EFEBF4 0%,#E6E0F0 38%,#3A2E56 68%,var(--sup) 100%);
+  box-shadow:0 30px 70px rgba(0,0,0,.55);display:block;
+  transition:transform .35s cubic-bezier(.2,.7,.2,1)}
+.moldura .capa{position:absolute;top:0;left:0;width:100%;height:64%;object-fit:cover;
+  -webkit-mask-image:linear-gradient(#000 74%,transparent);
+  mask-image:linear-gradient(#000 74%,transparent);
+  animation:respira 12s ease-in-out infinite}
+.moldura .capa-fb{position:absolute;top:0;left:0;width:100%;height:64%;display:grid;
+  place-items:center;font-size:84px;font-style:normal;animation:respira 12s ease-in-out infinite}
+@keyframes respira{50%{transform:scale(1.07)}}
+.moldura .brilho{position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(60% 40% at 50% 0%,rgba(255,61,138,.30),transparent 70%)}
+.moldura .live{position:absolute;top:14px;left:14px;display:flex;align-items:center;
+  gap:6px;background:rgba(9,7,14,.7);backdrop-filter:blur(8px);
+  border:1px solid var(--linha);border-radius:999px;padding:5px 11px;
+  font-size:11px;font-weight:700}
+.moldura .live b{width:6px;height:6px;border-radius:50%;background:var(--pink);
+  animation:pulso 1.6s infinite}
+.moldura .pe{position:absolute;left:0;right:0;bottom:0;padding:18px 16px 16px;
+  background:linear-gradient(transparent,rgba(9,7,14,.94) 55%)}
+.moldura .pe h3{font-size:14px;font-weight:600;line-height:1.3;margin-bottom:9px}
+.moldura .pe .pr b{font-size:26px;color:var(--ouro)}
+.moldura .pe .pr b i{color:rgba(255,216,77,.55)}
+.moldura .pe .afer{margin-top:7px}
+
+/* ══ esteira ══════════════════════════════════════════════════════════════ */
+.esteira{border-top:1px solid var(--linha);border-bottom:1px solid var(--linha);
+  padding:13px 0;overflow:hidden;white-space:nowrap;margin:clamp(14px,3vw,26px) 0;
+  -webkit-mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);
+  mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)}
+.esteira .fita{display:inline-flex;gap:34px;animation:corre 40s linear infinite}
+.esteira:hover .fita{animation-play-state:paused}
+@keyframes corre{to{transform:translateX(-50%)}}
+.esteira span{font-size:13px;color:var(--muted);display:inline-flex;align-items:center;gap:9px}
+.esteira span::before{content:"";width:5px;height:5px;border-radius:50%;
+  background:var(--pink);flex:none}
+.esteira b{color:var(--ink);font-weight:600}
+
+/* ══ controles ════════════════════════════════════════════════════════════ */
+.controles{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:20px}
+.lojas{display:flex;gap:5px;background:rgba(255,255,255,.04);border:1px solid var(--linha);
+  border-radius:999px;padding:5px;overflow-x:auto;scrollbar-width:none;max-width:100%}
+.lojas::-webkit-scrollbar{display:none}
+.loja{border:0;background:none;color:var(--muted);font:inherit;font-size:14px;
+  font-weight:650;padding:9px 17px;border-radius:999px;cursor:pointer;white-space:nowrap;
+  position:relative;isolation:isolate;transition:color .22s}
+.loja[aria-selected="true"]{color:#fff}
+.loja .pil{position:absolute;inset:0;border-radius:999px;z-index:0;opacity:0;
+  transform:scale(.85);background:linear-gradient(120deg,var(--pink),#B4247E);
+  transition:opacity .3s,transform .3s cubic-bezier(.2,.7,.2,1)}
+.loja[aria-selected="true"] .pil{opacity:1;transform:scale(1)}
+.loja>span:not(.pil){position:relative;z-index:1}
+.loja .n{opacity:.62;margin-left:6px;font-variant-numeric:tabular-nums;font-style:normal}
+.loja:disabled{opacity:.38;cursor:not-allowed}
+.chips{display:flex;gap:7px;flex-wrap:wrap}
+.chip{border:1px solid var(--linha);background:transparent;color:var(--muted);font:inherit;
+  font-size:13px;padding:8px 14px;border-radius:999px;cursor:pointer;
+  transition:color .2s,border-color .2s,background .2s,transform .2s}
+.chip:hover{color:var(--ink);transform:translateY(-1px)}
+.chip[aria-pressed="true"]{background:var(--ink);color:#12100D;border-color:var(--ink)}
+
+/* ══ grade ════════════════════════════════════════════════════════════════ */
+.palco{position:relative}
+.holofote{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .4s;
+  background:radial-gradient(340px circle at var(--mx,50%) var(--my,50%),
+    rgba(255,61,138,.13),transparent 62%)}
+.palco:hover .holofote{opacity:1}
+.grade{display:grid;gap:clamp(11px,1.6vw,18px);
+  grid-template-columns:repeat(auto-fill,minmax(215px,1fr))}
+.card{background:linear-gradient(165deg,var(--sup),rgba(21,15,34,.6));
+  border:1px solid var(--linha);border-radius:var(--r);overflow:hidden;display:flex;
+  flex-direction:column;position:relative;
+  transition:opacity .55s,transform .4s cubic-bezier(.2,.7,.2,1),
+    border-color .3s,box-shadow .4s}
+.card.esconde{display:none}
+.js .card{opacity:0;transform:translateY(24px)}
+.js .card.dentro{opacity:1;transform:none}
+.card:hover{border-color:rgba(255,61,138,.45);box-shadow:0 22px 50px rgba(0,0,0,.5)}
+.card .foto{aspect-ratio:1;position:relative;overflow:hidden;
+  background:linear-gradient(170deg,#F6F3F8,#DDD6E6)}
+.card .foto img{width:100%;height:100%;object-fit:cover;display:block;opacity:0;
+  transition:opacity .5s,transform .6s cubic-bezier(.2,.7,.2,1)}
+.card .foto img.ok{opacity:1}
+.card:hover .foto img.ok{transform:scale(1.07)}
+.card .foto .fb{position:absolute;inset:0;display:none;place-items:center;font-size:46px;
+  font-style:normal;transition:transform .45s cubic-bezier(.2,.7,.2,1)}
+.card .foto.sem-foto{background:radial-gradient(110% 80% at 50% 12%,var(--sup2),transparent)}
+.card .foto.sem-foto .fb{display:grid}
+.card:hover .foto.sem-foto .fb{transform:scale(1.14) rotate(-4deg)}
+.card .foto.carregando{background-image:linear-gradient(100deg,
+  #E9E3F0 42%,#F9F6FC 50%,#E9E3F0 58%);background-size:280% 100%;
+  animation:esqueleto 1.25s linear infinite}
+@keyframes esqueleto{from{background-position:160% 0}to{background-position:-60% 0}}
+.card .foto::after{content:"";position:absolute;inset:0;transform:translateX(-110%);
+  pointer-events:none;background:linear-gradient(112deg,transparent 40%,
+    rgba(255,255,255,.34) 50%,transparent 60%);transition:transform .8s}
+.card:hover .foto::after{transform:translateX(110%)}
+.selo{position:absolute;top:10px;left:10px;font-size:10.5px;font-weight:750;
+  padding:4px 9px;border-radius:999px;letter-spacing:.03em;background:rgba(9,7,14,.72);
+  backdrop-filter:blur(8px);border:1px solid var(--linha);color:var(--ink);z-index:2}
+.selo.novo{background:var(--menta);color:#03291B;border-color:transparent}
+.selo.off{background:var(--ouro);color:#2A1C00;border-color:transparent;left:auto;right:10px}
+.selo.plat{top:auto;bottom:10px}
+.card .corpo{padding:13px 14px 15px;display:flex;flex-direction:column;gap:10px;flex:1}
+.card h3{font-size:14px;font-weight:550;line-height:1.35;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.card .ver{display:flex;align-items:center;justify-content:center;gap:7px;
+  border:1px solid var(--linha);border-radius:11px;padding:11px;font-size:13.5px;
+  font-weight:700;margin-top:auto;transition:background .25s,border-color .25s,color .25s}
+.card:hover .ver{background:var(--pink);border-color:var(--pink);color:#fff}
+
+/* preço — o til avisa que é média, não preço travado */
+.pr{display:flex;align-items:baseline;gap:8px}
+.pr b,.pr s{white-space:nowrap}
+.pr b{font-size:21px;font-weight:800;letter-spacing:-.025em;font-variant-numeric:tabular-nums}
+.pr b i{font-style:normal;font-weight:600;font-size:.62em;margin-right:2px;
+  position:relative;top:-.1em;color:var(--muted)}
+.pr s{color:var(--muted);font-size:12px}
+.afer{font-size:10.5px;color:var(--muted);letter-spacing:.015em;margin-top:-4px;
+  display:flex;align-items:flex-start;gap:5px;line-height:1.35}
+.afer::before{content:"";width:4px;height:4px;border-radius:50%;background:var(--muted);
+  flex:none;opacity:.7;margin-top:.42em}
+.afer.caindo{color:var(--menta)}
+.afer.caindo::before{background:var(--menta);opacity:1}
+
+.vazio{text-align:center;padding:60px 20px;color:var(--muted)}
+.vazio b{display:block;color:var(--ink);font-size:19px;margin-bottom:7px;font-weight:700}
+
+/* ══ seções de conteúdo ═══════════════════════════════════════════════════ */
+section{padding:clamp(48px,8vw,88px) 0}
+.eyebrow{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--pink);margin-bottom:12px}
+h2{font-size:clamp(26px,4.4vw,44px);font-weight:800;font-stretch:112%;
+  letter-spacing:-.035em;line-height:1.05;text-wrap:balance}
+.sec-sub{color:var(--muted);margin-top:12px;max-width:56ch;font-size:clamp(14px,1.8vw,16.5px)}
+.reveal{opacity:1}
+.js .reveal{opacity:0;transform:translateY(26px);
+  transition:opacity .7s,transform .7s cubic-bezier(.2,.7,.2,1)}
+.js .reveal.dentro{opacity:1;transform:none}
+.difs{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+  gap:10px;margin-top:30px}
+.dif{display:flex;align-items:center;gap:11px;padding:14px 16px;border-radius:13px;
+  border:1px solid var(--linha);background:rgba(255,255,255,.025);font-size:14.5px;
+  transition:border-color .25s,transform .25s}
+.dif:hover{border-color:rgba(255,61,138,.4);transform:translateY(-2px)}
+.dif .check{color:var(--ouro);font-size:15px;flex:none}
+.feats{display:grid;grid-template-columns:repeat(auto-fit,minmax(258px,1fr));
+  gap:clamp(11px,1.6vw,18px);margin-top:34px}
+.feat{padding:24px 22px 26px;border-radius:var(--r);border:1px solid var(--linha);
+  background:linear-gradient(165deg,var(--sup),rgba(21,15,34,.55));
+  transition:border-color .3s,transform .3s,box-shadow .3s}
+.feat:hover{border-color:rgba(255,61,138,.4);transform:translateY(-4px);
+  box-shadow:0 20px 44px rgba(0,0,0,.45)}
+.feat .ico{font-size:26px;margin-bottom:14px}
+.feat h3{font-size:17px;font-weight:700;margin-bottom:8px;letter-spacing:-.01em}
+.feat p{color:var(--muted);font-size:14px;line-height:1.55}
+.contato{display:grid;grid-template-columns:1fr 1fr;gap:clamp(24px,5vw,56px);
+  align-items:start}
+@media(max-width:820px){.contato{grid-template-columns:1fr}}
+.cis{display:flex;flex-direction:column;gap:10px;margin-top:8px}
+.ci{display:flex;align-items:center;gap:13px;padding:15px 17px;border-radius:13px;
+  border:1px solid var(--linha);background:rgba(255,255,255,.025);
+  transition:border-color .25s,transform .25s}
+.ci:hover{border-color:rgba(61,255,176,.42);transform:translateX(3px)}
+.ci .ico{font-size:19px;flex:none}
+.ci span{display:flex;flex-direction:column;font-size:14.5px;font-weight:600}
+.ci span i{font-style:normal;font-size:12.5px;color:var(--muted);font-weight:400;margin-top:2px}
+
+footer.wrap{border-top:1px solid var(--linha);padding-block:30px 48px;color:var(--muted);
+  font-size:13px;display:flex;gap:16px;flex-wrap:wrap;justify-content:space-between}
+footer a{border-bottom:1px solid var(--linha)}
+
+@media(max-width:560px){
+  .grade{grid-template-columns:repeat(2,1fr)}
+  .card .corpo{padding:10px 11px 12px;gap:8px}
+  .card h3{font-size:12.5px}
+  .card .ver{padding:9px;font-size:12.5px}
+  .card .foto .fb{font-size:36px}
+  /* preço empilhado: lado a lado o riscado quebrava no meio do número
+     ("R$" numa linha, "220,37" na outra) no card de duas colunas */
+  .pr{flex-direction:column;align-items:flex-start;gap:1px}
+  .pr b{font-size:17px}
+  .pr s{font-size:11px}
+  /* chips numa fita rolável: em pé eles ocupavam 3 fileiras inteiras antes
+     do primeiro produto aparecer */
+  .chips{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;
+    margin-inline:calc(-1 * clamp(16px,4vw,32px));
+    padding-inline:clamp(16px,4vw,32px)}
+  .chips::-webkit-scrollbar{display:none}
+  .chip{flex:none}
+}
+@media(prefers-reduced-motion:reduce){
+  *{animation:none!important;transition-duration:.01ms!important}
+  .js .card,.js .reveal{opacity:1;transform:none}
+  h1{background:none;-webkit-text-fill-color:var(--ink);color:var(--ink)}
+}
 </style>
 </head>
 <body>
-<nav><div class="nav-in">
-  <div class="logo">top<b>shop</b>.</div>
-  <div class="nav-links">
-    <a href="#inicio">Início</a><a href="#diferenciais">Diferenciais</a>
-    <a href="#servicos">Serviços</a><a href="#produtos">Produtos</a>
-    <a href="#contato">Contato</a>
-  </div>
-  <a href="#contato" class="btn btn-primary" style="padding:10px 22px;font-size:0.9rem;">Parcerias</a>
-</div></nav>
+<div class="fundo" aria-hidden="true">
+  <div class="cam longe" data-k="0.10"><i></i><i></i></div>
+  <div class="cam meio"  data-k="0.30"><i></i><i></i></div>
+  <div class="perto" data-k="0.55"></div>
+</div>
 
-<header class="hero" id="inicio"><div class="wrap">
-  <span class="badge">Curadoria · Conteúdo · Tecnologia</span>
-  <h1>Produtos inteligentes.<br><b>Conteúdo que converte.</b></h1>
-  <p>A topshop garimpa, testa e transforma achados em vídeos estratégicos —
-     unindo curadoria afiada e inteligência artificial pra escalar resultado.</p>
-  <div class="hero-cta">
-    <a href="#produtos" class="btn btn-primary">Ver produtos</a>
-    <a href="#contato" class="btn btn-ghost">Propor parceria</a>
+<header id="topo">
+  <div class="wrap barra">
+    <a class="marca" href="#topo">top<i>shop</i><span class="pt">.</span></a>
+    <label class="busca">
+      <input id="busca" type="search" placeholder="Buscar o achado do vídeo..."
+             autocomplete="off" aria-label="Buscar produto">
+      <svg class="lupa" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg>
+      <span class="atalho">/</span>
+    </label>
+    <a class="zap" href="{{GRUPO_TOPO}}" target="_blank" rel="noopener">Entrar no grupo</a>
   </div>
-</div></header>
+</header>
 
-<section id="diferenciais" class="wrap reveal">
-  <span class="eyebrow">Por que a topshop</span>
-  <h2 class="sec-title">Diferenciais que entregam</h2>
-  <p class="sec-sub">Não é sobre postar muito. É sobre postar o que funciona, com método e tecnologia por trás.</p>
-  <div class="difs">
-    <div class="dif"><span class="check">✦</span><span>Curadoria inteligente de produtos</span></div>
-    <div class="dif"><span class="check">✦</span><span>Conteúdo feito pra prender atenção</span></div>
-    <div class="dif"><span class="check">✦</span><span>Uso estratégico de inteligência artificial</span></div>
-    <div class="dif"><span class="check">✦</span><span>Foco em produtos úteis e virais</span></div>
-    <div class="dif"><span class="check">✦</span><span>Presença em múltiplas plataformas</span></div>
-    <div class="dif"><span class="check">✦</span><span>Mentalidade de escala</span></div>
-    <div class="dif"><span class="check">✦</span><span>Atendimento direto pra parcerias</span></div>
-    <div class="dif"><span class="check">✦</span><span>Tecnologia própria em movimento</span></div>
-  </div>
-</section>
-
-<section id="servicos" class="wrap reveal">
-  <div class="center">
-    <span class="eyebrow">O que fazemos</span>
-    <h2 class="sec-title">Serviços</h2>
-    <p class="sec-sub">Do achado ao alcance — uma operação completa de conteúdo e divulgação.</p>
-  </div>
-  <div class="grid-3">
-    <div class="glass feat"><div class="ico">📢</div><h3>Divulgação de produtos</h3><p>Seu produto apresentado pra um público pronto pra comprar.</p></div>
-    <div class="glass feat"><div class="ico">🎬</div><h3>Conteúdo para redes</h3><p>Vídeos curtos e diretos, pensados pra cada plataforma.</p></div>
-    <div class="glass feat"><div class="ico">⭐</div><h3>Reviews e demonstrações</h3><p>Demonstração honesta que mostra o produto em ação.</p></div>
-    <div class="glass feat"><div class="ico">🔗</div><h3>Estratégia de afiliados</h3><p>Links rastreáveis e conversão acompanhada de perto.</p></div>
-    <div class="glass feat"><div class="ico">🤝</div><h3>Parcerias comerciais</h3><p>Colaborações sob medida pra marcas e lojistas.</p></div>
-    <div class="glass feat"><div class="ico">⚡</div><h3>Campanhas com vídeos curtos</h3><p>Volume e ritmo de publicação pensados pra escala.</p></div>
-  </div>
-</section>
-
-<section id="produtos" class="wrap reveal">
-  <div class="center">
-    <span class="eyebrow">Achados da vez</span>
-    <h2 class="sec-title">Vitrine topshop</h2>
-    <p class="sec-sub">Os produtos que ganharam o selo de achado esperto. Busque, filtre e garanta o seu.</p>
-  </div>
-  {{VITRINE}}
-</section>
-
-<section id="contato" class="wrap reveal">
-  <div class="contact-grid">
+<main class="wrap">
+  <section class="heroi" id="inicio">
+    <div class="atmos" id="atmos"><div class="vivo"></div><div class="luz" id="luz"></div></div>
     <div>
-      <span class="eyebrow">Vamos conversar</span>
-      <h2 class="sec-title">Fale comigo</h2>
-      <p class="sec-sub" style="margin-bottom:30px;">Quer indicar um produto, propor uma parceria ou entrar nos grupos de achadinhos? Chama aí.</p>
-      <div class="contact-info">
+      <div class="rotulo">Achado de hoje</div>
+      <h1>O que você viu<br>no vídeo, <span class="risca">achou aqui</span>.</h1>
+      <p class="sub">A gente garimpa, testa e mostra. Se apareceu no Reels, o link
+         tá aqui embaixo — com preço conferido.</p>
+      <div class="metricas">
+        <div><b data-alvo="{{TOTAL}}">{{TOTAL}}</b><span>achados ativos</span></div>
+        <div><b data-alvo="{{LOJAS}}">{{LOJAS}}</b><span>lojas</span></div>
+        <div><b data-alvo="{{OFF}}">{{OFF}}</b><span>% off médio</span></div>
+      </div>
+      <a class="cta-m" href="#produtos">Ver o garimpo <span class="seta">&rarr;</span></a>
+    </div>
+    {{DESTAQUE}}
+  </section>
 
+  {{ESTEIRA}}
+
+  <section id="produtos" style="padding-top:clamp(18px,3vw,32px)">
+    {{VITRINE}}
+  </section>
+
+  <section id="diferenciais" class="reveal">
+    <span class="eyebrow">Por que a topshop</span>
+    <h2>Diferenciais que entregam</h2>
+    <p class="sec-sub">Não é sobre postar muito. É sobre postar o que funciona,
+       com método e tecnologia por trás.</p>
+    <div class="difs">
+      <div class="dif"><span class="check">&#10022;</span><span>Curadoria inteligente de produtos</span></div>
+      <div class="dif"><span class="check">&#10022;</span><span>Conteúdo feito pra prender atenção</span></div>
+      <div class="dif"><span class="check">&#10022;</span><span>Uso estratégico de inteligência artificial</span></div>
+      <div class="dif"><span class="check">&#10022;</span><span>Foco em produtos úteis e virais</span></div>
+      <div class="dif"><span class="check">&#10022;</span><span>Presença em múltiplas plataformas</span></div>
+      <div class="dif"><span class="check">&#10022;</span><span>Mentalidade de escala</span></div>
+      <div class="dif"><span class="check">&#10022;</span><span>Atendimento direto pra parcerias</span></div>
+      <div class="dif"><span class="check">&#10022;</span><span>Tecnologia própria em movimento</span></div>
+    </div>
+  </section>
+
+  <section id="servicos" class="reveal">
+    <span class="eyebrow">O que fazemos</span>
+    <h2>Serviços</h2>
+    <p class="sec-sub">Do achado ao alcance — uma operação completa de conteúdo e divulgação.</p>
+    <div class="feats">
+      <div class="feat"><div class="ico">📢</div><h3>Divulgação de produtos</h3><p>Seu produto apresentado pra um público pronto pra comprar.</p></div>
+      <div class="feat"><div class="ico">🎬</div><h3>Conteúdo para redes</h3><p>Vídeos curtos e diretos, pensados pra cada plataforma.</p></div>
+      <div class="feat"><div class="ico">⭐</div><h3>Reviews e demonstrações</h3><p>Demonstração honesta que mostra o produto em ação.</p></div>
+      <div class="feat"><div class="ico">🔗</div><h3>Estratégia de afiliados</h3><p>Links rastreáveis e conversão acompanhada de perto.</p></div>
+      <div class="feat"><div class="ico">🤝</div><h3>Parcerias comerciais</h3><p>Colaborações sob medida pra marcas e lojistas.</p></div>
+      <div class="feat"><div class="ico">⚡</div><h3>Campanhas com vídeos curtos</h3><p>Volume e ritmo de publicação pensados pra escala.</p></div>
+    </div>
+  </section>
+
+  <section id="contato" class="reveal">
+    <div class="contato">
+      <div>
+        <span class="eyebrow">Vamos conversar</span>
+        <h2>Fale comigo</h2>
+        <p class="sec-sub">Quer indicar um produto, propor uma parceria ou entrar
+           nos grupos de achadinhos? Chama aí.</p>
+      </div>
+      <div class="cis">
         {{GRUPOS}}
-        <div class="ci"><div class="ico">✉️</div><span>E-mail: <a href="mailto:{{EMAIL}}">{{EMAIL}}</a></span></div>
-        <div class="ci"><div class="ico">📍</div><span>Goiânia — GO</span></div>
-        <div class="ci"><div class="ico">📸</div><span>Instagram: <a href="{{INSTAGRAM}}" target="_blank">@topshop.__</a></span></div>
-        <div class="ci"><div class="ico">🎵</div><span>TikTok: <a href="{{TIKTOK}}" target="_blank">@topshop.__</a></span></div>
-        <div class="ci"><div class="ico">▶️</div><span>YouTube: <a href="{{YOUTUBE}}" target="_blank">TopShop_.</a></span></div>
+        <a class="ci" href="mailto:{{EMAIL}}"><span class="ico">✉️</span>
+          <span>E-mail<i>{{EMAIL}}</i></span></a>
+        <a class="ci" href="{{INSTAGRAM}}" target="_blank" rel="noopener"><span class="ico">📸</span>
+          <span>Instagram<i>@topshop.__</i></span></a>
+        <a class="ci" href="{{TIKTOK}}" target="_blank" rel="noopener"><span class="ico">🎵</span>
+          <span>TikTok<i>@topshop.__</i></span></a>
+        <a class="ci" href="{{YOUTUBE}}" target="_blank" rel="noopener"><span class="ico">▶️</span>
+          <span>YouTube<i>@TopShop._0</i></span></a>
       </div>
     </div>
-    <div class="contact-btns">
-      <a href="mailto:{{EMAIL}}" class="btn btn-mail">Enviar e-mail</a>
-      <a href="#produtos" class="btn btn-primary" style="justify-content:center;">Ver ofertas</a>
-    </div>
-  </div>
-</section>
+  </section>
+</main>
 
-<footer><div class="wrap">
-  <div class="foot-top">
-    <div class="foot-brand">
-      <div class="logo">top<b>shop</b>.</div>
-      <p>Produtos inteligentes. Conteúdo estratégico. Tecnologia em movimento.</p>
-    </div>
-    <div class="foot-links">
-      <div class="foot-col"><h4>Navegação</h4>
-        <a href="#inicio">Início</a><a href="#produtos">Produtos</a>
-        <a href="#servicos">Serviços</a><a href="#contato">Contato</a></div>
-      <div class="foot-col"><h4>Redes</h4>
-        <a href="{{INSTAGRAM}}" target="_blank">Instagram</a>
-        <a href="{{TIKTOK}}" target="_blank">TikTok</a>
-        <a href="{{YOUTUBE}}" target="_blank">YouTube</a></div>
-    </div>
-  </div>
-  <p class="afiliado">Aviso de afiliado: a topshop participa de programas de afiliados.
-     Alguns links nesta página podem gerar comissão sobre compras, sem custo adicional
-     para você. Esta página não coleta dados pessoais. As ofertas e disponibilidades são
-     de responsabilidade das lojas anunciantes.</p>
-  <p class="copy">© {{ANO}} topshop · {{TOTAL}} achados · atualizado em {{DATA}}</p>
-</div></footer>
+<footer class="wrap">
+  <span>&copy; {{ANO}} topshop &middot; conteúdo publicitário &middot; links de afiliado
+    &middot; atualizado em {{DATA}}</span>
+  <span><a href="{{INSTAGRAM}}" target="_blank" rel="noopener">Instagram</a>
+    &middot; <a href="{{TIKTOK}}" target="_blank" rel="noopener">TikTok</a>
+    &middot; <a href="{{YOUTUBE}}" target="_blank" rel="noopener">YouTube</a></span>
+</footer>
 
 <script>
-  const reveals = document.querySelectorAll('.reveal');
-  function revelarTudo() { reveals.forEach(el => el.classList.add('in')); }
-  if ('IntersectionObserver' in window) {
-    const obs = new IntersectionObserver((entries) => {
-      entries.forEach(e => {
-        if (e.isIntersecting) { e.target.classList.add('in'); obs.unobserve(e.target); }
-      });
-    }, { threshold: 0, rootMargin: '0px 0px -8% 0px' });
-    reveals.forEach(el => obs.observe(el));
-    // rede de segurança: no celular, uma seção mais alta que a tela pode nunca
-    // "intersectar" o suficiente e ficaria invisível (opacity:0). Depois de um
-    // tempinho, mostra tudo de qualquer jeito.
-    setTimeout(revelarTudo, 1600);
-  } else {
-    revelarTudo();
-  }
+/* a classe .js liga as animações de entrada. Sem JS, tudo já nasce visível —
+   os cards vêm prontos do servidor, então a vitrine funciona mesmo assim. */
+document.documentElement.className += ' js';
+var calmo = matchMedia('(prefers-reduced-motion: reduce)').matches;
+var fino  = matchMedia('(pointer:fine)').matches;
+if (calmo) document.documentElement.className =
+  document.documentElement.className.replace(' js', '');
 
-  // Busca + filtro da vitrine
-  const busca = document.getElementById('busca');
-  if (busca) {
-    const cards = Array.from(document.querySelectorAll('.prod, .prod-destaque'));
-    const semRes = document.getElementById('sem-res');
-    const filtros = document.querySelectorAll('.filtro');
-    const filtrosPlat = document.querySelectorAll('.filtro-plat');
-    let catAtiva = 'todos';
-    let platAtiva = 'todos';
-    function aplicar() {
-      const termo = busca.value.trim().toLowerCase();
-      let achou = 0;
-      cards.forEach(function(c) {
-        const alvo = c.getAttribute('data-busca') || '';
-        const cat = c.getAttribute('data-categoria') || '';
-        const plat = c.getAttribute('data-plataforma') || 'shopee';
-        const okB = !termo || alvo.indexOf(termo) !== -1;
-        const okC = catAtiva === 'todos' || cat === catAtiva;
-        const okP = platAtiva === 'todos' || plat === platAtiva;
-        const mostra = okB && okC && okP;
-        c.style.display = mostra ? '' : 'none';
-        if (mostra) achou++;
+/* ── fotos: esqueleto -> ok, ou volta pro emoji se a CDN falhar ─────────── */
+document.querySelectorAll('.foto img').forEach(function(im){
+  var box = im.parentNode;
+  var pronto = function(){ box.classList.remove('carregando'); im.classList.add('ok'); };
+  var falhou = function(){ box.classList.remove('carregando');
+                           box.classList.add('sem-foto'); im.remove(); };
+  if (im.complete) { im.naturalWidth ? pronto() : falhou(); return; }
+  im.addEventListener('load', pronto);
+  im.addEventListener('error', falhou);
+});
+
+/* ── revelação em cascata ───────────────────────────────────────────────── */
+var obs = new IntersectionObserver(function(ents){
+  ents.forEach(function(en){
+    if (!en.isIntersecting) return;
+    var el = en.target, i = +(el.dataset.i || 0);
+    setTimeout(function(){ el.classList.add('dentro'); }, (i % 8) * 55);
+    obs.unobserve(el);
+  });
+}, {rootMargin: '0px 0px -8% 0px'});
+document.querySelectorAll('.card').forEach(function(c, i){
+  c.dataset.i = i; obs.observe(c);
+});
+document.querySelectorAll('.reveal').forEach(function(s){ obs.observe(s); });
+
+/* ── números do herói subindo (o valor certo já está no HTML) ───────────── */
+document.querySelectorAll('.metricas b').forEach(function(el){
+  var alvo = +el.dataset.alvo || 0;
+  if (calmo || !alvo) return;
+  var t0 = null;
+  requestAnimationFrame(function passo(t){
+    if (!t0) t0 = t;
+    var k = Math.min(1, (t - t0) / 1100), e = 1 - Math.pow(1 - k, 3);
+    el.textContent = Math.round(alvo * e);
+    if (k < 1) requestAnimationFrame(passo);
+  });
+});
+
+/* ── filtros e busca: só mostram e escondem o que já veio pronto ────────── */
+var st = {plat: 'todos', cat: 'todos', q: ''};
+var cards = [].slice.call(document.querySelectorAll('.card'));
+var semRes = document.getElementById('sem-res');
+
+function aplicar(){
+  var visiveis = 0;
+  cards.forEach(function(c){
+    var ok = (st.plat === 'todos' || c.dataset.plataforma === st.plat)
+          && (st.cat === 'todos' || c.dataset.categoria === st.cat)
+          && (!st.q || (c.dataset.busca || '').indexOf(st.q) > -1);
+    c.classList.toggle('esconde', !ok);
+    if (ok) visiveis++;
+  });
+  if (semRes) semRes.style.display = visiveis ? 'none' : '';
+}
+
+var caixaLojas = document.getElementById('filtros-plat');
+if (caixaLojas) caixaLojas.addEventListener('click', function(e){
+  var b = e.target.closest('.loja');
+  if (!b || b.disabled) return;
+  caixaLojas.querySelectorAll('.loja').forEach(function(o){
+    o.setAttribute('aria-selected', String(o === b)); });
+  st.plat = b.dataset.plat; aplicar();
+});
+var caixaCats = document.getElementById('filtros');
+if (caixaCats) caixaCats.addEventListener('click', function(e){
+  var b = e.target.closest('.chip');
+  if (!b) return;
+  caixaCats.querySelectorAll('.chip').forEach(function(o){
+    o.setAttribute('aria-pressed', String(o === b)); });
+  st.cat = b.dataset.filtro; aplicar();
+});
+var inp = document.getElementById('busca');
+if (inp){
+  inp.addEventListener('input', function(e){
+    st.q = e.target.value.toLowerCase().trim(); aplicar();
+  });
+  document.addEventListener('keydown', function(e){
+    if (e.key === '/' && document.activeElement !== inp){ e.preventDefault(); inp.focus(); }
+  });
+}
+
+/* ── holofote sobre a grade e inclinação 3D dos cards ───────────────────── */
+var palco = document.querySelector('.palco'), holo = document.getElementById('holofote');
+if (palco && holo) palco.addEventListener('pointermove', function(e){
+  var r = palco.getBoundingClientRect();
+  holo.style.setProperty('--mx', (e.clientX - r.left) + 'px');
+  holo.style.setProperty('--my', (e.clientY - r.top) + 'px');
+});
+if (!calmo && fino) cards.forEach(function(c){
+  c.addEventListener('pointermove', function(e){
+    var r = c.getBoundingClientRect();
+    var x = (e.clientX - r.left) / r.width - .5, y = (e.clientY - r.top) / r.height - .5;
+    c.style.transform = 'perspective(760px) rotateX(' + (-y * 7).toFixed(2) +
+      'deg) rotateY(' + (x * 7).toFixed(2) + 'deg) translateY(-5px)';
+  });
+  c.addEventListener('pointerleave', function(){ c.style.transform = ''; });
+});
+
+/* ── herói: luz no cursor e moldura acompanhando ────────────────────────── */
+var heroi = document.querySelector('.heroi'), luz = document.getElementById('luz');
+var atmos = document.getElementById('atmos'), mold = document.getElementById('moldura');
+var giro = {x:0, y:0}, desloc = 0;
+function porMoldura(){
+  if (!mold) return;
+  mold.style.transform = 'perspective(1000px) translateY(' + desloc.toFixed(1) + 'px)' +
+    ' rotateY(' + giro.x.toFixed(2) + 'deg) rotateX(' + giro.y.toFixed(2) + 'deg)';
+}
+if (!calmo && fino && heroi){
+  heroi.addEventListener('pointermove', function(e){
+    /* medido contra .atmos, que é mais largo que o herói */
+    var r = atmos.getBoundingClientRect();
+    luz.style.setProperty('--hx', (e.clientX - r.left) + 'px');
+    luz.style.setProperty('--hy', (e.clientY - r.top) + 'px');
+  });
+  addEventListener('pointermove', function(e){
+    giro.x = (e.clientX / innerWidth - .5) * 9;
+    giro.y = -(e.clientY / innerHeight - .5) * 6;
+    porMoldura();
+  });
+}
+
+/* ── profundidade: 3 camadas em velocidades diferentes, só no desktop ────
+   No celular o parallax de scroll engasga e a gente perde mais do que ganha —
+   e o tráfego daqui vem quase todo da bio do Instagram. */
+var camadas = [].slice.call(document.querySelectorAll('.cam'));
+var perto = document.querySelector('.perto');
+if (!calmo && fino && matchMedia('(min-width:900px)').matches){
+  var agendado = false;
+  addEventListener('scroll', function(){
+    if (agendado) return;
+    agendado = true;
+    requestAnimationFrame(function(){
+      var y = scrollY;
+      camadas.forEach(function(c){
+        c.style.transform = 'translate3d(0,' + (-y * (+c.dataset.k)).toFixed(1) + 'px,0)';
       });
-      if (semRes) semRes.style.display = achou === 0 ? 'block' : 'none';
-    }
-    busca.addEventListener('input', aplicar);
-    filtros.forEach(function(b) {
-      b.addEventListener('click', function() {
-        filtros.forEach(function(x) { x.classList.remove('ativo'); });
-        b.classList.add('ativo');
-        catAtiva = b.getAttribute('data-filtro');
-        aplicar();
-      });
+      if (perto) perto.style.setProperty('--vy', (-y * (+perto.dataset.k)).toFixed(1) + 'px');
+      desloc = Math.max(-26, -y * 0.06);
+      porMoldura();
+      agendado = false;
     });
-    filtrosPlat.forEach(function(b) {
-      b.addEventListener('click', function() {
-        filtrosPlat.forEach(function(x) { x.classList.remove('ativo'); });
-        b.classList.add('ativo');
-        platAtiva = b.getAttribute('data-plat');
-        aplicar();
-      });
-    });
-  }
+  }, {passive:true});
+}
+
+addEventListener('scroll', function(){
+  document.getElementById('topo').classList.toggle('colado', scrollY > 8);
+}, {passive:true});
 </script>
 </body>
-</html>"""
+</html>
+"""
 
 
 def main():

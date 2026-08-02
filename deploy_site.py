@@ -29,6 +29,11 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent
 SITE_REPO = Path(os.environ.get("TOPSHOP_SITE_DIR", str(Path.home() / "topshop-site")))
 HEALTH_CACHE = BASE_DIR / "shared" / "health_cache.json"
+# A fonte da marca vai como ARQUIVO separado, não embutida em base64 no HTML:
+# embutida ela engorda o index em ~85KB e atrasa a primeira pintura. Como
+# arquivo, o texto aparece na hora com a fonte do sistema e troca quando a
+# nossa chega (font-display:swap) — quem vem do Reels no 4G não fica no branco.
+FONTE = BASE_DIR / "assets" / "topshop-fonte.woff2"
 HEALTH_TTL = 6 * 3600   # re-checa cada produto no máx. 1x a cada 6h
 _UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36"
 
@@ -250,6 +255,23 @@ def _deduplicar(produtos, cache):
     return saida
 
 
+def _publicar_fonte():
+    """Copia a fonte pro repositório do site. Devolve True se mudou algo.
+
+    Sem o arquivo o site não quebra: o @font-face falha e o navegador usa a
+    fonte do sistema, que já está na lista de fallback."""
+    if not FONTE.exists():
+        _log(f"fonte não encontrada em {FONTE} — o site usa a fonte do sistema")
+        return False
+    destino = SITE_REPO / FONTE.name
+    dados = FONTE.read_bytes()
+    if destino.exists() and destino.read_bytes() == dados:
+        return False
+    destino.write_bytes(dados)
+    _log(f"fonte publicada: {FONTE.name} ({len(dados) / 1024:.0f} KB)")
+    return True
+
+
 def _git(*args):
     return subprocess.run(["git", "-C", str(SITE_REPO), *args],
                           capture_output=True, text=True)
@@ -294,15 +316,19 @@ def main():
         except Exception as e:
             _log(f"não consegui enriquecer preços: {str(e)[:80]}")
 
+    mudou_fonte = _publicar_fonte()
+
     html = B.gerar_site(produtos)
     idx = SITE_REPO / "index.html"
+    mudou_html = not (idx.exists() and idx.read_text(encoding="utf-8") == html)
 
-    if idx.exists() and idx.read_text(encoding="utf-8") == html:
+    if not mudou_html and not mudou_fonte:
         _log("site sem mudança — não precisa subir")
         return 0
-    idx.write_text(html, encoding="utf-8")
+    if mudou_html:
+        idx.write_text(html, encoding="utf-8")
 
-    _git("add", "index.html")
+    _git("add", "-A")
     c = _git("commit", "-m", f"vitrine: {len(produtos)} produtos (auto)")
     if c.returncode not in (0, 1):   # 1 = nada pra commitar (ok)
         _log("commit falhou: " + (c.stderr or c.stdout)[:200])
