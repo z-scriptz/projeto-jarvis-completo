@@ -289,7 +289,7 @@ def buscar(termos: list, diag: bool = False) -> dict:
         _log("playwright não instalado (pip install playwright && playwright install chromium)")
         return {}
 
-    saida, bloqueou = {}, False
+    saida, bloqueou, vazios = {}, False, 0
     with sync_playwright() as pw:
         exe = (os.environ.get("PLAYWRIGHT_CHROMIUM") or "").strip() or None
         navegador = pw.chromium.launch(
@@ -317,7 +317,7 @@ def buscar(termos: list, diag: bool = False) -> dict:
                 dados = pagina.evaluate(_EXTRAIR_JS)
             except Exception as e:
                 _log(f"   ✗ {termo[:40]}: {str(e)[:70]}")
-                saida[termo] = {"ok": False, "motivo": "erro de rede"}
+                saida[termo] = {"ok": False, "transitorio": True}
                 continue
 
             if dados.get("bloqueado"):
@@ -354,9 +354,20 @@ def buscar(termos: list, diag: bool = False) -> dict:
 
             organicos = [a for a in achados if not a["patrocinado"] and a["titulo"]]
             if not organicos:
-                _log(f"   ✗ {termo[:40]}: nenhum resultado orgânico")
-                saida[termo] = {"ok": False, "motivo": "sem resultado"}
+                # NÃO cacheia: página vazia é quase sempre passageira. Medido em
+                # produção — "Copo batedor de ovos" resolveu em três rodadas e
+                # voltou vazio na quarta. Gravar isso marcaria pra sempre um
+                # termo que funciona. Sem `motivo`, o cache ignora.
+                vazios += 1
+                _log(f"   ✗ {termo[:40]}: sem resultado (tento de novo depois)")
+                saida[termo] = {"ok": False, "transitorio": True}
+                if vazios >= 2:
+                    _log("   🛑 duas buscas vazias seguidas — a Amazon está")
+                    _log("      servindo página vazia. Encerrando a rodada.")
+                    _log("      (espere algumas horas; insistir só piora)")
+                    bloqueou = True
                 continue
+            vazios = 0
 
             a = organicos[0]
             r = {
@@ -426,9 +437,10 @@ def enriquecer_fila(limite: int = LIMITE_PADRAO, simular: bool = False,
 
     novos = buscar(alvo, diag=diag) if alvo else {}
     for termo, r in novos.items():
-        # recusa também vai pro cache: sem isso a próxima rodada repetiria a
-        # mesma busca ruim e gastaria requisição à toa
-        if r.get("ok") or r.get("motivo"):
+        # Cacheia decisão DURÁVEL: o acerto, e a recusa com motivo (que é
+        # julgamento sobre o produto). Falha transitória — página vazia, rede —
+        # fica de fora de propósito, pra ser tentada de novo.
+        if r.get("ok") or (r.get("motivo") and not r.get("transitorio")):
             cache[_chave(termo)] = r
     if novos and not simular:
         _cache_gravar(cache)
