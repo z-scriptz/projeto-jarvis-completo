@@ -402,7 +402,7 @@ def _toggle_plataforma_html(produtos: list) -> str:
     for p in produtos:
         conta[(p.get("plataforma") or "shopee").lower()] = \
             conta.get((p.get("plataforma") or "shopee").lower(), 0) + 1
-    if len([k for k, v in conta.items() if v]) < 2:
+    if not conta:
         return ""
     linhas = [("todos", "Tudo", len(produtos))]
     for chave, rotulo in (("shopee", "Shopee"), ("amazon", "Amazon"),
@@ -431,6 +431,21 @@ def _esteira_html(produtos: list) -> str:
         return ""
     fita = "".join(itens) * 2
     return f'<div class="esteira"><div class="fita">{fita}</div></div>'
+
+
+# Produto sem foto E sem preço não vira card. Não é regra contra a Amazon: é
+# barra de qualidade da vitrine — vale pra Shopee cuja imagem falhar também.
+# Hoje pega os links de BUSCA da Amazon, que não apontam pra um produto e por
+# isso não têm o que mostrar. O link segue valendo na legenda do vídeo, então
+# a comissão não se perde; ele só não ocupa um card que ninguém clica.
+# Vira True pra mostrar tudo de novo (quando a PA-API destravar, por exemplo).
+MOSTRAR_SEM_DADOS = False
+
+
+def _vale_mostrar(p: dict) -> bool:
+    tem_foto = bool((p.get("imagem") or "").strip())
+    tem_preco = bool((p.get("preco_resumo") or {}).get("preco"))
+    return MOSTRAR_SEM_DADOS or tem_foto or tem_preco
 
 
 def _dias_acompanhados(produtos: list) -> int:
@@ -487,6 +502,11 @@ def _grupos_html() -> str:
 
 def gerar_site(produtos: list) -> str:
     _corrigir_titulos(produtos)
+    antes = len(produtos)
+    produtos = [p for p in produtos if _vale_mostrar(p)]
+    if len(produtos) < antes:
+        log.info(f"   🚧 {antes - len(produtos)} produto(s) sem foto e sem preço "
+                 f"fora da vitrine (o link continua valendo na legenda)")
     total, lojas, off_medio = _metricas(produtos)
     destaque = _card_destaque(produtos[0]) if produtos else ""
     # imagem do 1º produto vira a prévia do link no WhatsApp/Instagram
@@ -499,6 +519,7 @@ def gerar_site(produtos: list) -> str:
                     .replace("{{GRUPO_TOPO}}", html.escape(grupo_topo))\
                     .replace("{{TOTAL}}", str(total))\
                     .replace("{{LOJAS}}", str(lojas))\
+                    .replace("{{LOJAS_ROTULO}}", "loja" if lojas == 1 else "lojas")\
                     .replace("{{OFF}}", str(off_medio))\
                     .replace("{{DIAS}}", str(_dias_acompanhados(produtos)))\
                     .replace("{{OGIMG}}", html.escape(og))\
@@ -894,7 +915,7 @@ footer a{border-bottom:1px solid var(--linha)}
          tá aqui embaixo — com preço conferido.</p>
       <div class="metricas">
         <div><b data-alvo="{{TOTAL}}">{{TOTAL}}</b><span>achados ativos</span></div>
-        <div><b data-alvo="{{LOJAS}}">{{LOJAS}}</b><span>lojas</span></div>
+        <div><b data-alvo="{{LOJAS}}">{{LOJAS}}</b><span>{{LOJAS_ROTULO}}</span></div>
         <div><b data-alvo="{{OFF}}">{{OFF}}</b><span>% off médio</span></div>
       </div>
       <a class="cta-m" href="#produtos">Ver o garimpo <span class="seta">&rarr;</span></a>
@@ -942,10 +963,10 @@ footer a{border-bottom:1px solid var(--linha)}
         <h3>dias de preço acompanhado</h3>
         <p>Por isso o preço aparece como média, com a data do lado. Preço exato
            numa página envelhece; média com data, não.</p></div>
-      <div class="prova"><b>{{LOJAS}}</b>
-        <h3>lojas, um lugar só</h3>
-        <p>Shopee e Amazon na mesma vitrine, com o filtro em cima.
-           Mercado Livre entra quando o primeiro produto de lá chegar.</p></div>
+      <div class="prova"><b>{{OFF}}%</b>
+        <h3>de desconto médio</h3>
+        <p>O selo amarelo só aparece a partir de 15%. Abaixo disso não é
+           desconto, é ruído — e a gente não põe selo por pôr.</p></div>
     </div>
   </section>
 
