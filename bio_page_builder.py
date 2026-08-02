@@ -433,6 +433,16 @@ def _esteira_html(produtos: list) -> str:
     return f'<div class="esteira"><div class="fita">{fita}</div></div>'
 
 
+def _dias_acompanhados(produtos: list) -> int:
+    """Há quantos dias a gente acompanha o preço do produto mais antigo.
+
+    É o número que sustenta a frase 'a gente mostra média, não chute' — e ele
+    cresce sozinho a cada rodada do deploy. Enquanto for pequeno, aparece
+    pequeno: não vale inflar."""
+    return max([(p.get("preco_resumo") or {}).get("obs", 0) for p in produtos]
+               or [0])
+
+
 def _metricas(produtos: list) -> tuple:
     """(achados, lojas, % off médio) — números do herói, calculados aqui e
     animados no JS a partir daqui. Sem JS, o número certo já está no HTML."""
@@ -490,6 +500,7 @@ def gerar_site(produtos: list) -> str:
                     .replace("{{TOTAL}}", str(total))\
                     .replace("{{LOJAS}}", str(lojas))\
                     .replace("{{OFF}}", str(off_medio))\
+                    .replace("{{DIAS}}", str(_dias_acompanhados(produtos)))\
                     .replace("{{OGIMG}}", html.escape(og))\
                     .replace("{{ANO}}", time.strftime("%Y"))\
                     .replace("{{DATA}}", time.strftime("%d/%m/%Y"))\
@@ -786,23 +797,31 @@ h2{font-size:clamp(26px,4.4vw,44px);font-weight:800;font-stretch:112%;
 .js .reveal{opacity:0;transform:translateY(26px);
   transition:opacity .7s,transform .7s cubic-bezier(.2,.7,.2,1)}
 .js .reveal.dentro{opacity:1;transform:none}
-.difs{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
-  gap:10px;margin-top:30px}
-.dif{display:flex;align-items:center;gap:11px;padding:14px 16px;border-radius:13px;
-  border:1px solid var(--linha);background:rgba(255,255,255,.025);font-size:14.5px;
-  transition:border-color .25s,transform .25s}
-.dif:hover{border-color:rgba(255,61,138,.4);transform:translateY(-2px)}
-.dif .check{color:var(--ouro);font-size:15px;flex:none}
-.feats{display:grid;grid-template-columns:repeat(auto-fit,minmax(258px,1fr));
-  gap:clamp(11px,1.6vw,18px);margin-top:34px}
-.feat{padding:24px 22px 26px;border-radius:var(--r);border:1px solid var(--linha);
-  background:linear-gradient(165deg,var(--sup),rgba(21,15,34,.55));
+/* passos numerados: aqui a numeração significa ordem de verdade — é a
+   sequência que a pessoa percorre, não enfeite */
+.passos{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+  gap:clamp(11px,1.6vw,18px);margin-top:34px;counter-reset:passo}
+.passo{padding:26px 22px 28px;border-radius:var(--r);border:1px solid var(--linha);
+  background:linear-gradient(165deg,var(--sup),rgba(21,15,34,.55));position:relative;
   transition:border-color .3s,transform .3s,box-shadow .3s}
-.feat:hover{border-color:rgba(255,61,138,.4);transform:translateY(-4px);
+.passo:hover{border-color:rgba(255,61,138,.4);transform:translateY(-4px);
   box-shadow:0 20px 44px rgba(0,0,0,.45)}
-.feat .ico{font-size:26px;margin-bottom:14px}
-.feat h3{font-size:17px;font-weight:700;margin-bottom:8px;letter-spacing:-.01em}
-.feat p{color:var(--muted);font-size:14px;line-height:1.55}
+.passo .num{display:grid;place-items:center;width:34px;height:34px;border-radius:50%;
+  background:var(--pink);color:#fff;font-weight:800;font-size:15px;margin-bottom:16px}
+.passo h3{font-size:17px;font-weight:700;margin-bottom:8px;letter-spacing:-.01em}
+.passo p{color:var(--muted);font-size:14px;line-height:1.55}
+/* provas: o número é o argumento, então ele é que fica grande */
+.provas{display:grid;grid-template-columns:repeat(auto-fit,minmax(258px,1fr));
+  gap:clamp(11px,1.6vw,18px);margin-top:34px}
+.prova{padding:24px 22px 26px;border-radius:var(--r);border:1px solid var(--linha);
+  background:rgba(255,255,255,.025);transition:border-color .3s,transform .3s}
+.prova:hover{border-color:rgba(61,255,176,.4);transform:translateY(-3px)}
+.prova b{display:block;font-size:clamp(38px,5.4vw,52px);font-weight:800;
+  font-stretch:110%;letter-spacing:-.04em;line-height:1;color:var(--menta);
+  font-variant-numeric:tabular-nums}
+.prova h3{font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--ink);margin:10px 0 10px}
+.prova p{color:var(--muted);font-size:14px;line-height:1.55}
 .contato{display:grid;grid-template-columns:1fr 1fr;gap:clamp(24px,5vw,56px);
   align-items:start}
 @media(max-width:820px){.contato{grid-template-columns:1fr}}
@@ -889,34 +908,44 @@ footer a{border-bottom:1px solid var(--linha)}
     {{VITRINE}}
   </section>
 
-  <section id="diferenciais" class="reveal">
-    <span class="eyebrow">Por que a topshop</span>
-    <h2>Diferenciais que entregam</h2>
-    <p class="sec-sub">Não é sobre postar muito. É sobre postar o que funciona,
-       com método e tecnologia por trás.</p>
-    <div class="difs">
-      <div class="dif"><span class="check">&#10022;</span><span>Curadoria inteligente de produtos</span></div>
-      <div class="dif"><span class="check">&#10022;</span><span>Conteúdo feito pra prender atenção</span></div>
-      <div class="dif"><span class="check">&#10022;</span><span>Uso estratégico de inteligência artificial</span></div>
-      <div class="dif"><span class="check">&#10022;</span><span>Foco em produtos úteis e virais</span></div>
-      <div class="dif"><span class="check">&#10022;</span><span>Presença em múltiplas plataformas</span></div>
-      <div class="dif"><span class="check">&#10022;</span><span>Mentalidade de escala</span></div>
-      <div class="dif"><span class="check">&#10022;</span><span>Atendimento direto pra parcerias</span></div>
-      <div class="dif"><span class="check">&#10022;</span><span>Tecnologia própria em movimento</span></div>
+  <section id="como" class="reveal">
+    <span class="eyebrow">Como funciona</span>
+    <h2>Do vídeo pro carrinho, sem enrolação</h2>
+    <p class="sec-sub">A gente garimpa e testa. Você só precisa do link certo —
+       e ele tá sempre aqui.</p>
+    <div class="passos">
+      <div class="passo"><span class="num">1</span>
+        <h3>Você viu no vídeo</h3>
+        <p>Todo achado que aparece no nosso Reels passou por garimpo e teste antes.</p></div>
+      <div class="passo"><span class="num">2</span>
+        <h3>Achou aqui</h3>
+        <p>O produto do vídeo entra nesta página no mesmo dia, com o link certo.
+           Nada de procurar no perfil.</p></div>
+      <div class="passo"><span class="num">3</span>
+        <h3>Compra na loja oficial</h3>
+        <p>O link leva direto pra Shopee ou Amazon. A compra é lá, no preço deles,
+           com a garantia deles.</p></div>
     </div>
   </section>
 
-  <section id="servicos" class="reveal">
-    <span class="eyebrow">O que fazemos</span>
-    <h2>Serviços</h2>
-    <p class="sec-sub">Do achado ao alcance — uma operação completa de conteúdo e divulgação.</p>
-    <div class="feats">
-      <div class="feat"><div class="ico">📢</div><h3>Divulgação de produtos</h3><p>Seu produto apresentado pra um público pronto pra comprar.</p></div>
-      <div class="feat"><div class="ico">🎬</div><h3>Conteúdo para redes</h3><p>Vídeos curtos e diretos, pensados pra cada plataforma.</p></div>
-      <div class="feat"><div class="ico">⭐</div><h3>Reviews e demonstrações</h3><p>Demonstração honesta que mostra o produto em ação.</p></div>
-      <div class="feat"><div class="ico">🔗</div><h3>Estratégia de afiliados</h3><p>Links rastreáveis e conversão acompanhada de perto.</p></div>
-      <div class="feat"><div class="ico">🤝</div><h3>Parcerias comerciais</h3><p>Colaborações sob medida pra marcas e lojistas.</p></div>
-      <div class="feat"><div class="ico">⚡</div><h3>Campanhas com vídeos curtos</h3><p>Volume e ritmo de publicação pensados pra escala.</p></div>
+  <section id="confianca" class="reveal">
+    <span class="eyebrow">Por que confiar no link</span>
+    <h2>A vitrine se corrige sozinha</h2>
+    <p class="sec-sub">Nenhuma dessas frases é promessa: é o que o sistema faz
+       todo dia, e o número ao lado sai dele.</p>
+    <div class="provas">
+      <div class="prova"><b>{{TOTAL}}</b>
+        <h3>produtos no ar agora</h3>
+        <p>Conferidos em {{DATA}}. Produto que sai do ar some da vitrine sozinho —
+           você não clica em link morto.</p></div>
+      <div class="prova"><b>{{DIAS}}</b>
+        <h3>dias de preço acompanhado</h3>
+        <p>Por isso o preço aparece como média, com a data do lado. Preço exato
+           numa página envelhece; média com data, não.</p></div>
+      <div class="prova"><b>{{LOJAS}}</b>
+        <h3>lojas, um lugar só</h3>
+        <p>Shopee e Amazon na mesma vitrine, com o filtro em cima.
+           Mercado Livre entra quando o primeiro produto de lá chegar.</p></div>
     </div>
   </section>
 
