@@ -39,7 +39,7 @@ import shutil
 import signal
 import argparse
 from pathlib import Path
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 
 try:
     from shared.logger import get_logger
@@ -95,6 +95,18 @@ DEFAULTS = {
     # o teto pra abrir a torneira em rampa (2 → 3 → 4-5/conta/dia).
     "post_por_conta":             False,
     "max_posts_por_conta_dia":    4,
+    # ── Pirâmide semanal ────────────────────────────────────────────────
+    # Volume igual todo dia faz os Reels da MESMA conta competirem entre si:
+    # eles disputam a mesma janela de entrega, e conta em crescimento não tem
+    # público pra sustentar 3-4/dia. A pirâmide concentra nos dias de pico e
+    # dá respiro no meio da semana, mantendo a média semanal.
+    # Índice = dia da semana (0=segunda ... 6=domingo). Vale POR CONTA.
+    # Lista vazia/ausente = desliga e volta a usar max_posts_por_conta_dia.
+    "posts_por_dia_semana":       [3, 2, 1, 3, 2, 1, 0],
+    # Em dia de volume baixo, QUAIS horários usar. Os primeiros da lista são
+    # escolhidos primeiro; o que não estiver aqui entra depois, na ordem do
+    # relógio. Vazio = ordem cronológica (o de sempre).
+    "prioridade_horarios":        [],
     # Validade da esteira, em dias. Oferta de afiliado envelhece: preço muda e o
     # link morre, então publicar pacote velho queima alcance com oferta vencida.
     # O que passar disso sai da fila (vai pra fila_vencida/, não é apagado).
@@ -292,6 +304,53 @@ def _desvio_do_horario(hhmm: str, cfg: dict, quando: date = None) -> int:
     return n % (2 * faixa + 1) - faixa
 
 
+def _teto_do_dia(cfg: dict, quando: date = None) -> int:
+    """Quantos posts CADA conta faz no dia informado (pirâmide semanal).
+
+    Volume chapado todo dia faz os Reels da mesma conta brigarem entre si pela
+    mesma janela de entrega. A pirâmide mantém a média semanal mas concentra
+    nos dias de pico. Domingo em 0 = descanso.
+    """
+    piramide = cfg.get("posts_por_dia_semana")
+    padrao = int(cfg.get("max_posts_por_conta_dia", 3))
+    if not piramide:
+        return padrao                       # pirâmide desligada
+    try:
+        return max(0, int(piramide[(quando or date.today()).weekday()]))
+    except (TypeError, ValueError, IndexError, KeyError):
+        log.warning("   ⚠️  posts_por_dia_semana inválido (precisa de 7 números, "
+                    f"segunda→domingo): {piramide!r} — usando {padrao}/dia")
+        return padrao
+
+
+def _posts_previstos(cfg: dict, dias: int, quando: date = None) -> int:
+    """Quantos posts cada conta vai fazer nos próximos `dias` dias.
+
+    Serve pro colchão de estoque. Com a pirâmide, multiplicar pelo teto do dia
+    erraria feio: sábado (1) pediria estoque pra 3 sábados, e a segunda
+    seguinte (3) chegaria seca. Somar o que vem de verdade acerta sempre.
+    """
+    base = quando or date.today()
+    return sum(_teto_do_dia(cfg, base + timedelta(days=i)) for i in range(max(0, dias)))
+
+
+def _slots_de_hoje(cfg: dict, quando: date = None) -> list:
+    """Os horários que valem hoje, já cortados pelo teto da pirâmide.
+
+    Em dia de 1 post só, qual dos 4 slots usar é decisão de estratégia, não do
+    relógio — daí o prioridade_horarios. Sem ele, vale a ordem cronológica.
+    """
+    horarios = list(cfg.get("horarios") or [])
+    n = _teto_do_dia(cfg, quando)
+    if n <= 0:
+        return []
+    if n >= len(horarios):
+        return horarios
+    pref = [h for h in (cfg.get("prioridade_horarios") or []) if h in horarios]
+    escolhidos = (pref + [h for h in horarios if h not in pref])[:n]
+    return sorted(escolhidos, key=_hora_para_min)
+
+
 def _horario_real(hhmm: str, cfg: dict, quando: date = None) -> int:
     """Minuto do dia em que o slot vai REALMENTE sair hoje (já com desvio).
     Nunca antes da janela — o desvio negativo não fura o 'não posta cedo'."""
@@ -316,7 +375,8 @@ def _horario_devido(cfg: dict, hist: dict) -> str | None:
     hoje = str(date.today())
     postados_hoje = hist["por_dia"].get(hoje, {})
 
-    for hhmm in cfg["horarios"]:
+    # só os slots que a pirâmide deixou de pé hoje (domingo = nenhum)
+    for hhmm in _slots_de_hoje(cfg):
         # o desvio pode puxar o slot pra antes da janela — aí vale a janela
         alvo = _horario_real(hhmm, cfg)
         if alvo < 0:
@@ -642,7 +702,7 @@ def _priorizar_por_estoque(candidatos: list, quantidade: int, cfg: dict) -> list
                     "produzindo só por comissão")
         return candidatos[:quantidade]
 
-    alvo = max(1, dias * int(cfg.get("max_posts_por_conta_dia", 3)))
+    alvo = max(1, _posts_previstos(cfg, dias))
     estoque = _estoque_por_conta()
 
     # No contas.json o nicho é a CHAVE ("beleza", "tech"); só o "_default" traz o
@@ -757,7 +817,7 @@ def ciclo_postagem(cfg: dict, hist: dict, dry_run: bool) -> dict:
     # MODO BALANCEADO (opt-in): posta 1 vídeo de CADA conta neste slot, respeitando
     # o teto diário por conta. Assim beauty/tech/geral saem no mesmo ritmo.
     if cfg.get("post_por_conta"):
-        teto = int(cfg.get("max_posts_por_conta_dia", 4))
+        teto = _teto_do_dia(cfg)
         alvos = _um_por_conta_sob_teto(hist, teto)
         if not alvos:
             log.warning("   ⚠️  Nada pra postar (esteira vazia ou todas as contas "
@@ -1115,6 +1175,18 @@ def mostrar_status():
     # Postagem hoje
     hoje = str(date.today())
     postados_hoje = hist["por_dia"].get(hoje, {})
+    if cfg.get("posts_por_dia_semana"):
+        DIAS = ["segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"]
+        teto_hoje = _teto_do_dia(cfg)
+        semana = cfg["posts_por_dia_semana"]
+        print(f"\n  🔺 Pirâmide: {DIAS[date.today().weekday()]} = "
+              f"{teto_hoje} post(s) por conta"
+              + ("  (dia de descanso)" if teto_hoje == 0 else ""))
+        try:
+            print(f"     semana: {'/'.join(str(int(n)) for n in semana)}"
+                  f"  =  {sum(int(n) for n in semana)} por conta")
+        except (TypeError, ValueError):
+            print(f"     semana: {semana!r}  (inválido — usando o teto fixo)")
     print(f"\n  📤 Postados hoje ({hoje}):")
     if postados_hoje:
         for horario, produto in sorted(postados_hoje.items()):
@@ -1127,7 +1199,7 @@ def mostrar_status():
     # mostra a hora de VERDADE (com o desvio de hoje), não a do config —
     # senão o status promete 09:00 e o post sai 09:06.
     pendentes = []
-    for h in cfg["horarios"]:
+    for h in _slots_de_hoje(cfg):
         real = _horario_real(h, cfg)
         if real > agora and h not in postados_hoje:
             marca = _min_para_hora(real)
