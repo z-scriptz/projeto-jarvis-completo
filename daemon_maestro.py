@@ -33,6 +33,8 @@ import os
 import sys
 import json
 import time
+import random
+import hashlib
 import shutil
 import signal
 import argparse
@@ -106,6 +108,15 @@ DEFAULTS = {
     # ligue depois da aprovação (+ conta pública + credenciais de produção no .env).
     "postar_tiktok":              False,
     "tolerancia_min":             10,
+    # ── Horário com cara de gente ──────────────────────────────────────
+    # Postar 09:00 cravado todo dia, e as contas todas no mesmo minuto, é
+    # padrão de robô. Duas medidas:
+    #   desvio_max_min      move o slot alguns minutos POR DIA (hoje 09:03,
+    #                       amanhã 08:57). 0 desliga.
+    #   intervalo_contas_min espera entre uma conta e outra dentro do mesmo
+    #                       slot, pra as 3 não dispararem juntas. [0,0] desliga.
+    "desvio_max_min":             8,
+    "intervalo_contas_min":       [2, 7],
     "janela_inicio":              "08:00",   # não posta antes
     "janela_fim":                 "23:00",   # não posta depois
 
@@ -266,6 +277,35 @@ def _dentro_da_janela(cfg: dict) -> bool:
     return ini <= agora <= fim
 
 
+def _desvio_do_horario(hhmm: str, cfg: dict, quando: date = None) -> int:
+    """Minutos de variação do slot HOJE (pode ser negativo).
+
+    Determinístico a partir de (data + horário), de propósito: o loop confere a
+    cada 60s, então um sorteio novo a cada checagem faria a janela pular e o
+    post poderia escapar do dia. Assim o desvio é o mesmo o dia inteiro e muda
+    sozinho amanhã."""
+    faixa = int(cfg.get("desvio_max_min", 0) or 0)
+    if faixa <= 0:
+        return 0
+    semente = f"{(quando or date.today()).isoformat()}|{hhmm}"
+    n = int.from_bytes(hashlib.sha256(semente.encode("utf-8")).digest()[:4], "big")
+    return n % (2 * faixa + 1) - faixa
+
+
+def _horario_real(hhmm: str, cfg: dict, quando: date = None) -> int:
+    """Minuto do dia em que o slot vai REALMENTE sair hoje (já com desvio).
+    Nunca antes da janela — o desvio negativo não fura o 'não posta cedo'."""
+    alvo = _hora_para_min(hhmm)
+    if alvo < 0:
+        return -1
+    return max(_hora_para_min(cfg["janela_inicio"]),
+               alvo + _desvio_do_horario(hhmm, cfg, quando))
+
+
+def _min_para_hora(minutos: int) -> str:
+    return f"{minutos // 60:02d}:{minutos % 60:02d}"
+
+
 def _horario_devido(cfg: dict, hist: dict) -> str | None:
     """
     Retorna o horário que está 'na hora' agora (dentro da tolerância) e que
@@ -277,7 +317,8 @@ def _horario_devido(cfg: dict, hist: dict) -> str | None:
     postados_hoje = hist["por_dia"].get(hoje, {})
 
     for hhmm in cfg["horarios"]:
-        alvo = _hora_para_min(hhmm)
+        # o desvio pode puxar o slot pra antes da janela — aí vale a janela
+        alvo = _horario_real(hhmm, cfg)
         if alvo < 0:
             continue
         # 'na hora' = entre alvo e alvo+tolerância
@@ -706,7 +747,9 @@ def ciclo_postagem(cfg: dict, hist: dict, dry_run: bool) -> dict:
         return resultado  # nenhum horário devido agora
 
     log.info("─" * 60)
-    log.info(f"📤 CICLO POSTAGEM — horário devido: {horario}")
+    desvio = _desvio_do_horario(horario, cfg)
+    log.info(f"📤 CICLO POSTAGEM — slot {horario} "
+             f"(saindo {datetime.now():%H:%M}, desvio de hoje: {desvio:+d} min)")
 
     if not dry_run:
         _expurgar_vencidos()
@@ -723,9 +766,24 @@ def ciclo_postagem(cfg: dict, hist: dict, dry_run: bool) -> dict:
             return resultado
         log.info(f"   🎯 {len(alvos)} conta(s) neste slot (teto {teto}/dia): "
                  + ", ".join(f"{c}" for _s, c in alvos))
+        # Espalha as contas dentro do slot. Sem isso as 3 postam no mesmo
+        # minuto, todo dia — três contas "diferentes" disparando juntas é
+        # padrão mais evidente que o horário cravado. A espera é sorteada a
+        # cada rodada porque aqui não tem o problema do loop: é uma passagem só.
+        faixa = cfg.get("intervalo_contas_min") or [0, 0]
+        try:
+            esp_min, esp_max = float(faixa[0]), float(faixa[1])
+        except (TypeError, ValueError, IndexError):
+            esp_min = esp_max = 0.0
+
         ok_slugs = []
-        for slug, conta in alvos:
-            log.info(f"   🎬 Postando '{slug}' → {conta}")
+        for i, (slug, conta) in enumerate(alvos):
+            if i and esp_max > 0 and not dry_run:
+                espera = random.uniform(esp_min, esp_max)
+                log.info(f"   ⏳ {espera:.1f} min até a próxima conta "
+                         f"(pra não postarem no mesmo minuto)")
+                time.sleep(espera * 60)
+            log.info(f"   🎬 [{datetime.now():%H:%M}] Postando '{slug}' → {conta}")
             if dry_run or _postar_produto(slug, cfg):
                 ok_slugs.append(slug)
         if ok_slugs:
@@ -1066,10 +1124,16 @@ def mostrar_status():
 
     # Próximos horários
     agora = _agora_min()
-    pendentes = [h for h in cfg["horarios"]
-                 if _hora_para_min(h) > agora and h not in postados_hoje]
+    # mostra a hora de VERDADE (com o desvio de hoje), não a do config —
+    # senão o status promete 09:00 e o post sai 09:06.
+    pendentes = []
+    for h in cfg["horarios"]:
+        real = _horario_real(h, cfg)
+        if real > agora and h not in postados_hoje:
+            marca = _min_para_hora(real)
+            pendentes.append(marca if marca == h else f"{marca} (slot {h})")
     if pendentes:
-        print(f"  ⏰ Próximos horários hoje: {pendentes}")
+        print(f"  ⏰ Próximos horários hoje: {', '.join(pendentes)}")
 
     print(f"\n  📊 Total histórico: {len(hist['postados'])} vídeos postados")
     print("═" * 56 + "\n")
