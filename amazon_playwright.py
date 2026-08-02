@@ -29,6 +29,7 @@ import os
 import random
 import re
 import sys
+import unicodedata
 import time
 from pathlib import Path
 
@@ -158,6 +159,52 @@ def _imagem_maior(url: str, lado: int = 640) -> str:
         return ""
     novo, n = re.subn(r"_(AC_)?U[LXYSF]\d+_", f"_\\g<1>UL{lado}_", url)
     return novo if n else url
+
+
+# Teto de preço da vitrine. Não é regra da Amazon, é do público: quem chega
+# pela bio veio de "achadinho". Um dispensador de remédio de R$ 474 pode até
+# casar com o termo, mas não é o produto do vídeo — termo vago quase sempre
+# resolve pro item caro da categoria. Ajustável por AMAZON_PRECO_MAX.
+PRECO_MAX_PADRAO = 250.0
+
+# Marcas de espanhol que praticamente não aparecem em título pt-BR. O termo em
+# si é difícil de julgar (pt e es compartilham muita palavra), mas o TÍTULO que
+# volta denuncia: "Cuida tu pelo: Todo lo que necesitas saber" veio de um termo
+# que era fragmento de legenda em espanhol.
+_MARCAS_ES = (" lo que ", " necesitas ", " para el ", " para la ", " sobre el ",
+              " de los ", " de las ", " todo lo ", " tu pelo ", " cómo ", " cuida tu ")
+
+_VAZIAS = frozenset("""para com sem por que dos das uma uns umas pelo pela este esta
+esse essa isso aquilo mais menos muito todo toda todos todas seu sua meu minha""".split())
+
+
+def _palavras_uteis(texto: str) -> set:
+    """Palavras de 4+ letras, sem acento, que carregam sentido."""
+    t = unicodedata.normalize("NFKD", texto or "")
+    t = "".join(c for c in t if not unicodedata.combining(c)).lower()
+    return {p for p in re.findall(r"[a-z]{4,}", t) if p not in _VAZIAS}
+
+
+def recusar(termo: str, r: dict) -> str:
+    """Motivo pra NÃO aceitar o par termo → produto, ou '' se estiver bom.
+
+    A busca faz o que foi pedida; quando o termo do vídeo é ruim, ela devolve
+    algo que casa com as palavras mas não com o produto. Estas guardas pegam os
+    casos que dá pra pegar sem chutar."""
+    preco = float(r.get("preco") or 0)
+    teto = float(os.getenv("AMAZON_PRECO_MAX", PRECO_MAX_PADRAO) or PRECO_MAX_PADRAO)
+    if preco > teto:
+        return f"R$ {preco:.2f} passa do teto de R$ {teto:.0f}"
+
+    titulo = r.get("titulo") or ""
+    baixo = f" {titulo.lower()} "
+    if any(m in baixo for m in _MARCAS_ES):
+        return "o título voltou em espanhol"
+
+    comuns = _palavras_uteis(termo) & _palavras_uteis(titulo)
+    if not comuns:
+        return "o produto não tem nenhuma palavra do termo"
+    return ""
 
 
 def _preco(texto: str) -> float:
@@ -297,14 +344,24 @@ def buscar(termos: list, diag: bool = False) -> dict:
                 continue
 
             a = organicos[0]
-            saida[termo] = {
+            r = {
                 "ok": True, "asin": a["asin"], "titulo": a["titulo"],
                 "preco": _preco(a["precoTxt"]),
                 "imagem": _imagem_maior(a["imagem"]),
                 "link": link_de_produto(a["asin"]),
             }
+            motivo = recusar(termo, r)
+            if motivo:
+                # Guarda o motivo no cache pra não gastar requisição repetindo
+                # a mesma busca ruim. Apagar a linha do termo força nova busca.
+                saida[termo] = {"ok": False, "motivo": motivo,
+                                "titulo": a["titulo"], "preco": r["preco"]}
+                _log(f"   ✗ \"{termo[:34]}\"  — {motivo}")
+                _log(f"       (veio: {a['titulo'][:48]})")
+                continue
+            saida[termo] = r
             _log(f"   ✓ \"{termo[:34]}\"")
-            _log(f"       → {a['asin']}  R$ {saida[termo]['preco']:.2f}  "
+            _log(f"       → {a['asin']}  R$ {r['preco']:.2f}  "
                  f"{a['titulo'][:52]}")
 
         ctx.close()
@@ -354,7 +411,9 @@ def enriquecer_fila(limite: int = LIMITE_PADRAO, simular: bool = False,
 
     novos = buscar(alvo, diag=diag) if alvo else {}
     for termo, r in novos.items():
-        if r.get("ok"):
+        # recusa também vai pro cache: sem isso a próxima rodada repetiria a
+        # mesma busca ruim e gastaria requisição à toa
+        if r.get("ok") or r.get("motivo"):
             cache[_chave(termo)] = r
     if novos and not simular:
         _cache_gravar(cache)
@@ -393,7 +452,10 @@ def enriquecer_fila(limite: int = LIMITE_PADRAO, simular: bool = False,
                 continue
             termo = (item.get("produto") or "").strip()
             r = cache.get(_chave(termo))
-            if not r or not r.get("ok"):
+            if not r:
+                continue
+            if not r.get("ok"):
+                _log(f'     {termo[:24]:24}  ✗  recusado: {r.get("motivo", "?")}')
                 continue
             _log(f'     {termo[:24]:24}  →  R$ {r["preco"]:>8.2f}  {r["titulo"][:34]}')
         _log("")
