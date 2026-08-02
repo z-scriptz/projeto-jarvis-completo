@@ -51,6 +51,34 @@ BASE = Path(__file__).resolve().parent
 if not (BASE / "pronto_para_postar").exists() and (BASE.parent / "pronto_para_postar").exists():
     BASE = BASE.parent
 
+def _carregar_env():
+    """Rodar do terminal não carrega o .env — só o systemd carrega. A API de
+    afiliado precisa de SHOPEE_APP_ID/SECRET, e sem eles a busca nem sai:
+    'a busca falhou: SHOPEE_APP_ID/SHOPEE_APP_SECRET não configurados'.
+    Mesmo carregador do deploy_site. Não sobrescreve o que já veio do ambiente,
+    e .env ilegível não pode derrubar o import."""
+    for cand in (BASE / ".env", Path(".env")):
+        if not cand.exists():
+            continue
+        try:
+            linhas = cand.read_text(encoding="utf-8").splitlines()
+        except Exception:
+            return
+        for linha in linhas:
+            linha = linha.strip()
+            if not linha or linha.startswith("#") or "=" not in linha:
+                continue
+            if linha.lower().startswith("export "):
+                linha = linha[7:]
+            chave, _, valor = linha.partition("=")
+            chave = chave.strip()
+            if chave and chave not in os.environ:
+                os.environ[chave] = valor.strip().strip('"').strip("'")
+        return
+
+
+_carregar_env()
+
 PRONTO = BASE / "pronto_para_postar"
 RESERVA = BASE / "fila_vencida"
 FILA = BASE / "shared" / "produtos_fila.json"
