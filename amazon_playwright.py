@@ -303,8 +303,9 @@ def buscar(termos: list, diag: bool = False) -> dict:
                 "imagem": _imagem_maior(a["imagem"]),
                 "link": link_de_produto(a["asin"]),
             }
-            _log(f"   ✓ {a['asin']}  R$ {saida[termo]['preco']:.2f}  "
-                 f"{a['titulo'][:46]}")
+            _log(f"   ✓ \"{termo[:34]}\"")
+            _log(f"       → {a['asin']}  R$ {saida[termo]['preco']:.2f}  "
+                 f"{a['titulo'][:52]}")
 
         ctx.close()
         navegador.close()
@@ -380,8 +381,25 @@ def enriquecer_fila(limite: int = LIMITE_PADRAO, simular: bool = False,
         _log("nada pra aplicar na fila")
         return 0
     if simular:
+        # Mostra o PAR, não só o resultado: quem decide se o produto casa com o
+        # termo do vídeo é você, e sem ver os dois lado a lado não dá.
+        _log("")
+        _log("     termo do vídeo            →  produto escolhido na Amazon")
+        _log("     " + "-" * 66)
+        for item in fila:
+            if not isinstance(item, dict):
+                continue
+            if (item.get("plataforma") or "").lower() != "amazon":
+                continue
+            termo = (item.get("produto") or "").strip()
+            r = cache.get(_chave(termo))
+            if not r or not r.get("ok"):
+                continue
+            _log(f'     {termo[:24]:24}  →  R$ {r["preco"]:>8.2f}  {r["titulo"][:34]}')
+        _log("")
         _log(f"[simulação] {trocados} produto(s) da Amazon ganhariam "
              f"link de produto, foto, preço e título")
+        _log("     confira os pares acima ANTES de rodar sem --simular")
         return 0
 
     tmp = FILA.with_suffix(".json.tmp")
