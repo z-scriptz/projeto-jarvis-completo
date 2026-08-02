@@ -162,10 +162,14 @@ def _imagem_maior(url: str, lado: int = 640) -> str:
 
 
 # Teto de preço da vitrine. Não é regra da Amazon, é do público: quem chega
-# pela bio veio de "achadinho". Um dispensador de remédio de R$ 474 pode até
-# casar com o termo, mas não é o produto do vídeo — termo vago quase sempre
-# resolve pro item caro da categoria. Ajustável por AMAZON_PRECO_MAX.
-PRECO_MAX_PADRAO = 250.0
+# pela bio veio de "achadinho", e a Amazon aqui é o resgate de vídeo que NÃO
+# casou com a Shopee — quase sempre item pequeno de impulso.
+#
+# Começou em 250 e desceu pra 150 com dado de produção na mão: "fidget spinner
+# arma" resolveu pra um brinquedo tático de R$ 209,90 e passou. Nessa faixa,
+# preço alto é sinal muito mais forte de que a busca escorregou do que de
+# achado legítimo. Ajustável por AMAZON_PRECO_MAX no .env.
+PRECO_MAX_PADRAO = 150.0
 
 # Marcas de espanhol que praticamente não aparecem em título pt-BR. O termo em
 # si é difícil de julgar (pt e es compartilham muita palavra), mas o TÍTULO que
@@ -201,6 +205,10 @@ def recusar(termo: str, r: dict) -> str:
     if any(m in baixo for m in _MARCAS_ES):
         return "o título voltou em espanhol"
 
+    # Rede de segurança fraca, e vale saber por quê: título da Amazon é longo e
+    # cheio de palavra-chave, então quase sempre casa alguma palavra do termo.
+    # Só pega o caso extremo, de produto totalmente sem relação. Quem separa
+    # "parecido" de "certo" é o olho humano na tabela do --simular.
     comuns = _palavras_uteis(termo) & _palavras_uteis(titulo)
     if not comuns:
         return "o produto não tem nenhuma palavra do termo"
