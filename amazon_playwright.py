@@ -161,15 +161,22 @@ def _imagem_maior(url: str, lado: int = 640) -> str:
     return novo if n else url
 
 
-# Teto de preço da vitrine. Não é regra da Amazon, é do público: quem chega
-# pela bio veio de "achadinho", e a Amazon aqui é o resgate de vídeo que NÃO
-# casou com a Shopee — quase sempre item pequeno de impulso.
+# Teto de ABSURDO, não teste de acerto. Nasceu em 250, desceu pra 150 e voltou
+# pra 500 quando os dados mostraram que a ideia estava errada:
 #
-# Começou em 250 e desceu pra 150 com dado de produção na mão: "fidget spinner
-# arma" resolveu pra um brinquedo tático de R$ 209,90 e passou. Nessa faixa,
-# preço alto é sinal muito mais forte de que a busca escorregou do que de
-# achado legítimo. Ajustável por AMAZON_PRECO_MAX no .env.
-PRECO_MAX_PADRAO = 150.0
+#   - rejeitou "Dispensador automático de remédios" -> "Dispensador automático
+#     de comprimidos" (R$ 449), que é o ÚNICO caso em que a busca acertou em
+#     cheio. Escondia um card correto.
+#   - deixou passar "Tips pelo huela rico todo" -> "Como ficar rico" (R$ 42),
+#     que é errado e barato.
+#
+# Preço não mede acerto. E a vitrine já vende iPhone de R$ 11 mil vindo da
+# Shopee, então travar só a Amazon em R$ 150 era incoerente. Fica alto só pra
+# barrar o caso grotesco (termo vago que resolve pra uma TV).
+#
+# Quem separa "parecido" de "certo" é o olho humano na tabela do --simular, e
+# a decisão dele agora fica gravada: veja --recusar.
+PRECO_MAX_PADRAO = 500.0
 
 # Marcas de espanhol que praticamente não aparecem em título pt-BR. O termo em
 # si é difícil de julgar (pt e es compartilham muita palavra), mas o TÍTULO que
@@ -470,6 +477,7 @@ def enriquecer_fila(limite: int = LIMITE_PADRAO, simular: bool = False,
         _log(f"[simulação] {trocados} produto(s) da Amazon ganhariam "
              f"link de produto, foto, preço e título")
         _log("     confira os pares acima ANTES de rodar sem --simular")
+        _log('     algum errado?  --recusar "termo do vídeo"  (não volta mais)')
         return 0
 
     tmp = FILA.with_suffix(".json.tmp")
@@ -477,6 +485,36 @@ def enriquecer_fila(limite: int = LIMITE_PADRAO, simular: bool = False,
     os.replace(tmp, FILA)
     _log(f"✅ {trocados} produto(s) da Amazon agora têm produto de verdade")
     _log("   rode o deploy_site.py pra ver na vitrine")
+    return 0
+
+
+def recusar_termo(termo: str, motivo: str = "recusado por você") -> int:
+    """Marca um par como recusado, pra sempre.
+
+    A conferência humana é o que de fato separa "parecido" de "certo" aqui —
+    então ela precisa virar estado, não sumir quando o terminal fecha. Termo
+    recusado nunca mais é buscado nem entra na vitrine."""
+    cache = _cache_ler()
+    chave = _chave(termo)
+    antes = cache.get(chave) or {}
+    cache[chave] = {"ok": False, "motivo": motivo,
+                    "titulo": antes.get("titulo", ""), "preco": antes.get("preco", 0)}
+    _cache_gravar(cache)
+    _log(f"recusado pra sempre: \"{termo}\"")
+    if antes.get("titulo"):
+        _log(f"   (era: {antes['titulo'][:56]})")
+    _log("   pra reverter:  --esquecer \"" + termo + "\"")
+    return 0
+
+
+def esquecer_termo(termo: str) -> int:
+    """Tira o termo do cache: ele volta a ser buscado na próxima rodada."""
+    cache = _cache_ler()
+    if cache.pop(_chave(termo), None) is None:
+        _log(f"\"{termo}\" não estava no cache — nada a fazer")
+        return 0
+    _cache_gravar(cache)
+    _log(f"esquecido: \"{termo}\" volta a ser buscado na próxima rodada")
     return 0
 
 
@@ -489,9 +527,17 @@ def main():
                     help="mostra o que a página devolveu (pra ajustar seletor)")
     ap.add_argument("--termo", default="",
                     help="busca UM termo e mostra o resultado, sem tocar na fila")
+    ap.add_argument("--recusar", default="",
+                    help="marca um termo como recusado pra sempre (não vai pra vitrine)")
+    ap.add_argument("--esquecer", default="",
+                    help="tira o termo do cache pra ser buscado de novo")
     a = ap.parse_args()
 
     _carregar_env()
+    if a.recusar:
+        return recusar_termo(a.recusar)
+    if a.esquecer:
+        return esquecer_termo(a.esquecer)
     if a.termo:
         r = buscar([a.termo], diag=True).get(a.termo, {})
         print(json.dumps(r, ensure_ascii=False, indent=2))
