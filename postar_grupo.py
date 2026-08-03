@@ -49,6 +49,19 @@ def _carregar_env():
 
 _carregar_env()
 
+# Achadinho é vitrine, e vitrine é CANAL — não a comunidade, onde as pessoas
+# conversam. Fila de link de afiliado num grupo de conversa afoga o assunto e
+# faz o membro silenciar.
+#
+# O telegram_poster lê TELEGRAM_CHAT_ID uma vez, no import. Então a troca tem
+# que acontecer AQUI, antes dele entrar — depois já é tarde.
+#
+# Sem TELEGRAM_CANAL_ID no .env, nada muda: continua indo pro CHAT_ID de
+# sempre. Assim ninguém acorda com o post indo pra outro lugar sem pedir.
+_CANAL = os.environ.get("TELEGRAM_CANAL_ID", "").strip()
+if _CANAL:
+    os.environ["TELEGRAM_CHAT_ID"] = _CANAL
+
 try:
     from integrations.telegram_poster import postar_achado
 except Exception:
@@ -136,6 +149,11 @@ def main():
         _log("nenhum achadinho novo pra postar (todos já foram) ✔")
         return 0
 
+    # imprime o destino: postar no chat errado é o tipo de erro que só aparece
+    # quando alguém reclama, e aí já foram 3 posts
+    destino = _CANAL or os.environ.get("TELEGRAM_CHAT_ID", "?")
+    _log(f"destino: {destino}" + ("  (TELEGRAM_CANAL_ID)" if _CANAL
+                                  else "  (TELEGRAM_CHAT_ID — sem canal definido)"))
     _log(f"{len(novos)} novos na fila · postando até {quantos} nesta rodada")
     postados_agora = 0
     for it in novos[:quantos]:
