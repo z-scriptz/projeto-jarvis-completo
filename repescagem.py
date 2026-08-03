@@ -312,7 +312,15 @@ def _fornecedores(termo: str, excluir_item=None, api=None) -> list:
                  f"{PALAVRAS_MIN}+ palavras em comum):")
         for tit, rel in sorted(recusados, key=lambda x: -x[1])[:5]:
             log.info(f"               rel {rel:.2f}  {tit[:62]}")
-    saida.sort(key=lambda x: (x["relevancia"], x["vendas"]), reverse=True)
+    # Anúncio com ZERO venda vai pro fim, por melhor que case no título.
+    # Visto na primeira rodada real: 'Capa De Silicone Transparente Com Borda
+    # Cromada' ganhou com 0 vendas porque a relevância era maior. Mas a
+    # repescagem existe pra escolher vendedor que NÃO some — e listagem que
+    # ninguém comprou é a que mais some. Só cai pra ela se não houver outra.
+    # A relevância continua mandando entre os que vendem: ela é o que garante
+    # que é o mesmo produto, e isso não se troca por volume.
+    saida.sort(key=lambda x: (x["vendas"] > 0, x["relevancia"], x["vendas"]),
+               reverse=True)
     return saida[:3]                                   # top 1, top 2, top 3
 
 
