@@ -102,7 +102,12 @@ def git(*args, checar=True):
 
 
 def nao_rastreados() -> list:
-    saida = git("status", "--porcelain", "--untracked-files=all")
+    """Modo 'normal', não 'all', de propósito. Com --untracked-files=all o git
+    entra em inbox_tiktok/, fila_vencida/ e _lixo/ e lista cada vídeo lá dentro
+    — na VPS isso é dezenas de milhares de arquivos, leva minutos e parece
+    travado. E é a resposta errada: eu quero tratar a pasta de lixo como UMA
+    coisa a ignorar, não item por item."""
+    saida = git("status", "--porcelain", "--untracked-files=normal")
     fora = []
     for linha in saida.splitlines():
         if linha.startswith("?? "):
@@ -131,7 +136,7 @@ def sobrariam(padroes_novos: str) -> list:
     try:
         r = subprocess.run(
             ["git", "-c", f"core.excludesFile={tmp}",
-             "status", "--porcelain", "--untracked-files=all"],
+             "status", "--porcelain", "--untracked-files=normal"],
             capture_output=True)
         fora = []
         for linha in r.stdout.decode(errors="replace").splitlines():
@@ -186,7 +191,10 @@ def cheiro_de_segredo(caminho: str) -> str:
         if m in base:
             return f"o nome contém '{m}'"
     p = Path(caminho)
-    if p.is_dir():
+    if caminho.endswith("/") or p.is_dir():
+        # no modo normal a pasta vem como uma entrada só. Não vasculho o que
+        # tem dentro: se ela sobrou até aqui, vai pro relatório pra você
+        # decidir, e o commit de uma pasta inteira é decisão sua, não minha.
         return ""
     try:
         if p.stat().st_size > 2_000_000:
@@ -243,14 +251,22 @@ def main():
         precisa_escrever = True
 
     # 3) simula: com o .gitignore novo, o que sobraria pra commitar?
+    print("lendo o estado do repositório...", flush=True)
     todos = nao_rastreados()
     sobra = sobrariam(SEGREDOS + ENTULHO) if precisa_escrever else todos
     cobertos = [f for f in todos if f not in set(sobra)]
     runtime = [f for f in sobra if f in RUNTIME or
                any(f.startswith(d) for d in RUNTIME if d.endswith("/"))]
-    salvar = [f for f in sobra if f not in runtime]
+    resto = [f for f in sobra if f not in runtime]
+    # Pasta NUNCA entra sozinha. No modo 'normal' o git resume uma pasta
+    # inteira numa linha, e adicionar essa linha arrasta tudo que há dentro —
+    # inclusive o que eu não li pra checar se é credencial. Vai pro relatório
+    # em separado, e quem decide é você.
+    pastas = [f for f in resto if f.endswith("/") or Path(f).is_dir()]
+    salvar = [f for f in resto if f not in pastas]
 
     # 4) conferência de segurança sobre o que REALMENTE entraria
+    print(f"conferindo o conteúdo de {len(salvar)} arquivo(s)...", flush=True)
     perigo = [(f, m) for f in salvar for m in [cheiro_de_segredo(f)] if m]
     print(f"não rastreados: {len(todos)}")
     print(f"  cobertos pelo .gitignore (atual + novo):    {len(cobertos)}")
@@ -270,6 +286,14 @@ def main():
     print(f"\n── SERIA SALVO ({len(salvar)}) ──")
     for f in sorted(salvar):
         print(f"   {f}")
+
+    if pastas:
+        print(f"\n── DEIXADO DE FORA: pastas inteiras ({len(pastas)}) ──")
+        print("   adicionar a pasta arrasta tudo que há dentro, e eu não li")
+        print("   esse conteúdo pra saber se tem credencial. Me diga se quer")
+        print("   alguma delas e eu confiro arquivo por arquivo antes:")
+        for f in sorted(pastas):
+            print(f"   {f}")
 
     if runtime:
         print(f"\n── DEIXADO DE FORA: estado de execução ({len(runtime)}) ──")
