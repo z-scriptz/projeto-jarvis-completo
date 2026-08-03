@@ -15,8 +15,21 @@
 # O TRUQUE: o hash de um blob no git é o conteúdo, não a data. Então dá pra
 # pegar um arquivo da VPS, calcular o hash dele e procurar esse hash no
 # histórico do repositório — se casar com um commit antigo, o arquivo está
-# ATRASADO e eu sei exatamente de quanto. Se não casar com nenhum, alguém
-# editou direto na VPS e sobrescrever perderia esse trabalho.
+# ATRASADO e eu sei exatamente de quanto.
+#
+# O QUE A PRIMEIRA RODADA ENSINOU: 94 arquivos deram "não bate com nenhum
+# commit", o que eu tinha rotulado de "editado na VPS". Estava errado. 132 dos
+# 179 arquivos daqui têm UM commit só, de 01/07 — o "Add files via upload".
+# O desenvolvimento de verdade seguiu no `agenteia` (o `origin` da VPS) e este
+# espelho ficou parado. Por isso "não bate" se divide em dois:
+#
+#   ESPELHO PARADO  o repo tem 1 commit deste arquivo. Ele não é a fonte da
+#                   verdade aqui — deployar REGRIDE a VPS em um mês.
+#   DIVERGENTE      o repo acompanha o arquivo (vários commits) e mesmo assim
+#                   não bate. Aí sim alguém editou de um lado só.
+#
+# Só ATRASADO é seguro pra deployar: a VPS está numa versão ANTIGA DESTE MESMO
+# repositório, então subir é seguir a linha, não pular pra outra.
 #
 # AS DUAS ÁRVORES: este repositório é chapado (tudo na raiz) e a VPS é em
 # pacotes (agents/, creative_engine/, integrations/...). O caminho real está no
@@ -43,7 +56,10 @@ REMOTE = "pjc"
 REF_PADRAO = f"{REMOTE}/claude/opa-clau-dgs591"
 
 # Não são código que roda na VPS — comparar só geraria ruído.
-IGNORAR = {"README.md", "ROADMAP.md", "DEPLOY.md", ".gitignore", "conferir.py"}
+IGNORAR = {"README.md", "ROADMAP.md", "DEPLOY.md", ".gitignore", "conferir.py",
+           # 10 pacotes têm __init__.py e o espelho chapado guarda UM. Comparar
+           # o único contra os dez não responde nada.
+           "__init__.py"}
 IGNORAR_PREFIXO = (".github/",)
 
 # Mapa vindo do ROADMAP.md ("Referência rápida (infra)"). É a fonte
@@ -171,8 +187,16 @@ def historico_do_caminho(ref: str, caminho: str, limite: int = 60) -> list:
 
 
 def classificar(sha_vps: str, sha_ref: str, ref: str, caminho_repo: str) -> tuple:
-    """(situação, detalhe). Quatro respostas possíveis, e a diferença entre a
-    terceira e a quarta é o que impede um deploy de destruir trabalho."""
+    """(situação, detalhe).
+
+    A distinção que importa é entre ESPELHO PARADO e DIVERGENTE, e ela custou
+    caro pra aparecer: 94 arquivos deram "não bate com nenhum commit", o que
+    parecia edição na VPS. Não era. 132 dos 179 arquivos deste repositório têm
+    UM commit só, de 01/07 — o "Add files via upload". O desenvolvimento de
+    verdade seguiu no `agenteia` (o `origin` da VPS), e este espelho ficou
+    parado. Pra esses, o repositório NÃO é a fonte da verdade: deployar
+    regrediria a VPS em um mês.
+    """
     if sha_vps == sha_ref:
         return "IGUAL", ""
 
@@ -183,8 +207,17 @@ def classificar(sha_vps: str, sha_ref: str, ref: str, caminho_repo: str) -> tupl
                 return "IGUAL", ""
             return "ATRASADO", (f"{i} commit(s) atrás — está em {commit[:7]} "
                                 f"\"{assunto[:46]}\"")
-    return "SÓ NA VPS", ("não bate com nenhum dos últimos commits — "
-                         "alguém editou aqui, e sobrescrever perderia isso")
+
+    if len(hist) <= 1:
+        quando = f" ({hist[0][0][:7]})" if hist else ""
+        return "ESPELHO PARADO", (
+            f"este repo tem 1 commit só deste arquivo{quando}, do upload "
+            f"inicial. A VPS seguiu em frente sem ele — NÃO deployar.")
+
+    return "DIVERGENTE", (
+        f"o repo acompanha este arquivo ({len(hist)} commits), mas o conteúdo "
+        f"da VPS não bate com nenhum. Alguém editou de um lado só — precisa "
+        f"de olho humano antes de qualquer escrita.")
 
 
 def main():
@@ -253,8 +286,8 @@ def main():
         conteudo[caminho] = bruto[fim + 1:fim + 1 + tam]
         pos = fim + 1 + tam + 1
 
-    grupos = {"SÓ NA VPS": [], "ATRASADO": [], "AUSENTE": [],
-              "DUPLICADO": [], "IGUAL": []}
+    grupos = {"DIVERGENTE": [], "ATRASADO": [], "AUSENTE": [], "COLISÃO": [],
+              "DUPLICADO": [], "ESPELHO PARADO": [], "IGUAL": []}
 
     for caminho_repo, sha_ref in sorted(alvos.items()):
         dados = conteudo.get(caminho_repo, b"")
@@ -277,7 +310,18 @@ def main():
 
         if len(estados) > 1:
             resumo = " · ".join(f"{c}={s}" for c, s, _ in estados)
-            grupos["DUPLICADO"].append((caminho_repo, resumo, estados))
+            na_raiz = [c for c, _, _ in estados if c.parent == Path(".")]
+            if na_raiz:
+                # raiz + pacote: a da raiz é a cópia morta, o caso do
+                # daemon_maestro que travou a postagem por dias
+                grupos["DUPLICADO"].append((caminho_repo, resumo, estados))
+            else:
+                # dois pacotes diferentes: executor/engine.py e
+                # workflows/engine.py são módulos DIFERENTES, e um repositório
+                # chapado não consegue guardar os dois com o mesmo nome. Um
+                # deles não existe aqui — chamar isso de duplicata esconde que
+                # o espelho é estruturalmente incapaz de representá-los.
+                grupos["COLISÃO"].append((caminho_repo, resumo, estados))
             continue
 
         c, sit, det = estados[0]
@@ -307,31 +351,44 @@ def main():
             print(f"   ... e mais {len(itens) - teto} "
                   f"(rode com --tudo pra ver a lista inteira)")
 
-    bloco("SÓ NA VPS", "⚠️  MODIFICADO NA VPS — não sobrescrever às cegas",
-          "o conteúdo não corresponde a nenhum commit: existe trabalho aqui\n"
-          "  que o repositório não tem. Traga pro repo antes de qualquer deploy.")
-    bloco("ATRASADO", "⏳ ATRASADO — o repositório tem correção que não rodou",
-          "foi isto que escondeu o b435f3c por um dia.")
-    bloco("DUPLICADO", "👯 DUPLICADO — existe em mais de um lugar",
-          "o daemon importa o do pacote; o da raiz é código morto.")
+    bloco("ATRASADO", "⏳ ATRASADO — o repo tem correção que não rodou",
+          "o único grupo seguro pra deployar: a VPS bate com um commit ANTIGO\n"
+          "  deste mesmo repositório, então subir é seguir a linha, não pular\n"
+          "  pra outra. Foi isto que escondeu o b435f3c por um dia.")
+    bloco("DIVERGENTE", "⚠️  DIVERGENTE — o repo acompanha, mas o conteúdo não bate",
+          "não dá pra saber de que lado está o certo sem olhar. NÃO deployar\n"
+          "  sem antes comparar à mão.")
+    bloco("DUPLICADO", "👯 DUPLICADO — mesma coisa em dois lugares",
+          "o daemon importa o do pacote; o da raiz é código morto. Foi assim\n"
+          "  que a postagem balanceada ficou dias travada.")
+    bloco("COLISÃO", "💥 COLISÃO DE NOME — o espelho não consegue guardar os dois",
+          "são módulos DIFERENTES com o mesmo nome de arquivo. Um repositório\n"
+          "  chapado só cabe um; o outro não existe aqui e nunca poderá ser\n"
+          "  deployado por este caminho.")
+    bloco("ESPELHO PARADO", "🪞 ESPELHO PARADO — o repo não é a fonte da verdade",
+          "1 commit só, do upload de 01/07. O desenvolvimento seguiu no\n"
+          "  'agenteia' (o origin da VPS) e este espelho ficou pra trás.\n"
+          "  DEPLOYAR QUALQUER UM DESTES REGRIDE A VPS EM UM MÊS.",
+          teto=0 if args.tudo else 8)
     bloco("AUSENTE", "🚫 NÃO EXISTE NA VPS",
           "arquivo novo, ou que mora em lugar que eu não procurei.",
           teto=0 if args.tudo else 12)
 
-    n_igual = len(grupos["IGUAL"])
     print()
     print("-" * larg)
-    print(f"em dia: {n_igual}   "
+    print(f"em dia: {len(grupos['IGUAL'])}   "
           f"atrasado: {len(grupos['ATRASADO'])}   "
-          f"modificado na VPS: {len(grupos['SÓ NA VPS'])}   "
+          f"divergente: {len(grupos['DIVERGENTE'])}")
+    print(f"espelho parado: {len(grupos['ESPELHO PARADO'])}   "
           f"duplicado: {len(grupos['DUPLICADO'])}   "
+          f"colisão: {len(grupos['COLISÃO'])}   "
           f"ausente: {len(grupos['AUSENTE'])}")
     if not args.tudo:
         print("(só código de produção — use --tudo pra incluir patch_/probe_/diag_)")
     print("-" * larg)
     print("nada foi alterado: este script só lê.")
 
-    return 1 if (grupos["ATRASADO"] or grupos["SÓ NA VPS"]) else 0
+    return 1 if (grupos["ATRASADO"] or grupos["DIVERGENTE"]) else 0
 
 
 if __name__ == "__main__":
