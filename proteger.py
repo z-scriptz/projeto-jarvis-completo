@@ -150,9 +150,24 @@ def sobrariam(padroes_novos: str) -> list:
 # Nome de arquivo não basta: no teste, um 'credencial_solta.txt' com
 # SHOPEE_SECRET dentro passou batido porque a lista de nomes suspeitos estava
 # em inglês. Quem decide é o CONTEÚDO.
-_NOME_SUSPEITO = ("env", "token", "secret", "segredo", "credential",
-                  "credencial", "session", "sessao", "sessão", "cookie",
-                  "senha", "chave", "key", "auth")
+# Extensão de código: aqui o nome do arquivo não diz nada sobre o conteúdo.
+# 'aplicar_env.py' e 'auth_youtube.py' são scripts, não credenciais — barrar
+# pelo nome só ensinava a ignorar o aviso.
+_EXT_CODIGO = {".py", ".sh", ".js", ".ts", ".md", ".txt"}
+
+# Estes SÃO credencial pelo nome, em qualquer extensão.
+def _nome_e_credencial(base: str) -> str:
+    if base.startswith(".env"):
+        return "é um arquivo .env"
+    if base.endswith((".session", ".pem", ".key", ".p12")):
+        return "é arquivo de chave/sessão"
+    for m in ("cookies", "sessions_backup", "id_rsa", "credentials"):
+        if m in base:
+            return f"o nome contém '{m}'"
+    return ""
+
+# Só pra arquivo de DADOS (json/env/ini): aí o nome pesa.
+_NOME_SUSPEITO_DADOS = ("secret", "credential", "credencial", "senha", "token")
 _CONTEUDO_SUSPEITO = (
     re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
     # CHAVE=valor com valor longo o bastante pra ser chave de verdade. O
@@ -169,33 +184,64 @@ _CONTEUDO_SUSPEITO = (
 )
 
 
-def _valor_de_verdade(v: str) -> bool:
-    """O que veio depois do '=' é uma chave, ou é código que LÊ a chave?
+def _valor_de_verdade(v: str, texto: str) -> bool:
+    """O que veio depois do '=' é uma CHAVE, ou é o NOME de uma variável?
 
-    `SECRET = os.environ.get("X")` casa com a regex, mas o valor capturado é
-    'os.environ.get' — 14 caracteres, comprido o bastante pra passar. Sem esta
-    checagem o script barraria código normal e viraria ruído que se ignora.
+    Na primeira rodada real isto barrou 7 arquivos, todos falso positivo:
+        CLIENT_SECRET = TP.CLIENT_SECRET      atributo de módulo
+        access_token": access_token           dict montado de variável
+        token = _token_da_conta               chamada de função
+        page_token_env": "PAGE_TOKEN_TOPSHOP" nome da env var, não o valor
+
+    Três sinais separam nome de chave, e nenhum deles sozinho basta:
     """
-    if v.startswith(("os.", "self.", "config.", "settings.", "env.")):
+    if not v or v.lower() in ("none", "null", "true", "false", "undefined"):
         return False
-    if v.lower() in ("none", "null", "true", "false", "undefined"):
+    # 1. ponto = acesso a atributo. Chave não tem ponto no meio.
+    if "." in v:
+        return False
+    # 2. forma de identificador: uma caixa só, sem hífen. Chave de verdade
+    #    quase sempre mistura caixa, ou tem '-', ou é hex longo. Hex e base64
+    #    compridos escapam desta regra logo abaixo.
+    so_minuscula = re.fullmatch(r"[a-z_][a-z0-9_]*", v)
+    so_maiuscula = re.fullmatch(r"[A-Z_][A-Z0-9_]*", v)
+    if so_minuscula or so_maiuscula:
+        if re.fullmatch(r"[0-9a-f]{24,}", v):
+            return True               # hex longo: é chave, não nome
+        if "_" in v or len(v) < 20:
+            return False              # snake_case ou curto: é nome
+        return True
+    # 3. aparece mais de uma vez no arquivo? Nome de variável se repete;
+    #    segredo costuma aparecer uma vez só.
+    if texto.count(v) > 1:
         return False
     return True
 
 
 def cheiro_de_segredo(caminho: str) -> str:
-    """'' se parece seguro; senão o motivo. Falso positivo aqui custa uma
-    olhada; falso negativo custa rotacionar todas as chaves."""
-    base = Path(caminho).name.lower()
-    for m in _NOME_SUSPEITO:
-        if m in base:
-            return f"o nome contém '{m}'"
+    """'' se parece seguro; senão o motivo.
+
+    Falso positivo custa uma olhada; falso negativo custa rotacionar todas as
+    chaves. Mas falso positivo DEMAIS custa mais que os dois: se o aviso pega
+    código normal, ele vira ruído e a pessoa aprende a passar por cima — e aí
+    o dia em que for de verdade, passa também.
+    """
     p = Path(caminho)
+    base = p.name.lower()
+
+    motivo = _nome_e_credencial(base)
+    if motivo:
+        return motivo
+
     if caminho.endswith("/") or p.is_dir():
-        # no modo normal a pasta vem como uma entrada só. Não vasculho o que
-        # tem dentro: se ela sobrou até aqui, vai pro relatório pra você
-        # decidir, e o commit de uma pasta inteira é decisão sua, não minha.
         return ""
+
+    ext = p.suffix.lower()
+    if ext not in _EXT_CODIGO:
+        for m in _NOME_SUSPEITO_DADOS:
+            if m in base:
+                return f"arquivo de dados com '{m}' no nome"
+
     try:
         if p.stat().st_size > 2_000_000:
             return ""
@@ -203,13 +249,15 @@ def cheiro_de_segredo(caminho: str) -> str:
     except Exception:
         return ""
     if b"\0" in dados[:8000]:
-        return ""                      # binário: não dá pra ler, não chuto
+        return ""                      # binário: não leio, não chuto
     texto = dados.decode("utf-8", errors="replace")
+
     for rx in _CONTEUDO_SUSPEITO:
         for achou in rx.finditer(texto):
-            valor = achou.groups()[-1] if achou.groups() else ""
-            if valor and not _valor_de_verdade(valor):
-                continue          # é código lendo a chave, não a chave
+            grupos = achou.groups()
+            valor = grupos[-1] if grupos else ""
+            if valor and not _valor_de_verdade(valor, texto):
+                continue              # é código lendo a chave, não a chave
             trecho = achou.group(0)[:44].replace("\n", " ")
             return f"conteúdo parece credencial: {trecho}..."
     return ""
@@ -268,20 +316,29 @@ def main():
     # 4) conferência de segurança sobre o que REALMENTE entraria
     print(f"conferindo o conteúdo de {len(salvar)} arquivo(s)...", flush=True)
     perigo = [(f, m) for f in salvar for m in [cheiro_de_segredo(f)] if m]
+    # Quarentena, não aborto. Na primeira rodada real 7 arquivos deram alarme
+    # e os 7 eram falso positivo — e como o aborto era total, eles travavam os
+    # outros 87. Agora o suspeito sai da lista e o resto segue: nada suspeito
+    # entra sozinho, e nada limpo fica refém do suspeito.
+    suspeitos = dict(perigo)
+    salvar = [f for f in salvar if f not in suspeitos]
+
     print(f"não rastreados: {len(todos)}")
     print(f"  cobertos pelo .gitignore (atual + novo):    {len(cobertos)}")
     print(f"  estado de execução (fora, veja abaixo):     {len(runtime)}")
+    print(f"  pastas (fora, veja abaixo):                 {len(pastas)}")
+    print(f"  em quarentena (fora, veja abaixo):          {len(suspeitos)}")
     print(f"  A SALVAR:                                   {len(salvar)}")
 
-    if perigo:
-        print("\n🛑 ABORTADO — isto entraria no commit e cheira a credencial:")
-        for f, motivo in perigo:
-            print(f"   {f}")
-            print(f"      {motivo}")
-        print("\nnão escrevi nada. me mande esta lista.")
-        return 1
-
-    print("\n✅ nenhuma credencial no que seria salvo.")
+    if suspeitos:
+        print(f"\n🔍 EM QUARENTENA ({len(suspeitos)}) — fora do commit até você olhar")
+        print("   pode ser falso positivo: código que LÊ uma chave se parece")
+        print("   com uma chave. Confira e me diga quais liberar.")
+        for f, motivo in sorted(suspeitos.items()):
+            print(f"   • {f}")
+            print(f"     {motivo}")
+    else:
+        print("\n✅ nenhuma credencial no que seria salvo.")
 
     print(f"\n── SERIA SALVO ({len(salvar)}) ──")
     for f in sorted(salvar):
