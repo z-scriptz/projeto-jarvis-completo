@@ -21,6 +21,14 @@ POSTADOS = BASE_DIR / "shared" / "grupo_postados.json"
 MAX_PADRAO = 3          # quantos achadinhos por rodada (drip)
 PAUSA_SEG = 4.0         # respiro entre posts
 
+# Janela de silêncio: oferta às 3 da manhã acorda membro e faz ele silenciar o
+# canal — e canal silenciado é canal morto, mesmo com todo mundo ainda dentro.
+# A trava mora aqui dentro, e não no cron, porque este script também roda na
+# mão. Fora da janela ele sai limpo, sem gastar chamada de API.
+# Ajustável por .env: GRUPO_HORA_INICIO / GRUPO_HORA_FIM.
+JANELA_INICIO = 7       # 07:00 — antes disso, não posta
+JANELA_FIM = 21         # 21:00 — a partir das 22:00, não posta
+
 
 def _carregar_env():
     for cand in (BASE_DIR / ".env", Path(".env")):
@@ -73,13 +81,42 @@ def _salvar_postados(links: list):
         _log(f"aviso: não consegui salvar o estado ({str(e)[:60]})")
 
 
+def _faixa_horaria():
+    """(inicio, fim) em horas. .env manda; valor torto cai no padrão."""
+    def _h(nome, padrao):
+        try:
+            v = int(os.environ.get(nome, "").strip())
+        except (TypeError, ValueError):
+            return padrao
+        return v if 0 <= v <= 23 else padrao
+    return _h("GRUPO_HORA_INICIO", JANELA_INICIO), _h("GRUPO_HORA_FIM", JANELA_FIM)
+
+
+def _dentro_da_janela(agora=None):
+    ini, fim = _faixa_horaria()
+    h = (agora or time.localtime()).tm_hour
+    if ini <= fim:
+        return ini <= h <= fim
+    return h >= ini or h <= fim          # janela que cruza a meia-noite
+
+
 def main():
     quantos = MAX_PADRAO
-    if len(sys.argv) > 1:
+    forcar = False
+    for arg in sys.argv[1:]:
+        if arg in ("--forcar", "--force"):
+            forcar = True                # pra testar fora do horário
+            continue
         try:
-            quantos = max(1, int(sys.argv[1]))
+            quantos = max(1, int(arg))
         except ValueError:
             pass
+
+    if not forcar and not _dentro_da_janela():
+        ini, fim = _faixa_horaria()
+        _log(f"fora da janela ({ini:02d}:00–{fim:02d}:59) — nada postado. "
+             "Use --forcar pra ignorar.")
+        return 0
 
     fila = _carregar_json(FILA, [])
     if not isinstance(fila, list) or not fila:
