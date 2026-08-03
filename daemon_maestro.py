@@ -624,12 +624,21 @@ def ciclo_producao(cfg: dict, estado: dict, dry_run: bool) -> dict:
     if cfg["auto_repor"]:
         prontos = _contar_prontos()
         if prontos > cfg["repor_quando_sobrar"]:
-            log.info(f"   ℹ️  {prontos} vídeo(s) prontos (> {cfg['repor_quando_sobrar']}) "
-                     f"— não precisa repor agora")
-            resultado["pulou"] = True
-            resultado["motivo"] = "fila_cheia"
-            return resultado
-        log.info(f"   📉 Só {prontos} prontos — repondo a esteira")
+            # O piso diário tem que furar este portão. Ele dispara com 3 pacotes
+            # na esteira, muito antes de qualquer lógica por conta — então sem
+            # esta saída o piso vira código morto justamente no caso pra que
+            # ele foi feito: esteira cheia e produção parada há semanas.
+            falta = _falta_do_piso(cfg)
+            if falta <= 0:
+                log.info(f"   ℹ️  {prontos} vídeo(s) prontos "
+                         f"(> {cfg['repor_quando_sobrar']}) — não precisa repor agora")
+                resultado["pulou"] = True
+                resultado["motivo"] = "fila_cheia"
+                return resultado
+            log.info(f"   🔁 {prontos} prontos, mas faltam {falta} pro piso de "
+                     f"{cfg.get('producao_minima_por_conta')}/conta/dia")
+        else:
+            log.info(f"   📉 Só {prontos} prontos — repondo a esteira")
 
     # Quantos produzir: respeita o teto diário restante
     restante_dia = cfg["producao_max_videos_dia"] - estado["videos_hoje"]
@@ -760,6 +769,31 @@ def _produzidos_hoje_por_conta() -> dict:
     return cont
 
 
+def _nichos_das_contas() -> set:
+    """Os nichos que existem hoje ({'beleza','tech','geral'}).
+
+    No contas.json o nicho é a CHAVE; só o "_default" traz o campo "nicho"
+    dentro. Ler o campo em todas colapsaria tudo em "geral".
+    """
+    try:
+        import roteador_contas as _RC
+        nichos = set()
+        for chave, conta in _RC.carregar_contas().items():
+            nichos.add((conta.get("nicho") or "geral") if chave == "_default" else chave)
+        return nichos or {"geral"}
+    except Exception:
+        return {"geral"}
+
+
+def _falta_do_piso(cfg: dict) -> int:
+    """Quantos vídeos faltam HOJE pra cumprir o piso, somando as contas."""
+    piso = max(0, int(cfg.get("producao_minima_por_conta", 0) or 0))
+    if piso <= 0:
+        return 0
+    ja = _produzidos_hoje_por_conta()
+    return sum(max(0, piso - ja.get(n, 0)) for n in _nichos_das_contas())
+
+
 def _priorizar_por_estoque(candidatos: list, quantidade: int, cfg: dict) -> list:
     """Escolhe o que produzir olhando o estoque de CADA conta.
 
@@ -789,12 +823,7 @@ def _priorizar_por_estoque(candidatos: list, quantidade: int, cfg: dict) -> list
 
     # No contas.json o nicho é a CHAVE ("beleza", "tech"); só o "_default" traz o
     # campo "nicho" dentro. Ler o campo em todas colapsaria tudo em "geral".
-    try:
-        nichos = set()
-        for chave, conta in _RC.carregar_contas().items():
-            nichos.add((conta.get("nicho") or "geral") if chave == "_default" else chave)
-    except Exception:
-        nichos = {"geral"}
+    nichos = _nichos_das_contas()
     # Piso: mesmo com a conta cheia, produz um pouco todo dia. Sem isso a
     # produção fica semanas parada e a esteira envelhece inteira junto — e
     # quando a conta enfim seca, ela volta do zero. Com o piso, a esteira
