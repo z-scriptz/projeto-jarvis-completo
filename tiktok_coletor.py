@@ -47,6 +47,22 @@ salad cream blast organize organizing fridge kitchen watch dirty ultimate busy
 forgetful themed satisfying people favorite floor mop steam cleaner gradient
 projector lamp night light cake fruit summer daughter pink viral ice bag give
 friend people setting starting cottage clean into every from they them we our
+tips hacks hack
+""".split())
+
+# Espanhol. O conteúdo em espanhol chega junto no TikTok e passava inteiro:
+# a lista acima só tem inglês, e o _termo_heuristico remove palavra funcional
+# do PORTUGUÊS — numa legenda espanhola nada casa e a frase vira "produto".
+#
+# CADA palavra aqui foi escolhida por NÃO existir em português. Um "todo",
+# "rico" ou "pelo" nesta lista reprovaria produto brasileiro legítimo, e o
+# preço de um falso positivo (produto bom descartado calado) é maior que o de
+# um falso negativo (que o filtro de juízo já pega).
+_ES_WORDS = frozenset("""
+cosas deberías deberias hacer mejorar apariencia huela hola muy más
+cómo aquí también están tienes tiene mejor mejores día días años niños
+niñas chicas chicos ellos nosotros ustedes siempre nuevo nueva pequeño pequeña
+conmigo esto eso mucho mucha
 """.split())
 
 
@@ -64,7 +80,7 @@ def _produto_pra_amazon(termo: str) -> bool:
     palavras = re.findall(r"[a-zA-ZÀ-ÿ]+", termo.lower())
     if not (2 <= len(palavras) <= 8):
         return False
-    return not any(p in _EN_WORDS for p in palavras)
+    return not any(p in _EN_WORDS or p in _ES_WORDS for p in palavras)
 
 
 def _amazon_link(termo: str) -> str:
@@ -503,8 +519,28 @@ def _termo_gemini(desc: str) -> str:
     return ""
 
 
-def _identificar_produto(desc: str) -> str:
-    return _termo_gemini(desc) or _termo_heuristico(desc)
+def _identificar_produto(desc: str):
+    """(termo, tem_juizo).
+
+    tem_juizo diz se ALGUÉM avaliou que aquilo é produto. O Gemini avalia: o
+    prompt manda responder NAO pra receita, dica, frase motivacional ou dúvida.
+    O _termo_heuristico não avalia nada — ele corta a primeira frase da legenda,
+    remove palavras funcionais do PORTUGUÊS e devolve as 5 primeiras que
+    sobraram. Numa legenda em espanhol nenhuma dessas palavras casa, e a frase
+    passa inteira:
+
+        "Cosas que deberías hacer para mejorar tu apariencia 💅 #tips"
+          -> 'Cosas deberías hacer mejorar apariencia'
+
+    Os três nomes-lixo que estavam na fila em 03/08 saíram exatamente daí. O
+    heurístico continua servindo pro caminho da Shopee, onde a busca e o
+    _match_relevante checam o termo contra a realidade — mas não pode mais
+    sustentar sozinho uma entrada na Amazon, que é só uma URL de busca.
+    """
+    t = _termo_gemini(desc)
+    if t:
+        return t, True
+    return _termo_heuristico(desc), False
 
 
 # adjetivos genéricos não contam como "parentesco" (senão 'Ventilador portátil'
@@ -937,7 +973,7 @@ def main():
                      f"dur={meta['duracao']}s) — pulo")
                 continue
             pasta = INBOX / f"{_slug(meta['uploader'])}_{vid}"
-            termo = _identificar_produto(meta["descricao"])
+            termo, termo_com_juizo = _identificar_produto(meta["descricao"])
             arq_pre = None
             # IG: a legenda é quase sempre um HOOK (curiosity-gap: "pouca gente imagina…"),
             # NÃO o produto — então a VISÃO (Gemini) é a autoridade. TikTok: a legenda
@@ -949,7 +985,9 @@ def main():
                 tv = (_termo_por_visao(arq_pre, meta.get("duracao") or 0,
                                        meta.get("descricao") or "") if arq_pre else "")
                 if tv:
-                    termo = tv                       # a visão vence a legenda-hook
+                    # a visão vence a legenda-hook — e ela é o Gemini olhando o
+                    # frame, então tem o mesmo juízo que o extrator de legenda
+                    termo, termo_com_juizo = tv, True
                 elif fonte == "instagram":
                     termo = ""                        # IG sem visão: não confia no hook
             if not termo or not _termo_valido(termo):
@@ -988,7 +1026,7 @@ def main():
                 comissao = camp.get("comissao_valor", 0)
                 _log(f"     ✓ Shopee: '{produto_nome[:45]}' | "
                      f"comissão R$ {comissao} | link: {link or '(falhou)'}")
-            elif _amazon_ativo() and _produto_pra_amazon(termo):
+            elif _amazon_ativo() and termo_com_juizo and _produto_pra_amazon(termo):
                 # Shopee não tem → Amazon (link de busca afiliado, só a tag)
                 plataforma = "amazon"
                 produto_nome = termo
@@ -997,9 +1035,13 @@ def main():
                 link = _amazon_link(termo)
                 _log(f"     ✓ Amazon (busca afiliada): {link}")
             else:
-                _log(f"     ✗ sem match na Shopee"
-                     f"{' e sem Amazon' if _amazon_ativo() else ' (gringo/Amazon?)'}"
-                     f" — descarto")
+                if _amazon_ativo() and not termo_com_juizo:
+                    motivo = " e o termo veio da heurística (ninguém checou que é produto)"
+                elif _amazon_ativo():
+                    motivo = " e sem Amazon"
+                else:
+                    motivo = " (gringo/Amazon?)"
+                _log(f"     ✗ sem match na Shopee{motivo} — descarto")
                 if arq_pre:
                     shutil.rmtree(pasta, ignore_errors=True)
                 continue
