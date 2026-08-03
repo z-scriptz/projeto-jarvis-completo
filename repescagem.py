@@ -208,7 +208,7 @@ _LIXO_BUSCA = {"shorts", "short", "reels", "reel", "tiktok", "viral", "achadinho
 PALAVRAS_BUSCA = 5
 
 
-def _termo_de_busca(bruto: str) -> str:
+def _termo_de_busca_local(bruto: str) -> str:
     """Transforma o nome cru num termo que a Shopee encontra.
 
     Dois defeitos vistos na VPS, os dois causando 'não achei o produto':
@@ -236,6 +236,15 @@ def _termo_de_busca(bruto: str) -> str:
 
 _LIGACAO = {"de", "da", "do", "dos", "das", "para", "pra", "com", "em", "no",
             "na", "nos", "nas", "e", "o", "a", "os", "as", "um", "uma", "por"}
+
+# O validador precisa da MESMA regra: regra de busca que diverge entre os dois
+# vira bug difícil — a repescagem acha o produto, o validador não, e o mesmo
+# item fica vivo num lugar e morto no outro. A cópia local acima continua de pé
+# como rede: sem o módulo, a repescagem roda igualzinho a antes.
+try:
+    from shared.termos import termo_de_busca as _termo_de_busca
+except Exception:
+    _termo_de_busca = _termo_de_busca_local
 
 
 # ══════════════════════════════════════════════════════════════════════════
