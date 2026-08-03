@@ -275,6 +275,95 @@ Ex.: "O segredo pra ter um iPhone 17 sem gastar / uma fortuna ✨".
 
 ---
 
+## 🗓️ Dia 2026-08-03 — a foto sumida, e o que ela revelou
+
+Começou com "tem produtos sem imagem no site" e terminou descobrindo que eu não
+tinha como saber o que está rodando. Cada item tem o commit e a hora em que
+entrou na VPS.
+
+**A foto se perdia em 3 pontos** (`e2b43f8`, no ar 12:29). O código da Shopee
+nunca quebrou: `buscar_produtos` sempre devolveu `imageUrl`. A foto era
+descartada depois — `validar_fila` não copiava do campeão, `curar_fila`
+reescrevia a fila inteira do zero com 3 campos (apagando foto/link/preço de
+TODOS a cada curadoria), e o `bio_page_builder` escrevia `"imagem": ""` fixo
+pra quem vinha da curadoria. Ninguém via porque o `preencher_fotos` (07/07)
+vinha tapando o vazamento desde julho. O que mudou foi o volume.
+
+**Pane não pode virar relatório** (`6f74589`, 12:50). Rodar
+`python3 -m agents.validar_fila` do terminal não carrega o `.env` — 80 produtos
+viraram "deserto" e o relatório bom foi sobrescrito. Agora o validador carrega
+o `.env`, se recusa a gravar quando 100% deu deserto, e o `curar_fila` não grava
+se aprovar menos de ¼ da fila (antes, zero aprovados = fila vazia, sem trava).
+
+**Busca vazia não é veredito** (`68ae6d1`, 14:13). O validador mandava o nome
+inteiro do produto pra Shopee — mediana de 16 palavras nas buscas que voltavam
+vazias. Agora retenta com o nome curto, e SÓ quando a busca volta vazia: se a
+Shopee devolveu produtos e o corte de qualidade reprovou, o veredito é real.
+O extrator virou `shared/termos.py`, compartilhado com a repescagem.
+**Desertos 27 → 16, vitrine 80 → 101 produtos.**
+
+**Nome-lixo tinha DOIS produtores** (`db8cae2` 14:31 + `b435f3c` 15:55).
+- `tiktok_coletor`: o `_termo_heuristico` corta a 1ª frase da legenda e remove
+  palavras funcionais do PORTUGUÊS — numa legenda em espanhol nada casa e a
+  frase passa inteira. Reproduzido byte a byte. E o ramo da Amazon (o `elif`
+  que recebe o que a Shopee não achou) não verificava nada, só montava a URL de
+  busca. Agora `_identificar_produto` devolve `(termo, tem_juizo)` e só termo
+  avaliado pelo Gemini sustenta entrada na Amazon.
+- `telegram_repurpose_hunter`: o score de cada linha candidata era a CONTAGEM DE
+  PALAVRAS, e gancho de venda é mais comprido que nome de produto — daí "2 mil
+  vendidos" ganhar de "Suporte celular".
+
+### ⚠️ O que isso ensinou (mais importante que os bugs)
+
+**Eu afirmei "está no ar" o dia inteiro sem ter como verificar.** De manhã eu
+disse que só `668f019` estava pendente; o `b435f3c` estava parado havia um dia,
+junto com `6f74d22`. O arquivo vivo estava no commit `581b840` e eu não sabia.
+
+Como descobrir (o par de comandos que achou):
+```bash
+# na VPS
+sha256sum integrations/telegram_repurpose_hunter.py | cut -c1-16
+# no repo: qual commit tem esse conteúdo
+for c in $(git log --format=%h -8 -- ARQUIVO.py); do
+  printf "%s %s\n" "$c" "$(git show $c:ARQUIVO.py | sha256sum | cut -c1-16)"
+done
+```
+
+Isso virou o **`conferir.py`** — roda na VPS, compara arquivo por arquivo contra
+o histórico do `pjc` e separa quatro casos: em dia, atrasado (com quantos
+commits), **modificado na VPS** (não bate com nenhum commit — tem trabalho ali
+que o repo não tem, e sobrescrever perderia) e duplicado. Não escreve nada.
+
+**Outra lição, essa sobre método:** eu passei o dia mandando patcher de 100 KB
+em base64 por `scp` — e o `DEPLOY.md:219` e o `ROADMAP.md` já documentavam o
+caminho certo (`git fetch pjc` + `git show FETCH_HEAD:arquivo.py > destino`).
+Também criei um `ESTADO.md` sem procurar antes, duplicando este documento.
+**Ler o que já existe antes de construir.**
+
+### Pendências pequenas deixadas conscientemente
+
+- `validar_fila`: quando a retentativa também falha, o relatório mostra o motivo
+  da 1ª tentativa (nome comprido). O log mostra as duas; o relatório não.
+- 3 entradas-lixo ainda na fila + "2 mil vendidos". A vitrine já as esconde e a
+  janela rolante (~80) as empurra pra fora. Não apagadas: mexer em dado de
+  produção é escolha do usuário.
+- Entradas Amazon com link `/s?k=` são busca, não produto — nunca terão foto.
+- 5 desertos honestos (nome errado ou nicho): Cerveja "heneinken", Chopp
+  ecobier, Hot Wheels 2-Pack, Boné Rabo de Cavalo, Lixeira Suspensa.
+
+### Próximos passos combinados
+
+1. ✅ Sincronizar `telegram_repurpose_hunter.py` (15:55)
+2. 🔜 `conferir.py` — só lê, diz o que está rodando
+3. 🔜 `deploy.py` — o conferidor com permissão de escrever. Aditivo, com
+   backup, nunca reverte (a VPS tem ~262 arquivos não commitados; qualquer
+   `checkout`/`reset` ali destrói trabalho)
+4. 🔜 Desarmar as duplicatas mortas da raiz (`daemon_maestro.py`,
+   `telegram_repurpose_hunter.py`)
+5. 🔜 Varrer os ~45 `aplicar_*.py`/`patch_*.py` acumulados na raiz da VPS
+
+---
+
 ## 🐞 Observações do dia (2026-07-12) — a resolver
 
 - 🚨 **BUG DE ATRIBUIÇÃO — vendas de TikTok saíam do radar (achado + corrigido 2026-07-13):**
