@@ -91,6 +91,23 @@ def _salvar_json(aprovados: list, simular: bool) -> bool:
         return True
     try:
         JSON_FILA.parent.mkdir(parents=True, exist_ok=True)
+        # Esta função apaga tudo que não está em `aprovados`. Se o relatório
+        # veio de uma rodada que falhou (credencial fora do ar reprova TODO
+        # mundo por "deserto"), o certo é não escrever nada — uma fila zerada
+        # tira o site do ar e não tem de onde voltar.
+        antes = 0
+        if JSON_FILA.exists():
+            try:
+                antes = len(json.load(open(JSON_FILA, encoding="utf-8")))
+            except Exception:
+                antes = 0
+        if antes and len(aprovados) < max(1, antes // 4):
+            log.error(f"   ❌ a curadoria aprovou {len(aprovados)} de {antes} "
+                      f"que estavam na fila — corte grande demais pra ser real.")
+            log.error("      fila PRESERVADA. rode o validador de novo e "
+                      "confira se a busca está respondendo.")
+            return False
+
         # O que já está gravado, indexado pelo nome genérico. Esta função
         # REESCREVE o arquivo inteiro — antes ela montava cada entrada do zero
         # com 3 campos, e isso apagava a foto, o link e o preço de TODOS os
