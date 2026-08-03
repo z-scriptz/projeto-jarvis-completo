@@ -144,6 +144,13 @@ def validar_fila(produtos: list, vendas_minimas: int = None,
                 "rating": c.get("rating", 0),
                 "score": c.get("score", 0),
                 "relevancia": c.get("relevancia", 0),
+                # a busca já devolve a foto e o link no campeão. Descartar aqui
+                # obrigava um preencher_fotos depois, porque daqui pra frente
+                # (curar_fila → produtos_fila → vitrine) ninguém mais tem de
+                # onde tirar: o card sem imagem não aparece na vitrine.
+                "imagem": c.get("imagem", ""),
+                "link": c.get("offer_link") or c.get("product_link") or "",
+                "preco": c.get("preco", 0),
             })
         else:
             resultados.append({

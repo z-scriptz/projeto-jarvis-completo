@@ -237,7 +237,11 @@ def _carregar_produtos() -> list:
                         "titulo": p.get("campeao", ""),
                         "classe": p.get("classe", ""),
                         "comissao_valor": p.get("comissao_valor", 0),
-                        "imagem": "", "link": "", "plataforma": "shopee",
+                        # o relatório do validador carrega foto e link desde
+                        # que ele passou a copiá-los do campeão. Zerar aqui
+                        # jogava todo produto desta fonte na vitrine invisível
+                        "imagem": p.get("imagem", ""),
+                        "link": p.get("link", ""), "plataforma": "shopee",
                         "preco": p.get("preco", 0) or 0,
                     })
         except Exception as e:
