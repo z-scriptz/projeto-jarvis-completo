@@ -303,6 +303,10 @@ def _fornecedores(termo: str, excluir_item=None, api=None) -> list:
             "shop_id": p.get("shop_id"),
             "preco": p.get("preco") or 0,
             "vendas": p.get("vendas") or 0,
+            # sem a foto o produto entra na fila INVISÍVEL: o canal só posta
+            # quem tem imagem, e a vitrine esconde quem não tem. Ela vem de
+            # graça na busca — descartar obrigava um preencher_fotos depois.
+            "imagem": p.get("imagem") or "",
             "link": p.get("offer_link") or p.get("product_link") or "",
             "relevancia": round(float(relevancia(termo, titulo)), 2),
         })
@@ -426,7 +430,8 @@ def repescar(limite: int = LIMITE_PADRAO, simular: bool = False) -> dict:
                 # na vitrine, e o post manda pra um produto que o site não tem
                 fila.append({"produto": termo, "campeao": melhor["titulo"],
                              "link": melhor["link"], "preco": melhor["preco"],
-                             "imagem": "", "plataforma": "shopee",
+                             "imagem": melhor.get("imagem", ""),
+                             "plataforma": "shopee",
                              "origem": "repescagem", "ts": int(time.time()),
                              "fornecedores": alts})
                 idx[slug] = len(fila) - 1
@@ -480,6 +485,9 @@ def repescar(limite: int = LIMITE_PADRAO, simular: bool = False) -> dict:
             entrada["link"] = novo_link
             entrada["preco"] = melhor["preco"]
             entrada["campeao"] = melhor["titulo"]
+            # a foto que estava lá é do anúncio que morreu
+            if melhor.get("imagem"):
+                entrada["imagem"] = melhor["imagem"]
             # guarda os outros: se este também morrer, desce a lista sem
             # precisar buscar de novo
             entrada["fornecedores"] = alts
