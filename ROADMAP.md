@@ -570,6 +570,30 @@ Detalhe que morde: o seletor exato usa `json.dumps(..., ensure_ascii=False)`. No
 padrão o json troca o emoji por escapes barra-u e o **CSS lê aquilo como escape
 hexadecimal**, casando com nada.
 
+**Segunda quebra, 15:39 do mesmo dia.** Modal já não aparece — o
+`_fechar_modal` resolveu. Mas a busca continuou sem casar, e o print mostrou o
+motivo: **layout novo do WhatsApp Web** (o painel direito passou a oferecer
+"Enviar documento / Adicionar contato / Perguntar à Meta AI"). Todo `SEL_BUSCA`
+por `data-tab` morreu junto. **Perseguir `data-tab` é correr atrás de alvo que
+muda sem aviso e sem versão** — então a resposta não foi um seletor novo:
+
+1. **Abrir pela LISTA, antes da busca.** No print o grupo está no topo do painel
+   lateral, visível sem pesquisar nada. `_abrir_grupo()` clica direto e não
+   depende de caixa de busca nenhuma — que é justo a parte que o WhatsApp mais
+   mexe. **A busca virou o caminho B.**
+2. **Perguntar pelo nome acessível.** O que não muda é como o campo se
+   apresenta: "Pesquisar ou começar uma nova conversa". `_achar_busca()` tenta
+   os CSS conhecidos e depois pergunta por papel/placeholder/título com regex —
+   funciona seja `<input>`, contenteditable, ou o que inventarem depois.
+
+`_achar_grupo()` varre do escopo específico ao amplo (`#pane-side` → listitem →
+grid → `span[title]` da página). Varrer amplo é seguro **aqui** porque a escolha
+é por comparação de título: ou casa com o nome do grupo, ou é ignorado.
+
+O `--diag` deixou de filtrar: despeja `input`/`textarea` inteiros e todo
+`placeholder`. Se a busca virar um `<input>` sem aria-label, filtrar por
+"pesquisa" a esconderia — **o ponto de uma medição é não esconder.**
+
 Próximo passo: rodar `--teste` de novo na VPS (`.venv/bin/python`, sempre).
 
 ### Pendências pequenas deixadas conscientemente
