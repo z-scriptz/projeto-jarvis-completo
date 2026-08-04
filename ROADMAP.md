@@ -670,6 +670,61 @@ na fila. Trabalho separado, de propósito.
 **Não testado ainda:** o caminho da foto exige WhatsApp Web de verdade. Escrito
 pra degradar, não quebrar: falha em download/anexo/prévia → texto.
 
+**DESLIGADO em 04/08 (`WHATSAPP_ATIVO=0`) e a razão importa.** O número que
+estava rodando era o **pessoal do Dre** — família, 99+ conversas. O risco de ban
+não mudou; o **custo** dele é que era outro. Perder o grupo de achadinhos custa
+um chip; perder o WhatsApp pessoal não tem recurso nem backup.
+
+Fica esperando um número dedicado. O aparelho **não tem eSIM**, mas tem **dois
+IMEIs** = dois slots físicos, com o slot 2 livre. Caminho: chip pré-pago
+comprado online, entregue em casa (1–5 dias), ativado pelo app com CPF, e o
+WhatsApp Business no segundo número — os dois convivem no mesmo aparelho.
+
+**Nunca usar serviço de aluguel de número/SMS** (sms-activate, 5sim e afins): o
+número é reciclado e volta pro pool, então quem pegar depois recupera a conta
+com o grupo e os clientes junto. Troca "posso perder o número" por "outra pessoa
+vai receber o número" — pior que o problema original.
+
+### O crontab estava rodando TUDO multiplicado (04/08)
+
+Começou com "por que o Telegram está quadruplicando os achadinhos?". A fila
+estava limpa (0 nomes e 0 links repetidos em 80 itens) — descartou a hipótese de
+coleta duplicada **pelo dado, não por argumento**. A causa estava no `crontab`:
+
+    8x  ceo_agent.py
+    5x  auto_resposta.py (*/20)
+    4x  tiktok_coletor, produzir_tiktok, amazon_playwright,
+        metricas_agent, reach_agent
+
+Não era só o `postar_grupo`. **Coletor puxando 4x a cota da API, produção
+rendendo 4x os vídeos** — e ninguém tinha percebido.
+
+**O que atingiu cliente foi o `auto_resposta`.** Ele carregava
+`respondidos.json`, marcava em memória e só gravava no fim. As 5 cópias liam o
+arquivo antes de qualquer uma gravar → **quem comentou recebeu até 5 respostas
+iguais.**
+
+`shared/trava.py` (flock, `rodar_unico()`) entrou nos 8 pontos de entrada.
+**flock e não arquivo de PID**: o kernel solta o flock quando o processo morre,
+inclusive com `kill -9` ou reboot. PID sobrevive ao crash e trava tudo até
+alguém apagar na mão — em vez de postar 4x, para de postar e ninguém percebe.
+**Trocar um defeito barulhento por um silencioso é piorar.**
+
+Segunda instância sai com **código 0**. Não falhou: achou trabalho em
+andamento. Código de erro faria o cron mandar e-mail de falha a cada 5 min.
+
+No `auto_resposta`, mais duas: `_salvar_respondidos` virou **atômico**
+(`write_text` ZERA o arquivo antes de escrever, e vazio ali significa "nunca
+respondi ninguém"), e grava **a cada resposta**, não só no fim.
+
+**Limpar o crontab resolve o caso; a trava resolve a classe.** Crontab é editado
+à mão e vai duplicar de novo.
+
+⚠️ **Origem não encontrada.** Achei o mecanismo, não quem duplicou. Algo faz
+`crontab -l | ... | crontab -` reescrevendo blocos inteiros — o
+`setup_cron_jarvis.sh` é o suspeito natural, **não confirmado**. Se duplicar de
+novo, a trava segura o dano, mas vale investigar.
+
 ### Pendências pequenas deixadas conscientemente
 
 - `validar_fila`: quando a retentativa também falha, o relatório mostra o motivo
