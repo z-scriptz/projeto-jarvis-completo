@@ -243,6 +243,77 @@ def _abrir(pw, headless=True):
         viewport={"width": 1280, "height": 860})
 
 
+_DIAG_JS = """
+() => {
+  const lista = [];
+  const desc = (el) => {
+    const a = {};
+    for (const at of el.attributes) {
+      if (["class","style"].includes(at.name)) continue;
+      a[at.name] = (at.value || "").slice(0, 60);
+    }
+    return {tag: el.tagName.toLowerCase(), attrs: a,
+            texto: (el.innerText || "").trim().slice(0, 40),
+            visivel: !!(el.offsetWidth || el.offsetHeight)};
+  };
+  for (const el of document.querySelectorAll('[contenteditable="true"]'))
+    lista.push({grupo: "contenteditable", ...desc(el)});
+  for (const el of document.querySelectorAll('[role="textbox"]'))
+    lista.push({grupo: "role=textbox", ...desc(el)});
+  for (const el of document.querySelectorAll('[aria-label]')) {
+    const L = (el.getAttribute("aria-label") || "").toLowerCase();
+    if (L.includes("pesquis") || L.includes("search") || L.includes("busca"))
+      lista.push({grupo: "aria-label busca", ...desc(el)});
+  }
+  return lista;
+}
+"""
+
+
+def diagnostico():
+    """Mostra o que a página REALMENTE tem, em vez de eu chutar seletor.
+
+    O WhatsApp Web troca a marcação sem aviso e sem versão. Quando o --teste
+    diz "não achei a caixa de busca", a resposta certa não é tentar outro
+    seletor no escuro: é olhar. Isto imprime todo campo editável, todo
+    role=textbox e todo aria-label de busca, com os atributos — é o que
+    permite escolher um seletor que exista de verdade.
+    """
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as pw:
+        ctx = _abrir(pw)
+        pagina = ctx.pages[0] if ctx.pages else ctx.new_page()
+        ctx.add_init_script(_STEALTH_JS)
+        try:
+            pagina.goto("https://web.whatsapp.com", timeout=60000)
+            if not _achar(pagina, SEL_LOGADO, timeout=25000):
+                _print_erro(pagina, "não está logado — rode --login primeiro")
+                return 1
+            _log("logado. deixando a interface assentar (6s)...")
+            pagina.wait_for_timeout(6000)
+
+            achados = pagina.evaluate(_DIAG_JS)
+            _log(f"{len(achados)} elemento(s) candidatos:\n")
+            for a in achados:
+                marca = "  " if a.get("visivel") else "(oculto) "
+                print(f"{marca}[{a['grupo']}] <{a['tag']}>")
+                for k, v in a["attrs"].items():
+                    print(f"      {k}={v!r}")
+                if a.get("texto"):
+                    print(f"      texto: {a['texto']!r}")
+                print()
+
+            caminho = _print_erro(pagina, "print do estado atual (não é erro)")
+            _avisar("WhatsApp --diag: print da tela pra escolher os seletores.",
+                    caminho)
+            return 0
+        finally:
+            try:
+                ctx.close()
+            except Exception:
+                pass
+
+
 def login():
     """Primeira vez: tira print do QR e manda pro Telegram pra escanear."""
     from playwright.sync_api import sync_playwright
@@ -321,6 +392,9 @@ def enviar(quantos: int, teste: bool = False) -> int:
                         "  .venv/bin/python whatsapp_playwright.py --login", caminho)
                 return 1
 
+            # a lista de conversas aparece antes da busca ficar utilizável;
+            # sem esta espera o seletor falha por a interface ainda montar
+            pagina.wait_for_timeout(4000)
             busca = _achar(pagina, SEL_BUSCA)
             if not busca:
                 caminho = _print_erro(pagina, "não achei a caixa de busca")
@@ -395,6 +469,8 @@ def enviar(quantos: int, teste: bool = False) -> int:
 def main():
     p = argparse.ArgumentParser(description="Posta achadinho no grupo do WhatsApp.")
     p.add_argument("--login", action="store_true", help="conecta pelo QR (1ª vez)")
+    p.add_argument("--diag", action="store_true",
+                   help="mostra os campos que a página tem (pra corrigir seletor)")
     p.add_argument("--teste", action="store_true", help="acha o grupo e mostra, sem enviar")
     p.add_argument("--forcar", action="store_true", help="ignora a janela de horário")
     p.add_argument("--quantos", type=int, default=MAX_RODADA)
@@ -403,17 +479,17 @@ def main():
     # As travas de configuração vêm ANTES do playwright: erro de .env é o caso
     # comum, e ouvir "playwright não instalado" quando o problema é
     # WHATSAPP_GRUPO vazio manda a pessoa procurar no lugar errado.
-    if not args.login and not _ligado() and not args.teste:
+    if not args.login and not args.diag and not _ligado() and not args.teste:
         _log("⚪ WHATSAPP_ATIVO desligado. Ligue com:")
         _log("     echo 'WHATSAPP_ATIVO=1' >> ~/jarvis/.env")
         _log("   (rode com --teste pra simular sem enviar)")
         return 0
 
-    if not args.login and not args.forcar and not _dentro_da_janela():
+    if not args.login and not args.diag and not args.forcar and not _dentro_da_janela():
         _log(f"fora da janela ({HORA_INI:02d}:00–{HORA_FIM:02d}:59) — nada enviado.")
         return 0
 
-    if not args.login and not _grupo():
+    if not args.login and not args.diag and not _grupo():
         _log("WHATSAPP_GRUPO vazio no .env — preciso do NOME EXATO do grupo.")
         _log("   echo 'WHATSAPP_GRUPO=Nome Exato Do Grupo' >> ~/jarvis/.env")
         return 2
@@ -427,6 +503,8 @@ def main():
 
     if args.login:
         return login()
+    if args.diag:
+        return diagnostico()
     return enviar(max(1, min(args.quantos, MAX_RODADA)), teste=args.teste)
 
 
