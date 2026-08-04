@@ -45,3 +45,7 @@ logs/
 Thumbs.db
 hooks_alana_recentes.json
 shared/tiktok_tokens.json
+
+# travas de instância única (shared/trava.py) — estado local, nunca versionado
+.trava_*
+**/.trava_*
