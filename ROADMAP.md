@@ -494,6 +494,26 @@ foram roteados quando `casa` não existia, então continuam indo pro
 frente vai pra conta nova. É o comportamento certo, mas explica por que a conta
 demora alguns dias pra encher.
 
+### 🔬 EM TESTE até ~18/08: feed misto no @topshopcasa_
+
+**A decidir em 2 semanas.** A conta recebe todo produto do nicho casa, venha da
+Shopee ou da Amazon. A dúvida do Dre não era sobre o algoritmo (esse classifica
+o CONTEÚDO do vídeo, não o destino do link) — era sobre ESTÉTICA: "achadinho da
+Shopee" e "Amazon finds" são formatos diferentes, um é utilidade barata com cara
+de promoção, o outro é decoração aspiracional.
+
+Tende a se resolver sozinho: pela experiência dele fazendo o casamento à mão,
+produto de amazon finds em geral NÃO existe na Shopee — então o vídeo gringo cai
+no `elif` e vira link de Amazon, e o produto BR de casa vira Shopee. Os dois na
+mesma conta por serem o mesmo nicho.
+
+Começamos junto porque a conta já tem 27 produtos de casa prontos, e restringir
+agora a deixaria parada justamente quando volume mais ajuda (conta nova).
+
+**Se o feed ficar incoerente:** rotear por plataforma dentro do nicho casa —
+Amazon fica no @topshopcasa_, Shopee de casa volta pro @topshop.__. É código
+pequeno. **Se funcionar:** mantém e não mexe.
+
 ### Pendências pequenas deixadas conscientemente
 
 - `validar_fila`: quando a retentativa também falha, o relatório mostra o motivo
