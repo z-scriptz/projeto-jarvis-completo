@@ -874,50 +874,90 @@ def _quebrar_hook_2linhas(texto: str):
 
 
 # Emoji colorido por NICHO do produto (1 codepoint = renderiza no Noto).
-_EMOJI_POR_PRODUTO = [
+# Emoji por produto — duas listas, e a diferença entre elas é QUEM GANHA do
+# emoji que o hook já trouxe.
+#
+# O hook vem com emoji escolhido pela fórmula ou pela frase de reserva, e esse
+# costuma ser bom porque foi escrito junto com a frase. Até 03/08 o palpite por
+# palavra-chave ganhava dele SEMPRE (linha `_emoji_do_produto(produto) or
+# _emoji_do_txt`), e o resultado apareceu nos posts: luminária de urso com 🔌,
+# separador de ovos com 🔌, suporte de celular com 🛵.
+#
+# ALTA CONFIANÇA vence o hook: aqui o emoji É o produto, e é pra isto que a
+# regra foi criada (o ROADMAP cita câmera 📷 e óculos 😎 nominalmente).
+_EMOJI_ALTA = [
     (("camera", "câmera", "filmadora", "gravador", "gravaç", "espiã", "espião",
-      "espia", "gopro", "webcam", "óculos câmera", "oculos camera", "mini camera",
-      "mini câmera", "dvr", "vigilância", "vigilancia"), "📷"),
-    (("óculos de sol", "oculos de sol", "óculos", "oculos", "solar"), "😎"),
+      "gopro", "webcam", "dvr", "vigilância", "vigilancia"), "📷"),
+    (("óculos de sol", "oculos de sol", "óculos", "oculos"), "😎"),
     (("cafeteira", "café", "cafe", "dolce gusto", "nespresso", "espresso",
-      "expresso", "cappuccino", "capuccino", "cápsula de café", "capsula de cafe",
-      "moedor de café", "moedor de cafe", "prensa francesa", "chaleira elétrica"), "☕"),
-    (("cozinha", "panela", "fritad", "air fryer", "utensil", "copo", "garrafa",
-      "talher", "fatiad", "ralad", "chaleira", "liquidif",
-      "descasc", "jantar", "prato", "tigela", "faca"), "🍳"),
-    (("skincare", "beleza", "maquia", "batom", "perfume", "cabelo", "unha",
-      "pele", "hidrat", "serum", "sérum", "gloss", "corporal", "facial",
-      "labial"), "💄"),
-    (("pet", "cachorro", "gato", "aquari", "raç", "coleira", "comedouro"), "🐶"),
-    (("fone", "carregad", "cabo", "gadget", "led", "lumin", "eletron", "usb",
-      "bluetooth", "teclado", "mouse", "notebook", "smartwatch"), "🔌"),
-    (("fitness", "treino", "academ", "yoga", "muscula", "corrida", "emagrec",
-      "massage"), "💪"),
+      "expresso", "cappuccino", "capuccino", "moedor de café", "prensa francesa",
+      "chaleira elétrica", "chaleira eletrica"), "☕"),
+    # luminária saiu do grupo do carregador. Uma luminária de urso na mesa de
+    # cabeceira com emoji de tomada foi o post mais fora de tom da semana.
+    (("luminária", "luminaria", "abajur", "lampada", "lâmpada", "candeeiro",
+      "led 3d", "luminária 3d"), "💡"),
+    (("pet", "cachorro", "gato", "aquari", "coleira", "comedouro", "arranhador"),
+     "🐶"),
+    (("bebê", "bebe ", "infantil", "mamadeira", "fralda", "pelúcia", "pelucia",
+      "urso ", "brinquedo"), "🧸"),
+]
+
+# BAIXA CONFIANÇA só entra se o hook NÃO trouxe emoji. São categorias largas,
+# onde o acerto é aproximado e o emoji do hook quase sempre é melhor.
+_EMOJI_BAIXA = [
+    (("cozinha", "panela", "fritad", "air fryer", "utensil", "copo", "caneca",
+      "garrafa", "talher", "fatiad", "ralad", "liquidif", "descasc", "prato",
+      "tigela", "faca", "ovo", "ovos", "espremedor", "batedor"), "🍳"),
+    (("skincare", "beleza", "maquia", "batom", "perfume", "cabelo", "cabelud",
+      "unha", "pele", "hidrat", "serum", "sérum", "gloss", "labial", "blush",
+      "sombra", "pó compacto"), "💄"),
+    (("fone", "carregad", "cabo usb", "power bank", "gadget", "eletron",
+      "bluetooth", "teclado", "mouse", "notebook", "smartwatch", "celular"),
+     "🔌"),
+    (("fitness", "treino", "academ", "yoga", "muscula", "corrida", "emagrec"),
+     "💪"),
     (("organiz", "closet", "guarda-roupa", "prateleira", "cabide", "gaveta",
-      "cesto"), "🧺"),
+      "cesto", "necessaire", "nécessaire"), "🧺"),
     (("manta", "fronha", "lençol", "lencol", "cobertor", "edredom", "toalha",
-      "almofada", "tapete", "cortina", "colcha"), "🏠"),
-    (("bebe", "bebê", "infantil", "criança", "banheira", "fralda", "mamadeira",
-      "brinquedo"), "🧸"),
-    (("roupa", "jaqueta", "parka", "casaco", "macacao", "macacão", "moletom",
-      "blusa", "camisa", "vestido", "calça", "short", "biquini", "biquíni",
-      "pijama", "lingerie", "tênis", "tamanco", "chinelo", "bota", "meia",
-      "modelador", "bolsa", "mochila", "relógio",
-      "relogio", "boné", "cinto"), "👕"),
-    (("moto", "capacete", "carro", "automot", "bike", "bicicleta"), "🛵"),
-    (("limpeza", "esponja", "vassoura", "rodo", "escova"), "🧽"),
+      "almofada", "tapete", "cortina", "sofá", "sofa"), "🏠"),
+    (("roupa", "jaqueta", "casaco", "moletom", "blusa", "camisa", "vestido",
+      "calça", "short", "biquíni", "pijama", "tênis", "tamanco", "chinelo",
+      "bota", "sandália", "sandalia", "scarpin", "bolsa", "mochila"), "👕"),
+    # 'moto' sozinho pegava "suporte magnético moto" (um suporte de celular).
+    # Agora exige contexto de veículo de verdade.
+    (("motocicleta", "capacete", "automot", "bicicleta", "para-brisa",
+      "parabrisa", "painel do carro", "porta-malas"), "🛵"),
+    (("limpeza", "esponja", "vassoura", "rodo", "mop", "aspirador"), "🧽"),
 ]
 
 
-def _emoji_do_produto(produto: str):
-    """Emoji colorido que combina com o NICHO do produto (senão None)."""
+def _pontuar(texto: str, lista) -> tuple:
+    """(emoji, pontos) da categoria que mais casa. Pontuação em vez de
+    'primeira que casa vence': 'Escova Massageadora para Couro Cabeludo' casava
+    com 'massage' (fitness 💪) porque fitness vinha antes, mesmo tendo duas
+    palavras de beleza. Contando, beleza ganha 2 a 1."""
+    melhor, pontos = None, 0
+    for chaves, emo in lista:
+        n = sum(1 for k in chaves if k in texto)
+        if n > pontos:
+            melhor, pontos = emo, n
+    return melhor, pontos
+
+
+def _emoji_do_produto(produto: str, so_alta: bool = False):
+    """Emoji que combina com o produto, ou None.
+
+    so_alta=True devolve só as categorias que valem a pena sobrepor ao emoji
+    que o hook já trouxe.
+    """
     if not produto:
         return None
     p = str(produto).lower()
-    for chaves, emo in _EMOJI_POR_PRODUTO:
-        if any(k in p for k in chaves):
-            return emo
-    return None
+    emo, _ = _pontuar(p, _EMOJI_ALTA)
+    if emo or so_alta:
+        return emo
+    emo, _ = _pontuar(p, _EMOJI_BAIXA)
+    return emo
 
 
 def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
@@ -1044,7 +1084,14 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
     HK_EMOJI_TAM = int(os.environ.get("HK_EMOJI", 40))
 
     _emoji_do_txt, hook_txt_limpo = _separar_emoji_hook(hook_txt)
-    _emoji_hook = _emoji_do_produto(produto) or _emoji_do_txt
+    # O emoji que veio NO HOOK ganha, porque foi escrito junto com a frase.
+    # Só as categorias de alta confiança (câmera, óculos, café, luminária, pet,
+    # bebê) sobrepõem — ali o emoji É o produto. Antes o palpite por
+    # palavra-chave ganhava sempre, e foi assim que a luminária de urso saiu
+    # com 🔌 e o suporte de celular com 🛵.
+    _emoji_hook = (_emoji_do_produto(produto, so_alta=True)
+                   or _emoji_do_txt
+                   or _emoji_do_produto(produto))
 
     def _larg(txt, fnt):
         _m = _textclip_justo(TextClip, txt, fnt, _hk_fonte)

@@ -12,3 +12,33 @@
 # achadinhosdashopee
 # achaditchos
 # ofertas.br
+
+# ── achadinhos / Shopee BR (ativos) ────────────────────────────────────────
+jayofertasimperdiveis
+oliviaazfinds
+the_techlabb
+achadinhosda.manaa
+diario.doachadinho
+horadeofertinhaa
+car.dosachados
+achadomila
+achadosonlineweb
+garimposda.kah
+
+# ── gringos / Amazon finds — DESLIGADOS DE PROPÓSITO ──────────────────────
+# Estes postam em inglês e vendem produto de fora. Ligar agora joga conteúdo
+# gringo nas contas BR (@topshop.__, @topshopbeauty._, @topshoptech_) e ensina
+# o algoritmo a entregar pro público errado — o oposto do que a separação por
+# nicho faz hoje pelo roteador_contas.
+#
+# Descomente QUANDO a conta Amazon existir e o roteador souber mandar pra ela.
+# ameliauusa
+# homeyy__huess
+# enalzhamai
+# exotic_home_furniture
+# neelafinds
+# snappypick
+# insulorahomes
+# recosbyanna
+# buddy.pup.us
+

@@ -263,9 +263,80 @@ def _eh_2linhas(h: str) -> bool:
     return len(_EMOJI_RX.sub("", h).strip()) >= int(os.environ.get("HOOK_MIN_CHARS", 44))
 
 
-def _fallback(nicho: str) -> str:
+# Palavras CONCRETAS que aparecem nas frases de reserva, com o que precisa
+# existir no nome do produto pra elas fazerem sentido. Levantadas do próprio
+# banco (contagem sobre HOOKS_RESERVA), não inventadas.
+#
+# Por que isto existe: em 03/08 saiu no ar um mouse gamer com o hook "Meu
+# celular vivia descarregando na pior hora". A reserva conhece o NICHO (tech),
+# não o produto — então qualquer coisa classificada como tech podia receber uma
+# frase sobre bateria de celular.
+_CONCRETO = {
+    "celular":   ("celular", "smartphone", "iphone", "fone", "carregad", "cabo",
+                  "power bank", "bateria"),
+    "casa":      ("casa", "sofá", "sofa", "sala", "quarto", "manta", "almofada",
+                  "cortina", "tapete", "lençol", "lencol", "decor"),
+    "cozinha":   ("cozinha", "panela", "copo", "caneca", "talher", "fatiad",
+                  "prato", "faca", "ovo", "ralad", "liquidif", "fritad"),
+    "cozinhar":  ("cozinha", "panela", "fritad", "receita", "chef"),
+    "cozinhando": ("cozinha", "panela", "fritad", "receita", "chef"),
+    "pele":      ("pele", "skincare", "hidrat", "facial", "creme", "sérum",
+                  "serum", "corporal"),
+    "cachorro":  ("cachorro", "pet", "gato", "coleira", "raç", "comedouro"),
+    "roupa":     ("roupa", "camisa", "vestido", "calça", "moda", "blusa",
+                  "jaqueta", "casaco", "short"),
+    "treino":    ("treino", "academ", "fitness", "muscula", "yoga", "corrida"),
+    "academia":  ("treino", "academ", "fitness", "muscula", "yoga"),
+    "corpo":     ("corpo", "fitness", "emagrec", "modelador", "massage"),
+    "setup":     ("setup", "mouse", "teclado", "monitor", "notebook", "gamer",
+                  "cadeira gamer", "headset"),
+    "gadget":    ("gadget", "eletron", "usb", "bluetooth", "led", "smart"),
+    "cabelo":    ("cabelo", "cabelud", "escova", "secador", "shampoo", "gloss"),
+    "beleza":    ("beleza", "maquia", "batom", "blush", "pele", "unha", "gloss"),
+    "mulher":    ("feminin", "vestido", "blush", "batom", "sandália", "bolsa"),
+}
+
+
+def _conflita(frase: str, produto: str) -> bool:
+    """A frase fala de uma coisa que o produto não é?
+
+    'Meu celular vivia descarregando' + um mouse = a pessoa lê sobre bateria e
+    vê um mouse. Ela não entende, e pula. Frase sem palavra concreta nunca
+    conflita — e é por isso que a mais genérica da semana ('Vivia com um
+    probleminha que ninguém resolvia') foi a de melhor alcance: ela serve
+    qualquer produto.
+    """
+    f, p = frase.lower(), (produto or "").lower()
+    for palavra, parentes in _CONCRETO.items():
+        if palavra in f and not any(r in p for r in parentes):
+            return True
+    return False
+
+
+def _cabe_no_formato(h: str) -> bool:
+    """A mesma regra que o _limpar_saida aplica na saída do Gemini.
+
+    Ela existia só lá, e a reserva passava por fora — foi assim que saíram
+    posts com 3 linhas ('Meu celular vivia descarregando na pior hora' tem 45
+    caracteres, o teto é 40, e ainda vinha o 'A Shopee:' embaixo).
+    """
+    if "{tag}" in h or "\n" in h:
+        frase = h.split("{tag}")[0].split("\n")[0]
+        return len(_EMOJI_RX.sub("", frase).strip()) <= int(
+            os.environ.get("HOOK_MAX_L1", 40))
+    return len(_EMOJI_RX.sub("", h).strip()) >= int(
+        os.environ.get("HOOK_MIN_CHARS", 44))
+
+
+def _fallback(nicho: str, produto: str = "") -> str:
     pool = HOOKS_RESERVA.get(_chave_nicho(nicho)) or HOOKS_RESERVA["geral"]
-    pool = [h for h in pool if _eh_2linhas(h)] or pool   # só entradas de 2 linhas
+    # 1) formato: nada que renderize em 3 linhas
+    pool = [h for h in pool if _cabe_no_formato(h)] or pool
+    # 2) sentido: nada que fale de uma coisa que o produto não é
+    sem_conflito = [h for h in pool if not _conflita(h, produto)]
+    pool = sem_conflito or [h for h in pool if not any(
+        w in h.lower() for w in _CONCRETO)] or pool
+    # 3) variedade
     recentes = set(_ler_recentes())
     frescas = [h for h in pool if h not in recentes] or pool
     escolha = random.choice(frescas).replace("{tag}", TAG_PADRAO)
@@ -420,7 +491,7 @@ def gerar_hook_alana(produto: str, descricao: str = "", nicho: str = "") -> str:
         if via:
             _registrar(via)
             return via
-    return _fallback(nicho)
+    return _fallback(nicho, produto)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
