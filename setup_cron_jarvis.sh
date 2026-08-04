@@ -36,6 +36,12 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 0 8 * * *   cd $JARVIS && $PY produzir_tiktok.py --nicho geral 1  >> $JARVIS/logs/cron_produzir.log 2>&1
 0 13 * * *  cd $JARVIS && $PY produzir_tiktok.py --nicho geral 1  >> $JARVIS/logs/cron_produzir.log 2>&1
 0 20 * * *  cd $JARVIS && $PY produzir_tiktok.py --nicho geral 1  >> $JARVIS/logs/cron_produzir.log 2>&1
+# casa 2/dia (a conta nasceu em 04/08). Somado ao piso do daemon -- que le o
+# contas.json e ja garante 1/conta/dia -- da 3/dia, mesma cota do geral.
+# Horarios escolhidos nas JANELAS VAZIAS entre os outros renders (cada video
+# ~7min) e fora dos slots de postagem, pra nao disputar CPU com o upload.
+0 10 * * *  cd $JARVIS && $PY produzir_tiktok.py --nicho casa 1   >> $JARVIS/logs/cron_produzir.log 2>&1
+30 14 * * * cd $JARVIS && $PY produzir_tiktok.py --nicho casa 1   >> $JARVIS/logs/cron_produzir.log 2>&1
 # 03:40 -> AMAZON: resolve os produtos que entraram como LINK DE BUSCA (/s?k=)
 #   e vira produto de verdade (ASIN + preco + foto). Precisa do .venv: o
 #   playwright so existe la, e rodar com o python do sistema falha o import.
@@ -83,7 +89,7 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 echo "✅ cron instalado. A maquina agora roda sozinha:"
 echo "   • 03:00  coleta virais do TikTok"
-echo "   • 04h/12h/18h  produz 1 video cada (3/dia)"
+echo "   • producao por nicho: tech 4 · beleza 4 · geral 3 · casa 2 (+1 do piso)"
 echo "   • 03:40  resolve produtos da Amazon (link de busca -> produto real)"
 echo "   • a cada 5min  auto-resposta nos posts novos (se AUTO_RESPONDER=1)"
 echo "   • 02:25  varredura funda (30 dias, 130 posts por conta)"

@@ -471,6 +471,29 @@ precisar editar o arquivo da VPS.
 Canal do YouTube da conta casa: `"youtube": "casa"` → `youtube_token_casa.json`,
 criado por `auth_youtube.py casa`. Sem o token ele cai no canal principal.
 
+### Produção pra 4 contas (04/08)
+
+Com a conta casa, a demanda da pirâmide passou de 36 pra **48 posts/semana**
+(12 por conta × 4) = 6,9/dia. A produção total já dava conta — o buraco era que
+o cron produz POR NICHO e não tinha entrada pra casa: tech 4, beleza 4, geral 3,
+**casa 0**.
+
+  `10:00` casa 1 · `14:30` casa 1 → 2/dia pelo cron
+
+Horários escolhidos nas janelas vazias entre os outros renders (cada vídeo
+~7min) e fora dos slots de postagem, pra não disputar CPU com o upload.
+
+O **piso do daemon já cobriu 1/dia sozinho**: `_nichos_das_contas()` itera o
+`contas.json`, então criar a conta subiu o piso de 3 pra 4/dia sem tocar em
+nada. Somado, a casa fica com 3/dia — mesma cota do geral.
+
+⚠️ **Pacote antigo mantém a conta antiga.** A produção grava `conta.json` ao
+lado do vídeo e o handle é queimado no render. Os pacotes que já estão prontos
+foram roteados quando `casa` não existia, então continuam indo pro
+`@topshop.__` — com o handle certo no vídeo. Só o que for produzido daqui pra
+frente vai pra conta nova. É o comportamento certo, mas explica por que a conta
+demora alguns dias pra encher.
+
 ### Pendências pequenas deixadas conscientemente
 
 - `validar_fila`: quando a retentativa também falha, o relatório mostra o motivo
