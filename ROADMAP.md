@@ -720,10 +720,58 @@ respondi ninguém"), e grava **a cada resposta**, não só no fim.
 **Limpar o crontab resolve o caso; a trava resolve a classe.** Crontab é editado
 à mão e vai duplicar de novo.
 
-⚠️ **Origem não encontrada.** Achei o mecanismo, não quem duplicou. Algo faz
-`crontab -l | ... | crontab -` reescrevendo blocos inteiros — o
-`setup_cron_jarvis.sh` é o suspeito natural, **não confirmado**. Se duplicar de
-novo, a trava segura o dano, mas vale investigar.
+#### A causa: uma crase num comentário (04/08, resolvido)
+
+Linha 53 do `setup_cron_jarvis.sh`, **dentro** do `BLOCO="..."`:
+
+    # chamada de API. Confira com `crontab -l` antes de acrescentar qualquer coisa
+
+`BLOCO` é string entre **aspas duplas**, e **crase dentro de aspas duplas é
+substituição de comando**. O bash executava `crontab -l` e colava o crontab
+inteiro dentro do próprio bloco. Toda execução do script.
+
+A assinatura ficou no crontab e foi ela que entregou o caso:
+
+    # JARVIS-AUTO-END antes de acrescentar qualquer coisa
+
+É o **fim do crontab embutido** grudado no texto que vinha depois da crase.
+Reproduzido em teste isolado: sai idêntica, com 2 BEGIN num bloco que deveria
+ter 1.
+
+A conta fecha: **3 execuções no histórico do shell → 4 cópias**, e foram 4 BEGIN
+encontrados. E explica o que a teoria do "bloco se reinserindo" não explicava:
+`postar_grupo`, `metricas_agent` e `reach_agent` são entradas **manuais**, fora
+do bloco, e mesmo assim estavam 4x — vinham de carona no crontab embutido.
+
+**O detalhe que dói:** o cabeçalho dizia *"Idempotente: pode rodar de novo sem
+duplicar"*. Era falso e passou semanas assim, porque o script **sempre**
+terminava imprimindo "✅ cron instalado" — ele nunca olhou o que acabara de
+escrever. **Script que só sabe dizer que deu certo não é verificação.**
+
+Trocar a crase conserta a ocorrência. Pra fechar a classe, entraram três
+conferências: antes de gravar exige 1 BEGIN + 1 END e no máximo 60 linhas de
+tarefa; **depois** de gravar confere o crontab resultante e avisa se sobrou mais
+de um bloco. Testado com o bloco defeituoso (aborta sem tocar no crontab) e com
+o corrigido (grava). Confirmado na VPS: `grep -c JARVIS-AUTO-BEGIN` → 1.
+
+⚠️ **Nunca use crase dentro do `$BLOCO`, nem em comentário.** O aviso está em
+caixa alta no topo do `setup_cron_jarvis.sh`.
+
+### Onde parou (04/08, fim do dia)
+
+**Esperando o chip.** Pedido feito — Claro pré-pago, R$ 20,99, chegada prevista
+~08/08. Pix conferido campo a campo antes de pagar (valor travado em 20.99,
+recebedor Pagar.me/Stone, **CRC calculado e batendo** — prova de que ninguém
+alterou valor nem destinatário depois de gerado).
+
+Quando chegar: chip no slot 2 → ativa pelo app → WhatsApp Business no número
+novo → migra o grupo → `WHATSAPP_ATIVO=1` → `--login` (QR vai pro Telegram).
+
+**A única coisa do WhatsApp que nunca rodou de verdade é o envio COM FOTO.**
+`_baixar_foto` já foi validado no seco (baixa e diz "COM foto"), mas
+`_enviar_com_foto` — anexo, prévia, caixa de legenda — só dá pra testar
+mandando. Escrito pra degradar em texto, não quebrar. **Testar com
+`--quantos 1`.**
 
 ### Pendências pequenas deixadas conscientemente
 
