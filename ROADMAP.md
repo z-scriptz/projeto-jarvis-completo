@@ -594,7 +594,41 @@ O `--diag` deixou de filtrar: despeja `input`/`textarea` inteiros e todo
 `placeholder`. Se a busca virar um `<input>` sem aria-label, filtrar por
 "pesquisa" a esconderia — **o ponto de uma medição é não esconder.**
 
-Próximo passo: rodar `--teste` de novo na VPS (`.venv/bin/python`, sempre).
+**O `--teste` passou** — `grupo aberto direto da lista (sem busca)`. E, por ser
+seco, mostrou o que ia pro cliente antes de ir:
+
+    *Produto com busca alta*
+    💰 R$ 1600,00
+
+Rótulo interno que vazou pra fila. **Eu tinha afirmado que a vitrine escondia
+isso — estava errado.** O `_nome_ruim` do `bio_page_builder` só reprova nome com
+menos de 3 palavras de 3+ letras, e esse tem 4. O `_e_lixo` do `telegram_radar`
+só olha selo de venda e aviso de grupo. **Cada superfície tinha meia regra;
+nenhuma tinha esta** — e o WhatsApp é a primeira que manda o nome cru pro
+cliente, então foi lá que apareceu.
+
+`shared/termos.py` ganhou **`nome_de_produto_ruim()`**. A pergunta que ela faz
+não é "o nome é curto?" e sim **"sobra alguma palavra que diga O QUE É a
+coisa?"** — tira ligação (com, para) e palavra de funil (produto, busca, alta) e
+vê o resto. "Produto com busca alta" resta 0; "Gloss Labial" resta 2.
+
+Corte de palavra única **medido, não chutado**: com ≥6 letras o "Tênis" era
+reprovado, e tênis é produto. Com ≥5 passam Tênis/Bolsa/Calça e reprovam
+Fone/Capa/Copo. 32 casos, 0 falhas.
+
+Mora em `shared/` e é **importada, nunca copiada** — regra duplicada é a
+armadilha que já mordeu este projeto. Import falhou → `_candidatos` devolve
+vazio e nada é enviado. **Vale a regra de quem publica: pular um produto bom
+custa menos que mandar lixo pro grupo do cliente.**
+
+Vale reusar `nome_de_produto_ruim()` no `telegram_radar` e na vitrine quando der
+— hoje não mexi neles pra não tocar caminho de ingestão que está funcionando.
+
+Preço também ganhou ponto de milhar (`R$ 1.600,00`): é o número que decide a
+compra e sem separador ele some no meio da mensagem.
+
+Próximo passo: `--teste` de novo (deve pular 1 item e mostrar 2 limpos), e só
+depois `WHATSAPP_ATIVO=1` pra uma rodada real com você olhando.
 
 ### Pendências pequenas deixadas conscientemente
 
