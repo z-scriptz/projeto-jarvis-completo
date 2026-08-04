@@ -306,11 +306,15 @@ def _produzir(pasta: Path, pj: Path, video_src: Path) -> bool:
                                 or os.environ.get("BG_" + nicho.upper(), _bg_padrao))
     _log(f"   🎨 fundo '{os.environ['TOPSHOP_BG']}' (nicho {nicho or 'geral'})")
 
-    # LOGO por conta/nicho: cada perfil tem sua marca (tech=teal, beauty=rosa).
-    # Coloque os PNGs em assets/brand/. Cai na logo_ts.png se o arquivo não existir.
-    _LOGO_NICHO = {"beleza": "logo_ts_beauty.png", "tech": "logo_ts_tech.png"}
-    os.environ["TOPSHOP_LOGO"] = (os.environ.get("FORCE_LOGO")
-                                  or _LOGO_NICHO.get(nicho, "logo_ts.png"))
+    # LOGO por conta/nicho: cada perfil tem sua marca. O nome sai do NICHO
+    # (shared/marca.py), não de um dicionário escrito à mão — foi um dicionário
+    # sem "casa" que fez o @topshopcasa_ publicar com a logo do @topshop.__.
+    # Se a logo da conta não existir, o aviso sai no log em vez de sumir.
+    try:
+        from shared.marca import logo_escolhida
+        os.environ["TOPSHOP_LOGO"] = logo_escolhida(nicho, log=_log)
+    except Exception:
+        os.environ["TOPSHOP_LOGO"] = os.environ.get("FORCE_LOGO") or "logo_ts.png"
     _log(f"   🅣 logo '{os.environ['TOPSHOP_LOGO']}'")
 
     # HOOK estilo Alana ("frase relatable 😩" / "A Shopee:") — é o que converte.

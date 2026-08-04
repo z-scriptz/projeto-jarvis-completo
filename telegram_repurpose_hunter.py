@@ -1586,9 +1586,14 @@ async def processar_mensagem_telegram(msg, sub_id: str = "hunter_radar"):
     _bg_padrao = "preto" if nicho in ("geral", "") else "branco"
     os.environ["TOPSHOP_BG"] = (os.environ.get("FORCE_BG")
                                 or os.environ.get("BG_" + nicho.upper(), _bg_padrao))
-    _LOGO_NICHO = {"beleza": "logo_ts_beauty.png", "tech": "logo_ts_tech.png"}
-    os.environ["TOPSHOP_LOGO"] = (os.environ.get("FORCE_LOGO")
-                                  or _LOGO_NICHO.get(nicho, "logo_ts.png"))
+    # mesma regra do produzir_tiktok, IMPORTADA e não copiada: o dicionário
+    # duplicado nestes dois arquivos foi o que deixou "casa" de fora e pôs a
+    # logo do @topshop.__ num vídeo do @topshopcasa_.
+    try:
+        from shared.marca import logo_escolhida
+        os.environ["TOPSHOP_LOGO"] = logo_escolhida(nicho, log=log)
+    except Exception:
+        os.environ["TOPSHOP_LOGO"] = os.environ.get("FORCE_LOGO") or "logo_ts.png"
 
     # HOOK estilo Alana (2 linhas, variado, anti-repetição) — MESMO gerador do
     # produzir_tiktok. Cai no hook_builder só se o Alana falhar.
