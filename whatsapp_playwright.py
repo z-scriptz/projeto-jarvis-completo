@@ -41,6 +41,7 @@ import argparse
 import json
 import os
 import random
+import re
 import sys
 import time
 from datetime import date, datetime
@@ -267,20 +268,94 @@ def _achar_grupo(pagina, grupo: str):
             return exato
     except Exception:
         pass
-    try:
-        itens = pagina.query_selector_all("#pane-side span[title], div[role='listitem'] span[title]")
-    except Exception:
-        itens = []
-    for el in itens:
+    # o escopo vai do mais específico ao mais amplo. Varrer a página inteira é
+    # seguro aqui porque a escolha é por comparação de título, não por posição:
+    # ou o título casa com o grupo, ou o elemento é ignorado.
+    for escopo in ("#pane-side span[title]",
+                   "div[role='listitem'] span[title]",
+                   "[role='grid'] span[title]",
+                   "span[title]"):
         try:
-            t = _norm(el.get_attribute("title") or "")
+            itens = pagina.query_selector_all(escopo)
         except Exception:
             continue
-        if not t:
-            continue
-        if t == alvo_cheio or (alvo_txt and alvo_txt in t):
-            return el
+        for el in itens:
+            try:
+                t = _norm(el.get_attribute("title") or "")
+            except Exception:
+                continue
+            if not t:
+                continue
+            if t == alvo_cheio or (alvo_txt and alvo_txt in t):
+                return el
     return None
+
+
+_RE_BUSCA = re.compile(r"pesquis|search|busca", re.I)
+
+
+def _achar_busca(pagina):
+    """A caixa de busca, perguntando pelo NOME e não pela marcação.
+
+    Em 04/08 o WhatsApp Web trocou de layout (o painel direito virou "Enviar
+    documento / Adicionar contato / Perguntar à Meta AI") e todo `SEL_BUSCA`
+    baseado em `data-tab` parou de casar. Perseguir data-tab é correr atrás de
+    um alvo que muda sem aviso.
+
+    O que NÃO muda é o nome acessível: o campo se apresenta como "Pesquisar ou
+    começar uma nova conversa" — está escrito no print. Então tento primeiro
+    os CSS conhecidos (rápidos, e ainda valem em quem não atualizou) e, se
+    nenhum casar, pergunto por papel/placeholder/título. Assim funciona seja o
+    campo um <input>, um contenteditable ou o que inventarem depois.
+    """
+    el = _achar(pagina, SEL_BUSCA, timeout=3000)
+    if el:
+        return el
+    tentativas = [
+        lambda: pagina.get_by_role("textbox", name=_RE_BUSCA),
+        lambda: pagina.get_by_placeholder(_RE_BUSCA),
+        lambda: pagina.get_by_title(_RE_BUSCA),
+        lambda: pagina.locator("[aria-label*='esquis' i], [placeholder*='esquis' i]"),
+    ]
+    for fazer in tentativas:
+        try:
+            loc = fazer().first
+            loc.wait_for(state="visible", timeout=3000)
+            return loc
+        except Exception:
+            continue
+    return None
+
+
+def _abrir_grupo(pagina, grupo: str):
+    """Abre a conversa do grupo. True se abriu.
+
+    Tenta pela LISTA antes da busca: no print de 04/08 o "💭 ACHADINHOS VIP
+    TOPSHOP" está no topo do pane lateral, visível sem pesquisar nada. Quando
+    ele está ali, esse caminho não depende de caixa de busca nenhuma — que é
+    justo a parte que o WhatsApp mais mexe.
+    """
+    item = _achar_grupo(pagina, grupo)
+    if item:
+        item.click()
+        _log("grupo aberto direto da lista (sem busca)")
+        pagina.wait_for_timeout(1800)
+        return True
+
+    busca = _achar_busca(pagina)
+    if not busca:
+        return None  # None = não achei a busca; False = achei mas não o grupo
+    busca.click()
+    # digita SEM emoji: o grupo é "💭 ACHADINHOS VIP TOPSHOP" e o keyboard.type
+    # não emite caractere fora do BMP de forma confiável.
+    pagina.keyboard.type(_digitavel(grupo), delay=random.randint(60, 140))
+    pagina.wait_for_timeout(2200)
+    item = _achar_grupo(pagina, grupo)
+    if not item:
+        return False
+    item.click()
+    pagina.wait_for_timeout(1800)
+    return True
 
 
 def _fechar_modal(pagina, voltas: int = 3) -> int:
@@ -384,12 +459,28 @@ _DIAG_JS = """
     lista.push({grupo: "contenteditable", ...desc(el)});
   for (const el of document.querySelectorAll('[role="textbox"]'))
     lista.push({grupo: "role=textbox", ...desc(el)});
+  // input/textarea entram inteiros: se a busca virou <input> sem aria-label,
+  // filtrar por "pesquisa" a esconderia — e o ponto do diag é NÃO esconder.
+  for (const el of document.querySelectorAll('input, textarea'))
+    lista.push({grupo: "input/textarea", ...desc(el)});
+  for (const el of document.querySelectorAll('[placeholder]'))
+    lista.push({grupo: "placeholder", ...desc(el)});
   for (const el of document.querySelectorAll('[aria-label]')) {
     const L = (el.getAttribute("aria-label") || "").toLowerCase();
     if (L.includes("pesquis") || L.includes("search") || L.includes("busca"))
       lista.push({grupo: "aria-label busca", ...desc(el)});
   }
-  return lista;
+  // e os títulos do painel lateral: é por eles que o grupo é encontrado
+  for (const el of document.querySelectorAll('span[title]')) {
+    const t = el.getAttribute("title") || "";
+    if (t.length > 1 && t.length < 70) lista.push({grupo: "span[title]", ...desc(el)});
+  }
+  const vistos = new Set();
+  return lista.filter(a => {
+    const k = a.grupo + JSON.stringify(a.attrs);
+    if (vistos.has(k)) return false;
+    vistos.add(k); return true;
+  }).slice(0, 120);
 }
 """
 
@@ -521,26 +612,17 @@ def enviar(quantos: int, teste: bool = False) -> int:
             # sem esta espera o seletor falha por a interface ainda montar
             pagina.wait_for_timeout(4000)
             _fechar_modal(pagina)  # o "Novidades do WhatsApp Web" cobre a busca
-            busca = _achar(pagina, SEL_BUSCA)
-            if not busca:
+            aberto = _abrir_grupo(pagina, grupo)
+            if aberto is None:
                 caminho = _print_erro(pagina, "não achei a caixa de busca")
-                _avisar("WhatsApp: a marcação da página mudou (busca). "
-                        "Os seletores precisam de revisão.", caminho)
+                _avisar("WhatsApp: não achei a busca NEM o grupo na lista. "
+                        "Rode --diag pra ver os campos da página.", caminho)
                 return 1
-            busca.click()
-            # digita SEM emoji: o grupo é "💭 ACHADINHOS VIP TOPSHOP" e o
-            # keyboard.type não emite caractere fora do BMP de forma confiável.
-            # Buscar pelo texto legível acha o mesmo grupo.
-            pagina.keyboard.type(_digitavel(grupo), delay=random.randint(60, 140))
-            pagina.wait_for_timeout(2200)
-            item = _achar_grupo(pagina, grupo)
-            if not item:
+            if not aberto:
                 caminho = _print_erro(pagina, f"grupo '{grupo}' não apareceu na busca")
                 _avisar(f"WhatsApp: não achei o grupo '{grupo}'. "
                         "Confira o NOME EXATO em WHATSAPP_GRUPO no .env.", caminho)
                 return 1
-            item.click()
-            pagina.wait_for_timeout(1800)
 
             enviados = 0
             for i, it in enumerate(alvo):
