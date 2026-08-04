@@ -400,13 +400,21 @@ chamada a mais.
 **Duas passadas no cron**, porque rodar a janela inteira de 5 em 5 minutos
 multiplicaria as chamadas do Graph por 12:
 
-  rápida  `*/5`  · 3 posts por conta, 12h  → comentário novo cai no post recente
-  funda   `7 * *` · 25 posts por conta, 7 dias → pega o que caiu em post antigo
+  rápida  `*/5`   · 3 posts por conta, 12h → comentário novo cai no post recente
+  funda   `25 2 *` · 130 posts por conta, 30 dias → alcança comentário de um mês
+
+A funda é 1x por dia, não de hora em hora: 130 posts × 24 rodadas passa de 17
+mil chamadas do Graph por dia. A conta dos 130: ~4 vídeos por conta por dia ×
+30 dias. Com os 25 anteriores ela só chegava a ~7 dias.
+
+⚠️ A janela filtra a idade do **post**, não a do comentário — é o post que a API
+lista. Comentário velho mora em post velho, então alcançar 30 dias de post é o
+que faz o comentário de um mês ser respondido.
 
 Novos argumentos de CLI `--midias`, `--horas`, `--max` (sobrepõem o `.env`).
 Defaults subiram: `AUTO_RESP_HORAS` 48→168, `AUTO_RESP_MIDIAS` 8→25.
 
-⚠️ **Custo medido:** 162 chamadas/h antes → 444/h agora. O limite do Graph
+⚠️ **Custo medido:** 3.888 chamadas/dia antes → 7.638/dia agora. O limite do Graph
 escala com IMPRESSÃO, e as contas ainda são pequenas. Se aparecer erro de rate
 limit em `logs/cron_autoresp.log`, baixe o `--midias` da linha de 5min ANTES de
 mexer em qualquer outra coisa.

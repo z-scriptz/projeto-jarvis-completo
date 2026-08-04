@@ -57,14 +57,25 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # hora -- varre a janela toda e pega o que caiu em post mais antigo.
 #
 #   rapida  a cada 5min  · 3 posts por conta, ultimas 12h
-#   funda   de hora em hora · 25 posts por conta, ultimos 7 dias
+#   funda   1x por dia    · 130 posts por conta, ultimos 30 dias
 #
-# 3 na rapida, nao 5: comentario novo cai quase sempre no post mais recente, e
-# o limite do Graph escala com IMPRESSAO -- com conta pequena ele aperta. Se o
-# log comecar a mostrar erro de rate limit, baixe --midias na linha de 5min
-# antes de mexer em qualquer outra coisa.
+# A funda alcanca UM MES pra tras, que e o que o Dre pediu: responder comentario
+# que a pessoa deixou ha semanas. A conta: sao ~4 videos por conta por dia, entao
+# 30 dias = ~120 posts. Com 25 posts ela so chegava a uns 7 dias.
+#
+# 1x POR DIA e nao de hora em hora: 130 posts x 24 rodadas passa de 17 mil
+# chamadas do Graph por dia. Uma vez basta -- o que cai em post antigo durante o
+# dia espera ate a madrugada, e o que cai em post novo a rapida ja pegou.
+#
+# 3 na rapida, nao mais: comentario novo cai quase sempre no post mais recente,
+# e o limite do Graph escala com IMPRESSAO -- com conta pequena ele aperta. Se o
+# log mostrar erro de rate limit, baixe o --midias da linha de 5min PRIMEIRO.
+#
+# AUTO_RESP_MAX (padrao 40) limita as respostas POR RODADA. Na primeira varredura
+# do mes pode haver mais comentarios velhos que isso; ele responde 40 por dia ate
+# zerar, o que tambem evita despejar 200 respostas de uma vez e parecer spam.
 */5 * * * * cd $JARVIS && $PY auto_resposta.py --midias 3 --horas 12 >> $JARVIS/logs/cron_autoresp.log 2>&1
-7 * * * *   cd $JARVIS && $PY auto_resposta.py --midias 25 --horas 168 >> $JARVIS/logs/cron_autoresp.log 2>&1
+25 2 * * *  cd $JARVIS && $PY auto_resposta.py --midias 130 --horas 720 >> $JARVIS/logs/cron_autoresp.log 2>&1
 # JARVIS-AUTO-END"
 
 # recompoe o crontab: o que ja existia (sem o bloco antigo) + o bloco novo
@@ -75,7 +86,7 @@ echo "   • 03:00  coleta virais do TikTok"
 echo "   • 04h/12h/18h  produz 1 video cada (3/dia)"
 echo "   • 03:40  resolve produtos da Amazon (link de busca -> produto real)"
 echo "   • a cada 5min  auto-resposta nos posts novos (se AUTO_RESPONDER=1)"
-echo "   • de hora em hora  varredura funda (7 dias, 25 posts por conta)"
+echo "   • 02:25  varredura funda (30 dias, 130 posts por conta)"
 echo "   • daemon posta nos horarios de sempre"
 echo
 echo "Logs:  tail -f $JARVIS/logs/cron_produzir.log"
