@@ -771,7 +771,32 @@ Ferramentas → Gerador de links): recebe uma ou mais URLs de produto, uma por
 linha, mais a etiqueta, e devolve os links. Aceitar VÁRIAS URLs de uma vez é
 bom sinal — é o formato de quem tem back-end de geração em lote.
 
-**A medição que falta, e é do Dre:** gerar UM link e olhar a estrutura. Se o link for a URL do produto + parâmetro de rastreio
+**MEDIDO em 04/08 — e deu o resultado inverso do esperado.** O link do "Gerador
+de produtos recomendados" (`meli.la/2gy5qtz`) redireciona 301 para:
+
+    mercadolivre.com.br/social/topshop2413
+      ?matt_word=topshop2413&matt_tool=35246996&forceInApp=true&ref=<TOKEN>
+
+**Não aponta pro produto.** Aponta pro PERFIL SOCIAL do afiliado; o produto
+está dentro do `ref=`, um token opaco gerado no servidor. Duas conclusões:
+
+  1. **Essa ferramenta não serve pro nosso caso**, mesmo se fosse automatizável:
+     o cliente cai no perfil e ainda precisa achar o produto. Um clique a mais
+     entre o vídeo e o carrinho.
+  2. **`ref=` não é construível.** Por concatenação, essa via está fechada.
+
+**Falta testar a OUTRA ferramenta: "Gerador de links"** (Central de afiliados →
+Ferramentas), que é distinta do "Gerador de produtos recomendados". É a
+candidata a dar link DIRETO de produto. O bom sinal já está à vista:
+`matt_word=topshop2413` e `matt_tool=35246996` são os parâmetros de rastreio, e
+`matt_word` é a etiqueta da conta. Se o "Gerador de links" devolver
+`<url-do-produto>?matt_word=topshop2413&matt_tool=…`, dá pra montar por
+concatenação — exatamente o modelo da Amazon aqui. Se devolver outro
+`meli.la/...` que também cai em `/social/`, a via automática morre e o ML vira
+curadoria manual.
+
+⚠️ Mesmo se a concatenação parecer funcionar, **testar com uma venda real** —
+link que não credita é trabalhar de graça e só aparece no extrato. Se o link for a URL do produto + parâmetro de rastreio
 (`matt_tool`/`matt_word`), dá pra montar link por concatenação — que é
 exatamente como a Amazon funciona aqui (`?tag=SUATAG`, sem PA-API,
 `tiktok_coletor.py:34`). Se for um short link opaco gerado no servidor, só o
@@ -826,6 +851,23 @@ anotada acima: **testar com uma venda real antes de escalar.**
 Reaproveita o que já existe: `bio_page_builder.py` já gera página estática
 responsiva com tema claro/escuro e `deploy_site.py` já publica. A página de
 vendas é o mesmo maquinário com outro conteúdo — não é começar do zero.
+
+### Espelhamento: regra que o Dre quer (04/08, adiado por ele)
+
+Hoje é binário: tem texto → não espelha. O que ele pediu é mais fino:
+
+  - vídeo **sem texto** → pode espelhar (diferenciação, como hoje)
+  - vídeo **com texto** → não espelha (como hoje)
+  - vídeo **com @ de outro perfil** → **espelha de propósito**, pra atrapalhar
+    a leitura do @ alheio e proteger o direito autoral do vídeo dele
+
+O terceiro caso inverte a regra: hoje o `@` conta como "texto" e BLOQUEIA o
+espelhamento — justo o oposto do que ele quer. Vai exigir separar, no OCR, o
+que é hook (texto que deve ser preservado) do que é arroba (texto que deve ser
+embaralhado). Provavelmente por regex de `@\w+` no resultado do Tesseract.
+
+**Adiado a pedido dele** ("veremos isso outra hora, com calma"). A correção da
+amostragem de 04/08 já resolve o sintoma que doía (texto invertido no ar).
 
 ### Onde parou (04/08, fim do dia)
 
