@@ -52,6 +52,7 @@ if not (BASE_DIR / "shared").exists() and (BASE_DIR.parent / "shared").exists():
     BASE_DIR = BASE_DIR.parent
 
 FILA = BASE_DIR / "shared" / "produtos_fila.json"
+CURADORIA = BASE_DIR / "shared" / "content_plans" / "validacao_fila.json"
 ESTADO = BASE_DIR / "shared" / "whatsapp_enviados.json"
 SESSAO = BASE_DIR / "shared" / "whatsapp_sessao"
 ERROS = BASE_DIR / "shared" / "whatsapp_erros"
@@ -213,6 +214,64 @@ def _reais(valor) -> str:
     return "R$ " + f"{n:,.2f}".replace(",", "§").replace(".", ",").replace("§", ".")
 
 
+_indice_preco = None
+
+
+def _precos_da_curadoria() -> dict:
+    """Preço por link e por nome, vindo do relatório do validador.
+
+    O teste seco de 04/08 mostrou os dois achadinhos limpos **sem preço**: os
+    itens de `produtos_fila.json` nem sempre carregam `preco`. O dado existe —
+    a curadoria guarda em `validacao_fila.json`, e é de lá que a vitrine
+    complementa (`bio_page_builder`, o bloco "2) COMPLEMENTO").
+
+    Então aqui é a MESMA fonte que a vitrine, não uma nova: preço que diverge
+    entre a vitrine e o WhatsApp é pior que preço ausente — o cliente vê os
+    dois. Nada de rede: só lê o arquivo que o validador já gravou.
+    """
+    global _indice_preco
+    if _indice_preco is not None:
+        return _indice_preco
+    _indice_preco = {}
+    rel = _carregar_json(CURADORIA, {})
+    for p in (rel.get("produtos", []) if isinstance(rel, dict) else []):
+        if not isinstance(p, dict):
+            continue
+        try:
+            preco = float(p.get("preco") or 0)
+        except (TypeError, ValueError):
+            continue
+        if preco <= 0:
+            continue
+        for chave in ((p.get("link") or "").strip(),
+                      _norm(p.get("campeao") or ""),
+                      _norm(p.get("produto") or "")):
+            if chave:
+                _indice_preco.setdefault(chave, preco)
+    return _indice_preco
+
+
+def _preco_do_item(item: dict) -> float:
+    """Preço do item; 0 se ninguém sabe — e aí a linha some da mensagem.
+
+    Nunca inventa: sem preço, o achadinho vai só com nome e link, que é o que
+    já acontecia. Preço errado num grupo de compras é pior que preço nenhum.
+    """
+    try:
+        direto = float(item.get("preco") or 0)
+    except (TypeError, ValueError):
+        direto = 0.0
+    if direto > 0:
+        return direto
+    idx = _precos_da_curadoria()
+    for chave in ((item.get("link") or "").strip(),
+                  _norm(_nome_do_item(item)),
+                  _norm(item.get("produto") or "")):
+        if chave and chave in idx:
+            return idx[chave]
+    return 0.0
+
+
 def _nome_do_item(item: dict) -> str:
     return (item.get("campeao") or item.get("produto")
             or item.get("titulo") or item.get("nome") or "").strip()
@@ -228,7 +287,7 @@ def _mensagem(item: dict) -> str:
     nome = " ".join((_nome_do_item(item) or "Achadinho").split())
     if len(nome) > 70:
         nome = nome[:67].rsplit(" ", 1)[0] + "..."
-    preco = item.get("preco") or 0
+    preco = _preco_do_item(item)
     linhas = [f"*{nome}*"]
     if preco:
         linhas.append(f"💰 {_reais(preco)}")
