@@ -56,6 +56,7 @@ CURADORIA = BASE_DIR / "shared" / "content_plans" / "validacao_fila.json"
 ESTADO = BASE_DIR / "shared" / "whatsapp_enviados.json"
 SESSAO = BASE_DIR / "shared" / "whatsapp_sessao"
 ERROS = BASE_DIR / "shared" / "whatsapp_erros"
+FOTOS = BASE_DIR / "shared" / "whatsapp_fotos"
 
 # A regra de "esse nome serve pra cliente?" mora em shared/termos.py e é
 # importada, nunca copiada: regra duplicada é a armadilha que já mordeu este
@@ -112,6 +113,26 @@ SEL_CAIXA = ["div[contenteditable='true'][data-tab='10']",
              "footer div[contenteditable='true']",
              "div[role='textbox'][data-tab='10']"]
 SEL_LOGADO = ["div[data-testid='chat-list']", "#pane-side", "div[aria-label*='Lista de conversas']"]
+
+# O input de arquivo do WhatsApp Web é escondido (o clique no "+" é só
+# enfeite). set_input_files funciona direto nele, sem abrir menu nenhum — é
+# menos passo e menos coisa pra mudar de layout.
+#
+# Sem curinga `input[type='file']` de propósito: o WhatsApp tem MAIS DE UM
+# desses, e um deles é o de DOCUMENTO. A foto entrando por ali vira anexo de
+# arquivo no grupo — pior que não ter foto. Se nenhum destes casar, o post cai
+# pro texto, que é a degradação segura.
+SEL_ANEXO = ["input[type='file'][accept*='image']",
+             "input[type='file'][accept*='jpeg']",
+             "input[type='file'][accept*='png']"]
+# Depois de anexar, o WhatsApp abre uma TELA DE PRÉVIA com a foto e uma caixa
+# de legenda separada da caixa de conversa. Digitar na caixa errada manda a
+# legenda como mensagem solta e a foto sem texto — por isso a prévia é
+# esperada antes de qualquer tecla.
+SEL_PREVIA = ["div[data-testid='media-preview']",
+              "div[aria-label*='Enviar'] img",
+              "div[role='dialog'] img[src^='blob:']",
+              "img[src^='blob:']"]
 
 
 def _log(m):
@@ -251,11 +272,51 @@ def _precos_da_curadoria() -> dict:
     return _indice_preco
 
 
+_historico = None
+
+
+def _do_historico(link: str) -> dict:
+    """O que `precos_historico.json` sabe sobre este link: preço e nome oficial.
+
+    Esta é a MESMA fonte que a vitrine usa (`historico_precos.enriquecer`), e
+    é indexada pelo mesmo link de afiliado que está na fila. Vem do
+    health-check do deploy, que já pedia esses dados à API e passou a guardar
+    — custo zero, nenhuma chamada nova.
+
+    Resolve dois dos defeitos do primeiro post real: o preço que faltava e o
+    nome truncado (aqui está o TÍTULO OFICIAL da Shopee, inteiro).
+    """
+    global _historico
+    if not link:
+        return {}
+    if _historico is None:
+        try:
+            import historico_precos
+            _historico = historico_precos
+        except Exception as e:
+            _log(f"sem histórico de preços ({str(e)[:60]}) — sigo sem ele")
+            _historico = False
+    if not _historico:
+        return {}
+    try:
+        dados = _historico.carregar()
+        r = _historico.resumo(link, dados=dados) or {}
+        return {"preco": float(r.get("preco") or 0),
+                "nome": (dados.get(link) or {}).get("nome") or ""}
+    except Exception as e:
+        _log(f"histórico ilegível ({str(e)[:60]}) — sigo sem ele")
+        return {}
+
+
 def _preco_do_item(item: dict) -> float:
     """Preço do item; 0 se ninguém sabe — e aí a linha some da mensagem.
 
-    Nunca inventa: sem preço, o achadinho vai só com nome e link, que é o que
-    já acontecia. Preço errado num grupo de compras é pior que preço nenhum.
+    Três fontes, da mais específica pra mais geral: o que o item traz, a
+    curadoria do validador, e o histórico do health-check. Todas já existem —
+    não há chamada de rede nenhuma aqui.
+
+    Nunca inventa: sem preço, o achadinho vai com nome e link. Preço errado
+    num grupo de compras é pior que preço nenhum.
     """
     try:
         direto = float(item.get("preco") or 0)
@@ -269,7 +330,7 @@ def _preco_do_item(item: dict) -> float:
                   _norm(item.get("produto") or "")):
         if chave and chave in idx:
             return idx[chave]
-    return 0.0
+    return float(_do_historico((item.get("link") or "").strip()).get("preco") or 0)
 
 
 def _nome_do_item(item: dict) -> str:
@@ -277,22 +338,45 @@ def _nome_do_item(item: dict) -> str:
             or item.get("titulo") or item.get("nome") or "").strip()
 
 
-def _mensagem(item: dict) -> str:
-    """Formato do WhatsApp: *negrito* e URL crua.
+# Antes ficava em 70 e cortava "Kit 4 Essência 10ml Para Aromatizador
+# Difusor Umidificador..." no meio — o cliente não sabia o que era. A legenda
+# de foto do WhatsApp aceita ~1024 caracteres; 110 mostra o nome inteiro da
+# quase totalidade dos anúncios e ainda cabe numa olhada.
+NOME_MAX = 110
 
-    Nada de markdown de link — o WhatsApp não embute, e colchete solto no meio
-    do texto fica feio. A URL sozinha vira prévia clicável sozinha.
+
+def _titulo_do_item(item: dict) -> str:
+    """O melhor nome disponível, inteiro sempre que couber.
+
+    Prefere o título OFICIAL da Shopee (guardado pelo health-check) ao nome
+    que o coletor extraiu do vídeo: é o mesmo nome que a vitrine mostra, e é
+    o que o cliente vai reler quando abrir o link.
     """
-    # espaço duplo vem de título de anúncio da Shopee e aparece na mensagem
-    nome = " ".join((_nome_do_item(item) or "Achadinho").split())
-    if len(nome) > 70:
-        nome = nome[:67].rsplit(" ", 1)[0] + "..."
+    oficial = _do_historico((item.get("link") or "").strip()).get("nome") or ""
+    nome = " ".join((oficial or _nome_do_item(item) or "Achadinho").split())
+    if len(nome) > NOME_MAX:
+        nome = nome[:NOME_MAX - 1].rsplit(" ", 1)[0] + "…"
+    return nome
+
+
+def _mensagem(item: dict) -> str:
+    """A legenda do achadinho — mesmo formato do grupo do Telegram.
+
+    Copiar a FORMA do `_montar_legenda` do telegram_poster é de propósito: as
+    duas comunidades são do mesmo dono e recebem os mesmos produtos. Formato
+    diferente por surface faz o cliente que está nos dois achar que são
+    revendas diferentes.
+
+    Muda só a marcação: o WhatsApp usa *negrito* e não embute link em texto,
+    então a URL vai crua — sozinha ela vira prévia clicável.
+    """
+    linhas = [f"🛍️ *{_titulo_do_item(item)}*", ""]
     preco = _preco_do_item(item)
-    linhas = [f"*{nome}*"]
     if preco:
         linhas.append(f"💰 {_reais(preco)}")
+    linhas.append("🔥 Corre que é por tempo limitado!")
     linhas.append("")
-    linhas.append(item.get("link", ""))
+    linhas.append(f"👉 {item.get('link', '')}")
     return "\n".join(linhas)
 
 
@@ -535,6 +619,103 @@ def _print_erro(pagina, motivo: str) -> Path:
     return caminho
 
 
+def _baixar_foto(url: str) -> Path:
+    """Baixa a foto do produto pra um arquivo temporário. None se não der.
+
+    Sem foto o achadinho vira link solto — foi exatamente a queixa do primeiro
+    post real. Mas foto é enfeite: se o download falhar, a mensagem vai como
+    texto, que ainda vende. Nunca deixo o post inteiro morrer por causa dela.
+    """
+    url = (url or "").strip()
+    if not url.startswith("http"):
+        return None
+    try:
+        import requests
+        r = requests.get(url, timeout=25, headers={"User-Agent": _UA})
+        r.raise_for_status()
+        if not r.content or len(r.content) < 1024:
+            _log("   foto veio vazia demais — mando sem foto")
+            return None
+        tipo = (r.headers.get("Content-Type") or "").lower()
+        ext = ".png" if "png" in tipo else ".webp" if "webp" in tipo else ".jpg"
+        FOTOS.mkdir(parents=True, exist_ok=True)
+        destino = FOTOS / f"{datetime.now():%H%M%S}-{random.randint(100, 999)}{ext}"
+        destino.write_bytes(r.content)
+        return destino
+    except Exception as e:
+        _log(f"   não baixei a foto ({str(e)[:60]}) — mando sem foto")
+        return None
+
+
+def _enviar_com_foto(pagina, foto: Path, legenda: str) -> bool:
+    """Anexa a foto e manda com a legenda junto. False se não deu.
+
+    O contrato importa: **False significa que NADA foi enviado**. Se
+    devolvesse False depois de já ter mandado alguma coisa, o chamador tentaria
+    o texto e o grupo receberia o produto duas vezes.
+
+    Por isso a prévia é esperada antes de digitar. Se ela não aparecer, o
+    arquivo pode ter sido anexado mas nada foi enviado — aí eu tiro o print,
+    fecho a prévia com Escape e devolvo False pro texto seguir.
+    """
+    campo = None
+    for s in SEL_ANEXO:
+        try:
+            campo = pagina.query_selector(s)
+        except Exception:
+            campo = None
+        if campo:
+            break
+    if not campo:
+        _log("   não achei onde anexar arquivo — mando sem foto")
+        return False
+
+    try:
+        campo.set_input_files(str(foto))
+    except Exception as e:
+        _log(f"   falhei ao anexar ({str(e)[:60]}) — mando sem foto")
+        return False
+
+    if not _achar(pagina, SEL_PREVIA, timeout=15000):
+        _print_erro(pagina, "anexei a foto mas a prévia não abriu")
+        try:
+            pagina.keyboard.press("Escape")
+            pagina.wait_for_timeout(800)
+        except Exception:
+            pass
+        return False
+
+    pagina.wait_for_timeout(1200)
+    # a caixa de legenda é OUTRA que a da conversa. Procuro a que está dentro
+    # da prévia; se houver mais de uma editável, a última é a legenda.
+    caixa = None
+    try:
+        editaveis = pagina.query_selector_all("div[contenteditable='true']")
+        visiveis = [e for e in editaveis if e.is_visible()]
+        if visiveis:
+            caixa = visiveis[-1]
+    except Exception:
+        caixa = None
+    if not caixa:
+        _print_erro(pagina, "prévia aberta mas sem caixa de legenda")
+        try:
+            pagina.keyboard.press("Escape")
+        except Exception:
+            pass
+        return False
+
+    caixa.click()
+    for n, linha in enumerate(legenda.split("\n")):
+        if n:
+            pagina.keyboard.press("Shift+Enter")
+        if linha:
+            pagina.keyboard.type(linha, delay=random.randint(20, 55))
+    pagina.wait_for_timeout(random.randint(700, 1500))
+    pagina.keyboard.press("Enter")
+    pagina.wait_for_timeout(2500)
+    return True
+
+
 def _abrir(pw, headless=True):
     """Contexto PERSISTENTE: a sessão do WhatsApp precisa sobreviver entre
     rodadas, senão seria um QR novo toda vez (e escanear QR toda hora é
@@ -735,29 +916,49 @@ def enviar(quantos: int, teste: bool = False) -> int:
 
             enviados = 0
             for i, it in enumerate(alvo):
-                caixa = _achar(pagina, SEL_CAIXA)
-                if not caixa:
-                    caminho = _print_erro(pagina, "não achei a caixa de mensagem")
-                    _avisar("WhatsApp: a marcação mudou (caixa de mensagem).", caminho)
-                    break
-
                 texto = _mensagem(it)
                 if teste:
-                    _log(f"   [seco] mandaria:\n{texto}\n")
+                    foto = _baixar_foto(it.get("imagem", ""))
+                    _log(f"   [seco] mandaria {'COM foto' if foto else 'SEM foto'}:"
+                         f"\n{texto}\n")
+                    if foto:
+                        try:
+                            foto.unlink()
+                        except Exception:
+                            pass
                     enviados += 1
                     continue
 
-                caixa.click()
-                # digita linha a linha: Enter manda a mensagem, então quebra de
-                # linha tem que ser Shift+Enter
-                for n, linha in enumerate(texto.split("\n")):
-                    if n:
-                        pagina.keyboard.press("Shift+Enter")
-                    if linha:
-                        pagina.keyboard.type(linha, delay=random.randint(25, 70))
-                pagina.wait_for_timeout(random.randint(600, 1400))
-                pagina.keyboard.press("Enter")
-                pagina.wait_for_timeout(1500)
+                # foto primeiro: achadinho sem foto vira link solto, que foi a
+                # queixa do primeiro post real. Se a foto falhar em qualquer
+                # etapa, cai no texto — que ainda vende.
+                foto = _baixar_foto(it.get("imagem", ""))
+                foi = False
+                if foto:
+                    foi = _enviar_com_foto(pagina, foto, texto)
+                    try:
+                        foto.unlink()
+                    except Exception:
+                        pass
+
+                if not foi:
+                    caixa = _achar(pagina, SEL_CAIXA)
+                    if not caixa:
+                        caminho = _print_erro(pagina, "não achei a caixa de mensagem")
+                        _avisar("WhatsApp: a marcação mudou (caixa de mensagem).",
+                                caminho)
+                        break
+                    caixa.click()
+                    # digita linha a linha: Enter manda a mensagem, então quebra
+                    # de linha tem que ser Shift+Enter
+                    for n, linha in enumerate(texto.split("\n")):
+                        if n:
+                            pagina.keyboard.press("Shift+Enter")
+                        if linha:
+                            pagina.keyboard.type(linha, delay=random.randint(25, 70))
+                    pagina.wait_for_timeout(random.randint(600, 1400))
+                    pagina.keyboard.press("Enter")
+                    pagina.wait_for_timeout(1500)
 
                 enviados += 1
                 ja.add(it["link"])
