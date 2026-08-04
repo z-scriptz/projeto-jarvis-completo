@@ -543,6 +543,35 @@ vários seletores; quando o print de erro chegar no Telegram, é sinal de que
 
 Fora do cron de propósito até o Dre validar as primeiras rodadas à mão.
 
+**Primeira quebra e o que ela ensinou (04/08).** O `--teste` parou em "não achei
+a caixa de busca". A tentação era trocar o seletor no escuro; em vez disso o
+`--diag` foi escrito pra *olhar*, e o print que o Telegram mandou resolveu antes
+mesmo de rodar: um **"Novidades do WhatsApp Web"** aberto por cima da interface,
+com botão Continuar. A busca e o grupo estavam atrás dele, corretos. Ou seja,
+**os seletores nunca estiveram errados** — `wait_for_selector(state="visible")`
+é que falha quando o elemento está atrás de um modal. É a mesma lição do dia
+inteiro: medir, não adivinhar. Aqui, o print É a medição.
+
+`_fechar_modal()` roda logo depois do login ser detectado. **Só clica em botão
+que esteja DENTRO de um `role=dialog` E cujo texto esteja numa lista curta**
+(Continuar, OK, Entendi, Agora não...). Diálogo desconhecido ele registra e não
+fecha — clicar em qualquer botão de qualquer diálogo é aceitar termo sem ler, e
+um dia o diálogo é "sair de todos os aparelhos?".
+
+O mesmo print revelou um segundo problema *antes* de ele acontecer: o grupo é
+**"💭 ACHADINHOS VIP TOPSHOP"**, com emoji no nome. `keyboard.type` não emite
+caractere fora do BMP de forma confiável (emoji é par surrogate) e um emoji
+digitado errado zera a busca → `_digitavel()` digita só o texto legível. E
+`span[title='...']` exigia o nome byte a byte → `_achar_grupo()` tenta o exato e
+depois aceita título que *contenha* o texto legível. Nunca "o primeiro
+resultado": isso é mandar achadinho pra conversa errada.
+
+Detalhe que morde: o seletor exato usa `json.dumps(..., ensure_ascii=False)`. No
+padrão o json troca o emoji por escapes barra-u e o **CSS lê aquilo como escape
+hexadecimal**, casando com nada.
+
+Próximo passo: rodar `--teste` de novo na VPS (`.venv/bin/python`, sempre).
+
 ### Pendências pequenas deixadas conscientemente
 
 - `validar_fila`: quando a retentativa também falha, o relatório mostra o motivo
