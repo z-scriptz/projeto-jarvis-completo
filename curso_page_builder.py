@@ -42,10 +42,17 @@ SAIDA_PADRAO = BASE_DIR / "site" / "curso" / "index.html"
 # app.hotmart.com/products/manage/... — aquele é a tela de ADMINISTRAÇÃO e o
 # cliente cai num login. Enquanto estiver vazio, a página avisa em vez de
 # publicar botão quebrado.
-CHECKOUT = os.environ.get("CURSO_CHECKOUT", "").strip()
+# `go.hotmart.com/<ID>?dp=1` e nao `pay.hotmart.com/<ID>`: o `dp=1` diz a
+# Hotmart pra PULAR a pagina de vendas dela e ir direto ao checkout — que e
+# justamente o motivo de existir pagina propria. O pay.hotmart tambem funciona,
+# mas o go/dp=1 e o caminho que a Hotmart documenta pra este caso e o que
+# preserva melhor o rastreio.
+CHECKOUT = os.environ.get(
+    "CURSO_CHECKOUT", "https://go.hotmart.com/B106927444O?dp=1").strip()
 
 PRECO = os.environ.get("CURSO_PRECO", "179,90").strip()
 PARCELA = os.environ.get("CURSO_PARCELA", "").strip()   # ex.: "12x de R$ 17,90"
+GARANTIA = int(float(os.environ.get("CURSO_GARANTIA_DIAS", "7")))
 
 CORES = {
     "bg1": "#0c1512", "bg2": "#07100c", "verde": "#12251b",
@@ -53,56 +60,56 @@ CORES = {
     "gold": "#d8b25a", "goldSoft": "#f0d79a", "quente": "#c98a72",
 }
 
-# ── CONTEÚDO ────────────────────────────────────────────────────────────────
-# Tudo abaixo sai das aulas que EXISTEM (curso/remotion/src/aulas/). Não há
-# nada inventado: se uma seção não tem lastro numa aula, ela não está aqui.
+# ── CONTEUDO ────────────────────────────────────────────────────────────────
+# Tudo abaixo sai das aulas que EXISTEM (curso/remotion/src/aulas/). Nada
+# inventado: secao sem lastro numa aula nao entra.
 
 TRAVAS = [
-    ("Não quero aparecer", "Você não precisa. O método inteiro é feito pra funcionar "
-     "sem mostrar o rosto."),
-    ("Não tenho tempo", "O trabalho é montar o sistema uma vez. Depois é ele que "
-     "roda, não você."),
-    ("Não sei por onde começar", "Existe uma ordem. Você vai segui-la, passo a "
-     "passo, sem adivinhar nada."),
+    ("🙈", "Não quero aparecer",
+     "Você não precisa. O método inteiro é feito pra funcionar sem mostrar o rosto."),
+    ("⏳", "Não tenho tempo",
+     "O trabalho é montar o sistema uma vez. Depois é ele que roda, não você."),
+    ("🧭", "Não sei por onde começar",
+     "Existe uma ordem. Você vai segui-la, passo a passo, sem adivinhar nada."),
 ]
 
 MAQUINA = [
-    ("Você não cria. Você <b>conecta</b>.",
+    ("01", "Você não cria. Você <b>conecta</b>.",
      "O conteúdo que converte já existe. O que falta é o sistema que liga uma "
      "peça na outra."),
-    ("Vídeos que <b>não mostram você</b>",
+    ("02", "Vídeos que <b>não mostram você</b>",
      "O formato faceless não é limitação — é o que torna possível produzir em "
      "volume sem depender da sua presença."),
-    ("Alcance é <b>volume</b>, não sorte",
+    ("03", "Alcance é <b>volume</b>, não sorte",
      "Um vídeo que estoura é ruído. Muitos vídeos, com método, viram média — e "
      "média dá pra prever."),
-    ("Do vídeo até o <b>checkout</b>",
+    ("04", "Do vídeo até o <b>checkout</b>",
      "O caminho inteiro, sem buraco: onde a pessoa te encontra, o que ela vê "
      "depois, e como ela chega na compra."),
-    ("Repita o que o <b>número</b> aprova",
-     "Parar de decidir por opinião. O que mediu e funcionou, repete; o que não, "
-     "sai."),
+    ("05", "Repita o que o <b>número</b> aprova",
+     "Parar de decidir por opinião. O que mediu e funcionou, repete; o que "
+     "não, sai."),
 ]
 
 MENTALIDADE = [
     ("Os primeiros vão ser <b>ruins</b>",
-     "E isso está previsto. Quem desiste no quinto vídeo desiste antes da parte "
-     "em que o método começa a agir."),
+     "E isso está previsto. Quem desiste no quinto vídeo desiste antes da "
+     "parte em que o método começa a agir."),
     ("Ninguém pode <b>garantir</b> resultado",
-     "Nem eu. Quem garante está vendendo outra coisa. O que dá pra garantir é o "
-     "método e a ordem."),
+     "Nem eu. Quem garante está vendendo outra coisa. O que dá pra garantir é "
+     "o método e a ordem."),
     ("Meta de <b>processo</b>, não de resultado",
-     "\"Publicar X vídeos nesta semana\" você controla. \"Faturar Y\" não. A "
-     "primeira te move; a segunda te paralisa."),
+     "&ldquo;Publicar X vídeos nesta semana&rdquo; você controla. "
+     "&ldquo;Faturar Y&rdquo; não. A primeira te move; a segunda te paralisa."),
     ("Compare com <b>você de ontem</b>",
-     "A régua é o seu próprio avanço. Comparar com quem começou há dois anos só "
-     "serve pra parar."),
+     "A régua é o seu próprio avanço. Comparar com quem começou há dois anos "
+     "só serve pra parar."),
 ]
 
 AULAS_M0 = [
     ("Aula 1", "Bem-vindo",
-     "A trava que te trouxe até aqui, por que dá pra fazer sem aparecer, e o que "
-     "este curso é — e o que ele não é."),
+     "A trava que te trouxe até aqui, por que dá pra fazer sem aparecer, e o "
+     "que este curso é — e o que ele não é."),
     ("Aula 2", "A máquina que você vai construir",
      "As peças do sistema e como elas se encaixam. Sozinha, nenhuma funciona."),
     ("Aula 3", "A mentalidade que sustenta o resultado",
@@ -110,243 +117,502 @@ AULAS_M0 = [
      "primeiro mês."),
 ]
 
-# Repassa TUDO que veio na URL da página pro checkout. É assim que o crédito do
-# afiliado sobrevive ao clique — e a razão de a página existir num domínio
-# nosso em vez de mandar o afiliado direto pra Hotmart.
-_JS_AFILIADO = """
-(function(){
-  var params = window.location.search;
-  if (!params || params.length < 2) return;
-  var extra = params.substring(1);
-  document.querySelectorAll('a[data-checkout]').forEach(function(a){
-    var href = a.getAttribute('href');
-    if (!href || href === '#') return;
-    a.setAttribute('href', href + (href.indexOf('?') === -1 ? '?' : '&') + extra);
-  });
-})();
-"""
+PRA_QUEM = [
+    (True, "Quer uma renda online e não quer aparecer"),
+    (True, "Prefere seguir um passo a passo a sair testando no escuro"),
+    (True, "Aceita que resultado vem de execução, não de sorte"),
+    (False, "Procura ficar rico rápido ou renda sem trabalho"),
+    (False, "Quer garantia de valor ou de prazo — isso ninguém honesto dá"),
+    (False, "Não pretende publicar com constância"),
+]
+
+FAQ = [
+    ("Preciso mostrar o rosto?",
+     "Não. O método inteiro é construído no formato <b>faceless</b> — os "
+     "vídeos não mostram você. Essa não é uma adaptação: é o desenho do curso "
+     "desde a primeira aula."),
+    ("Preciso criar conteúdo do zero?",
+     "Não. Uma das ideias centrais é que <b>você não cria, você conecta</b>. O "
+     "conteúdo que converte já existe; o que falta é o sistema que liga uma "
+     "peça na outra."),
+    ("Em quanto tempo eu vejo resultado?",
+     "Não tem resposta honesta com número. <b>Ninguém pode garantir resultado "
+     "ou prazo</b> — e quem garante está vendendo outra coisa. O que o curso "
+     "entrega é o método e a ordem; o resto depende da sua execução."),
+    ("E se meus primeiros vídeos forem ruins?",
+     "Vão ser. Isso está previsto e tem uma aula inteira sobre. Quem desiste "
+     "no quinto vídeo desiste <b>antes</b> da parte em que o método começa a "
+     "agir."),
+    ("Como funciona o pagamento?",
+     "O pagamento é processado pela <b>Hotmart</b>, com acesso liberado logo "
+     "após a confirmação. Você tem <b>{garantia} dias</b> de garantia."),
+]
 
 
 def _esc(t: str) -> str:
     return html.escape(t or "", quote=True)
 
 
-def _cartoes(itens, classe="cartao") -> str:
-    return "\n".join(
-        f'      <li class="{classe}"><h3>{t}</h3><p>{d}</p></li>'
-        for t, d in itens)
-
-
-def _botao(texto: str, grande: bool = False) -> str:
-    """O botão de compra. Sem checkout configurado ele NÃO vira link morto:
-    vira um aviso visível, porque publicar botão que não compra é pior que
-    publicar página sem botão."""
-    cls = "botao" + (" grande" if grande else "")
+def _botao(texto: str, classe: str = "") -> str:
+    """O botao de compra. Sem checkout configurado ele NAO vira link morto:
+    vira um aviso visivel, porque publicar botao que nao compra e pior que
+    publicar pagina sem botao."""
+    cls = ("botao " + classe).strip()
     if not CHECKOUT:
         return (f'<span class="{cls} pendente" title="Defina CURSO_CHECKOUT">'
-                f'⚠️ checkout não configurado</span>')
+                f'&#9888; checkout nao configurado</span>')
     return (f'<a class="{cls}" data-checkout href="{_esc(CHECKOUT)}" '
-            f'rel="noopener">{_esc(texto)}</a>')
+            f'rel="noopener"><span>{_esc(texto)}</span></a>')
 
 
-def montar() -> str:
+# Repassa TUDO que veio na URL da pagina pro checkout. E assim que o credito do
+# afiliado sobrevive ao clique — e a razao de a pagina existir num dominio
+# nosso em vez de mandar o afiliado direto pra Hotmart.
+#
+# O resto do JS e enfeite e SE DEGRADA: revelacao no scroll so acontece se
+# houver IntersectionObserver, o parallax so no desktop, e nada disso roda com
+# prefers-reduced-motion. O repasse do parametro nao e enfeite e roda sempre —
+# por isso e a PRIMEIRA coisa do arquivo, antes de qualquer checagem de suporte.
+_JS = r"""
+(function(){
+  var busca = window.location.search;
+  if (busca && busca.length > 1){
+    var extra = busca.substring(1);
+    var bts = document.querySelectorAll('a[data-checkout]');
+    for (var i=0;i<bts.length;i++){
+      var h = bts[i].getAttribute('href');
+      if (!h || h === '#') continue;
+      bts[i].setAttribute('href', h + (h.indexOf('?') === -1 ? '?' : '&') + extra);
+    }
+  }
+
+  var calmo = window.matchMedia &&
+              window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* revelacao no scroll */
+  var alvos = document.querySelectorAll('[data-revela]');
+  if (calmo || !('IntersectionObserver' in window)){
+    for (var j=0;j<alvos.length;j++) alvos[j].classList.add('visivel');
+  } else {
+    var obs = new IntersectionObserver(function(ents){
+      ents.forEach(function(e){
+        if (e.isIntersecting){ e.target.classList.add('visivel'); obs.unobserve(e.target); }
+      });
+    }, {rootMargin: '0px 0px -12% 0px', threshold: 0.08});
+    for (var k=0;k<alvos.length;k++) obs.observe(alvos[k]);
+  }
+
+  /* barra fixa de compra: aparece quando o heroi sai da tela.
+     No celular ela e o unico CTA sempre a mao — por isso nao depende de
+     IntersectionObserver e tem plano B no scroll. */
+  var barra = document.getElementById('barra');
+  var heroi = document.getElementById('heroi');
+  function mostra(v){ if (barra) barra.classList.toggle('aberta', v); }
+  if (barra && heroi){
+    if ('IntersectionObserver' in window){
+      new IntersectionObserver(function(e){ mostra(!e[0].isIntersecting); },
+                               {threshold: 0}).observe(heroi);
+    } else {
+      window.addEventListener('scroll', function(){
+        mostra(window.scrollY > heroi.offsetHeight * 0.8);
+      }, {passive:true});
+    }
+  }
+
+  /* luz do heroi seguindo o ponteiro — so no desktop, so com mouse */
+  if (!calmo && heroi && window.matchMedia('(pointer:fine)').matches){
+    heroi.addEventListener('pointermove', function(e){
+      var r = heroi.getBoundingClientRect();
+      heroi.style.setProperty('--mx', (e.clientX - r.left) + 'px');
+      heroi.style.setProperty('--my', (e.clientY - r.top) + 'px');
+    });
+  }
+
+  /* FAQ: abrir uma fecha as outras */
+  var faqs = document.querySelectorAll('.faq details');
+  for (var f=0; f<faqs.length; f++){
+    faqs[f].addEventListener('toggle', function(){
+      if (!this.open) return;
+      for (var g=0; g<faqs.length; g++) if (faqs[g] !== this) faqs[g].open = false;
+    });
+  }
+})();
+"""
+
+
+def _css() -> str:
     c = CORES
-    preco_linha = f'<div class="parcela">{_esc(PARCELA)}</div>' if PARCELA else ""
-    aulas = "\n".join(
-        f'      <li class="aula"><span class="n">{_esc(n)}</span>'
-        f'<h3>{_esc(t)}</h3><p>{_esc(d)}</p></li>'
-        for n, t, d in AULAS_M0)
-
-    return f"""<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Afiliado Online — renda online sem precisar aparecer</title>
-<meta name="description" content="Um método passo a passo pra construir uma
-renda online no formato faceless: sem mostrar o rosto e sem postar o dia
-inteiro na mão.">
-<style>
+    return f"""
 :root{{
   --bg1:{c['bg1']}; --bg2:{c['bg2']}; --verde:{c['verde']};
   --ink:{c['ink']}; --muted:{c['muted']};
   --gold:{c['gold']}; --goldSoft:{c['goldSoft']}; --quente:{c['quente']};
+  --linha:rgba(216,178,90,.15);
+  --card:rgba(18,37,27,.55);
 }}
 *{{box-sizing:border-box}}
-body{{margin:0;background:linear-gradient(160deg,var(--bg1),var(--bg2));
-  color:var(--ink);font:16px/1.65 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+html{{scroll-behavior:smooth}}
+body{{margin:0;background:var(--bg2);color:var(--ink);overflow-x:hidden;
+  font:16px/1.68 system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,sans-serif;
   -webkit-font-smoothing:antialiased}}
-.wrap{{max-width:1060px;margin:0 auto;padding:0 22px}}
-section{{padding:64px 0;border-top:1px solid rgba(216,178,90,.13)}}
-section:first-of-type{{border-top:0}}
-h1,h2,h3{{line-height:1.2;margin:0 0 14px}}
-h1{{font-size:clamp(30px,5.6vw,52px);letter-spacing:-.02em}}
-h2{{font-size:clamp(23px,3.4vw,33px);letter-spacing:-.01em}}
-h3{{font-size:18px}}
+.wrap{{max-width:1080px;margin:0 auto;padding:0 22px}}
+section{{padding:78px 0;position:relative}}
+h1,h2,h3{{line-height:1.16;margin:0 0 14px;letter-spacing:-.02em}}
+h1{{font-size:clamp(32px,6vw,58px);font-weight:800}}
+h2{{font-size:clamp(25px,3.8vw,38px);font-weight:750}}
+h3{{font-size:18px;font-weight:650;letter-spacing:-.01em}}
 p{{margin:0 0 14px;color:var(--muted)}}
-b{{color:var(--goldSoft);font-weight:600}}
-.olho{{font:600 12px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
-  letter-spacing:.16em;text-transform:uppercase;color:var(--gold);
-  margin-bottom:16px;display:block}}
-.g{{color:var(--gold)}}
+b{{color:var(--goldSoft);font-weight:650}}
+.g{{background:linear-gradient(100deg,var(--gold),var(--goldSoft) 55%,var(--gold));
+  -webkit-background-clip:text;background-clip:text;color:transparent}}
+.olho{{display:inline-flex;align-items:center;gap:8px;
+  font:650 11.5px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
+  letter-spacing:.18em;text-transform:uppercase;color:var(--gold);
+  margin-bottom:18px;padding:7px 13px;border-radius:999px;
+  border:1px solid var(--linha);background:rgba(216,178,90,.06)}}
 
-/* herói */
-.heroi{{padding:76px 0 60px;position:relative;overflow:hidden}}
-.heroi::after{{content:"";position:absolute;inset:auto -20% -55% 40%;height:460px;
-  background:radial-gradient(closest-side,rgba(216,178,90,.14),transparent 72%);
+/* fundo vivo: duas manchas que giram devagar */
+.orbe{{position:fixed;border-radius:50%;filter:blur(90px);opacity:.5;z-index:-1;
   pointer-events:none}}
-.heroi p.lead{{font-size:clamp(17px,2.3vw,21px);max-width:62ch}}
+.orbe.a{{width:52vw;height:52vw;top:-16vw;right:-14vw;
+  background:radial-gradient(closest-side,rgba(216,178,90,.16),transparent);
+  animation:flutua 26s ease-in-out infinite alternate}}
+.orbe.b{{width:44vw;height:44vw;bottom:-16vw;left:-14vw;
+  background:radial-gradient(closest-side,rgba(201,138,114,.12),transparent);
+  animation:flutua 34s ease-in-out infinite alternate-reverse}}
+@keyframes flutua{{to{{transform:translate3d(4vw,5vw,0) scale(1.14)}}}}
 
-/* listas em cartão */
-ul.grade{{list-style:none;display:grid;gap:16px;padding:0;margin:26px 0 0;
-  grid-template-columns:repeat(auto-fit,minmax(268px,1fr))}}
-.cartao,.aula{{background:rgba(18,37,27,.55);border:1px solid rgba(216,178,90,.16);
-  border-radius:15px;padding:22px}}
-.cartao h3{{color:var(--ink)}}
-.cartao p,.aula p{{margin:0;font-size:15px}}
-.aula .n{{font:600 11px/1 ui-monospace,Menlo,monospace;letter-spacing:.14em;
-  color:var(--gold);text-transform:uppercase;display:block;margin-bottom:9px}}
+/* heroi */
+.heroi{{padding:96px 0 74px;position:relative;isolation:isolate}}
+.heroi::before{{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;
+  background:radial-gradient(420px circle at var(--mx,72%) var(--my,28%),
+             rgba(216,178,90,.10),transparent 70%);transition:opacity .3s}}
+.heroi h1{{max-width:17ch}}
+.lead{{font-size:clamp(17px,2.2vw,20.5px);max-width:60ch;margin-top:20px}}
+.confia{{display:flex;flex-wrap:wrap;gap:9px;margin-top:26px;list-style:none;padding:0}}
+.confia li{{font-size:13px;color:var(--muted);border:1px solid var(--linha);
+  border-radius:999px;padding:7px 14px;background:rgba(18,37,27,.4)}}
 
-/* é / não é */
-.duas{{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(276px,1fr));
-  margin-top:26px}}
-.duas>div{{border-radius:15px;padding:24px;border:1px solid rgba(216,178,90,.16);
-  background:rgba(18,37,27,.55)}}
+/* revelacao */
+[data-revela]{{opacity:0;transform:translateY(22px);
+  transition:opacity .62s cubic-bezier(.2,.7,.3,1),transform .62s cubic-bezier(.2,.7,.3,1)}}
+[data-revela].visivel{{opacity:1;transform:none}}
+[data-revela][style*="--atraso"]{{transition-delay:var(--atraso)}}
+
+/* grades */
+ul.grade{{list-style:none;display:grid;gap:16px;padding:0;margin:30px 0 0;
+  grid-template-columns:repeat(auto-fit,minmax(272px,1fr))}}
+.cartao{{background:var(--card);border:1px solid var(--linha);border-radius:17px;
+  padding:26px;transition:transform .22s ease,border-color .22s ease;
+  position:relative;overflow:hidden}}
+.cartao:hover{{transform:translateY(-4px);border-color:rgba(216,178,90,.4)}}
+.cartao p{{margin:0;font-size:15px}}
+.cartao .ico{{font-size:26px;display:block;margin-bottom:12px;line-height:1}}
+.cartao .num{{font:700 12px/1 ui-monospace,Menlo,monospace;color:var(--gold);
+  letter-spacing:.14em;display:block;margin-bottom:11px}}
+
+/* e / nao e */
+.duas{{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+  margin-top:30px}}
+.duas>div{{border-radius:17px;padding:28px;border:1px solid var(--linha);
+  background:var(--card)}}
+.duas .sim h3{{color:var(--gold)}}
 .duas .nao{{border-color:rgba(201,138,114,.3)}}
 .duas .nao h3{{color:var(--quente)}}
-.duas h3{{color:var(--gold)}}
 
-/* preço */
-.preco{{text-align:center;background:rgba(18,37,27,.6);
-  border:1px solid rgba(216,178,90,.24);border-radius:19px;padding:38px 24px;
-  margin-top:26px}}
-.valor{{font-size:clamp(38px,7vw,60px);font-weight:700;color:var(--goldSoft);
-  letter-spacing:-.02em;line-height:1}}
-.valor small{{font-size:.42em;font-weight:600;color:var(--gold);
-  vertical-align:.85em;margin-right:5px}}
-.parcela{{color:var(--muted);margin-top:8px;font-size:15px}}
+/* pra quem e */
+.quem{{list-style:none;padding:0;margin:30px 0 0;display:grid;gap:11px;
+  grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}}
+.quem li{{display:flex;gap:12px;align-items:flex-start;font-size:15.5px;
+  color:var(--muted);background:var(--card);border:1px solid var(--linha);
+  border-radius:13px;padding:15px 17px}}
+.quem .m{{flex:0 0 auto;font-weight:800;line-height:1.5}}
+.quem .ok .m{{color:var(--gold)}}
+.quem .no .m{{color:var(--quente)}}
 
-/* botão */
-.botao{{display:inline-block;margin-top:22px;padding:16px 34px;border-radius:999px;
+/* aulas: linha do tempo */
+.linha{{list-style:none;padding:0;margin:30px 0 0;position:relative}}
+.linha::before{{content:"";position:absolute;left:19px;top:12px;bottom:12px;width:2px;
+  background:linear-gradient(var(--gold),transparent)}}
+.linha li{{position:relative;padding:0 0 24px 58px}}
+.linha li:last-child{{padding-bottom:0}}
+.linha .bolha{{position:absolute;left:0;top:0;width:40px;height:40px;border-radius:50%;
+  display:grid;place-items:center;background:var(--verde);
+  border:1px solid rgba(216,178,90,.45);color:var(--gold);
+  font:700 13px/1 ui-monospace,Menlo,monospace}}
+.linha h3{{margin-bottom:5px}}
+.linha p{{margin:0;font-size:15px}}
+
+/* preco */
+.preco{{text-align:center;border-radius:24px;padding:46px 26px;margin-top:30px;
+  background:linear-gradient(165deg,rgba(18,37,27,.9),rgba(12,21,18,.9));
+  border:1px solid rgba(216,178,90,.3);position:relative;overflow:hidden}}
+.preco::before{{content:"";position:absolute;inset:-40%;
+  background:conic-gradient(from 0deg,transparent,rgba(216,178,90,.12),transparent 32%);
+  animation:gira 9s linear infinite;pointer-events:none}}
+@keyframes gira{{to{{transform:rotate(360deg)}}}}
+.preco>*{{position:relative}}
+.valor{{font-size:clamp(44px,8vw,70px);font-weight:800;color:var(--goldSoft);
+  letter-spacing:-.03em;line-height:1;margin:6px 0}}
+.valor small{{font-size:.38em;font-weight:650;color:var(--gold);
+  vertical-align:.9em;margin-right:6px}}
+.parcela{{color:var(--muted);font-size:15px}}
+
+/* botao */
+.botao{{display:inline-block;margin-top:26px;padding:17px 38px;border-radius:999px;
   background:linear-gradient(135deg,var(--gold),var(--goldSoft));color:#14200f;
-  font-weight:700;text-decoration:none;font-size:16px;
-  box-shadow:0 10px 28px rgba(216,178,90,.2);transition:transform .16s ease}}
-.botao:hover{{transform:translateY(-2px)}}
-.botao.grande{{font-size:18px;padding:19px 44px}}
-.botao.pendente{{background:rgba(201,138,114,.2);color:var(--quente);
+  font-weight:750;text-decoration:none;font-size:16.5px;position:relative;
+  overflow:hidden;box-shadow:0 12px 32px rgba(216,178,90,.24);
+  transition:transform .18s ease,box-shadow .18s ease}}
+.botao::after{{content:"";position:absolute;top:0;left:-120%;width:60%;height:100%;
+  background:linear-gradient(100deg,transparent,rgba(255,255,255,.5),transparent);
+  animation:brilho 3.6s ease-in-out infinite}}
+@keyframes brilho{{0%,68%{{left:-120%}}100%{{left:170%}}}}
+.botao:hover{{transform:translateY(-2px);box-shadow:0 16px 40px rgba(216,178,90,.34)}}
+.botao.grande{{font-size:18px;padding:20px 46px}}
+.botao.pendente{{background:rgba(201,138,114,.16);color:var(--quente);
   border:1px dashed var(--quente);box-shadow:none;cursor:not-allowed}}
-.selo{{display:block;margin-top:14px;font-size:13px;color:var(--muted)}}
+.botao.pendente::after{{display:none}}
+.selo{{display:block;margin-top:15px;font-size:13.5px;color:var(--muted)}}
 
-footer{{padding:44px 0 58px;color:var(--muted);font-size:13.5px;
-  border-top:1px solid rgba(216,178,90,.13)}}
-@media (prefers-reduced-motion:reduce){{*{{transition:none!important}}}}
-</style>
+/* FAQ */
+.faq{{margin-top:30px;display:grid;gap:11px}}
+.faq details{{background:var(--card);border:1px solid var(--linha);
+  border-radius:15px;overflow:hidden}}
+.faq summary{{cursor:pointer;padding:20px 22px;font-weight:650;font-size:16.5px;
+  list-style:none;display:flex;justify-content:space-between;gap:16px;
+  align-items:center;transition:color .18s}}
+.faq summary::-webkit-details-marker{{display:none}}
+.faq summary:hover{{color:var(--goldSoft)}}
+.faq summary::after{{content:"+";color:var(--gold);font-size:22px;font-weight:400;
+  transition:transform .25s;flex:0 0 auto;line-height:1}}
+.faq details[open] summary::after{{transform:rotate(45deg)}}
+.faq .resp{{padding:0 22px 21px;color:var(--muted);font-size:15.5px;margin:0}}
+
+/* barra fixa */
+.barra{{position:fixed;left:0;right:0;bottom:0;z-index:40;
+  background:rgba(7,16,12,.94);backdrop-filter:blur(12px);
+  border-top:1px solid var(--linha);padding:12px 18px;
+  display:flex;gap:16px;align-items:center;justify-content:center;
+  transform:translateY(110%);transition:transform .3s cubic-bezier(.2,.7,.3,1)}}
+.barra.aberta{{transform:none}}
+.barra .b-preco{{font-weight:750;color:var(--goldSoft);white-space:nowrap}}
+.barra .b-preco span{{display:block;font-size:12px;color:var(--muted);font-weight:400}}
+.barra .botao{{margin:0;padding:13px 28px;font-size:15px}}
+body{{padding-bottom:84px}}
+
+hr.div{{border:0;border-top:1px solid var(--linha);margin:0}}
+footer{{padding:48px 0 30px;color:var(--muted);font-size:13.5px}}
+footer .aviso{{margin-top:12px;font-size:13px;opacity:.85;max-width:76ch}}
+
+@media (max-width:560px){{
+  section{{padding:58px 0}}
+  .heroi{{padding:70px 0 56px}}
+  .barra{{gap:12px;padding:10px 14px}}
+  .barra .b-preco{{font-size:14px}}
+}}
+@media (prefers-reduced-motion:reduce){{
+  *,*::before,*::after{{animation:none!important;transition:none!important}}
+  html{{scroll-behavior:auto}}
+}}
+"""
+
+
+def montar() -> str:
+    travas = "\n".join(
+        f'      <li class="cartao" data-revela style="--atraso:{i*90}ms">'
+        f'<span class="ico">{ico}</span><h3>{_esc(t)}</h3><p>{d}</p></li>'
+        for i, (ico, t, d) in enumerate(TRAVAS))
+
+    maquina = "\n".join(
+        f'      <li class="cartao" data-revela style="--atraso:{i*70}ms">'
+        f'<span class="num">{n}</span><h3>{t}</h3><p>{d}</p></li>'
+        for i, (n, t, d) in enumerate(MAQUINA))
+
+    mental = "\n".join(
+        f'      <li class="cartao" data-revela style="--atraso:{i*70}ms">'
+        f'<h3>{t}</h3><p>{d}</p></li>'
+        for i, (t, d) in enumerate(MENTALIDADE))
+
+    quem = "\n".join(
+        f'      <li class="{"ok" if bom else "no"}" data-revela '
+        f'style="--atraso:{i*55}ms"><span class="m">{"&#10003;" if bom else "&#10007;"}'
+        f'</span><span>{_esc(txt)}</span></li>'
+        for i, (bom, txt) in enumerate(PRA_QUEM))
+
+    aulas = "\n".join(
+        f'      <li data-revela style="--atraso:{i*90}ms">'
+        f'<span class="bolha">{i+1:02d}</span><h3>{_esc(t)}</h3><p>{_esc(d)}</p></li>'
+        for i, (n, t, d) in enumerate(AULAS_M0))
+
+    faq = "\n".join(
+        f'      <details data-revela style="--atraso:{i*55}ms">'
+        f'<summary>{_esc(p)}</summary>'
+        f'<p class="resp">{r.format(garantia=GARANTIA)}</p></details>'
+        for i, (p, r) in enumerate(FAQ))
+
+    parcela = f'<div class="parcela">{_esc(PARCELA)}</div>' if PARCELA else ""
+
+    return f"""<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Afiliado Online &mdash; uma renda online sem precisar aparecer</title>
+<meta name="description" content="Um metodo passo a passo para construir renda
+online no formato faceless: sem mostrar o rosto e sem postar o dia inteiro na
+mao.">
+<meta name="theme-color" content="{CORES['bg2']}">
+<meta property="og:title" content="Afiliado Online">
+<meta property="og:description" content="Uma renda online de verdade &mdash; sem
+precisar aparecer. Um metodo, nao um milagre.">
+<meta property="og:type" content="website">
+<style>{_css()}</style>
+
+<div class="orbe a"></div><div class="orbe b"></div>
 
 <div class="wrap">
 
-<section class="heroi">
-  <span class="olho">Afiliado Online</span>
-  <h1>Uma renda online de verdade —<br><span class="g">sem precisar aparecer.</span></h1>
-  <p class="lead">A vontade existe. O que trava é quase sempre o mesmo:
-  <b>não quero aparecer</b>, <b>não tenho tempo</b>, <b>não sei por onde
-  começar</b>. Este curso é o caminho que resolve os três — construindo um
-  <b>sistema que trabalha por você</b>, em vez de você trabalhar o dia inteiro.</p>
-  {_botao("Quero começar", grande=True)}
-  <span class="selo">Método passo a passo · formato faceless · acesso imediato</span>
+<section class="heroi" id="heroi">
+  <span class="olho">&#9679; Afiliado Online</span>
+  <h1>Uma renda online de verdade &mdash;<br><span class="g">sem precisar aparecer.</span></h1>
+  <p class="lead">A vontade existe. O que trava e quase sempre o mesmo:
+  <b>nao quero aparecer</b>, <b>nao tenho tempo</b>, <b>nao sei por onde
+  comecar</b>. Este e o caminho que resolve os tres &mdash; construindo um
+  <b>sistema que trabalha por voce</b>, em vez de voce trabalhar o dia inteiro.</p>
+  {_botao("Quero comecar agora", "grande")}
+  <ul class="confia">
+    <li>&#10003; Formato faceless</li>
+    <li>&#10003; Passo a passo</li>
+    <li>&#10003; Acesso imediato</li>
+    <li>&#10003; {GARANTIA} dias de garantia</li>
+  </ul>
 </section>
 
+<hr class="div">
+
 <section>
-  <span class="olho">O que te trouxe aqui</span>
-  <h2>Você quer — mas <span class="g">trava</span></h2>
+  <span class="olho" data-revela>O que te trouxe aqui</span>
+  <h2 data-revela>Voce quer &mdash; mas <span class="g">trava</span></h2>
+  <p data-revela>Sao quase sempre os mesmos tres motivos. E os tres tem resposta.</p>
   <ul class="grade">
-{_cartoes([(t, d) for t, d in TRAVAS])}
+{travas}
   </ul>
 </section>
 
 <section>
-  <span class="olho">O que este curso é</span>
-  <h2>Um <span class="g">método</span>. Não um milagre.</h2>
+  <span class="olho" data-revela>O que este curso e</span>
+  <h2 data-revela>Um <span class="g">metodo</span>. Nao um milagre.</h2>
   <div class="duas">
-    <div><h3>É isto</h3><p>Um sistema real, passo a passo, que você constrói e
-      coloca pra rodar. Com ordem, com régua e com o que fazer em cada etapa.</p></div>
-    <div class="nao"><h3>Não é isto</h3><p>Promessa de ficar rico da noite pro
-      dia. Resultado vem de execução — e a gente é honesto sobre isso desde a
-      primeira aula.</p></div>
+    <div class="sim" data-revela><h3>&#10003; E isto</h3><p>Um sistema real,
+      passo a passo, que voce constroi e coloca pra rodar. Com ordem, com
+      regua, e com o que fazer em cada etapa.</p></div>
+    <div class="nao" data-revela style="--atraso:110ms"><h3>&#10007; Nao e isto</h3>
+      <p>Promessa de ficar rico da noite pro dia. Resultado vem de execucao
+      &mdash; e a gente e honesto sobre isso desde a primeira aula.</p></div>
   </div>
 </section>
 
 <section>
-  <span class="olho">A máquina</span>
-  <h2>O que você vai <span class="g">construir</span></h2>
-  <p>Peças que se encaixam. Sozinha, nenhuma funciona.</p>
+  <span class="olho" data-revela>A maquina</span>
+  <h2 data-revela>O que voce vai <span class="g">construir</span></h2>
+  <p data-revela>Cinco pecas que se encaixam. Sozinha, nenhuma funciona.</p>
   <ul class="grade">
-{_cartoes(MAQUINA)}
+{maquina}
   </ul>
 </section>
 
 <section>
-  <span class="olho">A parte que ninguém te conta</span>
-  <h2>A <span class="g">mentalidade</span> que sustenta o resultado</h2>
+  <span class="olho" data-revela>A parte que ninguem te conta</span>
+  <h2 data-revela>A <span class="g">mentalidade</span> que sustenta o resultado</h2>
+  <p data-revela>E o que decide quem continua depois do primeiro mes.</p>
   <ul class="grade">
-{_cartoes(MENTALIDADE)}
+{mental}
   </ul>
 </section>
 
 <section>
-  <span class="olho">Começa aqui</span>
-  <h2>Módulo 0 — <span class="g">a base</span></h2>
-  <p>Três aulas que colocam você na direção certa antes da primeira execução.</p>
-  <ul class="grade">
+  <span class="olho" data-revela>Comeca aqui</span>
+  <h2 data-revela>Modulo 0 &mdash; <span class="g">a base</span></h2>
+  <p data-revela>Tres aulas que colocam voce na direcao certa antes da primeira
+  execucao.</p>
+  <ul class="linha">
 {aulas}
   </ul>
 </section>
 
 <section>
-  <span class="olho">Acesso</span>
-  <h2>Comece <span class="g">hoje</span></h2>
-  <div class="preco">
+  <span class="olho" data-revela>Antes de decidir</span>
+  <h2 data-revela>Isto e <span class="g">pra voce</span>?</h2>
+  <p data-revela>Prefiro que voce saia agora a comprar esperando outra coisa.</p>
+  <ul class="quem">
+{quem}
+  </ul>
+</section>
+
+<section>
+  <span class="olho" data-revela>Acesso</span>
+  <h2 data-revela>Comece <span class="g">hoje</span></h2>
+  <div class="preco" data-revela>
+    <div class="parcela">Acesso ao curso Afiliado Online</div>
     <div class="valor"><small>R$</small>{_esc(PRECO)}</div>
-    {preco_linha}
-    {_botao("Garantir meu acesso", grande=True)}
-    <span class="selo">Pagamento processado pela Hotmart</span>
+    {parcela}
+    {_botao("Garantir meu acesso", "grande")}
+    <span class="selo">Pagamento processado pela Hotmart &middot;
+      {GARANTIA} dias de garantia</span>
   </div>
 </section>
 
+<section>
+  <span class="olho" data-revela>Duvidas</span>
+  <h2 data-revela>O que costumam <span class="g">perguntar</span></h2>
+  <div class="faq">
+{faq}
+  </div>
+</section>
+
+<hr class="div">
+
 <footer>
-  <div><b>Afiliado Online</b> — um método para construir renda online no formato
-  faceless.</div>
-  <p style="margin-top:10px">Este curso ensina um método. Ele não garante
-  resultado, ganho ou prazo: o que você alcança depende da sua execução — e a
-  gente diz isso na aula, não só aqui embaixo.</p>
+  <div><b>Afiliado Online</b> &mdash; um metodo para construir renda online no
+  formato faceless.</div>
+  <p class="aviso">Este curso ensina um metodo. Ele nao garante resultado,
+  ganho ou prazo: o que voce alcanca depende da sua execucao &mdash; e a gente
+  diz isso na aula, nao so aqui embaixo.</p>
 </footer>
 
 </div>
-<script>{_JS_AFILIADO}</script>
+
+<div class="barra" id="barra">
+  <div class="b-preco">R$ {_esc(PRECO)}<span>acesso imediato</span></div>
+  {_botao("Quero o curso")}
+</div>
+
+<script>{_JS}</script>
 """
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description="Gera a página de vendas do curso.")
+    p = argparse.ArgumentParser(description="Gera a pagina de vendas do curso.")
     p.add_argument("--saida", default=str(SAIDA_PADRAO))
     args = p.parse_args()
 
     if not CHECKOUT:
-        print("[curso] ⚠️  CURSO_CHECKOUT vazio — a página sai com AVISO no lugar")
-        print("[curso]    do botão, de propósito: botão que não compra é pior")
-        print("[curso]    que página sem botão. Use o link PÚBLICO da Hotmart")
-        print("[curso]    (pay.hotmart.com/...), não o de app.hotmart.com/manage.")
+        print("[curso] AVISO: CURSO_CHECKOUT vazio — a pagina sai com AVISO no")
+        print("[curso]   lugar do botao, de proposito: botao que nao compra e")
+        print("[curso]   pior que pagina sem botao.")
     elif "app.hotmart.com" in CHECKOUT or "/manage/" in CHECKOUT:
-        print("[curso] ❌ CURSO_CHECKOUT aponta pro painel de ADMINISTRAÇÃO da")
-        print("[curso]    Hotmart. O cliente cairia numa tela de login. Pegue o")
-        print("[curso]    link público de checkout do produto.")
+        print("[curso] ERRO: CURSO_CHECKOUT aponta pro painel de ADMINISTRACAO")
+        print("[curso]   da Hotmart. O cliente cairia numa tela de login. Use o")
+        print("[curso]   link publico (go.hotmart.com/<ID>?dp=1).")
         return 2
 
     destino = Path(args.saida)
     destino.parent.mkdir(parents=True, exist_ok=True)
     pagina = montar()
     destino.write_text(pagina, encoding="utf-8")
-    print(f"[curso] ✅ {destino}  ({len(pagina)/1024:.1f} KB)")
+    print(f"[curso] OK {destino}  ({len(pagina)/1024:.1f} KB)")
     if CHECKOUT:
-        print(f"[curso]    checkout: {CHECKOUT}")
-        print("[curso]    parâmetros da URL são repassados pro checkout "
-              "(crédito do afiliado)")
+        print(f"[curso]   checkout: {CHECKOUT}")
+        print("[curso]   os parametros da URL sao repassados pro checkout "
+              "(credito do afiliado)")
     return 0
 
 
