@@ -757,6 +757,44 @@ o corrigido (grava). Confirmado na VPS: `grep -c JARVIS-AUTO-BEGIN` → 1.
 ⚠️ **Nunca use crase dentro do `$BLOCO`, nem em comentário.** O aviso está em
 caixa alta no topo do `setup_cron_jarvis.sh`.
 
+### Mercado Livre como 3ª loja — levantado, não construído (04/08)
+
+**Não existe API oficial de afiliados.** O Developer Portal do ML documenta
+pedidos, opiniões, perguntas, lojas oficiais — **nenhuma seção de afiliados**, e
+há reclamação formal registrada com esse título. As "APIs de afiliado ML" que
+aparecem em blog são de terceiros (scraper ou automação de painel), não do ML.
+Comissão anunciada: até 16%.
+
+**A medição que falta, e é do Dre:** criar UM link no painel de afiliados e
+olhar a estrutura. Se o link for a URL do produto + parâmetro de rastreio
+(`matt_tool`/`matt_word`), dá pra montar link por concatenação — que é
+exatamente como a Amazon funciona aqui (`?tag=SUATAG`, sem PA-API,
+`tiktok_coletor.py:34`). Se for um short link opaco gerado no servidor, só o
+painel gera, e aí a automação sairia cara demais pro retorno.
+
+⚠️ **Não presumir que o parâmetro credita.** Promover produto com link que não
+credita é trabalhar de graça sem saber. Testa com uma venda antes de escalar.
+
+**O que já está pronto:** o filtro da vitrine lista `("meli", "Mercado Livre")`,
+e o selo de loja virou tabela (`LOJAS`/`_loja`) — antes era
+`"Amazon" if plat == "amazon" else "Shopee"`, que rotularia produto do ML como
+Shopee.
+
+**O que falta, medido:**
+
+  1. `tiktok_coletor` — a cascata é Shopee → Amazon → descarta. Falta o ramo ML.
+  2. Geração de link — um `meli_afiliado.py`; depende da medição acima.
+  3. `validar_fila`/`repescagem` — chamam `minerar_oportunidades`, que é Shopee.
+     Produto ML não é validado nem repescado.
+  4. `historico_precos` — o preço vem do health-check da API da Shopee. Produto
+     ML entraria **sem preço**, igual a Amazon hoje.
+  5. Roteador/`contas.json` — decidir qual conta recebe produto do ML.
+
+**Recomendação:** não abrir esta frente antes de fechar o WhatsApp (chip
+chegando ~08/08) e antes da avaliação de 2 semanas do feed misto do
+`@topshopcasa_` (~18/08). A Amazon ainda está em teste; abrir uma terceira loja
+com a segunda não avaliada é multiplicar variável sem ter medida de nenhuma.
+
 ### Onde parou (04/08, fim do dia)
 
 **Esperando o chip.** Pedido feito — Claro pré-pago, R$ 20,99, chegada prevista
