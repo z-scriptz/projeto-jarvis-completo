@@ -785,15 +785,26 @@ está dentro do `ref=`, um token opaco gerado no servidor. Duas conclusões:
      entre o vídeo e o carrinho.
   2. **`ref=` não é construível.** Por concatenação, essa via está fechada.
 
-**Falta testar a OUTRA ferramenta: "Gerador de links"** (Central de afiliados →
-Ferramentas), que é distinta do "Gerador de produtos recomendados". É a
-candidata a dar link DIRETO de produto. O bom sinal já está à vista:
-`matt_word=topshop2413` e `matt_tool=35246996` são os parâmetros de rastreio, e
-`matt_word` é a etiqueta da conta. Se o "Gerador de links" devolver
-`<url-do-produto>?matt_word=topshop2413&matt_tool=…`, dá pra montar por
-concatenação — exatamente o modelo da Amazon aqui. Se devolver outro
-`meli.la/...` que também cai em `/social/`, a via automática morre e o ML vira
-curadoria manual.
+**A outra ferramenta foi testada e dá no MESMO lugar.** O "Gerar link / ID de
+produto" (botão *Compartilhar* de cada produto no hub) devolveu
+`meli.la/33F2j7h`, que redireciona 301 para o mesmo
+`/social/topshop2413?...&ref=<TOKEN>`. **Todo link de afiliado do ML passa pelo
+perfil social com token opaco.**
+
+**VEREDITO: não dá pra montar link de afiliado do ML por concatenação.** Ao
+contrário da Amazon (`?tag=SUATAG`, custo zero), aqui cada link precisa ser
+gerado no painel. Consequências:
+
+  - O ML **não entra no fluxo automático** como Shopee e Amazon entram.
+  - Automatizar o painel com navegador é tecnicamente possível, mas é a mesma
+    classe de risco do WhatsApp Web — com a diferença de que uma conta de
+    afiliado banida custa muito menos que um WhatsApp pessoal. **Decisão pra
+    depois, não agora.**
+  - Existe também o **"ID do produto"** (ex.: `TJH03T-TZPA`), que a pessoa cola
+    no buscador do ML. Não serve pra link clicável em vídeo.
+
+**Enquanto isso, ML = curadoria manual.** A vitrine já sabe exibir `meli`
+(filtro + selo), então produto colado à mão na fila aparece certinho.
 
 ⚠️ Mesmo se a concatenação parecer funcionar, **testar com uma venda real** —
 link que não credita é trabalhar de graça e só aparece no extrato. Se o link for a URL do produto + parâmetro de rastreio
@@ -824,6 +835,56 @@ Shopee.
 chegando ~08/08) e antes da avaliação de 2 semanas do feed misto do
 `@topshopcasa_` (~18/08). A Amazon ainda está em teste; abrir uma terceira loja
 com a segunda não avaliada é multiplicar variável sem ter medida de nenhuma.
+
+### CURSO "AFILIADO ONLINE" — o que ele É
+
+> ⚠️ Isto está escrito aqui porque em 04/08 eu **perdi essa informação numa
+> compactação de contexto** e tive que recuperá-la da transcrição da sessão. O
+> Dre tinha pedido, semanas antes, que tudo fosse salvo em arquivo justamente
+> pra isso não acontecer. **Decisão de produto que só existe no chat está
+> perdida** — só ainda não se sabe quando.
+
+**Promessa:** construir uma renda online de forma prática, **sem precisar
+aparecer** (formato *faceless*).
+
+**Posicionamento, e ele é deliberado:** é um **método/sistema passo a passo**,
+**não** promessa de ficar rico rápido. A honestidade sobre resultado é parte da
+oferta, não ressalva de rodapé — a Aula 3 inteira é sobre isso ("ninguém pode
+garantir resultado", "os primeiros vão ser ruins", "meta de processo, não de
+resultado"). **A página de vendas tem que soar como isso.** Copy de promessa
+fácil contradiz o produto e queima a confiança que o curso constrói.
+
+**Dor de entrada (Aula 1):** a pessoa quer renda online mas trava em três
+coisas — *"não quero aparecer"*, *"não tenho tempo"*, *"não sei por onde
+começar"*.
+
+**Módulo 0 — 3 aulas prontas:**
+
+  1. **Bem-vindo** — a trava, a boa notícia (dá pra fazer sem aparecer e no
+     automático), o que o curso é e o que não é, como aproveitar.
+  2. **A máquina que você vai construir** — "você não cria, você **conecta**" ·
+     vídeos que não mostram você · alcance é **volume**, não sorte · do vídeo
+     até o checkout · repita o que o **número** aprova · sozinha nenhuma peça
+     funciona.
+  3. **A mentalidade que sustenta o resultado** — volume, não sorte · os
+     primeiros vão ser ruins · ninguém garante resultado · meta de processo ·
+     compare com você de ontem.
+
+**Onde mora:** branch `claude/curso-video-aulas`, pasta `curso/remotion/`
+(**PR #2**). Slides em código (Remotion), narração ElevenLabs — o MP3 por slide
+vai em `curso/remotion/public/` e a duração se ajusta sozinha
+(`node scripts/narrar.mjs Aula1`).
+
+**Marca do curso é OUTRA que a da vitrine:** verde escuro (`#0c1512` / `#07100c`)
+com dourado (`#d8b25a` / `#f0d79a`). A vitrine é rosa choque. **Não misturar** —
+a página de vendas usa a paleta do curso.
+
+**Pendente:** gravação de tela de ~30s do painel de afiliados da Shopee, pro
+Módulo 1.
+
+**Falta pra escrever a página de vendas** (só o Dre tem): **preço**, **URL do
+checkout da Hotmart**, e o que os módulos PAGOS entregam (o Módulo 0 parece ser
+a porta de entrada).
 
 ### CURSO: páginas próprias fora da Hotmart (pedido em 04/08)
 
