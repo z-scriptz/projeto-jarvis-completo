@@ -25,20 +25,21 @@ achadomila
 achadosonlineweb
 garimposda.kah
 
-# ── gringos / Amazon finds — DESLIGADOS DE PROPÓSITO ──────────────────────
-# Estes postam em inglês e vendem produto de fora. Ligar agora joga conteúdo
-# gringo nas contas BR (@topshop.__, @topshopbeauty._, @topshoptech_) e ensina
-# o algoritmo a entregar pro público errado — o oposto do que a separação por
-# nicho faz hoje pelo roteador_contas.
+# ── gringos: casa, decoração e finds (LIGADOS em 04/08) ───────────────────
+# Ficaram desligados até a conta @topshopcasa_ existir. Agora existe, e o
+# roteador classifica 'casa' desde antes — então o produto de casa que sair
+# destes vídeos vai pra lá sozinho.
 #
-# Descomente QUANDO a conta Amazon existir e o roteador souber mandar pra ela.
-# ameliauusa
-# homeyy__huess
-# enalzhamai
-# exotic_home_furniture
-# neelafinds
-# snappypick
-# insulorahomes
-# recosbyanna
-# buddy.pup.us
+# Perfil NÃO pertence a conta: o roteador decide pelo PRODUTO, não pela fonte.
+# Um item de beleza que aparecer num destes vai pro @topshopbeauty._ do mesmo
+# jeito. Por isso não existe "perfil da conta gringa" — existe fonte de vídeo.
+ameliauusa
+homeyy__huess
+enalzhamai
+exotic_home_furniture
+neelafinds
+snappypick
+insulorahomes
+recosbyanna
+buddy.pup.us
 

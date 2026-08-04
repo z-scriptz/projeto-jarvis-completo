@@ -18,7 +18,13 @@
     "handle": "@topshoptech_",
     "instagram_user_id": "17841476482343138",
     "facebook_page_id": "1179217661943310",
-    "page_token_env": "PAGE_TOKEN_TOPSHOP_CASA",
+    "page_token_env": "PAGE_TOKEN_TOPSHOP_TECH",
     "youtube": "tech"
+  },
+  "casa": {
+    "handle": "@topshopcasa_",
+    "instagram_user_id": "17841438142967261",
+    "facebook_page_id": "1238524326010430",
+    "page_token_env": "PAGE_TOKEN_TOPSHOP_CASA"
   }
 }

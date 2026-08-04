@@ -419,6 +419,35 @@ escala com IMPRESSÃO, e as contas ainda são pequenas. Se aparecer erro de rate
 limit em `logs/cron_autoresp.log`, baixe o `--midias` da linha de 5min ANTES de
 mexer em qualquer outra coisa.
 
+### 4ª conta: @topshopcasa_ (04/08) — e um token trocado que ela revelou
+
+Conta de **casa/decoração**, não "conta da Amazon". O roteador decide por NICHO
+(`contas.json` é mapa nicho→conta); uma conta por plataforma exigiria código
+novo. E `_NICHOS_VALIDOS` já tinha `casa` desde antes, com lista de palavras
+própria e o nicho no prompt da IA — só não havia pra onde mandar, então tudo de
+casa caía no `_default`. A conta foi **uma entrada no contas.json**.
+
+  casa · @topshopcasa_ · page 1238524326010430 · ig 17841438142967261
+       · PAGE_TOKEN_TOPSHOP_CASA
+
+⚠️ **BUG ACHADO NO CAMINHO.** O `contas.json` mandava a conta **tech** usar
+`PAGE_TOKEN_TOPSHOP_CASA` — token da página "TopShop & Casa", que agora serve o
+@topshopcasa_. O `page_id` da tech estava certo (1179217661943310 = TopShop &
+Tech), só o nome do token estava errado. Corrigido pra
+`PAGE_TOKEN_TOPSHOP_TECH`.
+
+O `page_token_env` segue o nome da PÁGINA do Facebook, não do nicho — foi isso
+que confundiu. Antes de criar conta nova, rode `diag_contas.py` e confira que
+nenhuma conta compartilha token, page_id ou ig_id.
+
+**Perfil-fonte não pertence a conta.** O roteador classifica o PRODUTO, não a
+origem do vídeo. Os 9 gringos foram ligados e o que sair deles vai pro nicho
+certo sozinho — inclusive `home_appliances513`, `homekitchgadgets1`,
+`goodstuffdiary`, `acefastglobal` e `elnazhamai`, que já rodavam no TikTok.
+
+Sem chave `youtube`, a conta cai no token principal (canal geral). Criar o canal
+e acrescentar quando for a hora.
+
 ### Pendências pequenas deixadas conscientemente
 
 - `validar_fila`: quando a retentativa também falha, o relatório mostra o motivo
