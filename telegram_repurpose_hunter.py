@@ -194,7 +194,15 @@ CFG_LIMPAR_META        = True
 CFG_VELOCIDADE         = 1.01
 CFG_ZOOM_DIGITAL       = 0.01
 CFG_MIRROR_X           = False   # override manual: True = espelha SEMPRE (cuidado)
-CFG_MIRROR_AUTO        = True    # inteligente: espelha SÓ vídeo SEM texto (OCR)
+# Espelha só vídeo SEM texto (OCR). Desligue com MIRROR_AUTO=0 no .env — sem
+# editar código — se aparecer texto invertido de novo.
+#
+# O CUSTO É ASSIMÉTRICO, e é isso que decide os limiares lá embaixo: espelhar
+# só ajuda a diferenciar do vídeo original. Não espelhar não custa quase nada.
+# Texto de trás pra frente custa o espectador, que fecha o vídeo e não volta.
+# Então, na dúvida, NÃO espelha.
+CFG_MIRROR_AUTO        = os.environ.get("MIRROR_AUTO", "1").strip().lower() \
+                         not in ("0", "false", "nao", "não")
 CFG_VINHETA            = True
 
 CFG_INTRO_IA           = False
@@ -815,13 +823,41 @@ def _aplicar_zoom_digital(clip, fator=0.01):
     return _image_transform(clip, lambda f: _zoom_frame(f))
 
 
-def _clip_tem_texto(clip, amostras: int = 6, min_conf: int = 55,
-                    min_chars: int = 4) -> bool:
+def _instantes_ocr(dur: float, espalhados: int = 6) -> list:
+    """QUANDO olhar o vídeo procurando texto.
+
+    O DEFEITO QUE ISTO CONSERTA (04/08/2026): a amostragem antiga era
+    `dur * (i+1) / 7`, ou seja 14%, 29%, 43%, 57%, 71% e 86% da duração. Ela
+    **nunca olhava os primeiros 14%** — e é exatamente ali que mora o hook.
+    Num vídeo de 30s o primeiro olhar caía aos 4,3s, com o texto já fora da
+    tela há tempo. O OCR concluía "vídeo sem texto", o clip era espelhado, e o
+    hook do autor original saía de trás pra frente pro cliente ver.
+
+    Agora o começo é olhado de perto (0,2s a 3s), porque hook viral vive nos
+    primeiros segundos, e o resto do vídeo continua sendo varrido pro caso de
+    legenda que entra no meio.
+    """
+    if dur <= 0:
+        return []
+    cedo = [t for t in (0.2, 0.6, 1.2, 2.0, 3.0) if t < dur]
+    espalhado = [dur * (i + 1) / (espalhados + 1) for i in range(espalhados)]
+    fim = [dur - 0.3] if dur > 0.6 else []      # selo/CTA costuma ficar no fim
+    return sorted(set(round(t, 2) for t in cedo + espalhado + fim if 0 < t < dur))
+
+
+def _clip_tem_texto(clip, amostras: int = 6, min_conf: int = 45,
+                    min_chars: int = 3) -> bool:
     """True se o vídeo tem texto na tela (aí NÃO pode espelhar, senão o texto
     fica de trás pra frente). Amostra alguns frames e roda OCR (Tesseract).
 
     Precisa do Tesseract instalado (apt install tesseract-ocr + pip pytesseract).
-    SEM ele, retorna True (= não espelha) — mantém o comportamento seguro atual."""
+    SEM ele, retorna True (= não espelha) — mantém o comportamento seguro atual.
+
+    Os limiares são frouxos DE PROPÓSITO (conf 45, 3 caracteres). Achar texto
+    que não existe custa uma diferenciação a menos; não achar texto que existe
+    custa um vídeo com a escrita invertida na cara do cliente. Erro barato de
+    um lado, caro do outro — então erro pro lado barato.
+    """
     try:
         import pytesseract
     except Exception:
@@ -832,14 +868,16 @@ def _clip_tem_texto(clip, amostras: int = 6, min_conf: int = 55,
         dur = float(getattr(clip, "duration", 0) or 0)
         if dur <= 0:
             return True
-        for i in range(amostras):
-            t = dur * (i + 1) / (amostras + 1)
+        for t in _instantes_ocr(dur, amostras):
             try:
                 frame = _np.asarray(clip.get_frame(t)).astype("uint8")
             except Exception:
                 continue
             img = Image.fromarray(frame)
-            img.thumbnail((640, 640))   # reduz pra acelerar no VPS fraco
+            # 960 e não 640: encolher demais apaga justamente o texto pequeno
+            # que a gente está procurando. O ganho de velocidade não vale um
+            # vídeo espelhado com a escrita ao contrário.
+            img.thumbnail((960, 960))
             data = pytesseract.image_to_data(
                 img, output_type=pytesseract.Output.DICT)
             chars = 0
