@@ -353,6 +353,30 @@ caminho certo (`git fetch pjc` + `git show FETCH_HEAD:arquivo.py > destino`).
 Também criei um `ESTADO.md` sem procurar antes, duplicando este documento.
 **Ler o que já existe antes de construir.**
 
+### Amazon: existia, funcionava, e ninguém chamava (03/08 fim do dia)
+
+O `amazon_playwright.py` resolve link de busca (`/s?k=`) em produto real — ASIN,
+preço e foto. Rodando na mão deu 2 produtos legítimos na hora (Capa Motorola
+G06 R$ 27,90 · Portfólio Executivo R$ 289,82).
+
+Duas coisas o mantinham parado, e nenhuma era o código:
+
+- **Python errado.** `python3 amazon_playwright.py` falha o import; o playwright
+  só existe no venv. É `.venv/bin/python`. Mesma armadilha do `.env`.
+- **Ninguém o chamava.** `grep` no projeto inteiro: o único arquivo que citava
+  `amazon_playwright` era ele mesmo. Nem daemon, nem cron.
+
+O mesmo valia pro **`deploy_site.py`** — a vitrine só atualizava quando alguém
+rodava à mão, e o `historico_precos` foi desenhado pra uma leitura por dia.
+
+Agora no cron (`setup_cron_jarvis.sh`, com `.venv/bin/python`):
+`03:40` Amazon · `04:10` e `20:30` publica a vitrine.
+
+E o freio anti-bloqueio aprendeu a diferença entre "a Amazon caiu" e "esse termo
+não é produto": nome-lixo que volta vazio 3x vai pro fim da fila e para de
+contar pro freio. Simulado com a fila real — antes os 2 lixos matavam a rodada
+antes do primeiro produto; agora resolve 4 de 4 em duas rodadas.
+
 ### Pendências pequenas deixadas conscientemente
 
 - `validar_fila`: quando a retentativa também falha, o relatório mostra o motivo

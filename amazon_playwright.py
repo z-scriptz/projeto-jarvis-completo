@@ -257,6 +257,34 @@ def _chave(termo: str) -> str:
     return re.sub(r"\s+", " ", (termo or "").strip().lower())
 
 
+# Contador de buscas vazias por termo. Fica numa chave RESERVADA do cache, e
+# não no registro do termo, porque `_chave(termo) in cache` é o que decide se
+# ele já foi resolvido — gravar a tentativa ali marcaria o termo como pronto e
+# ele nunca mais seria buscado.
+#
+# Por que isto existe: em 03/08 a rodada resolveu 2 produtos de verdade e então
+# bateu em "Cosas deberías hacer mejorar apariencia" e "Tips pelo huela rico
+# todo" — dois nomes-lixo de legenda em espanhol. Duas vazias seguidas
+# dispararam o freio anti-bloqueio e a rodada morreu pela metade. O freio está
+# certo; ele só não sabia diferenciar "a Amazon me bloqueou" de "esse termo não
+# existe porque não é produto".
+CHAVE_VAZIOS = "__vazios__"
+VAZIOS_ATE_DESCONFIAR = 3
+
+# Quantas vazias seguidas encerram a rodada. Era 2. Subiu pra 3 depois de
+# simular a primeira rodada com a fila real: na estreia nenhum termo tem
+# histórico, os dois nomes-lixo caem no começo da lista e o freio matava a
+# rodada ANTES de tentar qualquer produto de verdade. Com 3, o terceiro termo
+# desempata — se ele resolve, era lixo; se também vem vazio, é bloqueio mesmo.
+# O custo quando a Amazon está realmente fora é uma requisição a mais.
+VAZIOS_PRA_PARAR = 3
+
+
+def _vazios_de(cache: dict) -> dict:
+    v = cache.get(CHAVE_VAZIOS)
+    return v if isinstance(v, dict) else {}
+
+
 def _anotar_preco(link: str, preco, nome: str = ""):
     """Grava a leitura no histórico de preços, com a data de HOJE.
 
@@ -277,12 +305,17 @@ def _anotar_preco(link: str, preco, nome: str = ""):
 
 
 # ── busca ─────────────────────────────────────────────────────────────────
-def buscar(termos: list, diag: bool = False) -> dict:
+def buscar(termos: list, diag: bool = False, vazios_antes: dict = None) -> dict:
     """Resolve vários termos numa sessão só de navegador.
 
     Devolve {termo: {ok, asin, titulo, preco, imagem, link}} — e para tudo no
     primeiro sinal de bloqueio, sem tentar os termos restantes.
+
+    vazios_antes = {termo: quantas vezes já voltou vazio}. Termo com histórico
+    de vazio não conta pro freio anti-bloqueio: ele voltar vazio de novo é o
+    esperado, não sinal de que a Amazon caiu.
     """
+    vazios_antes = vazios_antes or {}
     try:
         from playwright.sync_api import sync_playwright
     except Exception:
@@ -358,12 +391,17 @@ def buscar(termos: list, diag: bool = False) -> dict:
                 # produção — "Copo batedor de ovos" resolveu em três rodadas e
                 # voltou vazio na quarta. Gravar isso marcaria pra sempre um
                 # termo que funciona. Sem `motivo`, o cache ignora.
-                vazios += 1
-                _log(f"   ✗ {termo[:40]}: sem resultado (tento de novo depois)")
+                antes = int(vazios_antes.get(_chave(termo), 0))
+                if antes >= VAZIOS_ATE_DESCONFIAR:
+                    _log(f"   ✗ {termo[:40]}: vazio de novo "
+                         f"({antes+1}ª vez) — não parece ser produto")
+                else:
+                    vazios += 1
+                    _log(f"   ✗ {termo[:40]}: sem resultado (tento de novo depois)")
                 saida[termo] = {"ok": False, "transitorio": True}
-                if vazios >= 2:
-                    _log("   🛑 duas buscas vazias seguidas — a Amazon está")
-                    _log("      servindo página vazia. Encerrando a rodada.")
+                if vazios >= VAZIOS_PRA_PARAR:
+                    _log(f"   🛑 {VAZIOS_PRA_PARAR} buscas vazias seguidas — a Amazon")
+                    _log("      está servindo página vazia. Encerrando a rodada.")
                     _log("      (espere algumas horas; insistir só piora)")
                     bloqueou = True
                 continue
@@ -431,17 +469,32 @@ def enriquecer_fila(limite: int = LIMITE_PADRAO, simular: bool = False,
         elif termo not in pendentes:
             pendentes.append(termo)
 
+    # Quem já voltou vazio várias vezes vai pro FIM: o teto por rodada é baixo
+    # (5), e antes disto dois nomes-lixo no começo da lista consumiam metade da
+    # rodada e ainda derrubavam o freio antes dos produtos de verdade.
+    vazios_antes = _vazios_de(cache)
+    pendentes.sort(key=lambda t: int(vazios_antes.get(_chave(t), 0)))
+    teimosos = sum(1 for t in pendentes
+                   if int(vazios_antes.get(_chave(t), 0)) >= VAZIOS_ATE_DESCONFIAR)
+
     _log(f"{len(ja_no_cache)} já resolvidos antes · {len(pendentes)} pra buscar "
-         f"(teto desta rodada: {limite})")
+         f"(teto desta rodada: {limite})"
+         + (f" · {teimosos} no fim da fila por já terem vindo vazios" if teimosos else ""))
     alvo = pendentes[:limite]
 
-    novos = buscar(alvo, diag=diag) if alvo else {}
+    novos = buscar(alvo, diag=diag, vazios_antes=vazios_antes) if alvo else {}
     for termo, r in novos.items():
         # Cacheia decisão DURÁVEL: o acerto, e a recusa com motivo (que é
         # julgamento sobre o produto). Falha transitória — página vazia, rede —
         # fica de fora de propósito, pra ser tentada de novo.
         if r.get("ok") or (r.get("motivo") and not r.get("transitorio")):
             cache[_chave(termo)] = r
+            vazios_antes.pop(_chave(termo), None)   # resolveu: zera o histórico
+        elif r.get("transitorio"):
+            k = _chave(termo)
+            vazios_antes[k] = int(vazios_antes.get(k, 0)) + 1
+    # o contador é separado do registro do termo de propósito (ver CHAVE_VAZIOS)
+    cache[CHAVE_VAZIOS] = vazios_antes
     if novos and not simular:
         _cache_gravar(cache)
 

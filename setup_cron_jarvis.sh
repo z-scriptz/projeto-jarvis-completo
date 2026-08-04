@@ -36,6 +36,18 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 0 8 * * *   cd $JARVIS && $PY produzir_tiktok.py --nicho geral 1  >> $JARVIS/logs/cron_produzir.log 2>&1
 0 13 * * *  cd $JARVIS && $PY produzir_tiktok.py --nicho geral 1  >> $JARVIS/logs/cron_produzir.log 2>&1
 0 20 * * *  cd $JARVIS && $PY produzir_tiktok.py --nicho geral 1  >> $JARVIS/logs/cron_produzir.log 2>&1
+# 03:40 -> AMAZON: resolve os produtos que entraram como LINK DE BUSCA (/s?k=)
+#   e vira produto de verdade (ASIN + preco + foto). Precisa do .venv: o
+#   playwright so existe la, e rodar com o python do sistema falha o import.
+#   Conservador de proposito -- teto 5, pausa longa, para sozinho se ver captcha.
+40 3 * * * cd $JARVIS && $PY amazon_playwright.py --limite 5 >> $JARVIS/logs/cron_amazon.log 2>&1
+# 04:10 e 20:30 -> PUBLICA A VITRINE. Ninguem chamava o deploy_site: o site so
+#   atualizava quando alguem rodava a mao. E o historico de precos foi desenhado
+#   pra uma leitura por dia (a ultima do dia vence), o que pressupoe rodada
+#   diaria. Duas vezes: de manha com o que a Amazon resolveu, a noite com o que
+#   entrou durante o dia.
+10 4 * * *  cd $JARVIS && $PY deploy_site.py >> $JARVIS/logs/cron_site.log 2>&1
+30 20 * * * cd $JARVIS && $PY deploy_site.py >> $JARVIS/logs/cron_site.log 2>&1
 # DOMINGO 09:00 -> CEO Conselheiro: relatorio semanal (vai pro Telegram privado)
 0 9 * * 0 cd $JARVIS && $PY ceo_agent.py 7 >> $JARVIS/logs/cron_ceo.log 2>&1
 # A cada 20min -> auto-resposta: responde comentarios com gatilho (so roda se
@@ -49,6 +61,8 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 echo "✅ cron instalado. A maquina agora roda sozinha:"
 echo "   • 03:00  coleta virais do TikTok"
 echo "   • 04h/12h/18h  produz 1 video cada (3/dia)"
+echo "   • 03:40  resolve produtos da Amazon (link de busca -> produto real)"
+echo "   • 04:10 e 20:30  publica a vitrine + grava preco do dia"
 echo "   • a cada 20min  auto-resposta a comentarios (se AUTO_RESPONDER=1)"
 echo "   • daemon posta nos horarios de sempre"
 echo
