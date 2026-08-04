@@ -348,4 +348,12 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # TRAVA DE INSTÂNCIA ÚNICA. Em 04/08/2026 o `crontab -l` tinha esta
+    # mesma linha repetida (algumas 4x, o ceo_agent 8x) e as cópias rodaram
+    # juntas o dia inteiro. shared/trava.py conta a história inteira.
+    # Sem a trava disponível, roda como antes — ela protege, não bloqueia.
+    try:
+        from shared.trava import rodar_unico
+    except Exception:
+        sys.exit(main())
+    sys.exit(rodar_unico("deploy_site", main))

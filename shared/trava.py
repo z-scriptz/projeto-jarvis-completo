@@ -28,6 +28,26 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent
 
 
+def rodar_unico(nome: str, funcao, *args, **kwargs) -> int:
+    """Roda `funcao` só se nenhuma outra cópia estiver rodando.
+
+    Feito pra caber numa linha no fim do script:
+
+        if __name__ == "__main__":
+            sys.exit(rodar_unico("auto_resposta", main))
+
+    Devolve 0 quando desiste. A segunda instância não falhou — ela encontrou
+    trabalho já em andamento, que é a resposta certa. Código de erro aqui faria
+    o cron mandar e-mail de falha a cada 5 minutos.
+    """
+    with travar(nome) as livre:
+        if not livre:
+            print(f"[{nome}] outra instância já está rodando — saio sem fazer "
+                  "nada ✔", flush=True)
+            return 0
+        return funcao(*args, **kwargs)
+
+
 @contextmanager
 def travar(nome: str, base: Path = None):
     """Entrega True se ESTE processo pegou a trava, False se outro já tem.

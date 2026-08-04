@@ -147,9 +147,21 @@ def _carregar_respondidos() -> dict:
 
 
 def _salvar_respondidos(d: dict) -> None:
+    """Grava de forma ATÔMICA: escreve num temporário e troca de nome.
+
+    O write_text direto abre o arquivo, ZERA e só então escreve. Quem ler
+    naquele instante encontra arquivo vazio — e arquivo vazio aqui significa
+    "nunca respondi ninguém", ou seja, responder todo mundo de novo.
+
+    Em 04/08 isso não era teórico: o crontab tinha 5 cópias desta linha e elas
+    liam e gravavam ao mesmo tempo. O os.replace é atômico no mesmo sistema de
+    arquivos — quem lê vê o conteúdo velho ou o novo, nunca um pedaço.
+    """
     try:
         STORE_DIR.mkdir(parents=True, exist_ok=True)
-        RESPONDIDOS.write_text(json.dumps(d, ensure_ascii=False), encoding="utf-8")
+        tmp = RESPONDIDOS.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(d, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, RESPONDIDOS)
     except Exception:
         pass
 
@@ -267,6 +279,7 @@ def _resp_instagram(conta, token, gatilhos, respondidos, limites, teste) -> int:
                 _log(f"   💬 IG respondeu @{c.get('username')} ({conta.get('handle')})"
                      + (" +DM" if dm_ok else ""))
                 respondidos[cid] = int(time.time()); feitos += 1
+                _salvar_respondidos(respondidos)
             else:
                 err = (r.get("error") or {}).get("message") or str(r)[:120]
                 _log(f"   ⚠️ IG não respondeu ({err})")
@@ -325,6 +338,7 @@ def _resp_facebook(conta, token, gatilhos, respondidos, limites, teste) -> int:
             if r.get("id"):
                 _log(f"   💬 FB respondeu ({conta.get('handle') or page})")
                 respondidos[cid] = int(time.time()); feitos += 1
+                _salvar_respondidos(respondidos)
             else:
                 err = (r.get("error") or {}).get("message") or str(r)[:120]
                 _log(f"   ⚠️ FB não respondeu ({err})")
@@ -394,4 +408,12 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # TRAVA DE INSTÂNCIA ÚNICA. Em 04/08/2026 o `crontab -l` tinha esta
+    # mesma linha repetida (algumas 4x, o ceo_agent 8x) e as cópias rodaram
+    # juntas o dia inteiro. shared/trava.py conta a história inteira.
+    # Sem a trava disponível, roda como antes — ela protege, não bloqueia.
+    try:
+        from shared.trava import rodar_unico
+    except Exception:
+        sys.exit(main())
+    sys.exit(rodar_unico("auto_resposta", main))
