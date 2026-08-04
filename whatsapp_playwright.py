@@ -56,6 +56,19 @@ ESTADO = BASE_DIR / "shared" / "whatsapp_enviados.json"
 SESSAO = BASE_DIR / "shared" / "whatsapp_sessao"
 ERROS = BASE_DIR / "shared" / "whatsapp_erros"
 
+# A regra de "esse nome serve pra cliente?" mora em shared/termos.py e é
+# importada, nunca copiada: regra duplicada é a armadilha que já mordeu este
+# projeto (arquivo na raiz divergindo do arquivo do pacote). Se ela não puder
+# ser carregada, _candidatos devolve lista vazia e o script não manda nada —
+# mesma política do resto do arquivo: na dúvida, para.
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+try:
+    from shared.termos import nome_de_produto_ruim as _nome_ruim
+except Exception as _e_imp:          # noqa: N816
+    _nome_ruim = None
+    _ERRO_REGRA = str(_e_imp)[:120]
+
 MAX_RODADA = int(float(os.environ.get("WHATSAPP_MAX_RODADA", "2")))
 MAX_DIA = int(float(os.environ.get("WHATSAPP_MAX_DIA", "6")))
 PAUSA_MIN = float(os.environ.get("WHATSAPP_PAUSA_MIN", "45"))
@@ -187,19 +200,38 @@ def _enviados_hoje(estado: dict) -> int:
     return int(estado.get("por_dia", {}).get(str(date.today()), 0))
 
 
+def _reais(valor) -> str:
+    """R$ 1.600,00 — com ponto de milhar.
+
+    O teste seco mandaria "R$ 1600,00". Não está errado, mas preço sem
+    separador some no meio da mensagem e é o número que decide a compra.
+    """
+    try:
+        n = float(valor)
+    except (TypeError, ValueError):
+        return ""
+    return "R$ " + f"{n:,.2f}".replace(",", "§").replace(".", ",").replace("§", ".")
+
+
+def _nome_do_item(item: dict) -> str:
+    return (item.get("campeao") or item.get("produto")
+            or item.get("titulo") or item.get("nome") or "").strip()
+
+
 def _mensagem(item: dict) -> str:
     """Formato do WhatsApp: *negrito* e URL crua.
 
     Nada de markdown de link — o WhatsApp não embute, e colchete solto no meio
     do texto fica feio. A URL sozinha vira prévia clicável sozinha.
     """
-    nome = (item.get("campeao") or item.get("produto") or "Achadinho").strip()
+    # espaço duplo vem de título de anúncio da Shopee e aparece na mensagem
+    nome = " ".join((_nome_do_item(item) or "Achadinho").split())
     if len(nome) > 70:
         nome = nome[:67].rsplit(" ", 1)[0] + "..."
     preco = item.get("preco") or 0
     linhas = [f"*{nome}*"]
     if preco:
-        linhas.append(f"💰 R$ {float(preco):.2f}".replace(".", ","))
+        linhas.append(f"💰 {_reais(preco)}")
     linhas.append("")
     linhas.append(item.get("link", ""))
     return "\n".join(linhas)
@@ -211,12 +243,30 @@ def _candidatos(fila, ja: set, quantos: int, resta_dia: int) -> list:
 
     Mesma regra do grupo do Telegram: precisa de link E foto. Sem foto o
     achadinho fica sem prévia e parece corrente de spam.
+
+    E precisa de NOME que sirva pra cliente. O teste seco de 04/08 ia mandar
+    "*Produto com busca alta* — R$ 1.600,00": rótulo interno que vazou pra
+    fila e que nenhum filtro do projeto pegava. Aqui vale a regra de quem
+    publica — pular um produto bom custa menos que mandar lixo pro grupo.
     """
     if not isinstance(fila, list):
         return []
-    novos = [it for it in fila
-             if isinstance(it, dict) and it.get("link") and it.get("imagem")
-             and it["link"] not in ja]
+    if _nome_ruim is None:
+        _log(f"❌ não consegui carregar shared/termos.py ({_ERRO_REGRA}) — sem a "
+             "regra de nome eu não mando nada, pra não postar rótulo interno.")
+        return []
+    novos, pulados = [], 0
+    for it in fila:
+        if not isinstance(it, dict):
+            continue
+        if not it.get("link") or not it.get("imagem") or it["link"] in ja:
+            continue
+        if _nome_ruim(_nome_do_item(it)):
+            pulados += 1
+            continue
+        novos.append(it)
+    if pulados:
+        _log(f"{pulados} item(ns) pulado(s) por nome que não serve pra cliente")
     return novos[:max(0, min(quantos, resta_dia))]
 
 
