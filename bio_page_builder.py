@@ -321,19 +321,39 @@ def _selos_html(p: dict, novo: bool = False) -> str:
         selos.append('<span class="selo novo">novo</span>')
     if r.get("off"):
         selos.append(f'<span class="selo off">-{r["off"]}%</span>')
-    plat = (p.get("plataforma") or "shopee").lower()
     # classe `plat` e não `loja`: `.loja` já é o botão de aba lá em cima, e as
     # duas regras de CSS brigavam pelo mesmo seletor
-    selos.append(f'<span class="selo plat">{"Amazon" if plat == "amazon" else "Shopee"}</span>')
+    selos.append(f'<span class="selo plat">{_loja(p)[0]}</span>')
     return "".join(selos)
+
+
+# Rótulo e emoji por loja. É TABELA e não `if amazon else shopee` de propósito:
+# a forma binária mentia por omissão — qualquer plataforma que não fosse
+# "amazon" saía escrita **Shopee**, inclusive um produto do Mercado Livre com
+# link pro Mercado Livre. O filtro da vitrine já lista "meli" desde antes
+# (_filtros_html), então o selo era a única peça que ainda decidia no par.
+#
+# Loja desconhecida cai em Shopee porque é o que a fila tem de fato quando o
+# campo vem vazio — mas agora isso é uma ESCOLHA declarada, não um efeito
+# colateral de escrever a condição ao contrário.
+LOJAS = {
+    "shopee": ("Shopee", "🛍️"),
+    "amazon": ("Amazon", "📦"),
+    "meli": ("Mercado Livre", "🟡"),
+}
+LOJA_PADRAO = LOJAS["shopee"]
+
+
+def _loja(p: dict) -> tuple:
+    """(rótulo, emoji) da loja do produto."""
+    return LOJAS.get((p.get("plataforma") or "shopee").lower(), LOJA_PADRAO)
 
 
 def _foto_html(p: dict, titulo: str, novo: bool = False) -> str:
     """Foto do produto com os três estados previstos: carregando (esqueleto),
     ok, e sem-foto (a Amazon hoje não devolve imagem)."""
     img = html.escape(p.get("imagem", ""))
-    plat = (p.get("plataforma") or "shopee").lower()
-    emoji = "📦" if plat == "amazon" else "🛍️"
+    emoji = _loja(p)[1]
     if not img:
         return (f'<div class="foto sem-foto"><em class="fb">{emoji}</em>'
                 f'{_selos_html(p, novo)}</div>')
@@ -348,9 +368,8 @@ def _card_destaque(p: dict) -> str:
     titulo = html.escape(_titulo_legivel(p.get("titulo") or p.get("nome", ""), 70))
     link = html.escape(p.get("link", "#"))
     img = html.escape(p.get("imagem", ""))
-    plat = (p.get("plataforma") or "shopee").lower()
     capa = (f'<img class="capa" src="{img}" alt="{titulo}" decoding="async">'
-            if img else f'<em class="capa-fb">{"📦" if plat == "amazon" else "🛍️"}</em>')
+            if img else f'<em class="capa-fb">{_loja(p)[1]}</em>')
     return f"""
     <a class="moldura" id="moldura" href="{link}" target="_blank" rel="noopener">
       {capa}
