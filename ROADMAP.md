@@ -330,9 +330,22 @@ done
 ```
 
 Isso virou o **`conferir.py`** — roda na VPS, compara arquivo por arquivo contra
-o histórico do `pjc` e separa quatro casos: em dia, atrasado (com quantos
-commits), **modificado na VPS** (não bate com nenhum commit — tem trabalho ali
-que o repo não tem, e sobrescrever perderia) e duplicado. Não escreve nada.
+o histórico do `pjc` e separa: em dia, atrasado (com quantos commits),
+divergente, espelho parado e duplicado. Não escreve nada.
+
+Medido em 03/08: **32 em dia, 2 atrasados, 10 divergentes, 84 espelho parado.**
+
+⚠️ **Correção do mesmo dia, importante pra quem ler isto depois.** Eu li o
+"espelho parado" como se o `pjc` estivesse abandonado e cheguei a dizer que os
+scripts da raiz "não estão em repositório nenhum". **Errado.** Medido: dos 46
+arquivos que eu ia commitar no `agenteia`, **34 já estavam versionados no
+`pjc`** — repescagem, tiktok_coletor, deploy_site, postar_grupo,
+historico_precos, todos com commits recentes. Só 12 não estavam em lugar
+nenhum, e 8 desses são `diag_*`/`teste_*` descartáveis.
+
+Os dois repositórios são **complementares**: o `agenteia` versiona os módulos de
+pacote, o `pjc` versiona os scripts da raiz e é onde o trabalho do dia a dia
+acontece há 3 meses. "Espelho parado" vale por ARQUIVO, nunca pelo repositório.
 
 **Outra lição, essa sobre método:** eu passei o dia mandando patcher de 100 KB
 em base64 por `scp` — e o `DEPLOY.md:219` e o `ROADMAP.md` já documentavam o

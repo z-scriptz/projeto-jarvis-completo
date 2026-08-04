@@ -193,9 +193,9 @@ def classificar(sha_vps: str, sha_ref: str, ref: str, caminho_repo: str) -> tupl
     caro pra aparecer: 94 arquivos deram "não bate com nenhum commit", o que
     parecia edição na VPS. Não era. 132 dos 179 arquivos deste repositório têm
     UM commit só, de 01/07 — o "Add files via upload". O desenvolvimento de
-    verdade seguiu no `agenteia` (o `origin` da VPS), e este espelho ficou
-    parado. Pra esses, o repositório NÃO é a fonte da verdade: deployar
-    regrediria a VPS em um mês.
+    verdade desses arquivos aconteceu fora daqui. Vale por ARQUIVO, não pelo
+    repositório: os ~47 que este repo acompanha de verdade são justamente
+    onde o trabalho do dia a dia acontece.
     """
     if sha_vps == sha_ref:
         return "IGUAL", ""
@@ -366,9 +366,9 @@ def main():
           "  chapado só cabe um; o outro não existe aqui e nunca poderá ser\n"
           "  deployado por este caminho.")
     bloco("ESPELHO PARADO", "🪞 ESPELHO PARADO — o repo não é a fonte da verdade",
-          "1 commit só, do upload de 01/07. O desenvolvimento seguiu no\n"
-          "  'agenteia' (o origin da VPS) e este espelho ficou pra trás.\n"
-          "  DEPLOYAR QUALQUER UM DESTES REGRIDE A VPS EM UM MÊS.",
+          "1 commit só, do upload de 01/07: este ARQUIVO nunca foi tocado aqui\n"
+          "  depois, enquanto na VPS mudou. Não use este repo como origem de\n"
+          "  deploy pra eles (o repo em si é ativo — isto é por arquivo).",
           teto=0 if args.tudo else 8)
     bloco("AUSENTE", "🚫 NÃO EXISTE NA VPS",
           "arquivo novo, ou que mora em lugar que eu não procurei.",
