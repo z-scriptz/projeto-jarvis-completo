@@ -7,6 +7,28 @@
 # Uso (na VPS):  bash setup_cron_jarvis.sh
 # Ver depois:    crontab -l
 # Remover:       bash setup_cron_jarvis.sh --remover
+#
+# ⚠️ NUNCA USE CRASE DENTRO DO $BLOCO. NEM EM COMENTÁRIO.
+# ─────────────────────────────────────────────────────────
+# O $BLOCO é uma string entre ASPAS DUPLAS, e crase dentro de aspas duplas é
+# SUBSTITUIÇÃO DE COMANDO — o bash executa e cola a saída ali dentro.
+#
+# Em 04/08/2026 um comentário dizia:  Confira com `crontab -l` antes de...
+# Aquilo não era texto: era o crontab INTEIRO sendo executado e embutido no
+# meio do bloco, a cada execução do script. O rastro ficou visível no crontab
+# como a linha "# JARVIS-AUTO-END antes de acrescentar qualquer coisa" — o fim
+# do crontab embutido grudado no texto que vinha depois da crase.
+#
+# Resultado: 3 execuções deste script = 4 cópias de TUDO. O grupo do Telegram
+# recebeu cada achadinho 4 vezes, o coletor puxou 4x a cota da API e o
+# auto_resposta respondeu o mesmo comentário 5 vezes pro cliente.
+#
+# O "idempotente" da linha acima era falso e ninguém percebeu por semanas,
+# porque o script SEMPRE terminava dizendo que deu certo.
+#
+# Em comentário, use aspas simples. A verificação no fim deste arquivo existe
+# pra que, se isso voltar a acontecer, o script pare em vez de estragar o
+# crontab de novo.
 set -e
 
 JARVIS=/root/jarvis
@@ -50,7 +72,8 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # NAO ponha deploy_site aqui. Ele JA roda a cada 2h por uma entrada propria do
 # crontab, fora deste bloco (0 */2 * * *), e a das 04:00 cai 20min depois da
 # rodada Amazon acima -- o encaixe ja existe. Duplicar so dobra health-check e
-# chamada de API. Confira com `crontab -l` antes de acrescentar qualquer coisa
+# chamada de API. Confira com 'crontab -l' antes de acrescentar qualquer coisa
+# (ASPAS SIMPLES, NUNCA CRASE: veja o aviso no topo deste arquivo)
 # aqui: este bloco nao enxerga o que foi posto a mao.
 # DOMINGO 09:00 -> CEO Conselheiro: relatorio semanal (vai pro Telegram privado)
 0 9 * * 0 cd $JARVIS && $PY ceo_agent.py 7 >> $JARVIS/logs/cron_ceo.log 2>&1
@@ -84,8 +107,43 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 25 2 * * *  cd $JARVIS && $PY auto_resposta.py --midias 130 --horas 720 >> $JARVIS/logs/cron_autoresp.log 2>&1
 # JARVIS-AUTO-END"
 
+# ── CONFERE ANTES DE ESCREVER ──────────────────────────────────────────────
+# Este script se dizia idempotente e nao era: uma crase num comentario fazia
+# ele embutir o crontab inteiro dentro do proprio bloco, e ninguem percebeu
+# por semanas porque ele SEMPRE terminava dizendo "✅ cron instalado".
+#
+# Agora ele mede antes de gravar. Um bloco bem formado tem exatamente 1 BEGIN
+# e 1 END; mais que isso significa que alguma coisa foi interpolada ali dentro,
+# e gravar seria repetir o estrago.
+N_BEGIN=$(printf '%s\n' "$BLOCO" | grep -c 'JARVIS-AUTO-BEGIN' || true)
+N_END=$(printf '%s\n' "$BLOCO" | grep -c 'JARVIS-AUTO-END' || true)
+if [ "$N_BEGIN" != "1" ] || [ "$N_END" != "1" ]; then
+    echo "❌ ABORTADO: o bloco tem $N_BEGIN BEGIN e $N_END END (o certo e 1 e 1)."
+    echo "   Alguma coisa foi executada e embutida dentro do \$BLOCO."
+    echo "   Procure CRASE ou \$( ) nas linhas entre BLOCO=\" e JARVIS-AUTO-END."
+    echo "   O crontab NAO foi alterado."
+    exit 1
+fi
+
+# Numero de linhas de tarefa: um bloco normal tem algumas dezenas. Se explodir,
+# e sinal de interpolacao que passou pela conferencia acima.
+N_LINHAS=$(printf '%s\n' "$BLOCO" | grep -vc '^[[:space:]]*#' || true)
+if [ "$N_LINHAS" -gt 60 ]; then
+    echo "❌ ABORTADO: o bloco tem $N_LINHAS linhas de tarefa — muito acima do esperado."
+    echo "   O crontab NAO foi alterado."
+    exit 1
+fi
+
 # recompoe o crontab: o que ja existia (sem o bloco antigo) + o bloco novo
 { [ -n "$BASE" ] && printf '%s\n' "$BASE"; printf '%s\n' "$BLOCO"; } | crontab -
+
+# e confere o RESULTADO: se sobrou mais de um bloco, o sed de limpeza falhou
+N_DEPOIS=$(crontab -l 2>/dev/null | grep -c 'JARVIS-AUTO-BEGIN' || true)
+if [ "$N_DEPOIS" != "1" ]; then
+    echo "⚠️  ATENCAO: o crontab ficou com $N_DEPOIS blocos JARVIS-AUTO (esperado 1)."
+    echo "   Rode:  crontab -l | grep -n JARVIS-AUTO"
+    echo "   e limpe os blocos sobrando a mao antes de confiar no agendamento."
+fi
 
 echo "✅ cron instalado. A maquina agora roda sozinha:"
 echo "   • 03:00  coleta virais do TikTok"
