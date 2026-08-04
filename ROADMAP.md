@@ -366,11 +366,17 @@ Duas coisas o mantinham parado, e nenhuma era o código:
 - **Ninguém o chamava.** `grep` no projeto inteiro: o único arquivo que citava
   `amazon_playwright` era ele mesmo. Nem daemon, nem cron.
 
-O mesmo valia pro **`deploy_site.py`** — a vitrine só atualizava quando alguém
-rodava à mão, e o `historico_precos` foi desenhado pra uma leitura por dia.
+Agora no cron (`setup_cron_jarvis.sh`, com `.venv/bin/python`): `03:40` Amazon.
 
-Agora no cron (`setup_cron_jarvis.sh`, com `.venv/bin/python`):
-`03:40` Amazon · `04:10` e `20:30` publica a vitrine.
+⚠️ **Errei junto e vale registrar.** Afirmei que o `deploy_site.py` também não
+era chamado por ninguém, e cheguei a pôr duas entradas pra ele. Estava errado:
+ele já roda **a cada 2 horas** por uma entrada própria do crontab, FORA do
+bloco `JARVIS-AUTO`. Eu tinha procurado no `daemon_maestro.py` e no
+`setup_cron_jarvis.sh` — nunca rodei `crontab -l`.
+
+**Antes de mexer em automação, `crontab -l` primeiro.** O bloco JARVIS-AUTO não
+enxerga o que foi posto à mão, e fora dele já existem: `deploy_site` a cada 2h,
+`postar_grupo` a cada 2h, `metricas_agent` 04:30 e `reach_agent` 10:00.
 
 E o freio anti-bloqueio aprendeu a diferença entre "a Amazon caiu" e "esse termo
 não é produto": nome-lixo que volta vazio 3x vai pro fim da fila e para de
