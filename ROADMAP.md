@@ -514,6 +514,35 @@ agora a deixaria parada justamente quando volume mais ajuda (conta nova).
 Amazon fica no @topshopcasa_, Shopee de casa volta pro @topshop.__. É código
 pequeno. **Se funcionar:** mantém e não mexe.
 
+### WhatsApp: grupo automatizado por navegador (04/08)
+
+`whatsapp_playwright.py`. **Decisão de risco tomada pelo Dre com a condição de
+ser conservador** — e vale registrar por quê, pra ninguém "otimizar" depois:
+
+O WhatsApp NÃO tem API oficial pra postar em grupo. A Cloud API da Meta é pra
+conversa 1:1 com quem optou por receber; grupo não está na superfície dela. Isto
+automatiza o WhatsApp **Web**, o que contraria os termos — e número banido leva
+junto o grupo e o contato comercial.
+
+O que derruba número é **volume e padrão de robô**, não a automação. Daí as
+travas, todas por `.env`:
+
+  `WHATSAPP_ATIVO=0`   desligado por padrão
+  2/rodada · 6/dia · janela 07–21h · pausa 45–120s · digitação lenta
+
+Para na primeira dúvida: sessão caída, grupo não achado ou seletor que sumiu →
+print em `shared/whatsapp_erros/` + aviso no Telegram privado, e encerra. Nunca
+clica adivinhando.
+
+**Login:** `--login` tira print do QR e MANDA PRO TELEGRAM (a VPS não tem tela).
+Sessão persistente em `shared/whatsapp_sessao/`.
+
+⚠️ O WhatsApp Web troca marcação sem aviso e sem versão. Cada elemento tem
+vários seletores; quando o print de erro chegar no Telegram, é sinal de que
+`SEL_BUSCA`/`SEL_CAIXA` precisam de revisão. **É manutenção esperada, não bug.**
+
+Fora do cron de propósito até o Dre validar as primeiras rodadas à mão.
+
 ### Pendências pequenas deixadas conscientemente
 
 - `validar_fila`: quando a retentativa também falha, o relatório mostra o motivo
