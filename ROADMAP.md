@@ -765,8 +765,13 @@ há reclamação formal registrada com esse título. As "APIs de afiliado ML" qu
 aparecem em blog são de terceiros (scraper ou automação de painel), não do ML.
 Comissão anunciada: até 16%.
 
-**A medição que falta, e é do Dre:** criar UM link no painel de afiliados e
-olhar a estrutura. Se o link for a URL do produto + parâmetro de rastreio
+**Conta criada em 04/08** — perfil "TOPSHOP", **etiqueta `topshop2413`**. A
+ferramenta é o **"Gerador de produtos recomendados"** (Central de afiliados →
+Ferramentas → Gerador de links): recebe uma ou mais URLs de produto, uma por
+linha, mais a etiqueta, e devolve os links. Aceitar VÁRIAS URLs de uma vez é
+bom sinal — é o formato de quem tem back-end de geração em lote.
+
+**A medição que falta, e é do Dre:** gerar UM link e olhar a estrutura. Se o link for a URL do produto + parâmetro de rastreio
 (`matt_tool`/`matt_word`), dá pra montar link por concatenação — que é
 exatamente como a Amazon funciona aqui (`?tag=SUATAG`, sem PA-API,
 `tiktok_coletor.py:34`). Se for um short link opaco gerado no servidor, só o
@@ -794,6 +799,33 @@ Shopee.
 chegando ~08/08) e antes da avaliação de 2 semanas do feed misto do
 `@topshopcasa_` (~18/08). A Amazon ainda está em teste; abrir uma terceira loja
 com a segunda não avaliada é multiplicar variável sem ter medida de nenhuma.
+
+### CURSO: páginas próprias fora da Hotmart (pedido em 04/08)
+
+O Dre quer sair das páginas padrão da Hotmart. Três peças, e elas **não têm o
+mesmo grau de liberdade** — o que decide a ordem de fazer:
+
+  1. **Página de vendas** — a que os afiliados divulgam. **Liberdade total**,
+     pode morar no nosso domínio. É a que dá mais retorno e a que não depende
+     de ninguém. **Começar por aqui.**
+  2. **Página do produto** — a que a Hotmart gera. Substituível pela de vendas:
+     o link de afiliado aponta pra nossa página, e ela leva ao checkout.
+  3. **Página de pagamento (checkout)** — ⚠️ **aqui NÃO há liberdade total.**
+     Quem processa cartão e Pix é a Hotmart, e checkout próprio de verdade
+     significaria virar gateway (PCI, antifraude, chargeback). O que existe é
+     personalização dentro do que a plataforma permite. **Verificar o que o
+     plano do Dre libera ANTES de prometer qualquer coisa** — nunca desenhar um
+     checkout que a Hotmart não deixa publicar.
+
+Ponto de atenção que vale mais que o visual: **o link de afiliado tem que
+sobreviver ao caminho todo.** Se a nossa página de vendas perder o parâmetro de
+afiliado no meio, o afiliado divulga, a venda acontece e ele não recebe — e
+descobre pelo extrato, semanas depois. É a mesma armadilha do Mercado Livre
+anotada acima: **testar com uma venda real antes de escalar.**
+
+Reaproveita o que já existe: `bio_page_builder.py` já gera página estática
+responsiva com tema claro/escuro e `deploy_site.py` já publica. A página de
+vendas é o mesmo maquinário com outro conteúdo — não é começar do zero.
 
 ### Onde parou (04/08, fim do dia)
 
