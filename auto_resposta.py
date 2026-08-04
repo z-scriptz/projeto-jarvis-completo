@@ -188,6 +188,38 @@ def _extrai_link(texto: str) -> str:
 
 
 # ── INSTAGRAM ──────────────────────────────────────────────────────────────
+def _velho_demais(carimbo: str, horas: int) -> bool:
+    """O post é mais antigo que a janela?
+
+    O AUTO_RESP_HORAS existia desde sempre, aparecia no log como "janela 48h" —
+    e NUNCA era usado pra filtrar nada. Quem limitava de fato era o
+    AUTO_RESP_MIDIAS (os N posts mais recentes). O log dizia uma coisa que o
+    código não cumpria.
+
+    Sem carimbo (o Facebook nem pedia created_time) devolve False: na dúvida
+    olha o post, porque deixar de responder um comentário custa mais que uma
+    chamada a mais.
+    """
+    if not carimbo or horas <= 0:
+        return False
+    try:
+        t = carimbo.strip().replace("Z", "+0000")
+        # ISO do Graph: 2026-08-03T12:34:56+0000
+        from datetime import datetime
+        for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%S.%f%z"):
+            try:
+                dt = datetime.strptime(t, fmt)
+                break
+            except ValueError:
+                continue
+        else:
+            return False
+        idade_h = (time.time() - dt.timestamp()) / 3600.0
+        return idade_h > horas
+    except Exception:
+        return False
+
+
 def _resp_instagram(conta, token, gatilhos, respondidos, limites, teste) -> int:
     ig = str(conta.get("instagram_user_id", "")).strip()
     if not ig:
@@ -203,6 +235,8 @@ def _resp_instagram(conta, token, gatilhos, respondidos, limites, teste) -> int:
     for m in midia:
         if feitos >= limites["max"]:
             break
+        if _velho_demais(m.get("timestamp", ""), limites["horas"]):
+            continue          # fora da janela: nem pede os comentários
         cmts = _get(f"{GRAPH}/{m.get('id')}/comments",
                     {"fields": "id,text,username,timestamp", "limit": 50,
                      "access_token": token}).get("data", [])
@@ -254,11 +288,13 @@ def _resp_facebook(conta, token, gatilhos, respondidos, limites, teste) -> int:
     feitos = 0
 
     videos = _get(f"{GRAPH}/{page}/videos",
-                  {"fields": "id", "limit": limites["midias"],
+                  {"fields": "id,created_time", "limit": limites["midias"],
                    "access_token": token}).get("data", [])
     for v in videos:
         if feitos >= limites["max"]:
             break
+        if _velho_demais(v.get("created_time", ""), limites["horas"]):
+            continue
         # filter=toplevel → só comentários de cima (ignora subcomentários/replies)
         cmts = _get(f"{GRAPH}/{v.get('id')}/comments",
                     {"fields": "id,message,from", "filter": "toplevel", "limit": 50,
@@ -301,6 +337,17 @@ def _resp_facebook(conta, token, gatilhos, respondidos, limites, teste) -> int:
 
 def main():
     teste = "--teste" in sys.argv or "--dry" in sys.argv
+
+    def _arg(nome, padrao):
+        """--midias 5 / --horas 168. Existe porque rodar a cada 5 minutos com a
+        janela inteira multiplicaria as chamadas do Graph por 12 e estouraria o
+        limite da API. O cron faz duas passadas: uma rápida e frequente nos
+        posts novos, e uma funda de hora em hora."""
+        try:
+            i = sys.argv.index(nome)
+            return int(float(sys.argv[i + 1]))
+        except (ValueError, IndexError):
+            return padrao
     if not _REQ_OK:
         _log("❌ 'requests' não instalado."); return 1
     if not _ligado() and not teste:
@@ -317,12 +364,13 @@ def main():
     gatilhos = _gatilhos()
     respondidos = _carregar_respondidos()
     limites = {
-        "horas": int(float(os.environ.get("AUTO_RESP_HORAS", "48"))),
-        "midias": int(float(os.environ.get("AUTO_RESP_MIDIAS", "8"))),
-        "max": int(float(os.environ.get("AUTO_RESP_MAX", "40"))),
+        "horas": _arg("--horas", int(float(os.environ.get("AUTO_RESP_HORAS", "168")))),
+        "midias": _arg("--midias", int(float(os.environ.get("AUTO_RESP_MIDIAS", "25")))),
+        "max": _arg("--max", int(float(os.environ.get("AUTO_RESP_MAX", "40")))),
     }
     _log(f"{'DRY-RUN' if teste else 'ATIVO'} · {len(contas)} conta(s) · "
-         f"gatilhos: {len(gatilhos)} · janela {limites['horas']}h")
+         f"gatilhos: {len(gatilhos)} · janela {limites['horas']}h "
+         f"· até {limites['midias']} post(s) por conta")
 
     total = 0
     for chave, conta in contas.items():

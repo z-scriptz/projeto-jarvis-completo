@@ -48,9 +48,23 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # aqui: este bloco nao enxerga o que foi posto a mao.
 # DOMINGO 09:00 -> CEO Conselheiro: relatorio semanal (vai pro Telegram privado)
 0 9 * * 0 cd $JARVIS && $PY ceo_agent.py 7 >> $JARVIS/logs/cron_ceo.log 2>&1
-# A cada 20min -> auto-resposta: responde comentarios com gatilho (so roda se
-# AUTO_RESPONDER=1 no .env; senao sai na hora). FB responde com link, IG manda pra bio.
-*/20 * * * * cd $JARVIS && $PY auto_resposta.py >> $JARVIS/logs/cron_autoresp.log 2>&1
+# AUTO-RESPOSTA em duas passadas (so roda se AUTO_RESPONDER=1 no .env).
+# FB responde com link clicavel, IG manda pra bio (link em comentario nao clica).
+#
+# Por que duas: quem comenta quer resposta rapida, mas rodar a janela INTEIRA de
+# 5 em 5 minutos multiplica as chamadas do Graph por 12 e estoura o limite da
+# API. Entao a passada rapida olha so os posts novos, e a funda -- de hora em
+# hora -- varre a janela toda e pega o que caiu em post mais antigo.
+#
+#   rapida  a cada 5min  · 3 posts por conta, ultimas 12h
+#   funda   de hora em hora · 25 posts por conta, ultimos 7 dias
+#
+# 3 na rapida, nao 5: comentario novo cai quase sempre no post mais recente, e
+# o limite do Graph escala com IMPRESSAO -- com conta pequena ele aperta. Se o
+# log comecar a mostrar erro de rate limit, baixe --midias na linha de 5min
+# antes de mexer em qualquer outra coisa.
+*/5 * * * * cd $JARVIS && $PY auto_resposta.py --midias 3 --horas 12 >> $JARVIS/logs/cron_autoresp.log 2>&1
+7 * * * *   cd $JARVIS && $PY auto_resposta.py --midias 25 --horas 168 >> $JARVIS/logs/cron_autoresp.log 2>&1
 # JARVIS-AUTO-END"
 
 # recompoe o crontab: o que ja existia (sem o bloco antigo) + o bloco novo
@@ -60,7 +74,8 @@ echo "✅ cron instalado. A maquina agora roda sozinha:"
 echo "   • 03:00  coleta virais do TikTok"
 echo "   • 04h/12h/18h  produz 1 video cada (3/dia)"
 echo "   • 03:40  resolve produtos da Amazon (link de busca -> produto real)"
-echo "   • a cada 20min  auto-resposta a comentarios (se AUTO_RESPONDER=1)"
+echo "   • a cada 5min  auto-resposta nos posts novos (se AUTO_RESPONDER=1)"
+echo "   • de hora em hora  varredura funda (7 dias, 25 posts por conta)"
 echo "   • daemon posta nos horarios de sempre"
 echo
 echo "Logs:  tail -f $JARVIS/logs/cron_produzir.log"

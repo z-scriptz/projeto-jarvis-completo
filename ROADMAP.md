@@ -383,6 +383,34 @@ não é produto": nome-lixo que volta vazio 3x vai pro fim da fila e para de
 contar pro freio. Simulado com a fila real — antes os 2 lixos matavam a rodada
 antes do primeiro produto; agora resolve 4 de 4 em duas rodadas.
 
+### Auto-resposta: 5 em 5 min, e a janela que nunca existiu (03/08)
+
+Pedido do Dre: responder mais rápido e olhar mais pra trás.
+
+**O `AUTO_RESP_HORAS` era decorativo.** Lido do `.env`, impresso no log como
+"janela 48h", e nunca usado pra filtrar nada — `grep` só o achava em 2 linhas.
+Quem limitava de fato era o `AUTO_RESP_MIDIAS` (os N posts mais recentes). O
+Instagram até pedia o `timestamp` da mídia e o descartava; o Facebook nem pedia
+`created_time`.
+
+Agora a janela é real nos dois. Falha pro lado seguro: sem carimbo, carimbo
+quebrado ou `--horas 0`, ele OLHA — deixar de responder custa mais que uma
+chamada a mais.
+
+**Duas passadas no cron**, porque rodar a janela inteira de 5 em 5 minutos
+multiplicaria as chamadas do Graph por 12:
+
+  rápida  `*/5`  · 3 posts por conta, 12h  → comentário novo cai no post recente
+  funda   `7 * *` · 25 posts por conta, 7 dias → pega o que caiu em post antigo
+
+Novos argumentos de CLI `--midias`, `--horas`, `--max` (sobrepõem o `.env`).
+Defaults subiram: `AUTO_RESP_HORAS` 48→168, `AUTO_RESP_MIDIAS` 8→25.
+
+⚠️ **Custo medido:** 162 chamadas/h antes → 444/h agora. O limite do Graph
+escala com IMPRESSÃO, e as contas ainda são pequenas. Se aparecer erro de rate
+limit em `logs/cron_autoresp.log`, baixe o `--midias` da linha de 5min ANTES de
+mexer em qualquer outra coisa.
+
 ### Pendências pequenas deixadas conscientemente
 
 - `validar_fila`: quando a retentativa também falha, o relatório mostra o motivo
