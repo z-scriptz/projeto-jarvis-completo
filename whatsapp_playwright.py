@@ -647,6 +647,80 @@ def _baixar_foto(url: str) -> Path:
         return None
 
 
+_JS_LEGENDA_FOCADA = """
+() => {
+  const a = document.activeElement;
+  if (!a) return false;
+  if (a.getAttribute("contenteditable") !== "true") return false;
+  const rot = ((a.getAttribute("aria-label") || "") + " " +
+               (a.getAttribute("aria-placeholder") || "") + " " +
+               (a.getAttribute("data-tab") || "")).toLowerCase();
+  // a caixa de BUSCA também é contenteditable — se o foco caiu nela, digitar
+  // ali procura conversa em vez de escrever legenda
+  if (rot.includes("pesquis") || rot.includes("search")) return false;
+  return true;
+}
+"""
+
+
+def _sair_da_previa(pagina):
+    """Descarta a prévia sem enviar. Duas vezes: a 1ª pode abrir um
+    'descartar alterações?' que precisa de outro Escape."""
+    for _ in range(2):
+        try:
+            pagina.keyboard.press("Escape")
+            pagina.wait_for_timeout(700)
+        except Exception:
+            return
+
+
+def _focar_legenda(pagina) -> bool:
+    """Põe o cursor na caixa de LEGENDA da prévia. False se não conseguiu.
+
+    Escrito depois do erro de 04/08: `ElementHandle.click: Timeout 30000ms`
+    com "element is visible, enabled and stable". Elemento visível cujo clique
+    não completa é elemento COBERTO por outro — eu pegava "a última
+    contenteditable visível" da página, e a tela de prévia tem editor de
+    imagem, texto, recorte. Peguei o elemento errado. Foi chute, e chute era
+    justamente o que este arquivo diz não fazer.
+
+    Agora vai pelo nome ("Adicione uma legenda") e, no fim, pelo caminho que
+    não depende de marcação nenhuma: Tab até o foco cair numa editável que
+    NÃO seja a busca. E o teclado confirma onde está antes de digitar —
+    digitar na caixa de busca procuraria conversa em vez de escrever legenda.
+    """
+    alvos = [
+        "div[contenteditable='true'][aria-label*='legenda' i]",
+        "div[contenteditable='true'][aria-placeholder*='legenda' i]",
+        "div[contenteditable='true'][aria-label*='caption' i]",
+        "div[role='textbox'][aria-label*='legenda' i]",
+    ]
+    for s in alvos:
+        try:
+            el = pagina.query_selector(s)
+            if el and el.is_visible():
+                el.click(timeout=5000)
+                if pagina.evaluate(_JS_LEGENDA_FOCADA):
+                    return True
+        except Exception:
+            continue
+
+    # último recurso sem marcação: o Tab anda pelos focáveis da prévia
+    for _ in range(8):
+        try:
+            pagina.keyboard.press("Tab")
+            pagina.wait_for_timeout(250)
+            if pagina.evaluate(_JS_LEGENDA_FOCADA):
+                return True
+        except Exception:
+            break
+    # a prévia às vezes já abre com a legenda focada
+    try:
+        return bool(pagina.evaluate(_JS_LEGENDA_FOCADA))
+    except Exception:
+        return False
+
+
 def _enviar_com_foto(pagina, foto: Path, legenda: str) -> bool:
     """Anexa a foto e manda com a legenda junto. False se não deu.
 
@@ -686,34 +760,27 @@ def _enviar_com_foto(pagina, foto: Path, legenda: str) -> bool:
         return False
 
     pagina.wait_for_timeout(1200)
-    # a caixa de legenda é OUTRA que a da conversa. Procuro a que está dentro
-    # da prévia; se houver mais de uma editável, a última é a legenda.
-    caixa = None
-    try:
-        editaveis = pagina.query_selector_all("div[contenteditable='true']")
-        visiveis = [e for e in editaveis if e.is_visible()]
-        if visiveis:
-            caixa = visiveis[-1]
-    except Exception:
-        caixa = None
-    if not caixa:
-        _print_erro(pagina, "prévia aberta mas sem caixa de legenda")
-        try:
-            pagina.keyboard.press("Escape")
-        except Exception:
-            pass
+    if not _focar_legenda(pagina):
+        _print_erro(pagina, "prévia aberta mas não consegui focar a legenda")
+        _sair_da_previa(pagina)
         return False
 
-    caixa.click()
-    for n, linha in enumerate(legenda.split("\n")):
-        if n:
-            pagina.keyboard.press("Shift+Enter")
-        if linha:
-            pagina.keyboard.type(linha, delay=random.randint(20, 55))
-    pagina.wait_for_timeout(random.randint(700, 1500))
-    pagina.keyboard.press("Enter")
-    pagina.wait_for_timeout(2500)
-    return True
+    try:
+        for n, linha in enumerate(legenda.split("\n")):
+            if n:
+                pagina.keyboard.press("Shift+Enter")
+            if linha:
+                pagina.keyboard.type(linha, delay=random.randint(20, 55))
+        pagina.wait_for_timeout(random.randint(700, 1500))
+        pagina.keyboard.press("Enter")
+        pagina.wait_for_timeout(2500)
+        return True
+    except Exception as e:
+        # digitou parte da legenda mas não mandou: a prévia continua aberta e
+        # nada foi enviado. Escape descarta, e o texto segue como plano B.
+        _print_erro(pagina, f"falhei ao digitar a legenda: {str(e)[:70]}")
+        _sair_da_previa(pagina)
+        return False
 
 
 def _abrir(pw, headless=True):
@@ -942,6 +1009,11 @@ def enviar(quantos: int, teste: bool = False) -> int:
                         pass
 
                 if not foi:
+                    # se a prévia não fechou, digitar aqui escreveria a legenda
+                    # DENTRO dela — melhor pular este item que postar torto
+                    if _achar(pagina, SEL_PREVIA, timeout=2500):
+                        _print_erro(pagina, "a prévia não fechou — pulo este item")
+                        break
                     caixa = _achar(pagina, SEL_CAIXA)
                     if not caixa:
                         caminho = _print_erro(pagina, "não achei a caixa de mensagem")
