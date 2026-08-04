@@ -76,7 +76,22 @@ window.chrome = { runtime: {} };
 SEL_QR = ["canvas[aria-label*='scan' i]", "div[data-ref] canvas", "canvas"]
 SEL_BUSCA = ["div[contenteditable='true'][data-tab='3']",
              "div[role='textbox'][data-tab='3']",
-             "div[title='Caixa de texto de pesquisa']"]
+             "div[title='Caixa de texto de pesquisa']",
+             # visto no print de 04/08: o campo se anuncia com este texto
+             "div[contenteditable='true'][aria-label*='Pesquisar' i]",
+             "div[contenteditable='true'][data-lexical-editor='true']"]
+
+# O WhatsApp Web solta um "Novidades do WhatsApp Web" por cima de tudo depois
+# de atualizar. Ele NÃO some sozinho e cobre a busca — foi o que derrubou o
+# --teste de 04/08: os seletores da busca estavam certos, o elemento é que
+# estava atrás do modal, e wait_for_selector(state="visible") falha nisso.
+#
+# Só clico em botão que esteja DENTRO de um role=dialog e cujo texto seja um
+# dos abaixo. Clicar em "qualquer botão do diálogo" é como aceitar um termo
+# sem ler: um dia o diálogo é "Sair de todos os aparelhos?".
+SEL_MODAL = ["div[role='dialog']", "div[data-animate-modal-body='true']"]
+TXT_MODAL_OK = ["Continuar", "Continue", "OK", "Ok", "Entendi", "Got it",
+                "Agora não", "Not now", "Fechar", "Dispensar"]
 SEL_CAIXA = ["div[contenteditable='true'][data-tab='10']",
              "div[contenteditable='true'][data-tab='6']",
              "footer div[contenteditable='true']",
@@ -216,6 +231,115 @@ def _achar(pagina, seletores, timeout=8000):
     return None
 
 
+def _digitavel(nome: str) -> str:
+    """O que dá pra digitar do nome do grupo.
+
+    O grupo é "💭 ACHADINHOS VIP TOPSHOP". keyboard.type não emite caractere
+    fora do BMP de forma confiável (emoji é par surrogate), e um emoji que sai
+    errado transforma a busca em zero resultado. Digito só o texto legível —
+    a busca do WhatsApp casa por trecho, então acha do mesmo jeito.
+    """
+    limpo = "".join(c for c in (nome or "") if ord(c) < 0x2190 or c.isspace())
+    limpo = " ".join(limpo.split())
+    return limpo or (nome or "").strip()
+
+
+def _norm(s: str) -> str:
+    return " ".join((s or "").split()).strip().lower()
+
+
+def _achar_grupo(pagina, grupo: str):
+    """A linha do grupo no resultado da busca.
+
+    Tenta o título exato primeiro; se não casar (emoji, espaço a mais, nome
+    renomeado no celular), aceita o item cujo título CONTENHA o texto legível.
+    Só isso — não pego "o primeiro resultado", que é como se manda achadinho
+    pra conversa errada.
+    """
+    alvo_cheio, alvo_txt = _norm(grupo), _norm(_digitavel(grupo))
+    try:
+        # ensure_ascii=False de propósito: no padrão, o json.dumps troca o
+        # emoji por um par de escapes barra-u, e o CSS lê barra-d83d como
+        # escape HEXADECIMAL, não como o emoji. O seletor casaria com nada.
+        alvo_css = json.dumps(grupo, ensure_ascii=False)
+        exato = pagina.query_selector(f"span[title={alvo_css}]")
+        if exato:
+            return exato
+    except Exception:
+        pass
+    try:
+        itens = pagina.query_selector_all("#pane-side span[title], div[role='listitem'] span[title]")
+    except Exception:
+        itens = []
+    for el in itens:
+        try:
+            t = _norm(el.get_attribute("title") or "")
+        except Exception:
+            continue
+        if not t:
+            continue
+        if t == alvo_cheio or (alvo_txt and alvo_txt in t):
+            return el
+    return None
+
+
+def _fechar_modal(pagina, voltas: int = 3) -> int:
+    """Dispensa o aviso que o WhatsApp Web abre por cima da interface.
+
+    Retorna quantos diálogos foram fechados. Nenhum diálogo é o caso normal —
+    por isso não é erro voltar 0. Faz até 3 voltas porque às vezes um aviso
+    revela outro atrás.
+
+    Deliberadamente conservador: só clica em botão que esteja dentro de um
+    diálogo E cujo texto esteja em TXT_MODAL_OK. Se o diálogo for outra coisa
+    (um "sair de todos os aparelhos?", por exemplo), o script prefere não
+    achar a busca e parar com print a clicar no escuro.
+    """
+    fechados = 0
+    for _ in range(max(1, voltas)):
+        dialogo = None
+        for s in SEL_MODAL:
+            try:
+                el = pagina.query_selector(s)
+            except Exception:
+                el = None
+            if el and el.is_visible():
+                dialogo = el
+                break
+        if not dialogo:
+            break
+
+        titulo = ""
+        try:
+            titulo = (dialogo.inner_text() or "").strip().splitlines()[0][:60]
+        except Exception:
+            pass
+
+        clicou = False
+        try:
+            botoes = dialogo.query_selector_all("button, div[role='button']")
+        except Exception:
+            botoes = []
+        for b in botoes:
+            try:
+                rotulo = (b.inner_text() or "").strip()
+                if rotulo and any(rotulo.lower() == t.lower() for t in TXT_MODAL_OK):
+                    b.click()
+                    _log(f"aviso dispensado: {titulo!r} → botão {rotulo!r}")
+                    clicou = True
+                    break
+            except Exception:
+                continue
+
+        if not clicou:
+            # tem diálogo, mas nenhum botão que eu reconheça — não invento
+            _log(f"⚠️  há um diálogo aberto que eu não sei fechar: {titulo!r}")
+            break
+        fechados += 1
+        pagina.wait_for_timeout(1200)
+    return fechados
+
+
 def _print_erro(pagina, motivo: str) -> Path:
     ERROS.mkdir(parents=True, exist_ok=True)
     caminho = ERROS / f"{datetime.now():%Y%m%d-%H%M%S}.png"
@@ -291,6 +415,7 @@ def diagnostico():
                 return 1
             _log("logado. deixando a interface assentar (6s)...")
             pagina.wait_for_timeout(6000)
+            _fechar_modal(pagina)
 
             achados = pagina.evaluate(_DIAG_JS)
             _log(f"{len(achados)} elemento(s) candidatos:\n")
@@ -395,6 +520,7 @@ def enviar(quantos: int, teste: bool = False) -> int:
             # a lista de conversas aparece antes da busca ficar utilizável;
             # sem esta espera o seletor falha por a interface ainda montar
             pagina.wait_for_timeout(4000)
+            _fechar_modal(pagina)  # o "Novidades do WhatsApp Web" cobre a busca
             busca = _achar(pagina, SEL_BUSCA)
             if not busca:
                 caminho = _print_erro(pagina, "não achei a caixa de busca")
@@ -402,9 +528,12 @@ def enviar(quantos: int, teste: bool = False) -> int:
                         "Os seletores precisam de revisão.", caminho)
                 return 1
             busca.click()
-            pagina.keyboard.type(grupo, delay=random.randint(60, 140))
+            # digita SEM emoji: o grupo é "💭 ACHADINHOS VIP TOPSHOP" e o
+            # keyboard.type não emite caractere fora do BMP de forma confiável.
+            # Buscar pelo texto legível acha o mesmo grupo.
+            pagina.keyboard.type(_digitavel(grupo), delay=random.randint(60, 140))
             pagina.wait_for_timeout(2200)
-            item = pagina.query_selector(f"span[title='{grupo}']")
+            item = _achar_grupo(pagina, grupo)
             if not item:
                 caminho = _print_erro(pagina, f"grupo '{grupo}' não apareceu na busca")
                 _avisar(f"WhatsApp: não achei o grupo '{grupo}'. "
