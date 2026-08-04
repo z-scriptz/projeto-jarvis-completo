@@ -71,6 +71,19 @@ except Exception as _e_imp:          # noqa: N816
     _nome_ruim = None
     _ERRO_REGRA = str(_e_imp)[:120]
 
+# Mesma trava do postar_grupo, pela mesma razão: em 04/08 o crontab tinha a
+# linha do postar_grupo repetida 4x e o grupo do Telegram recebeu tudo em
+# quádruplo. Aqui o estrago seria pior — 4 navegadores na mesma sessão do
+# WhatsApp é exatamente o padrão que derruba número.
+try:
+    from shared.trava import travar
+except Exception:
+    from contextlib import contextmanager
+
+    @contextmanager
+    def travar(_nome, base=None):
+        yield True
+
 MAX_RODADA = int(float(os.environ.get("WHATSAPP_MAX_RODADA", "2")))
 MAX_DIA = int(float(os.environ.get("WHATSAPP_MAX_DIA", "6")))
 PAUSA_MIN = float(os.environ.get("WHATSAPP_PAUSA_MIN", "45"))
@@ -1094,11 +1107,19 @@ def main():
         _log("use o venv:  .venv/bin/python whatsapp_playwright.py ...")
         return 2
 
-    if args.login:
-        return login()
-    if args.diag:
-        return diagnostico()
-    return enviar(max(1, min(args.quantos, MAX_RODADA)), teste=args.teste)
+    # a trava vale pra TUDO que abre navegador, não só pro envio: duas sessões
+    # do Chromium no mesmo user_data_dir corrompem o perfil, e perfil corrompido
+    # aqui significa escanear o QR de novo — o padrão que faz o WhatsApp
+    # desconfiar da conta.
+    with travar("whatsapp_playwright") as livre:
+        if not livre:
+            _log("outra instância já está com o navegador — saio sem fazer nada ✔")
+            return 0
+        if args.login:
+            return login()
+        if args.diag:
+            return diagnostico()
+        return enviar(max(1, min(args.quantos, MAX_RODADA)), teste=args.teste)
 
 
 if __name__ == "__main__":

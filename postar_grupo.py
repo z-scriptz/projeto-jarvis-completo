@@ -67,6 +67,17 @@ try:
 except Exception:
     from telegram_poster import postar_achado
 
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+try:
+    from shared.trava import travar
+except Exception:                    # sem a trava, seguir é melhor que parar
+    from contextlib import contextmanager
+
+    @contextmanager
+    def travar(_nome, base=None):
+        yield True
+
 
 def _log(m):
     print(f"[postar_grupo] {m}")
@@ -114,6 +125,25 @@ def _dentro_da_janela(agora=None):
 
 
 def main():
+    """Só deixa UMA instância trabalhar por vez.
+
+    Em 04/08 o grupo recebeu cada achadinho 4 vezes. O código estava certo: o
+    `crontab -l` é que tinha esta mesma linha repetida 4x, todas em
+    `15 */2 * * *`. Os quatro processos leram o `grupo_postados.json` antes de
+    qualquer um gravar, e cada um achou que os produtos eram novos.
+
+    A limpeza do crontab resolveu o caso; a trava resolve a CLASSE. Crontab é
+    editado à mão e vai duplicar de novo — quem tem que se recusar a rodar
+    duas vezes é o script.
+    """
+    with travar("postar_grupo") as livre:
+        if not livre:
+            _log("outra instância já está postando — saio sem fazer nada ✔")
+            return 0
+        return _rodar()
+
+
+def _rodar():
     quantos = MAX_PADRAO
     forcar = False
     for arg in sys.argv[1:]:
@@ -169,6 +199,10 @@ def main():
         if r.get("ok"):
             ja.add(it["link"])
             postados_agora += 1
+            # grava A CADA post, não só no fim: se o processo morrer no meio
+            # da rodada, o que já foi ao ar tem que ficar registrado, senão
+            # a próxima rodada posta de novo
+            _salvar_postados(list(ja))
             _log(f"   ✅ {produto['nome'][:45]}")
         else:
             _log(f"   ❌ falhou ({str(r.get('erro'))[:70]}) — paro por aqui")
