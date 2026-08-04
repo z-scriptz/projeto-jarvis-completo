@@ -103,7 +103,26 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # AUTO_RESP_MAX (padrao 40) limita as respostas POR RODADA. Na primeira varredura
 # do mes pode haver mais comentarios velhos que isso; ele responde 40 por dia ate
 # zerar, o que tambem evita despejar 200 respostas de uma vez e parecer spam.
-*/5 * * * * cd $JARVIS && $PY auto_resposta.py --midias 3 --horas 12 >> $JARVIS/logs/cron_autoresp.log 2>&1
+# TRES passadas, nao duas. A do MEIO nasceu em 04/08: um comentario ficou 40min
+# sem resposta e o Dre queria 5-10min. A rapida olhava so os 3 posts mais
+# recentes -- com ~4 videos por conta por dia, isso cobre umas 18h. Comentario
+# em post mais antigo so era visto na funda das 02:25, ou seja podia esperar o
+# dia inteiro. Nao era lentidao: era um BURACO entre as duas passadas.
+#
+# Custo medido em chamadas do Graph por dia, com 4 contas:
+#   antes  rapida(3)x288 + funda(130)x1              =  5.132
+#   agora  rapida(5)x288 + meio(25)x48 + funda(130)  = 12.428
+#
+# Cobertura por passada:
+#   rapida  a cada 5min  ·  5 posts  ~ ultimo dia e meio
+#   meio    a cada 30min · 25 posts  ~ ultima semana
+#   funda   1x por dia   · 130 posts ~ ultimos 30 dias
+#
+# SE O LOG MOSTRAR ERRO DE RATE LIMIT, baixe NESTA ORDEM: primeiro os 25 da
+# passada do meio, depois a frequencia dela (*/30 -> 0,30 = 2x/h), e so por
+# ultimo os 5 da rapida -- que e a que entrega os 5 minutos pedidos.
+*/5 * * * * cd $JARVIS && $PY auto_resposta.py --midias 5 --horas 36 >> $JARVIS/logs/cron_autoresp.log 2>&1
+*/30 * * * * cd $JARVIS && $PY auto_resposta.py --midias 25 --horas 168 >> $JARVIS/logs/cron_autoresp.log 2>&1
 25 2 * * *  cd $JARVIS && $PY auto_resposta.py --midias 130 --horas 720 >> $JARVIS/logs/cron_autoresp.log 2>&1
 # JARVIS-AUTO-END"
 
