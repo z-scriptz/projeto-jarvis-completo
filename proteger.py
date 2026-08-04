@@ -70,6 +70,14 @@ emoji_teste_*.png
 narracao_teste.mp3
 produtos_teste.txt
 
+# ── patchers gerados (aplicar_*.py) ──
+# Cada um carrega o arquivo inteiro em base64: ~2 MB de conteúdo que já está
+# versionado em forma normal, e que fica obsoleto quando o deploy.py existir.
+# O POR QUÊ de cada conserto está na mensagem de commit, com mais detalhe do
+# que o script guarda. Os patch_*/diag_*/probe_* ficam: são pequenos, escritos
+# à mão, e alguns servem de diagnóstico reutilizável.
+aplicar_*.py
+
 # ── lixo de expansão de caminho do Windows ──
 # (um $USERPROFILE que não expandiu virou nome de arquivo)
 :USERPROFILE*
@@ -90,6 +98,13 @@ RUNTIME = {
     "hooks_alana_recentes.json", "candidatos_fontes.txt",
     "shared/ceo/", "shared/engajamento/",
 }
+
+# Cópia MORTA que o repositório não deve gravar. O daemon importa
+# integrations/telegram_repurpose_hunter.py (o log diz 'integrations.*') e o
+# agenteia já rastreia esse. Commitar a da raiz grava a duplicata divergente no
+# repositório — a armadilha que deixou a postagem balanceada travada por dias,
+# com a gente editando o arquivo que não roda.
+DUPLICATA_MORTA = {"telegram_repurpose_hunter.py"}
 
 MARCA = "# ── acrescentado pelo proteger.py ──"
 
@@ -311,7 +326,8 @@ def main():
     # inclusive o que eu não li pra checar se é credencial. Vai pro relatório
     # em separado, e quem decide é você.
     pastas = [f for f in resto if f.endswith("/") or Path(f).is_dir()]
-    salvar = [f for f in resto if f not in pastas]
+    mortas = [f for f in resto if f in DUPLICATA_MORTA]
+    salvar = [f for f in resto if f not in pastas and f not in mortas]
 
     # 4) conferência de segurança sobre o que REALMENTE entraria
     print(f"conferindo o conteúdo de {len(salvar)} arquivo(s)...", flush=True)
@@ -343,6 +359,14 @@ def main():
     print(f"\n── SERIA SALVO ({len(salvar)}) ──")
     for f in sorted(salvar):
         print(f"   {f}")
+
+    if mortas:
+        print(f"\n── DEIXADO DE FORA: cópia morta ({len(mortas)}) ──")
+        print("   o daemon importa a versão de dentro do pacote; esta da raiz")
+        print("   é código que ninguém executa. Gravar as duas no repositório")
+        print("   é como a gente acaba editando a errada:")
+        for f in sorted(mortas):
+            print(f"   {f}")
 
     if pastas:
         print(f"\n── DEIXADO DE FORA: pastas inteiras ({len(pastas)}) ──")
