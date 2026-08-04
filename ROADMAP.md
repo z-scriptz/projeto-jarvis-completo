@@ -627,8 +627,48 @@ Vale reusar `nome_de_produto_ruim()` no `telegram_radar` e na vitrine quando der
 Preço também ganhou ponto de milhar (`R$ 1.600,00`): é o número que decide a
 compra e sem separador ele some no meio da mensagem.
 
-Próximo passo: `--teste` de novo (deve pular 1 item e mostrar 2 limpos), e só
-depois `WHATSAPP_ATIVO=1` pra uma rodada real com você olhando.
+**Os 2 primeiros posts reais saíram — e prestaram pouco.** Link solto, sem
+foto, sem legenda, sem preço, nome cortado no meio. **Tecnicamente funcionando e
+comercialmente inútil**, que é um jeito de falhar que teste nenhum pega: só
+quem olha o grupo como cliente enxerga.
+
+  **Foto** — a fila já EXIGIA `imagem` pro item ser candidato, e o script não
+  usava o dado. `_baixar_foto` + `_enviar_com_foto` (input escondido,
+  `set_input_files`, sem abrir menu). **Sem curinga `input[type=file]`**: o
+  WhatsApp tem mais de um e um é o de DOCUMENTO — foto por ali vira anexo de
+  arquivo, pior que sem foto. Não casou → cai pro texto.
+
+  Contrato: **`_enviar_com_foto` devolve False só quando NADA foi enviado.** Se
+  devolvesse False depois de já ter mandado, o texto iria junto e o grupo
+  receberia o produto duas vezes. Por isso a prévia é esperada antes de digitar.
+  E a caixa de legenda é OUTRA que a da conversa — errar de caixa manda legenda
+  solta e foto muda.
+
+  **Legenda** — mesma FORMA do `telegram_poster._montar_legenda`, de propósito:
+  as duas comunidades são do mesmo dono e recebem os mesmos produtos. Formato
+  diferente por surface faz quem está nos dois achar que são revendas
+  diferentes. Muda só a marcação (`*negrito*`, URL crua).
+
+  **Nome** — passou a preferir o **título oficial da Shopee**, que o
+  health-check já guardava em `precos_historico.json` e ninguém usava. Corte de
+  70 → 110: em 70 o "Kit 4 Essência 10ml Para Aromatizador Difusor
+  Umidificador…" morria no meio.
+
+  **Preço** — três fontes: item → curadoria → histórico do health-check. **A
+  mesma da vitrine**, que é o ponto: preço divergente entre as duas é pior que
+  preço ausente, porque o cliente vê as duas. Zero rede nova.
+
+Confirmado no seco de 04/08: `COM foto`, R$ 54,00 e R$ 75,00 vindos do
+histórico, títulos oficiais inteiros.
+
+**Lacuna registrada, não resolvida:** a fila não guarda preço na ingestão —
+`postar_grupo.py:163` manda `"preco_real": ""` com esse comentário, ou seja **o
+grupo do Telegram posta sem preço desde sempre**. Não é defeito do WhatsApp; ele
+só tornou visível. O conserto de verdade é gravar o preço quando o produto entra
+na fila. Trabalho separado, de propósito.
+
+**Não testado ainda:** o caminho da foto exige WhatsApp Web de verdade. Escrito
+pra degradar, não quebrar: falha em download/anexo/prévia → texto.
 
 ### Pendências pequenas deixadas conscientemente
 
