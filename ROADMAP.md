@@ -448,6 +448,29 @@ certo sozinho — inclusive `home_appliances513`, `homekitchgadgets1`,
 Sem chave `youtube`, a conta cai no token principal (canal geral). Criar o canal
 e acrescentar quando for a hora.
 
+### YouTube Shorts: 3x por semana, fora da pirâmide (04/08)
+
+Pedido do Dre: o Shorts entrega diferente do Reels — volume alto divide a mesma
+janela de recomendação e derruba o engajamento por vídeo em vez de somar. Então
+o YouTube saiu da pirâmide e virou **segunda/quarta/sexta, 1 por conta**.
+
+  `youtube_dias_semana: [0, 2, 4]` · `youtube_max_por_conta_dia: 1`
+
+O Instagram e o Facebook seguem a pirâmide `[3,2,1,3,2,1,0]` sem mudança — a
+regra vive no laço de plataformas do `_postar_produto`, não no agendador.
+
+O teto é POR CONTA, não global: as 4 contas são canais diferentes no YouTube,
+então short da tech não gasta a vaga da casa. Contador em
+`hist["youtube_por_dia"][data][conta]` — chave nova no mesmo arquivo, lida com
+`setdefault`, sem migração.
+
+Lista vazia/ausente volta ao comportamento antigo. Como `carregar_config` faz
+`dict(DEFAULTS)` e só então sobrepõe o `agendador_config.json`, a regra vale sem
+precisar editar o arquivo da VPS.
+
+Canal do YouTube da conta casa: `"youtube": "casa"` → `youtube_token_casa.json`,
+criado por `auth_youtube.py casa`. Sem o token ele cai no canal principal.
+
 ### Pendências pequenas deixadas conscientemente
 
 - `validar_fila`: quando a retentativa também falha, o relatório mostra o motivo

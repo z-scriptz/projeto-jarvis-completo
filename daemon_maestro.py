@@ -95,6 +95,15 @@ DEFAULTS = {
     # ── Postagem ──
     "horarios":                   ["09:00", "14:00", "17:00", "21:00"],
     "plataformas":                ["youtube"],
+    # ── YouTube Shorts: 3x por semana, não todo dia ─────────────────────
+    # O Shorts entrega diferente do Reels: volume alto divide a mesma janela
+    # de recomendação e derruba o engajamento por vídeo em vez de somar. Então
+    # o YouTube sai da pirâmide e vai a segunda/quarta/sexta, 1 por conta.
+    # Índice = dia da semana (0=segunda ... 6=domingo), igual à pirâmide.
+    # Lista vazia/ausente = sem restrição (comportamento antigo).
+    # Vale pra TODAS as contas; o Instagram e o Facebook seguem a pirâmide.
+    "youtube_dias_semana":        [0, 2, 4],
+    "youtube_max_por_conta_dia":  1,
     "publico":                    True,
     # 1 vídeo de CADA conta por slot (balanceado), com teto diário por conta.
     # OFF por padrão = comportamento antigo (1 vídeo/slot, total). Ligue e ajuste
@@ -968,7 +977,7 @@ def ciclo_postagem(cfg: dict, hist: dict, dry_run: bool) -> dict:
                          f"(pra não postarem no mesmo minuto)")
                 time.sleep(espera * 60)
             log.info(f"   🎬 [{datetime.now():%H:%M}] Postando '{slug}' → {conta}")
-            if dry_run or _postar_produto(slug, cfg):
+            if dry_run or _postar_produto(slug, cfg, hist):
                 ok_slugs.append(slug)
         if ok_slugs:
             _registrar_postagem(hist, horario, ok_slugs)
@@ -992,7 +1001,7 @@ def ciclo_postagem(cfg: dict, hist: dict, dry_run: bool) -> dict:
         resultado.update(postou=True, produto=produto, dry_run=True)
         return resultado
 
-    if _postar_produto(produto, cfg):
+    if _postar_produto(produto, cfg, hist):
         _registrar_postagem(hist, horario, produto)
         resultado.update(postou=True, produto=produto)
     else:
@@ -1135,7 +1144,43 @@ def _um_por_conta_sob_teto(hist: dict, teto: int) -> list:
     return escolhidos
 
 
-def _postar_produto(produto: str, cfg: dict) -> bool:
+_DIA_NOME = ("segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo")
+
+
+def _youtube_liberado(hist: dict, cfg: dict, conta: str):
+    """(pode_subir, motivo_se_nao). O Shorts tem regra própria, separada da
+    pirâmide do Instagram/Facebook.
+
+    Duas travas, e as duas precisam passar:
+      dia    — só nos dias configurados (padrão segunda/quarta/sexta)
+      teto   — no máximo N por conta por dia (padrão 1)
+
+    O teto é POR CONTA e não global: as 4 contas são canais diferentes no
+    YouTube, então um short da tech não gasta a vaga da casa.
+    """
+    dias = cfg.get("youtube_dias_semana")
+    if not dias:
+        return True, ""                     # sem restrição = comportamento antigo
+    hoje_dow = date.today().weekday()
+    if hoje_dow not in dias:
+        quais = "/".join(_DIA_NOME[d] for d in sorted(dias) if 0 <= d <= 6)
+        return False, f"hoje é {_DIA_NOME[hoje_dow]} — Shorts só {quais}"
+    teto = int(cfg.get("youtube_max_por_conta_dia", 1) or 1)
+    ja = hist.get("youtube_por_dia", {}).get(str(date.today()), {}).get(conta, 0)
+    if ja >= teto:
+        return False, f"{conta} já subiu {ja} short hoje (teto {teto})"
+    return True, ""
+
+
+def _registrar_youtube(hist: dict, conta: str):
+    """Conta o short do dia. Chave nova no mesmo histórico — o _carregar_historico
+    usa setdefault, então arquivo antigo continua sendo lido sem migração."""
+    hoje = str(date.today())
+    d = hist.setdefault("youtube_por_dia", {}).setdefault(hoje, {})
+    d[conta] = d.get(conta, 0) + 1
+
+
+def _postar_produto(produto: str, cfg: dict, hist: dict = None) -> bool:
     """Posta 1 vídeo em todas as plataformas configuradas. True se alguma deu certo."""
     try:
         from agents.publish_guard import publicar_com_garantia
@@ -1143,10 +1188,18 @@ def _postar_produto(produto: str, cfg: dict) -> bool:
         log.error(f"   ❌ Não consegui importar publish_guard: {e}")
         return False
     ok = False
+    conta = _conta_do_slug(produto) or "geral"
     for plataforma in cfg["plataformas"]:
+        if plataforma == "youtube" and hist is not None:
+            libera, motivo = _youtube_liberado(hist, cfg, conta)
+            if not libera:
+                log.info(f"   ⏭️  YouTube pulado: {motivo}")
+                continue
         r = publicar_com_garantia(plataforma, produto, plano=None, publico=cfg["publico"])
         if r.get("sucesso"):
             ok = True
+            if plataforma == "youtube" and hist is not None:
+                _registrar_youtube(hist, conta)
         elif r.get("pulado"):
             log.info(f"   ⏭️  {plataforma} pulado (sem uploader ainda)")
     # TikTok via API oficial (Content Posting API) — gated até o app ser aprovado.
