@@ -117,6 +117,49 @@ AULAS_M0 = [
      "primeiro mês."),
 ]
 
+# A GRADE. `pronto` diz se o modulo JA ESTA GRAVADO — a pagina mostra selo
+# "disponivel" ou "em breve" a partir disto. Mentir aqui e o jeito mais rapido
+# de transformar venda em reembolso, e reembolso queima o afiliado que trouxe
+# a venda junto com o dinheiro. Marque True so quando as aulas existirem.
+MODULOS = [
+    (0, "Boas-vindas", True, [
+        "Bem-vindo ao Afiliado Online",
+        "O que voce vai construir (a visao da maquina)",
+        "Mentalidade: sistema &gt; esforco"]),
+    (1, "Fundamentos do Afiliado Faceless", False, [
+        "Como funciona a comissao (Shopee) e o rastreio",
+        "Por que &ldquo;sem aparecer&rdquo; vende",
+        "Criando sua conta de afiliado + seus primeiros links"]),
+    (2, "Montando as Contas (a Fundacao)", False, [
+        "Escolhendo o nicho e criando os perfis",
+        "Bio que converte",
+        "Identidade visual: template, logo e feed"]),
+    (3, "A Esteira de Conteudo (o Coracao)", False, [
+        "De onde vem o conteudo (fontes virais)",
+        "Produzindo o video faceless (corte, template, audio)",
+        "O hook que para o scroll",
+        "A legenda que gera alcance (informativa + Publi)",
+        "Hashtags em escada (SEO)"]),
+    (4, "Alcance (o Gargalo Real)", False, [
+        "Por que alcance e tudo no comeco",
+        "As alavancas de alcance (audio, retencao, saves)",
+        "Medindo o que funciona"]),
+    (5, "Conversao (View &rarr; R$)", False, [
+        "Link na bio, ID do produto e marcacao nativa do IG",
+        "O canal do Telegram como ativo proprio",
+        "Respondendo comentarios e DMs"]),
+    (6, "Automacao (a Maquina Sozinha)", False, [
+        "O que da (e o que nao da) pra automatizar",
+        "Postagem no piloto automatico",
+        "Medir, podar e escalar o que funciona"]),
+    (7, "Escala (do Afiliado ao Empresario)", False, [
+        "Ser dono da audiencia (a lista)",
+        "Trafego pago quando faz sentido (CPA &lt; LTV)",
+        "Proximos degraus: loja e infoproduto"]),
+]
+
+BONUS = ("Kit do Aluno", ["Templates e checklists", "Comunidade (em breve)"])
+
 PRA_QUEM = [
     (True, "Quer uma renda online e não quer aparecer"),
     (True, "Prefere seguir um passo a passo a sair testando no escuro"),
@@ -143,10 +186,42 @@ FAQ = [
      "Vão ser. Isso está previsto e tem uma aula inteira sobre. Quem desiste "
      "no quinto vídeo desiste <b>antes</b> da parte em que o método começa a "
      "agir."),
+    ("Que nome aparece na fatura do meu cartao?",
+     "A cobranca e processada pela Hotmart e aparece comecando com "
+     "<b>HTM*</b>, seguido de uma abreviacao do produto &mdash; e cada banco "
+     "abrevia de um jeito. Nao e cobranca de outra empresa: e a Hotmart "
+     "processando a sua compra."),
     ("Como funciona o pagamento?",
      "O pagamento é processado pela <b>Hotmart</b>, com acesso liberado logo "
      "após a confirmação. Você tem <b>{garantia} dias</b> de garantia."),
 ]
+
+
+def _modulos_html() -> str:
+    linhas = []
+    for n, titulo, pronto, aulas in MODULOS:
+        selo = ('<span class="selo-m ok">disponivel</span>' if pronto
+                else '<span class="selo-m breve">em breve</span>')
+        itens = "\n".join(f'        <li>{a}</li>' for a in aulas)
+        aberto = " open" if pronto else ""
+        linhas.append(
+            f'      <details class="mod" data-revela{aberto}>\n'
+            f'        <summary><span class="idx">{n:02d}</span>'
+            f'<span class="tit">{titulo}'
+            f'<em>{len(aulas)} aula{"s" if len(aulas) != 1 else ""}</em></span>'
+            f'{selo}<span class="seta">+</span></summary>\n'
+            f'        <ul>\n{itens}\n        </ul>\n'
+            f'      </details>')
+    bt, ba = BONUS
+    itens = "\n".join(f'        <li>{a}</li>' for a in ba)
+    linhas.append(
+        f'      <details class="mod bonus" data-revela>\n'
+        f'        <summary><span class="idx">&#127873;</span>'
+        f'<span class="tit">Bonus &mdash; {bt}<em>{len(ba)} itens</em></span>'
+        f'<span class="seta">+</span></summary>\n'
+        f'        <ul>\n{itens}\n        </ul>\n'
+        f'      </details>')
+    return "\n".join(linhas)
 
 
 def _esc(t: str) -> str:
@@ -401,6 +476,41 @@ ul.grade{{list-style:none;display:grid;gap:16px;padding:0;margin:30px 0 0;
 .barra .botao{{margin:0;padding:13px 28px;font-size:15px}}
 body{{padding-bottom:84px}}
 
+/* grade de modulos */
+.mods{{list-style:none;padding:0;margin:30px 0 0;display:grid;gap:13px}}
+.mod{{background:var(--card);border:1px solid var(--linha);border-radius:16px;
+  overflow:hidden;transition:border-color .22s}}
+.mod:hover{{border-color:rgba(216,178,90,.36)}}
+.mod>summary{{cursor:pointer;list-style:none;padding:20px 22px;display:flex;
+  align-items:center;gap:15px}}
+.mod>summary::-webkit-details-marker{{display:none}}
+.mod .idx{{flex:0 0 auto;width:38px;height:38px;border-radius:11px;display:grid;
+  place-items:center;background:rgba(216,178,90,.1);color:var(--gold);
+  border:1px solid rgba(216,178,90,.3);
+  font:700 14px/1 ui-monospace,Menlo,monospace}}
+.mod .tit{{flex:1 1 auto;font-weight:650;font-size:16.5px;letter-spacing:-.01em}}
+.mod .tit em{{display:block;font-style:normal;font-size:12.5px;color:var(--muted);
+  font-weight:400;margin-top:3px}}
+.mod .selo-m{{flex:0 0 auto;font:650 10.5px/1 ui-monospace,Menlo,monospace;
+  letter-spacing:.1em;text-transform:uppercase;padding:6px 10px;border-radius:999px;
+  white-space:nowrap}}
+.mod .ok{{color:#14200f;background:linear-gradient(135deg,var(--gold),var(--goldSoft))}}
+.mod .breve{{color:var(--muted);border:1px solid var(--linha)}}
+.mod .seta{{flex:0 0 auto;color:var(--gold);font-size:19px;transition:transform .25s}}
+.mod[open] .seta{{transform:rotate(45deg)}}
+.mod ul{{margin:0;padding:0 22px 20px 74px;list-style:none}}
+.mod ul li{{color:var(--muted);font-size:15px;padding:6px 0 6px 18px;position:relative}}
+.mod ul li::before{{content:"";position:absolute;left:0;top:15px;width:7px;height:7px;
+  border-radius:50%;background:rgba(216,178,90,.45)}}
+.mod.bonus{{border-color:rgba(201,138,114,.32)}}
+.mod.bonus .idx{{color:var(--quente);background:rgba(201,138,114,.1);
+  border-color:rgba(201,138,114,.3)}}
+@media (max-width:560px){{
+  .mod ul{{padding-left:26px}}
+  .mod .selo-m{{display:none}}
+  .mod>summary{{padding:17px 16px;gap:12px}}
+}}
+
 hr.div{{border:0;border-top:1px solid var(--linha);margin:0}}
 footer{{padding:48px 0 30px;color:var(--muted);font-size:13.5px}}
 footer .aviso{{margin-top:12px;font-size:13px;opacity:.85;max-width:76ch}}
@@ -451,6 +561,7 @@ def montar() -> str:
         f'<p class="resp">{r.format(garantia=GARANTIA)}</p></details>'
         for i, (p, r) in enumerate(FAQ))
 
+    modulos = _modulos_html()
     parcela = f'<div class="parcela">{_esc(PARCELA)}</div>' if PARCELA else ""
 
     return f"""<meta charset="utf-8">
@@ -525,6 +636,17 @@ precisar aparecer. Um metodo, nao um milagre.">
   <p data-revela>E o que decide quem continua depois do primeiro mes.</p>
   <ul class="grade">
 {mental}
+  </ul>
+</section>
+
+<section>
+  <span class="olho" data-revela>A grade</span>
+  <h2 data-revela>8 modulos, do <span class="g">zero ao sistema</span></h2>
+  <p data-revela>Clique num modulo pra ver as aulas. O <b>Modulo 0 ja esta
+  disponivel</b>; os demais entram conforme sao gravados &mdash; e voce nao paga
+  nada a mais por eles.</p>
+  <ul class="mods">
+{modulos}
   </ul>
 </section>
 
