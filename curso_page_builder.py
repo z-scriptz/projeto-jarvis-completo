@@ -38,11 +38,25 @@
 import argparse
 import html
 import os
+import subprocess
 import sys
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
-SAIDA_PADRAO = BASE_DIR / "site" / "curso" / "index.html"
+
+# O site é um CLONE do Topshop-Site (GitHub Pages) — mesma variável e mesmo
+# caminho que o deploy_site.py usa, de propósito: se a vitrine e o curso
+# publicassem em lugares diferentes, um dia um dos dois sairia do ar sozinho e
+# ninguém saberia onde procurar.
+SITE_REPO = Path(os.environ.get("TOPSHOP_SITE_DIR", str(Path.home() / "topshop-site")))
+SUBPASTA = os.environ.get("CURSO_SUBPASTA", "curso").strip("/")
+
+# Publica direto no repo do site quando ele existe; senão cai num rascunho
+# local, pra dar pra gerar e olhar sem ter o clone configurado.
+if (SITE_REPO / ".git").exists():
+    SAIDA_PADRAO = SITE_REPO / SUBPASTA / "index.html"
+else:
+    SAIDA_PADRAO = BASE_DIR / "site" / SUBPASTA / "index.html"
 
 # `go.hotmart.com/<ID>?dp=1` e não `pay.hotmart.com/<ID>`: o `dp=1` manda a
 # Hotmart PULAR a página de vendas dela e ir direto ao checkout — que é
@@ -675,9 +689,50 @@ precisar aparecer. Um método, não um milagre.">
 """
 
 
+def _git(*args):
+    return subprocess.run(["git", "-C", str(SITE_REPO), *args],
+                          capture_output=True, text=True)
+
+
+def _publicar():
+    """Commita e empurra o repo do site. Mesmo caminho do deploy_site.py.
+
+    Não faz `add -A` cego: adiciona SÓ a pasta do curso. A vitrine é gerada
+    por outro script, e um `add -A` daqui empurraria uma vitrine pela metade
+    se o deploy_site estivesse escrevendo ao mesmo tempo.
+    """
+    if not (SITE_REPO / ".git").exists():
+        print(f"[curso] {SITE_REPO} não é um repo git — nada publicado.")
+        print(f"[curso]   clone o site lá antes, ou use --saida pra gerar solto.")
+        return 1
+
+    a = _git("add", SUBPASTA)
+    if a.returncode != 0:
+        print("[curso] git add falhou: " + (a.stderr or a.stdout)[:200])
+        return 1
+
+    c = _git("commit", "-m", "curso: atualiza a pagina de vendas (auto)")
+    if c.returncode not in (0, 1):        # 1 = nada mudou, e isso é normal
+        print("[curso] commit falhou: " + (c.stderr or c.stdout)[:200])
+        return 1
+    if c.returncode == 1:
+        print("[curso] nada mudou desde a última publicação ✔")
+        return 0
+
+    p = _git("push")
+    if p.returncode != 0:
+        print("[curso] push falhou: " + (p.stderr or p.stdout)[:200])
+        print("[curso]   o arquivo está gravado; só o envio falhou.")
+        return 1
+    print("[curso] ✅ publicado. O GitHub Pages leva 1-2 min pra atualizar.")
+    return 0
+
+
 def main():
     p = argparse.ArgumentParser(description="Gera a página de vendas do curso.")
     p.add_argument("--saida", default=str(SAIDA_PADRAO))
+    p.add_argument("--publicar", action="store_true",
+                   help="commita e empurra o repo do site depois de gerar")
     args = p.parse_args()
 
     if not CHECKOUT:
@@ -700,6 +755,15 @@ def main():
     if CHECKOUT:
         print(f"[curso]   checkout: {CHECKOUT}")
         print("[curso]   parâmetros da URL são repassados (crédito do afiliado)")
+
+    if args.publicar:
+        # publicar sem checkout seria pôr no ar uma página que não vende
+        if not CHECKOUT:
+            print("[curso] NÃO publiquei: sem CURSO_CHECKOUT a página não compra.")
+            return 2
+        return _publicar()
+    if str(destino).startswith(str(SITE_REPO)):
+        print("[curso]   (rode de novo com --publicar pra subir pro ar)")
     return 0
 
 
