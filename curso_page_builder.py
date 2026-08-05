@@ -58,12 +58,24 @@ if (SITE_REPO / ".git").exists():
 else:
     SAIDA_PADRAO = BASE_DIR / "site" / SUBPASTA / "index.html"
 
-# `go.hotmart.com/<ID>?dp=1` e não `pay.hotmart.com/<ID>`: o `dp=1` manda a
-# Hotmart PULAR a página de vendas dela e ir direto ao checkout — que é
-# justamente o motivo de existir página própria. Sem ele, o cliente sai da
-# nossa página pra ver a da Hotmart, e a nossa vira só um desvio.
+# `pay.hotmart.com/<ID>` — MEDIDO, não suposto (05/08). Eu tinha posto
+# `go.hotmart.com/<ID>?dp=1` achando que `dp` era "direct payment". Não é. O
+# que cada link faz de verdade, seguindo o redirecionamento:
+#
+#   go.hotmart.com/<ID>        302 -> drezinn-p.hotmart.host/afiliado-online-...
+#                                     (a página que a própria Hotmart monta)
+#   go.hotmart.com/<ID>?dp=1   302 -> hotmart.com/pt-br/marketplace/produtos/...
+#                                     (o ANÚNCIO no marketplace — não compra)
+#   pay.hotmart.com/<ID>       200, fica ali  <- o checkout de verdade
+#
+# Com o link errado, cada clique no botão de compra levava o cliente pra uma
+# listagem do marketplace em vez do pagamento. Quem pegou foi o Dre, olhando
+# pra onde o botão ia — eu tinha "conferido" só o formato da URL.
+#
+# Confirmado que o checkout aceita parâmetro extra (200 com ?src= e com
+# ?sck=&src=), que é o que mantém o crédito do afiliado vivo.
 CHECKOUT = os.environ.get(
-    "CURSO_CHECKOUT", "https://go.hotmart.com/B106927444O?dp=1").strip()
+    "CURSO_CHECKOUT", "https://pay.hotmart.com/B106927444O").strip()
 
 # Conferidos na tabela da Hotmart (05/08). O PARCELADO é o número grande porque
 # é a barreira real de decisão; o à vista aparece logo abaixo, sem esconder.
