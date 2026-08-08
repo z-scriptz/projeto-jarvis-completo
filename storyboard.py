@@ -179,6 +179,40 @@ def _por_modelo(nome, preco, n):
             "cta": {"texto": random.choice(_CTAS_BASE), "duracao": 2.0}}
 
 
+# Coisas que NÃO reprovam sozinhas, mas que um humano precisa olhar. Separado
+# de PROIBIDO de propósito: reprovar tudo que é duvidoso faria o gerador
+# devolver roteiro sem graça; não avisar faria o Dre publicar sem perceber.
+_AVISOS = [
+    (re.compile(r"\bminha (pele|cabelo|barriga|acne|celulite|olheira)", re.I),
+     "afirma experiência FÍSICA pessoal com o produto"),
+    (re.compile(r"\b(emagreci|clareou|curou|sumiu a|acabou com a)\b", re.I),
+     "promete resultado corporal/saúde"),
+    (re.compile(r"\b(uso h[áa]|testei por|faz \d+ (meses|semanas) que uso)\b", re.I),
+     "afirma tempo de uso que ninguém teve"),
+    (re.compile(r"\b(aprovado pela anvisa|dermatologicamente testado|hipoalerg)", re.I),
+     "alegação regulada — só se estiver escrito no anúncio"),
+]
+
+
+def avisar(sb):
+    """Pontos que pedem olho humano. Não reprovam.
+
+    Nasceu do 2º roteiro real: a narração dizia "minha pele é oleosa e ele não
+    deixa esbranquiçado" para um protetor solar. Hook em 1ª pessoa é
+    ENQUADRAMENTO e foi o que a medição aprovou; afirmação de desempenho no
+    próprio corpo é DEPOIMENTO — e depoimento inventado sobre cosmético é
+    publicidade enganosa, não licença criativa.
+
+    Fica como aviso porque a linha é de julgamento: "comprei e amei" é
+    inofensivo, "minha acne sumiu" não é. Quem decide é o dono da conta.
+    """
+    texto = " ".join(
+        [(sb.get("hook") or {}).get("texto", ""), (sb.get("cta") or {}).get("texto", "")]
+        + [c.get("texto_tela", "") for c in (sb.get("cenas") or [])]
+        + [c.get("narracao", "") for c in (sb.get("cenas") or [])])
+    return [m for regex, m in _AVISOS if regex.search(texto)]
+
+
 def validar(sb, n_assets):
     """[] quando está bom; lista de problemas quando não.
 
@@ -293,6 +327,8 @@ def main():
             _log(f"      ✗ {x}")
     else:
         _log("✅ passou na validação")
+    for a in avisar(sb):
+        _log(f"   👀 olhe antes de publicar: {a}")
 
     if args.salvar:
         SAIDA_DIR.mkdir(parents=True, exist_ok=True)
