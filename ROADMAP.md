@@ -981,6 +981,52 @@ Recomendado: **cortar produção pela metade** até a esteira cair pra 60-80.
 "geral" significa que o classificador não está decidindo — e produto em geral é
 produto que não foi pra conta especializada, onde converteria melhor.
 
+### PRODUTOR ORIGINAL — começou em 08/08
+
+**Por que existe.** Os 133 posts medidos deram engajamento SAUDÁVEL (3-5%) com
+alcance BAIXO (mediana 116). Conteúdo que ressoa e não é distribuído é a
+assinatura do que a plataforma trata como **material reciclado** — e o pipeline
+hoje é: pegar vídeo de outro perfil, reeditar, publicar. Não dá pra provar sem
+comparar contra original, e é isso que o experimento vai fazer.
+
+`storyboard.py` — **só JSON, não renderiza nada.** Roteiro burro se descobre em
+segundos; vídeo burro custa render. Traz o dado dentro: hook em 1ª pessoa,
+"A Shopee:" e urgência PROIBIDOS pelo validador **com o número na mensagem de
+erro**, pra quem for "consertar" isso um dia saber o que está desfazendo.
+
+Regras que vieram de defeito real, não de teoria:
+
+  **só pede imagem que EXISTE** — storyboard com 6 cenas pra produto com 2
+  fotos é documento bonito e irrealizável, e só se descobriria no render.
+
+  **CTA tem que conter "bio"** — o 1º roteiro dizia "Garanta já o seu kit!".
+  Garanta onde? No IG só a bio é clicável. Soava bem e não instruía.
+
+  **narração continua a história do hook** — o Dre aprovou 6 de 8 e apontou
+  "parece comercial". O padrão: hook em 1ª pessoa, narração vira locutor
+  ("Conheça a saia que une...", "Apresento..."). O vídeo começa conversa e
+  vira propaganda no segundo 3, jogando fora o que a medição premiou.
+
+  **modelo determinístico como piso** — roda sem chave de API e serve de
+  régua: se a IA não superar o modelo base, não vale a chamada.
+
+  **`origem: "original"` em todo roteiro** — é o experimento. Sem esse campo,
+  daqui a um mês não dá pra separar original de reciclado, e o A/B vira opinião.
+
+**Avisos ≠ reprovação.** Eficácia no corpo e alegação regulada AVISAM, nunca
+bloqueiam: a regra do Dre é pesquisar o produto antes e tirar a frase se ele
+não entregar. A mensagem serve esse processo em vez de discutir com ele. E o
+aviso de "experiência pessoal" foi ESTREITADO a pedido dele, com razão —
+"minha pele é oleosa e adorei a textura" é voz de marketing, não fraude.
+
+**Fora de propósito: quality gate com nota 0-10.** Modelo dando nota ao próprio
+roteiro é opinião com casa decimal, e raramente reprova a si mesmo. O validador
+só checa o VERIFICÁVEL. Nota entra quando houver correlação medida entre ela e
+o alcance real — aí vira preditor, não achismo.
+
+**Próximo passo:** storyboard → EDL → FFmpeg. Só depois que a rodada nova
+mostrar a narração corrigida.
+
 ### Onde parou (04/08, fim do dia)
 
 **Esperando o chip.** Pedido feito — Claro pré-pago, R$ 20,99, chegada prevista
