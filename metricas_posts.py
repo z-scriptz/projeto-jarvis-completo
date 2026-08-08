@@ -269,7 +269,9 @@ def _top(linhas, quantos=12):
     print("── OS QUE MAIS ALCANÇARAM ──")
     for r in sorted(linhas, key=lambda x: -(x.get("reach", 0) or 0))[:quantos]:
         hook = " / ".join(s.strip() for s in (r.get("hook") or "—").splitlines() if s.strip())
-        print(f"   {r.get('reach',0):7} alcance · {r.get('likes',0):5} curtidas · "
+        al, cu = r.get("reach", 0) or 0, r.get("likes", 0) or 0
+        tx = (cu / al * 100) if al else 0
+        print(f"   {al:7} alcance · {cu:5} curtidas · engaj {tx:4.1f}% · "
               f"{r.get('nicho') or '?':7} · {r['data']}")
         print(f"           {hook[:72]}")
     print()
@@ -318,11 +320,20 @@ def ranking(minimo=3, top=False):
         def _med(v, campo):
             n = [r.get(campo, 0) or 0 for r in v]
             return sum(n) / len(n) if n else 0
+
+        def _taxa(v):
+            """curtidas por 100 alcançados. Separa "conteúdo ruim" de "conteúdo
+            bom que não foi distribuído" — duas conclusões opostas que o alcance
+            sozinho confunde. Post com alcance baixo E taxa alta é o algoritmo
+            não entregando, não o vídeo falhando."""
+            a = sum(r.get("reach", 0) or 0 for r in v)
+            c = sum(r.get("likes", 0) or 0 for r in v)
+            return (c / a * 100) if a else 0
         for k, v in sorted(fora, key=lambda kv: -_med(kv[1], "reach"))[:12]:
             # hook de 2 linhas quebraria a tabela; a quebra vira ' / '
             rotulo = " / ".join(x.strip() for x in k.splitlines() if x.strip())
-            print(f"   alcance {_med(v,'reach'):8.0f} · curtidas {_med(v,'likes'):6.0f}"
-                  f" · {len(v):3} post(s)   {rotulo[:56]}")
+            print(f"   alcance {_med(v,'reach'):7.0f} · curtidas {_med(v,'likes'):5.0f}"
+                  f" · engaj {_taxa(v):4.1f}% · {len(v):3} post(s)   {rotulo[:46]}")
         if ignorados:
             print(f"   ({ignorados} grupo(s) com menos de {minimo} posts, fora do ranking)")
         print()
