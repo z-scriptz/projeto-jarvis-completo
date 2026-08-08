@@ -192,15 +192,26 @@ def _por_modelo(nome, preco, n):
 _AVISOS = [
     # ESTREITADO a pedido do Dre (08/08), e ele tem razão: "minha pele é oleosa
     # e adorei a textura" é voz de marketing, não depoimento fraudulento — o
-    # público sabe ler isso. O que continua marcado é RESULTADO no corpo, que é
-    # outra coisa: "adorei" é opinião, "minha acne sumiu" é afirmação de
-    # eficácia, e essa tem régua legal mesmo quando dita em primeira pessoa.
-    (re.compile(r"\b(minha|meu)\s+\w+\s+(sumiu|clareou|curou|melhorou \d|"
-                r"cresceu \d|desapareceu)", re.I),
-     "afirma RESULTADO no corpo — confirme no anúncio; se o produto não entrega, tire a frase e mantenha o marketing"),
+    # público sabe ler isso. O que fica marcado é AFIRMAÇÃO DE EFICÁCIA.
+    #
+    # E o padrão era estreito DEMAIS: no roteiro do sabonete de açafrão passou
+    # "as bolinhas diminuíram muito e o crescimento dos pelos ficou mais
+    # fininho" — eficácia pura, sem disparar nada, porque eu só procurava
+    # "minha X sumiu". Isso quebrava o processo do Dre, que é PESQUISAR o
+    # produto antes de afirmar: se o aviso não dispara, a pesquisa não
+    # acontece, e a ferramenta ainda passa a sensação de que está tudo
+    # conferido. Aviso que não avisa é pior que aviso nenhum.
+    #
+    # Agora é CONDIÇÃO + MUDANÇA, em qualquer pessoa gramatical.
+    (re.compile(r"\b(bolinha|pelo|acne|cravo|mancha|frizz|queda|caspa|"
+                r"celulite|olheira|ruga|estria|foliculite|espinha|oleosidade|"
+                r"pel[oe]s?)\w*\b[^.!?]{0,40}?\b(sumi|diminu|reduzi|acabou|"
+                r"clareou|curou|parou de|ficou mais (fin|clar|rala))", re.I),
+     "afirma EFICÁCIA (condição melhorou) — confirme no anúncio antes de "
+     "publicar; se o produto não entrega, tire a frase e fique só no marketing"),
     (re.compile(r"\b(emagreci|clareou minha|curou minha|acabou com (a|minha) "
                 r"(acne|celulite|queda))\b", re.I),
-     "promete resultado de saúde/estética"),
+     "promete resultado de saúde/estética — mesma conferência"),
     (re.compile(r"\b(uso h[áa]|testei por|faz \d+ (meses|semanas) que uso)\b", re.I),
      "afirma tempo de uso que ninguém teve"),
     (re.compile(r"\b(aprovado pela anvisa|dermatologicamente testado|hipoalerg)", re.I),
