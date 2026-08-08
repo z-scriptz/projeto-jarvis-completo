@@ -348,11 +348,24 @@ def _listar_ig_instaloader(perfil: str, limite: int) -> list:
         #      .venv/bin/instaloader --login=SUA_CONTA  → INSTALOADER_USER no .env.
         login_user = os.environ.get("INSTALOADER_USER", "").strip()
         if login_user:
+            # A SESSÃO NÃO PODE MORAR EM /tmp. Em 08/08 a coleta do Instagram
+            # estava falhando havia dias com:
+            #   [Errno 2] .../tmp/.instaloader-root/session-sxrwping
+            # O arquivo não estava corrompido — tinha SUMIDO. Rodando como root
+            # o instaloader cai em /tmp, e /tmp é limpo em reboot e por rotina
+            # do sistema. Ou seja: a sessão tinha prazo de validade que ninguém
+            # escolheu, e quando venceu o log dizia "falhou", não "sumiu".
+            #
+            # Ordem de procura: INSTALOADER_SESSION → shared/ (sobrevive) →
+            # caminho padrão do instaloader (que pode ser /tmp — último recurso).
             sess = os.environ.get("INSTALOADER_SESSION", "").strip()
+            nosso = BASE_DIR / "shared" / f"instaloader-{login_user}.session"
             if sess and Path(sess).exists():
                 L.load_session_from_file(login_user, sess)
+            elif nosso.exists():
+                L.load_session_from_file(login_user, str(nosso))
             else:
-                L.load_session_from_file(login_user)     # caminho padrão do instaloader
+                L.load_session_from_file(login_user)     # padrão (pode ser /tmp)
         else:
             # 2) fallback: cookies.txt do navegador (funciona, mas o IG barra mais)
             cookie = (os.environ.get("YTDLP_COOKIES") or os.environ.get("IG_COOKIES") or "").strip()
