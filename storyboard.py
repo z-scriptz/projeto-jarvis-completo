@@ -117,7 +117,10 @@ REGRAS OBRIGATÓRIAS:
 4. Movimento de cada cena: um de {movs}.
 5. As durações somadas devem ficar entre {dmin} e {dmax} segundos.
 6. Não prometa resultado, ganho ou superlativo que não dá pra verificar.
-7. Responda SÓ o JSON, sem cercas de código e sem comentários.
+7. O CTA precisa DIZER O QUE FAZER, e o único caminho clicável no Instagram
+   é a bio. Escreva algo que contenha "bio" — ex.: "Link na bio 👆".
+   "Garanta já o seu" NÃO serve: soa bem e não diz onde clicar.
+8. Responda SÓ o JSON, sem cercas de código e sem comentários.
 """
 
 
@@ -191,8 +194,14 @@ def validar(sb, n_assets):
     cenas = sb.get("cenas") or []
     if not cenas:
         p.append("nenhuma cena")
-    if not (sb.get("cta") or {}).get("texto", "").strip():
+    cta = (sb.get("cta") or {}).get("texto", "").strip()
+    if not cta:
         p.append("CTA vazio")
+    elif not re.search(r"\bbio\b", cta, re.I):
+        # No Instagram, legenda e comentário não têm link clicável — a bio é o
+        # único caminho. CTA sem "bio" soa bem e não instrui: o espectador quer
+        # comprar e não sabe onde. Foi o defeito do 1º roteiro real gerado.
+        p.append(f"CTA não diz onde clicar (falta 'bio'): {cta!r}")
 
     texto_todo = " ".join([hook, (sb.get("cta") or {}).get("texto", "")]
                           + [c.get("texto_tela", "") for c in cenas]
