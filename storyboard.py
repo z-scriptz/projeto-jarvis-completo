@@ -183,10 +183,17 @@ def _por_modelo(nome, preco, n):
 # de PROIBIDO de propósito: reprovar tudo que é duvidoso faria o gerador
 # devolver roteiro sem graça; não avisar faria o Dre publicar sem perceber.
 _AVISOS = [
-    (re.compile(r"\bminha (pele|cabelo|barriga|acne|celulite|olheira)", re.I),
-     "afirma experiência FÍSICA pessoal com o produto"),
-    (re.compile(r"\b(emagreci|clareou|curou|sumiu a|acabou com a)\b", re.I),
-     "promete resultado corporal/saúde"),
+    # ESTREITADO a pedido do Dre (08/08), e ele tem razão: "minha pele é oleosa
+    # e adorei a textura" é voz de marketing, não depoimento fraudulento — o
+    # público sabe ler isso. O que continua marcado é RESULTADO no corpo, que é
+    # outra coisa: "adorei" é opinião, "minha acne sumiu" é afirmação de
+    # eficácia, e essa tem régua legal mesmo quando dita em primeira pessoa.
+    (re.compile(r"\b(minha|meu)\s+\w+\s+(sumiu|clareou|curou|melhorou \d|"
+                r"cresceu \d|desapareceu)", re.I),
+     "afirma RESULTADO no corpo (não é opinião, é eficácia)"),
+    (re.compile(r"\b(emagreci|clareou minha|curou minha|acabou com (a|minha) "
+                r"(acne|celulite|queda))\b", re.I),
+     "promete resultado de saúde/estética"),
     (re.compile(r"\b(uso h[áa]|testei por|faz \d+ (meses|semanas) que uso)\b", re.I),
      "afirma tempo de uso que ninguém teve"),
     (re.compile(r"\b(aprovado pela anvisa|dermatologicamente testado|hipoalerg)", re.I),
@@ -293,8 +300,48 @@ def _da_fila(indice):
     return nome, it.get("preco", ""), it.get("link", "")
 
 
+def revisar():
+    """Mostra todos os roteiros salvos de forma legível.
+
+    O `grep` que eu sugeri mostrava só a linha `"hook": {` — o texto fica na
+    seguinte. Dava pra contar quantos rodaram e não dava pra JULGAR nenhum, que
+    era o ponto. Roteiro se avalia lendo.
+    """
+    if not SAIDA_DIR.exists():
+        _log("nenhum roteiro salvo ainda (use --salvar)")
+        return 1
+    arqs = sorted(SAIDA_DIR.glob("*.json"))
+    _log(f"{len(arqs)} roteiro(s) em {SAIDA_DIR}\n")
+    for i, f in enumerate(arqs, 1):
+        try:
+            sb = json.loads(f.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        dur = ((sb.get("hook") or {}).get("duracao", 0)
+               + sum(c.get("duracao", 0) for c in sb.get("cenas") or [])
+               + (sb.get("cta") or {}).get("duracao", 0))
+        print(f"{'─'*72}")
+        print(f"{i:2}. {sb.get('produto','')[:66]}")
+        print(f"    {dur:.0f}s · {sb.get('roteiro_por','?')} · "
+              f"R$ {sb.get('preco') or '—'}")
+        print(f"\n    HOOK  {(sb.get('hook') or {}).get('texto','')}")
+        for n, c in enumerate(sb.get("cenas") or [], 1):
+            print(f"    {n}. [{c.get('movimento','')}] {c.get('texto_tela','')}")
+            if c.get("narracao"):
+                print(f"       “{c['narracao']}”")
+        print(f"    CTA   {(sb.get('cta') or {}).get('texto','')}")
+        for a in avisar(sb):
+            print(f"    👀 {a}")
+        print()
+    print(f"{'─'*72}")
+    _log("quantos você publicaria SEM editar?")
+    return 0
+
+
 def main():
     p = argparse.ArgumentParser(description="Gera o ROTEIRO (JSON) de um vídeo original.")
+    p.add_argument("--revisar", action="store_true",
+                   help="lê todos os roteiros salvos, legível")
     p.add_argument("--fila", type=int, help="índice do produto em produtos_fila.json")
     p.add_argument("--nome", help="nome do produto (em vez de --fila)")
     p.add_argument("--preco", default="")
@@ -302,6 +349,9 @@ def main():
                    help="quantas imagens do produto existem (o roteiro não pode pedir mais)")
     p.add_argument("--salvar", action="store_true")
     args = p.parse_args()
+
+    if args.revisar:
+        return revisar()
 
     if args.fila is not None:
         nome, preco, link = _da_fila(args.fila)
