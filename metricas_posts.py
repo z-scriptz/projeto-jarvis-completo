@@ -258,7 +258,34 @@ def coletar(horas_min=24, refazer=False, teste=False, limite=0, novos=False):
     return 0
 
 
-def ranking(minimo=3):
+def _top(linhas, quantos=12):
+    """Os posts individuais que mais alcançaram.
+
+    Existe porque o ranking por HOOK só funciona quando um hook se repete, e
+    com 147 hooks distintos em 133 posts quase nenhum repete. A média por grupo
+    é a pergunta certa a LONGO prazo; hoje, o que dá pra aprender está no post
+    individual — qual vídeo estourou, e o que ele tinha.
+    """
+    print("── OS QUE MAIS ALCANÇARAM ──")
+    for r in sorted(linhas, key=lambda x: -(x.get("reach", 0) or 0))[:quantos]:
+        hook = " / ".join(s.strip() for s in (r.get("hook") or "—").splitlines() if s.strip())
+        print(f"   {r.get('reach',0):7} alcance · {r.get('likes',0):5} curtidas · "
+              f"{r.get('nicho') or '?':7} · {r['data']}")
+        print(f"           {hook[:72]}")
+    print()
+    n = [r.get("reach", 0) or 0 for r in linhas]
+    n.sort()
+    if n:
+        meio = n[len(n) // 2]
+        print(f"   mediana de alcance: {meio}   ·   maior: {n[-1]}   ·   menor: {n[0]}")
+        # a mediana importa mais que a média aqui: um post que estourou puxa a
+        # média e faz parecer que o conjunto vai bem quando não vai.
+        print(f"   média: {sum(n)/len(n):.0f}  (se a média for MUITO maior que a "
+              "mediana, poucos posts carregam o resultado)")
+    print()
+
+
+def ranking(minimo=3, top=False):
     """O que os números dizem, agrupado por hook e por nicho.
 
     `minimo` existe porque média de 1 post não é média — é anedota com casas
@@ -300,6 +327,8 @@ def ranking(minimo=3):
             print(f"   ({ignorados} grupo(s) com menos de {minimo} posts, fora do ranking)")
         print()
 
+    if top:
+        _top(linhas)
     _mostra("POR NICHO", "nicho")
     _mostra("POR HOOK", "hook")
     return 0
@@ -315,12 +344,14 @@ def main():
     p.add_argument("--limite", type=int, default=0, help="mede só os N primeiros")
     p.add_argument("--novos", action="store_true",
                    help="começa pelos posts MAIS RECENTES (bom pra testar)")
+    p.add_argument("--top", action="store_true",
+                   help="mostra os posts individuais de maior alcance")
     p.add_argument("--minimo", type=int, default=3,
                    help="posts mínimos por grupo no ranking")
     args = p.parse_args()
 
     if args.ranking:
-        return ranking(args.minimo)
+        return ranking(args.minimo, args.top)
     try:
         import requests  # noqa: F401
     except Exception:
