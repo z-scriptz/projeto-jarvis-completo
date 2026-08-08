@@ -120,7 +120,14 @@ REGRAS OBRIGATÓRIAS:
 7. O CTA precisa DIZER O QUE FAZER, e o único caminho clicável no Instagram
    é a bio. Escreva algo que contenha "bio" — ex.: "Link na bio 👆".
    "Garanta já o seu" NÃO serve: soa bem e não diz onde clicar.
-8. Responda SÓ o JSON, sem cercas de código e sem comentários.
+8. A NARRAÇÃO CONTINUA A HISTÓRIA DO HOOK, na mesma voz. Você está contando
+   a um amigo o que aconteceu com VOCÊ — não apresentando um produto.
+   NUNCA use "Apresento", "Conheça", "Descubra", "Esqueça o que você pensa",
+   "Perfeito para quem busca", "Ideal para". Isso é voz de locutor e faz o
+   vídeo virar propaganda no segundo 3.
+     ruim: "Conheça a saia que une a delicadeza do tricot ao conforto do modal"
+     bom:  "Botei pra ver e o caimento me pegou de surpresa — não marca nada"
+9. Responda SÓ o JSON, sem cercas de código e sem comentários.
 """
 
 
@@ -190,14 +197,22 @@ _AVISOS = [
     # eficácia, e essa tem régua legal mesmo quando dita em primeira pessoa.
     (re.compile(r"\b(minha|meu)\s+\w+\s+(sumiu|clareou|curou|melhorou \d|"
                 r"cresceu \d|desapareceu)", re.I),
-     "afirma RESULTADO no corpo (não é opinião, é eficácia)"),
+     "afirma RESULTADO no corpo — confirme no anúncio; se o produto não entrega, tire a frase e mantenha o marketing"),
     (re.compile(r"\b(emagreci|clareou minha|curou minha|acabou com (a|minha) "
                 r"(acne|celulite|queda))\b", re.I),
      "promete resultado de saúde/estética"),
     (re.compile(r"\b(uso h[áa]|testei por|faz \d+ (meses|semanas) que uso)\b", re.I),
      "afirma tempo de uso que ninguém teve"),
     (re.compile(r"\b(aprovado pela anvisa|dermatologicamente testado|hipoalerg)", re.I),
-     "alegação regulada — só se estiver escrito no anúncio"),
+     "alegação regulada — confirme que está escrita no anúncio"),
+    # A crítica do Dre nos 8 primeiros roteiros: "algumas narrações parecem
+    # mais um comercial do que um vídeo". Achei o padrão — o HOOK é em 1ª
+    # pessoa e a NARRAÇÃO troca pra voz de locutor. O vídeo começa como
+    # conversa e vira propaganda no segundo 3. Estes são os marcadores.
+    (re.compile(r"\b(apresento|conhe[çc]a o|conhe[çc]a a|descubra|"
+                r"esque[çc]a o que voc[êe]|perfeito para quem busca|"
+                r"ideal para quem)\b", re.I),
+     "voz de CATÁLOGO na narração — devia continuar a história do hook"),
 ]
 
 
