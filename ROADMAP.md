@@ -930,6 +930,57 @@ embaralhado). Provavelmente por regex de `@\w+` no resultado do Tesseract.
 **Adiado a pedido dele** ("veremos isso outra hora, com calma"). A correção da
 amostragem de 04/08 já resolve o sintoma que doía (texto invertido no ar).
 
+### Raio-x de 08/08 — o que 3 dias sem sessão revelaram
+
+`raio_x.sh` (read-only, 10 blocos) e `conferir_esteira.py` nasceram aqui. Rode
+os dois antes de perguntar "como está o Jarvis" — economizam 10 idas e voltas.
+
+**A COLETA DO INSTAGRAM ESTAVA MORTA HÁ DIAS.** 673 erros no `cron_coletor.log`.
+Causa final: **o `.env` tinha o nome da conta errado** — `INSTALOADER_USER=sxrwping`
+quando a conta é **`sxrwpingg`, com dois "g"**. O código pedia a sessão de um
+usuário que não existe, caía no caminho padrão (`/tmp`, que o sistema limpa) e
+o log dizia "falhou" em vez de "não existe". Corrigido no `.env`; a sessão
+precisa ser gerada **no PC do Dre**, nunca na VPS (o IG barra login de IP de
+datacenter — duas contas tomaram checkpoint tentando).
+
+⚠️ **Conta de scraping é descartável, como o chip do WhatsApp.** O
+`@topshopmoda_` foi usado numa tentativa e tomou checkpoint. Nunca usar conta
+que é marca.
+
+**HIPÓTESE ERRADA, REGISTRADA PRA NÃO SE REPETIR:** eu achei que vídeos eram
+renderizados pra uma conta e postados em outra, por causa do `or "geral"` em
+`daemon_maestro:1102-1117`. **Medido: 241 pacotes, 241 com `conta.json`, zero
+sem.** O roteamento está correto. O defeito real era só a logo: 1 pacote de
+casa renderizado antes de a `logo_ts_casa.png` chegar (04/08 19:08).
+
+**Alarme falso meu #2:** `agente.log` com "11.109 ❌" — o símbolo está no RÓTULO
+`❌ 0 erro(s)` das linhas de resumo. Grep de símbolo não distingue rótulo de
+ocorrência.
+
+**Alarme falso meu #3:** "0 vídeos postados hoje" era o contador de PRODUÇÃO
+(`vídeos hoje: 0/9`), e ele está em 0 porque o estoque está cheio — o sistema
+funcionando como projetado.
+
+**As travas em disco NÃO ficam presas.** `flock` é solto pelo kernel quando o
+processo morre; o arquivo `.trava_*` fica, o cadeado não. Não apagar.
+
+#### O desequilíbrio que sobrou (não resolvido)
+
+    produção  ~16-18/dia        postagem  ~9/dia        esteira  241 pacotes
+
+Cresce ~8/dia. O mais antigo tem 16 dias; **nada apodreceu ainda** (0 acima de
+30 dias), mas chega sozinho em duas semanas — e vídeo com link morto é pior que
+vídeo nenhum. As cotas do cron (tech 4 · beleza 4 · geral 3 · casa 2) foram
+calibradas **quando a produção rodava em quádruplo** pelo bug do crontab, ou
+seja, com o número errado na tela.
+
+Recomendado: **cortar produção pela metade** até a esteira cair pra 60-80.
+**Exceto `casa`**, que tem só 13 pacotes e é a conta que o Dre quer crescer.
+
+**Composição da fila:** geral 120 · tech 61 · beleza 47 · casa 13. Metade em
+"geral" significa que o classificador não está decidindo — e produto em geral é
+produto que não foi pra conta especializada, onde converteria melhor.
+
 ### Onde parou (04/08, fim do dia)
 
 **Esperando o chip.** Pedido feito — Claro pré-pago, R$ 20,99, chegada prevista
