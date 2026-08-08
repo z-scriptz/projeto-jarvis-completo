@@ -158,7 +158,7 @@ def _ja_medidos() -> set:
     return {i for i in ids if i}
 
 
-def coletar(horas_min=24, refazer=False, teste=False, limite=0):
+def coletar(horas_min=24, refazer=False, teste=False, limite=0, novos=False):
     from ledger_publicados import juntar
     try:
         from shared.categorias import normalizar
@@ -186,6 +186,12 @@ def coletar(horas_min=24, refazer=False, teste=False, limite=0):
             recentes += 1          # ainda juntando alcance — não mede
             continue
         fila.append(p)
+    # ordem importa quando há --limite. O padrão é do mais ANTIGO pro mais novo
+    # (o backfill anda em ordem cronológica), mas pra TESTAR isso é a pior
+    # escolha: post velho pode ter sido apagado da conta, e aí a amostra falha
+    # inteira por um motivo que não é o código. --novos mede os recentes, que
+    # com certeza ainda existem.
+    fila.sort(key=lambda p: (p["data"], p["hora"]), reverse=bool(novos))
     if limite:
         fila = fila[:limite]
 
@@ -213,6 +219,7 @@ def coletar(horas_min=24, refazer=False, teste=False, limite=0):
 
     SAIDA.parent.mkdir(parents=True, exist_ok=True)
     gravados = semid = semdado = 0
+    faltantes = []
     with open(SAIDA, "a", encoding="utf-8") as f:
         for p in fila:
             sc = p["id"]
@@ -223,6 +230,8 @@ def coletar(horas_min=24, refazer=False, teste=False, limite=0):
                     break
             if not media_id:
                 semid += 1
+                if len(faltantes) < 6:
+                    faltantes.append(f"{p['data']} {sc}")
                 continue
             dados = insights(media_id, tk)
             if not dados:
@@ -242,8 +251,10 @@ def coletar(horas_min=24, refazer=False, teste=False, limite=0):
 
     _log(f"✅ {gravados} gravado(s) · {semid} sem media_id · {semdado} sem insight")
     if semid:
-        _log("   (sem media_id = post de conta cujo token não está no .env, "
-             "ou mídia fora das páginas listadas)")
+        _log("   sem media_id = a conta não lista mais essa mídia (apagada?) "
+             "ou o token dela não está no .env. Exemplos:")
+        for x in faltantes:
+            _log(f"      {x}")
     return 0
 
 
@@ -302,6 +313,8 @@ def main():
     p.add_argument("--horas-min", type=int, default=24,
                    help="idade mínima do post pra medir (padrão 24h)")
     p.add_argument("--limite", type=int, default=0, help="mede só os N primeiros")
+    p.add_argument("--novos", action="store_true",
+                   help="começa pelos posts MAIS RECENTES (bom pra testar)")
     p.add_argument("--minimo", type=int, default=3,
                    help="posts mínimos por grupo no ranking")
     args = p.parse_args()
@@ -313,7 +326,8 @@ def main():
     except Exception:
         _log("requests não instalado — use .venv/bin/python")
         return 2
-    return coletar(args.horas_min, args.refazer, args.teste, args.limite)
+    return coletar(args.horas_min, args.refazer, args.teste, args.limite,
+                   args.novos)
 
 
 if __name__ == "__main__":
