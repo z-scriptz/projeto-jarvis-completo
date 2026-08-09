@@ -49,3 +49,8 @@ shared/tiktok_tokens.json
 # travas de instância única (shared/trava.py) — estado local, nunca versionado
 .trava_*
 **/.trava_*
+
+# saída gerada pela esteira de conteúdo original (roteiro -> linha do tempo -> vídeo)
+shared/storyboards/
+shared/edl/
+shared/renders/

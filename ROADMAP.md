@@ -1162,6 +1162,73 @@ Instrumental é o que mais falta: é o único que serve pro modo narracao_viral,
 e hoje há 5 na lista. **Faixa cantada não serve** por baixo de narração — duas
 vozes brigando.
 
+### RENDER — `render.py`, o piloto saiu (09/08)
+
+A cadeia fechou: **storyboard (o quê) → EDL (como) → render (pixel)**. Nenhuma
+decisão criativa mora no render; se o vídeo ficou lento conserta-se no `edl.py`,
+se a frase ficou fraca no `storyboard.py`.
+
+    python3 render.py --edl shared/edl/x.json --imagens pasta/ --quadros 8
+
+**O que foi MEDIDO e mudou o desenho (nada aqui é palpite):**
+
+1. **A narração real não cabe no tempo planejado.** O `edl.py` estima fala em 15
+   caracteres/segundo. O hook do polvo: **2,5s planejados, 4,08s de Edge-TTS**.
+   Renderizar pelo plano cortaria a voz no meio da primeira frase — a única que
+   decide se a pessoa fica. Por isso o render **gera a voz primeiro, mede, e
+   estica a linha do tempo** (passo `_conformar`). O piloto foi de 18,00s pra
+   20,19s, e as 5 falas caem no início do trecho certo (conferido com
+   `silencedetect`: 0,00 · 4,45 · 9,23 · 13,73 · 18,23). O trecho só CRESCE,
+   nunca encolhe: sobrar imagem é respiro, faltar é frase cortada.
+2. **`drawtext` não existe em todo FFmpeg.** O build estático testado tem
+   `libfreetype` ligado e mesmo assim **não traz o filtro**. Texto sai por
+   **libass**, e é melhor: ASS anima de verdade (`\t`, `\move`, `\fad`, cor por
+   palavra) — que é o que o `ANIM_TEXTO` pede e o drawtext não faz. O render
+   checa o filtro `ass` ANTES de gastar 5 chamadas de TTS.
+3. **Emoji queimado no vídeo está DESLIGADO, e dói.** Quadro de teste com
+   😩 👆 😮‍💨 🔥 💡 em duas fontes, inclusive forçando a Noto Color Emoji: o libass
+   desenhou **todos em preto e branco**, pequenos, e **quebrou a sequência ZWJ**
+   do 😮‍💨 em dois desenhos soltos. O projeto já resolveu isso do jeito certo em
+   outro lugar — o `narrated_video_agent` cola **PNG de emoji** da pasta brand
+   (`_emoji_aparado`). **Esse é o caminho da v2.** Emoji continua na legenda do
+   post; sai só do que é queimado no vídeo, e o render avisa quando tira.
+
+**Três defeitos que só apareceram OLHANDO o render** (por isso existe o
+`--quadros N`, que extrai PNGs — revisar vídeo sem player é o normal aqui):
+
+  - **cartão com canto arredondado** ficou bonito no 1º corte e errado em
+    movimento: a partir do zoom 1,06 as bordas saem da tela. O efeito aparecia e
+    sumia. Trocado por **foto na largura cheia** — não há canto pra cortar, e o
+    produto ainda fica maior.
+  - **legenda cinza-lavada**: a animação de entrada valia pra todo estado da
+    revelação palavra a palavra; cada estado dura ~0,1s e o fade 0,12s, então o
+    fade **reiniciava a cada palavra e nunca chegava a opaco**. Entrada agora é
+    só do 1º estado.
+  - **palavra solta e torta**: revelar por transparência deixava "lado" sozinho
+    e deslocado, com o resto do bloco como espaço vazio. Agora o bloco inteiro
+    aparece e o que anda é o **destaque dourado** na palavra do momento — nada
+    se mexe e a leitura acompanha a fala.
+
+**A marca entra DEPOIS do movimento**, como PNG com alfa, senão o punch-in
+ampliaria a logo a cada corte. A geometria lê as MESMAS variáveis do template
+que já está no ar (`LOGO_X`, `LOGO_Y`, `LOGO_TAM`, `NOME_FONT`, `HANDLE_FONT`,
+`TEXTO_DX`) — mudou lá, muda aqui.
+
+**O que ainda NÃO sai do render** (o relatório lista em toda rodada, e o
+`.relatorio.json` fica ao lado do MP4):
+  - transição **`whip`** — sai corte seco. O **`flash`** sai, desenhado no ASS
+    (de propósito: `xfade` encurta o vídeo e desalinha voz e legenda).
+  - **SFX** (whoosh/pop/impacto) — não há arquivo de som no projeto.
+  - **música** — não há arquivo, e a do Instagram não se baixa. Por isso o
+    piloto é modo `narracao`, como já estava recomendado acima.
+  - **emoji** — item 3.
+
+⚠️ **O piloto foi renderizado com fotos genéricas**, porque este ambiente não
+tem a fila de produtos nem a pasta `assets/brand`. O que está PROVADO é a
+mecânica: tempo, corte, zoom, pan, legenda, marca, áudio e encode. **Falta rodar
+na VPS** com foto de produto de verdade, `logo_ts_casa.png` e `verificado.png`
+no lugar — e aí julgar o vídeo, não o encanamento.
+
 ### Onde parou (04/08, fim do dia)
 
 **Esperando o chip.** Pedido feito — Claro pré-pago, R$ 20,99, chegada prevista
