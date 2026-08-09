@@ -36,6 +36,7 @@
 
 import argparse
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -73,6 +74,16 @@ PAN = {"pan_left": (0.10, -0.10), "pan_right": (-0.10, 0.10)}
 # SFX só quando AGREGA. Vídeo com efeito a cada corte cansa em 5 segundos e
 # soa amador — o som tem que marcar acontecimento, não pontuar edição.
 MAX_SFX = 4
+
+# Piso de duração de corte. Abaixo disto o olho registra piscada, não corte —
+# e a linha do tempo da saia gerou um de 0,34s. O validador avisava e o arquivo
+# era salvo assim mesmo: aviso que não impede é aviso que vira post.
+PISO_CORTE = 0.5
+
+# Teto de zoom acumulado. O punch-in progressivo somava 0,05 por corte e chegou
+# a 1,25 no Kit Cachos — 25% de crop numa foto de e-commerce arrisca cortar o
+# produto fora do quadro, que é o oposto do objetivo.
+ZOOM_MAX = 1.18
 
 
 def _log(m):
@@ -177,6 +188,19 @@ def montar(sb: dict) -> dict:
         # é isso que faz o corte cair onde o sentido muda
         pesos = [_dur_fala(b) for b in batidas]
         soma = sum(pesos) or 1.0
+        # Batida cujo tempo ficaria abaixo do piso é FUNDIDA na anterior. O
+        # corte de 0,34s da saia nasceu aqui: a batida era curta em fala, e o
+        # tempo proporcional virou piscada. Filtrar por caracteres não bastava
+        # porque o que decide é a fatia do tempo DESTA cena.
+        while len(batidas) > 1:
+            menor = min(range(len(batidas)), key=lambda i: pesos[i])
+            if dur_cena * (pesos[menor] / soma) >= PISO_CORTE:
+                break
+            alvo = menor - 1 if menor > 0 else 1
+            batidas[alvo] = f"{batidas[alvo]} {batidas[menor]}".strip()
+            pesos[alvo] += pesos[menor]
+            del batidas[menor], pesos[menor]
+            soma = sum(pesos) or 1.0
         ini_cena = t
         _, teto = RITMO["desenvolvimento"]
         for i_b, (b, peso) in enumerate(zip(batidas, pesos)):
@@ -186,13 +210,20 @@ def montar(sb: dict) -> dict:
             # teto do ritmo, o plano é REPARTIDO em punch-ins da mesma imagem.
             # A legenda continua sendo uma só, cobrindo a batida inteira: o
             # olho recebe corte, o ouvido recebe a frase inteira.
-            n_sub = max(1, int(d / teto + 0.5))
+            # CEIL, não round: com d=4,0s e teto=3,0s o round dava 1 e o plano
+            # de 4 segundos passava inteiro — foi o que aconteceu nas Taças e
+            # no Calção. Teto é limite, não sugestão.
+            n_sub = max(1, math.ceil(d / teto - 0.001))
+            # e nunca fatiar abaixo do piso: 3 cortes de 0,4s é pior que 1 de 1,2s
+            while n_sub > 1 and d / n_sub < PISO_CORTE:
+                n_sub -= 1
             zi, zf = ZOOM.get(mov, ZOOM["zoom_in"])
             for k in range(n_sub):
                 # o zoom AVANÇA a cada corte da cena. Sem isso, dois cortes
                 # seguidos mostram o mesmo enquadramento e parecem falha de
                 # vídeo, não edição.
-                desloc = 0.05 * (i_b + k)
+                # o deslocamento é limitado: sem teto ele somava até 1,25
+                desloc = min(0.05 * (i_b + k), max(0.0, ZOOM_MAX - max(zi, zf)))
                 item = {"inicio": round(t, 2), "fim": round(t + d / n_sub, 2),
                         "asset": asset, "movimento": mov,
                         "zoom_de": round(zi + desloc, 3),
