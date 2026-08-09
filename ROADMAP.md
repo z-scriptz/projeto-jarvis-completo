@@ -1229,6 +1229,105 @@ mecânica: tempo, corte, zoom, pan, legenda, marca, áudio e encode. **Falta rod
 na VPS** com foto de produto de verdade, `logo_ts_casa.png` e `verificado.png`
 no lugar — e aí julgar o vídeo, não o encanamento.
 
+### RENDER v2 — a voz certa, o template certo, e o olho (09/08)
+
+**1. A VOZ É O ELEVENLABS, NÃO O EDGE-TTS.** Correção do Dre, e ela vale muito
+mais que trocar de fornecedor: o endpoint `/with-timestamps` devolve **o
+instante de início e fim de CADA CARACTERE**. Duas consequências:
+  - a duração deixa de ser medida do arquivo e passa a ser **lida**;
+  - a legenda deixa de ser ESTIMADA. O `edl.py` repartia o tempo de cada bloco
+    proporcionalmente ao número de letras — chute educado que assume que toda
+    letra dura o mesmo, e nenhuma dura. Agora cada bloco entra e sai no
+    instante em que a voz diz aquelas palavras (`_resincronizar_legendas`).
+  - `narracao_ia.falar_com_tempos()` usa **a mesma voz por nicho e os mesmos
+    `voice_settings`** do `falar_elevenlabs` (extraídos pra `_voice_settings`,
+    regra num lugar só). Edge-TTS vira **rede de segurança** e o render avisa
+    alto quando cai nela: *"NÃO é a voz da marca, não publique sem ouvir"*.
+  - ⚠️ O casamento legenda↔alinhamento compara **só alfanumérico**, porque o
+    `_batidas` faz `strip(" ,;:")` e a pontuação do bloco quase nunca bate com
+    a do texto falado. Bloco que não casa **fica com o tempo antigo e avisa** —
+    legenda aproximada é ruim, legenda no lugar errado é pior. Testado com
+    alinhamento sintético: 4 blocos contíguos, sem sobreposição, e o bloco
+    inexistente preservado + avisado.
+
+**2. O TEMPLATE AGORA É O QUE JÁ ESTÁ NO AR.** O Dre mandou o print do feed e
+ele é bem diferente do que eu tinha montado: **fundo branco**, cabeçalho
+pequeno no alto (logo redonda · TopShop · selo azul · @handle em cinza),
+**HOOK EM PRETO alinhado à esquerda**, a mídia como um **bloco de largura
+cheia** no meio, e a barra fixa **`COMENTE "QUERO" 👉`** no pé.
+  - **O hook dura o vídeo inteiro**, não só a seção do hook. É o cabeçalho do
+    post, não uma legenda — o EDL trata como texto de seção e é o render que
+    reconcilia com o template real.
+  - **Só a mídia se mexe.** O zoom é aplicado à FAIXA da mídia e o template
+    entra por cima, inteiro e parado. Foi isto que matou de vez a classe de bug
+    do cartão saindo da tela: não existe mais "quadro montado sendo zoomado".
+  - A faixa da mídia **ocupa todo o espaço livre** entre o hook e a barra de
+    CTA. A 1ª versão usava a altura natural da foto e sobrava uma tira branca
+    morta de ~320px — buraco no meio de baixo do quadro.
+  - Tudo tunável por `.env` (`LOGO_X/Y/TAM`, `NOME_FONT`, `HANDLE_FONT`,
+    `TEXTO_DX`, `TOPSHOP_BG`, `TOPSHOP_CTA_FIXO`), os mesmos nomes do
+    `narrated_video_agent`.
+
+**3. EMOJI: O PIL DESENHA, O LIBASS NÃO.** Medido lado a lado num quadro só. O
+libass pinta 😩 👆 😮‍💨 em preto e branco e quebra o ZWJ; o Pillow pinta colorido
+e compõe o ZWJ certo (`embedded_color=True` na NotoColorEmoji, que é bitmap —
+abre em 109 e reduz). Daí a divisão de trabalho, que é regra e não gosto:
+
+    PIL     o que é FIXO — cabeçalho, hook, barra de CTA.  TEM emoji.
+    libass  o que ANIMA  — legendas e destaques.           SEM emoji.
+
+Legenda é transcrição de narração, não leva emoji — então a divisão não custa
+nada. E o hook, que é onde o emoji importa, saiu ganhando.
+
+### RENDER → INSPEÇÃO → CORREÇÃO (`conferir_render.py`, 09/08)
+
+**A observação do Dre que fecha o ciclo:**
+
+> "muitos problemas só aparecem depois que o vídeo existe. O render não pode
+> ser o último estágio lógico do sistema: render → inspeção → correção."
+
+E a prova é o próprio piloto: **cartão saindo da tela no zoom, legenda lavada,
+palavra isolada, emoji quebrado**. Nenhum dos quatro existe no storyboard nem
+no EDL — os dois estavam certos. Os defeitos nasceram no encontro do plano com
+o pixel. ⚠️ **E eu só os achei porque olhei.** Renderizados oito e postados, os
+quatro teriam ido ao ar.
+
+`conferir_render.py` é checagem **determinística** no arquivo final — mede
+pixel e tempo, não pede opinião a modelo nenhum, na mesma disciplina da regra
+de ouro. Cada achado carrega o número que o produziu.
+
+    duracao          arquivo ≠ EDL          → conform/áudio saiu do lugar
+    moldura_estavel  a moldura muda         → o zoom está comendo a marca
+    midia_viva       a mídia não muda       → zoompan quebrado, vídeo parado
+    quadro_morto     quadro chapado         → asset falhou, saiu tela lisa
+    contraste_texto  faixa da legenda lisa  → legenda lavada ou ausente
+    faixa_preenchida buraco na faixa        → foto pequena demais pro bloco
+
+**E o checador foi TESTADO CONTRA DEFEITO DE VERDADE**, não só contra o vídeo
+bom — senão seria mais um aviso que não avisa. Fabriquei dois vídeos quebrados
+de propósito: um com zoom no quadro inteiro (a marca zoomando junto) e um
+congelado. `moldura_estavel` pegou o primeiro (diferença 63,0) e `midia_viva` o
+segundo (0,41). O render bom passou.
+
+**Sobre o `visual_audit_agent` — sim, ele existe e funciona**, com extração de
+frames, heurísticas OpenCV, folha de contato e uma camada Gemini Vision
+(`avaliar_relevancia_frame`). Mas ele audita os **INGREDIENTES** — "este clipe
+combina com este produto?" — e não o **BOLO**. Nenhum dos quatro defeitos do
+piloto seria pego por ele. O caminho natural é reaproveitar a camada Vision
+dele apontada pro MP4 pronto, com o `conferir_render` entregando os quadros já
+recortados por zona (moldura × mídia). **Ainda não feito.**
+
+**O que isto abre**, e era o ponto do Dre: com veredito em JSON por render, a
+memória do projeto pode começar a guardar não só o que VENDEU, mas o que o
+sistema APRENDEU A PRODUZIR — *"o render #184 teve invasão de moldura em zoom
+> 1,06; o limite virou 1,04"*.
+
+⚠️ **Pergunta em aberto, não resolvida por mim:** a barra `COMENTE "QUERO" 👉`
+fica a ~95px do rodapé. No print (grade do perfil) ela aparece inteira, mas no
+**player de Reels** a interface do Instagram cobre a faixa de baixo. Não mexi
+no template publicado por causa disso — é medição pra fazer no app, não palpite
+meu.
+
 ### Onde parou (04/08, fim do dia)
 
 **Esperando o chip.** Pedido feito — Claro pré-pago, R$ 20,99, chegada prevista

@@ -24,15 +24,30 @@
 #    linha do tempo pra caber. O EDL já previa isso ("quando existir o MP3 da
 #    narração, a duração real dele manda").
 #
-# 2) drawtext NÃO EXISTE em todo build de FFmpeg.
-#    O binário estático que testei tem libfreetype ligado e mesmo assim não
-#    traz o filtro drawtext. Tem libass. Então o texto sai por ASS, e isso é
-#    melhor de qualquer jeito: ASS anima de verdade (\t, \move, \fad, alfa por
-#    palavra), que é exatamente o que ANIM_TEXTO pede e o drawtext não faz.
+# 2) O TEXTO SAI EM DOIS LUGARES, E ISSO FOI MEDIDO, NÃO ESCOLHIDO.
+#    O `drawtext` do FFmpeg não existe em todo build — o estático que testei tem
+#    libfreetype ligado e mesmo assim não traz o filtro. Sobrou libass. Só que
+#    libass NÃO PINTA EMOJI: num quadro de teste com 😩 👆 😮‍💨 🔥 💡, forçando até
+#    a Noto Color Emoji como fonte do estilo, ele desenhou todos em preto e
+#    branco e ainda quebrou a sequência ZWJ do 😮‍💨 em dois desenhos soltos.
+#    O Pillow desenha os mesmos emoji CORRETAMENTE, coloridos e com o ZWJ
+#    composto (`embedded_color=True` na NotoColorEmoji). Daí a divisão:
+#      PIL    o que é FIXO — cabeçalho, hook, barra de CTA. Tem emoji.
+#      libass o que ANIMA  — legendas e destaques. Sem emoji (não precisam:
+#             legenda é transcrição de narração).
 #
-# 3) A MARCA NÃO PODE ZOOMAR JUNTO.
-#    Logo e @ são desenhados UMA vez, em PNG com alfa, e entram DEPOIS do
-#    movimento. Se entrassem antes, o punch-in ampliaria a logo a cada corte.
+# 3) O TEMPLATE É O QUE JÁ ESTÁ NO AR, não um que eu inventei.
+#    O Dre mandou o print do feed: fundo BRANCO, cabeçalho pequeno no alto
+#    (logo redonda · TopShop · selo · @), HOOK EM PRETO à esquerda logo abaixo,
+#    a mídia como um bloco de largura cheia no meio, e a barra fixa
+#    `COMENTE "QUERO" 👉` embaixo. O hook fica a favor do vídeo INTEIRO — não só
+#    durante a seção do hook. Vídeo original que entra no feed com outro layout
+#    lê como se fosse de outra conta.
+#
+# 4) SÓ A MÍDIA SE MEXE.
+#    O zoom é aplicado à FAIXA DA MÍDIA, e o template branco entra por cima,
+#    inteiro e parado. Na 1ª versão eu zoomava o quadro montado e o punch-in
+#    ampliava a logo junto — e o cartão da foto saía da tela a partir de 1,06.
 #
 # O QUE AINDA NÃO SAI DAQUI (dito na cara, não escondido no código):
 #   • transição "whip" — sai corte seco. O "flash" sai, desenhado no ASS.
@@ -66,13 +81,32 @@ FPS = 30
 SUPER = 2                      # a placa é renderizada em 2x: sobra de pixel
                                # pro punch-in não amolecer a imagem
 
-# Zonas seguras do template. O produto vive ENTRE elas — foi assim que o
-# header da marca parou de cair em cima da foto.
-TOPO_SEGURO = 300              # logo + TopShop + @
-BASE_SEGURA = 430              # legendas
+# ── GEOMETRIA DO TEMPLATE TOPSHOP ────────────────────────────────────────────
+# Tirada do print do feed que o Dre mandou. Tudo em pixels de um quadro
+# 1080x1920, e tudo tunável por .env porque ajuste fino de layout se faz
+# olhando UM render, não lendo código.
+MARGEM = 52                    # margem esquerda do cabeçalho e do hook
+Y_HEADER = 44
+LOGO_TAM = 64
+NOME_FONT = 42
+HANDLE_FONT = 34
+HOOK_FONT = 46
+HOOK_LINHA = 62                # altura de linha do hook
+HOOK_MAX_LINHAS = 3
+Y_HOOK = 176
+FOLGA_MIDIA = 26               # respiro entre o fim do hook e a mídia
+ALT_BARRA_CTA = 190            # faixa branca de baixo, onde mora o CTA fixo
+CTA_FONT = 44
+
+# A NotoColorEmoji é bitmap (CBDT): o Pillow só a abre no tamanho da strike.
+# Desenha-se em 109 e reduz-se — é o que faz o emoji sair colorido e nítido.
+FONTE_EMOJI = "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf"
+STRIKE_EMOJI = 109
 
 PAUSA_APOS_FALA = 0.25         # respiro no fim de cada bloco de narração; sem
                                # ele a última sílaba encosta no corte seguinte
+PISO_LEGENDA = 0.25            # nenhum bloco de legenda fica menos que isto na
+                               # tela, mesmo que a voz o diga correndo
 
 # Cor da legenda em ASS é &HBBGGRR (invertido em relação ao HTML).
 COR_BRANCO = "&H00FFFFFF"
@@ -181,66 +215,179 @@ def _ass_tempo(s: float) -> str:
     return f"{h}:{m:02d}:{s % 60:05.2f}"
 
 
+# ── Texto com emoji (PIL) ────────────────────────────────────────────────────
+#
+# Aqui mora a razão de o hook ser desenhado em PIL e não em ASS: o libass deste
+# FFmpeg pinta emoji em preto e branco e quebra sequência ZWJ; o Pillow pinta
+# colorido e compõe o ZWJ certo. O template publicado usa emoji em quase todo
+# hook (🧸 😊 😎 🏅) e na barra `COMENTE "QUERO" 👉` — sem isso o vídeo original
+# não se parece com o que a conta já publica.
+
+_CACHE_EMOJI = {}
+
+
+def _img_emoji(seq: str, altura: int):
+    """Um pedaço de emoji virado imagem, na altura pedida. None se não der."""
+    chave = (seq, altura)
+    if chave in _CACHE_EMOJI:
+        return _CACHE_EMOJI[chave]
+    from PIL import Image, ImageDraw, ImageFont
+    try:
+        f = ImageFont.truetype(FONTE_EMOJI, STRIKE_EMOJI)
+    except Exception:
+        _CACHE_EMOJI[chave] = None
+        return None
+    try:
+        tela = Image.new("RGBA", (STRIKE_EMOJI * 3 * max(1, len(seq)),
+                                  int(STRIKE_EMOJI * 1.6)), (0, 0, 0, 0))
+        ImageDraw.Draw(tela).text((0, 0), seq, font=f, embedded_color=True)
+        bb = tela.getbbox()
+        if not bb:
+            raise ValueError("nada desenhado")
+        tela = tela.crop(bb)
+        r = altura / tela.height
+        img = tela.resize((max(1, int(tela.width * r)), altura), Image.LANCZOS)
+    except Exception:
+        img = None
+    _CACHE_EMOJI[chave] = img
+    return img
+
+
+def _pedacos(t: str) -> list:
+    """Divide o texto em trechos (conteudo, é_emoji), na ordem."""
+    fora, i = [], 0
+    for m in _EMOJI.finditer(t or ""):
+        if m.start() > i:
+            fora.append((t[i:m.start()], False))
+        fora.append((m.group(), True))
+        i = m.end()
+    if i < len(t or ""):
+        fora.append((t[i:], False))
+    return fora
+
+
+def _texto_rico(img, d, x: int, y_meio: int, texto: str, fonte, cor,
+                contorno=0, cor_contorno=(0, 0, 0, 255), desenhar=True) -> int:
+    """Escreve texto+emoji numa linha e devolve a largura ocupada.
+
+    `y_meio` é o MEIO da linha, não o topo: é o único jeito de alinhar o
+    desenho do emoji (que vem como imagem) com a letra (que vem como fonte)
+    sem depender de métrica de baseline que cada fonte reporta diferente.
+    """
+    alt_emoji = int(getattr(fonte, "size", 40) * 1.12)
+    cur = x
+    for pedaco, eh_emoji in _pedacos(texto):
+        if eh_emoji:
+            im = _img_emoji(pedaco, alt_emoji)
+            if im is None:
+                continue
+            if desenhar:
+                img.alpha_composite(im, (cur, y_meio - im.height // 2))
+            cur += im.width + 4
+        else:
+            if desenhar:
+                d.text((cur, y_meio), pedaco, font=fonte, fill=cor,
+                       anchor="lm", stroke_width=contorno,
+                       stroke_fill=cor_contorno)
+            cur += int(d.textlength(pedaco, font=fonte))
+    return cur - x
+
+
+def _quebrar(d, texto: str, fonte, larg_max: int, max_linhas: int) -> list:
+    """Quebra gulosa por largura REAL (emoji conta). Corta no limite de linhas."""
+    linhas, atual = [], []
+    for p in (texto or "").split():
+        teste = " ".join(atual + [p])
+        if atual and _texto_rico(None, d, 0, 0, teste, fonte, None,
+                                 desenhar=False) > larg_max:
+            linhas.append(" ".join(atual))
+            atual = [p]
+            if len(linhas) == max_linhas:
+                return linhas
+        else:
+            atual.append(p)
+    if atual and len(linhas) < max_linhas:
+        linhas.append(" ".join(atual))
+    return linhas or [""]
+
+
+# ── Layout: onde cada faixa do template começa e termina ─────────────────────
+
+def _layout(edl: dict, imgs: list, avisos: list) -> dict:
+    """Calcula as faixas do quadro a partir do hook e da 1ª foto.
+
+    A faixa da mídia não é fixa: ela começa DEPOIS do hook (que pode ter 1, 2 ou
+    3 linhas) e tem a altura natural da foto em largura cheia. É o que faz o
+    quadro parecer o do print — bloco de mídia com respiro branco embaixo — em
+    vez de uma foto esticada pra preencher.
+    """
+    from PIL import Image, ImageDraw
+    claro = os.environ.get("TOPSHOP_BG", "branco").strip().lower() not in (
+        "preto", "black", "escuro", "dark")
+
+    scratch = Image.new("RGBA", (LARG, ALT))
+    d = ImageDraw.Draw(scratch)
+    hook_txt = next((t.get("texto", "") for t in edl["trilhas"]["texto"]
+                     if t.get("estilo") == "hook"), "")
+    linhas = _quebrar(d, hook_txt, _fonte(HOOK_FONT),
+                      LARG - MARGEM - 45, HOOK_MAX_LINHAS)
+    if hook_txt and len(" ".join(linhas)) < len(hook_txt.strip()) - 2:
+        avisos.append(f"o hook não coube em {HOOK_MAX_LINHAS} linhas e foi "
+                      f"CORTADO — o storyboard devia ter escrito mais curto: "
+                      f"{hook_txt[:70]!r}")
+
+    # A MÍDIA OCUPA TODA A FAIXA LIVRE, e isso foi decidido olhando o render.
+    # A 1ª versão dava à faixa a altura NATURAL da foto em largura cheia (1080
+    # pra foto quadrada) e sobrava uma tira branca morta de ~320px entre a foto
+    # e a barra de CTA — o quadro ficava com um buraco no meio de baixo. No
+    # print do feed a mídia é um BLOCO que desce até perto do CTA. Foto que não
+    # preenche a faixa recebe, dentro dela, o preenchimento claro e desfocado
+    # da própria foto: continua sendo um bloco, e nada é cortado.
+    y_midia = Y_HOOK + len(linhas) * HOOK_LINHA + FOLGA_MIDIA
+    h_midia = ALT - ALT_BARRA_CTA - y_midia
+    if h_midia < 700:
+        avisos.append(f"sobrou só {h_midia}px pra mídia — o hook está ocupando "
+                      "quadro demais")
+
+    return {"claro": claro, "hook_linhas": linhas, "y_midia": y_midia,
+            "h_midia": h_midia, "y_cta": ALT - ALT_BARRA_CTA // 2}
+
+
 # ── Placas (a imagem parada que o movimento vai percorrer) ───────────────────
 
-def _placa(origem: Path, destino: Path, avisos: list) -> Path:
-    """Foto do produto -> quadro vertical 9:16 pronto pro punch-in.
+def _placa(origem: Path, destino: Path, lay: dict, avisos: list) -> Path:
+    """Foto do produto -> SÓ a faixa da mídia, pronta pro punch-in.
 
-    FUNDO BORRADO, NÃO CORTE. Foto de e-commerce é quadrada. Pra "cobrir"
-    1080x1920 ela teria que perder 44% da largura — e o que sai do quadro é
-    justamente o produto. Então o produto entra INTEIRO (contain) e o vazio é
-    preenchido com a própria foto ampliada e desfocada: o quadro fica cheio,
-    a cor conversa com o produto, e nada é cortado.
+    A placa não é o quadro inteiro: é só o bloco que se mexe. O template branco
+    (cabeçalho, hook, barra de CTA) entra depois, por cima, parado. Foi assim
+    que o zoom parou de ampliar a logo junto.
 
-    O produto é centrado ENTRE as zonas seguras, não no meio do quadro: em
-    cima mora a marca, embaixo moram as legendas.
+    Dentro da faixa a foto entra INTEIRA (contain), nunca cortada — foto de
+    e-commerce é quadrada e cobrir a faixa toda comeria o produto pelas
+    laterais. O que sobra é preenchido com a própria foto ampliada e
+    desfocada, clareada pra conversar com o fundo branco do template em vez
+    de abrir um buraco escuro no meio do quadro.
     """
     from PIL import Image, ImageFilter, ImageEnhance
 
-    W, H = LARG * SUPER, ALT * SUPER
+    W, H = LARG * SUPER, lay["h_midia"] * SUPER
     img = Image.open(origem).convert("RGB")
 
-    # fundo: cobre o quadro, desfoca e escurece — desfocado demais vira sopa,
-    # de menos compete com o produto
     e = max(W / img.width, H / img.height)
     fundo = img.resize((max(1, int(img.width * e)), max(1, int(img.height * e))),
                        Image.LANCZOS)
-    esq = (fundo.width - W) // 2
-    topo = (fundo.height - H) // 2
+    esq, topo = (fundo.width - W) // 2, (fundo.height - H) // 2
     fundo = fundo.crop((esq, topo, esq + W, topo + H))
     fundo = fundo.filter(ImageFilter.GaussianBlur(radius=int(46 * SUPER)))
-    fundo = ImageEnhance.Brightness(fundo).enhance(0.55)
+    fundo = ImageEnhance.Brightness(fundo).enhance(
+        1.25 if lay["claro"] else 0.55)
+    if lay["claro"]:
+        fundo = ImageEnhance.Color(fundo).enhance(0.5)
 
-    # PRODUTO NA LARGURA CHEIA — e isto foi corrigido OLHANDO O RENDER.
-    #
-    # A 1ª versão montou a foto como um "cartão" de 92% da largura, com canto
-    # arredondado e sombra. Ficou bonito no quadro parado do primeiro corte e
-    # ERRADO em movimento: o punch-in fecha o enquadramento, e a partir de zoom
-    # 1,06 as bordas do cartão saem da tela. O vídeo começava com um cartão
-    # desenhado e terminava com um retângulo cortado — o efeito aparecia e
-    # sumia, que é pior do que nunca ter existido.
-    #
-    # Na largura cheia não há canto pra cortar: o que sai de quadro no zoom são
-    # as laterais da própria foto, que é o que o olho espera de um push-in. A
-    # foto também fica maior, e produto grande é o ponto do vídeo.
-    livre_topo = TOPO_SEGURO * SUPER
-    livre_base = H - BASE_SEGURA * SUPER
-    alt_livre = livre_base - livre_topo
-    r = min(W / img.width, alt_livre / img.height)
+    r = min(W / img.width, H / img.height)
     prod = img.resize((max(1, int(img.width * r)), max(1, int(img.height * r))),
                       Image.LANCZOS)
-    px = (W - prod.width) // 2
-    py = livre_topo + (alt_livre - prod.height) // 2
-
-    # sombra nas emendas de cima e de baixo: sem ela a foto encosta no fundo
-    # borrado com uma linha reta e dura, e lê como imagem COLADA
-    from PIL import ImageDraw
-    sombra = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    ImageDraw.Draw(sombra).rectangle(
-        (px, py, px + prod.width, py + prod.height), fill=(0, 0, 0, 190))
-    sombra = sombra.filter(ImageFilter.GaussianBlur(radius=int(26 * SUPER)))
-    fundo = Image.alpha_composite(fundo.convert("RGBA"), sombra).convert("RGB")
-    fundo.paste(prod, (px, py))
+    fundo.paste(prod, ((W - prod.width) // 2, (H - prod.height) // 2))
 
     destino.parent.mkdir(parents=True, exist_ok=True)
     fundo.save(destino, "PNG")
@@ -292,33 +439,50 @@ def _logo_circular(caminho: Path, tam: int):
     return img
 
 
-def _camada_marca(edl: dict, destino: Path, avisos: list) -> Path:
-    """PNG com alfa: logo redonda + TopShop + selo + @, e a marca d'água.
+CTA_FIXO = 'COMENTE "QUERO" 👉'
 
-    A GEOMETRIA É A MESMA do template que já está no ar
-    (narrated_video_agent._criar_camadas_topo) e lê as MESMAS variáveis de
-    ambiente — LOGO_X, LOGO_Y, LOGO_TAM, NOME_FONT, HANDLE_FONT, TEXTO_DX.
-    Não importei aquele arquivo porque ele é MoviePy de ponta a ponta e este
-    render é FFmpeg; mas repetir os números com outros nomes seria repetir o
-    erro do dicionário de logo duplicado. Mudou lá, muda aqui, pelos knobs.
 
-    Qual logo e qual @ vêm do EDL, que por sua vez pegou de shared/marca.py e
-    contas.json. Aqui não se decide marca; aqui se desenha.
+def _camada_marca(edl: dict, lay: dict, destino: Path, avisos: list) -> Path:
+    """O TEMPLATE INTEIRO num PNG com alfa: cabeçalho, hook e barra de CTA.
+
+    Reproduz o print do feed que o Dre mandou: fundo branco, logo redonda no
+    alto à esquerda, "TopShop" em preto com o selo, "@handle" em cinza abaixo,
+    o HOOK em preto alinhado à esquerda, e a barra `COMENTE "QUERO" 👉` no pé.
+
+    TUDO AQUI É FIXO E DURA O VÍDEO INTEIRO — inclusive o hook. No template
+    publicado ele não some quando a narração passa da primeira frase; é o
+    cabeçalho do post, não uma legenda. O EDL trata o hook como texto de uma
+    seção, e é o render que reconcilia com o template real.
+
+    Desenhado em PIL, não em ASS, POR CAUSA DO EMOJI: o libass pinta emoji em
+    preto e branco e quebra sequência ZWJ; o Pillow pinta colorido e compõe o
+    ZWJ certo. Quase todo hook do print tem emoji.
+
+    Qual logo e qual @ vêm do EDL, que pegou de shared/marca.py e contas.json.
+    Aqui não se decide marca; aqui se desenha.
     """
     from PIL import Image, ImageDraw
 
     tp = edl.get("template") or {}
-    W, H = LARG, ALT
-    camada = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    claro = lay["claro"]
+    tinta = (17, 17, 17, 255) if claro else (255, 255, 255, 255)
+    cinza = (122, 122, 122, 255) if claro else (225, 225, 225, 255)
+    contorno = 0 if claro else 3
+    cor_contorno = (0, 0, 0, 255)
+
+    camada = Image.new("RGBA", (LARG, ALT), (0, 0, 0, 0))
     d = ImageDraw.Draw(camada)
 
-    logo_x = int(os.environ.get("LOGO_X", 100))
-    logo_y = int(os.environ.get("LOGO_Y", 112))
-    logo_tam = int(os.environ.get("LOGO_TAM", 120))
-    nome_font = int(os.environ.get("NOME_FONT", 56))
-    handle_font = int(os.environ.get("HANDLE_FONT", 46))
-    texto_dx = int(os.environ.get("TEXTO_DX", 16))
+    # a moldura branca (ou preta) é o próprio template: ela cobre tudo MENOS a
+    # faixa da mídia, que fica transparente pro vídeo aparecer por baixo
+    fundo = (255, 255, 255, 255) if claro else (10, 10, 10, 255)
+    d.rectangle((0, 0, LARG, lay["y_midia"]), fill=fundo)
+    d.rectangle((0, lay["y_midia"] + lay["h_midia"], LARG, ALT), fill=fundo)
 
+    # ── cabeçalho ───────────────────────────────────────────────────────────
+    logo_x = int(os.environ.get("LOGO_X", MARGEM))
+    logo_y = int(os.environ.get("LOGO_Y", Y_HEADER))
+    logo_tam = int(os.environ.get("LOGO_TAM", LOGO_TAM))
     arq_logo = BRAND_DIR / (tp.get("logo") or "logo_ts.png")
     if arq_logo.exists():
         camada.alpha_composite(_logo_circular(arq_logo, logo_tam), (logo_x, logo_y))
@@ -326,36 +490,45 @@ def _camada_marca(edl: dict, destino: Path, avisos: list) -> Path:
         avisos.append(f"logo '{arq_logo.name}' não existe em {BRAND_DIR} — "
                       "o vídeo sai SEM a marca no canto")
 
-    texto_x = logo_x + logo_tam + texto_dx
-    f_nome = _fonte(nome_font)
-    d.text((texto_x, logo_y - 12), "TopShop", font=f_nome,
-           fill=(255, 255, 255, 255), stroke_width=3, stroke_fill=(0, 0, 0, 255))
+    texto_x = logo_x + logo_tam + int(os.environ.get("TEXTO_DX", 14))
+    f_nome = _fonte(int(os.environ.get("NOME_FONT", NOME_FONT)))
+    y_nome = logo_y + 20
+    larg_nome = _texto_rico(camada, d, texto_x, y_nome, "TopShop", f_nome,
+                            tinta, contorno, cor_contorno)
 
-    larg_nome = int(d.textlength("TopShop", font=f_nome))
     selo = BRAND_DIR / "verificado.png"
     if selo.exists():
         from PIL import Image as _I
-        s = _I.open(selo).convert("RGBA").resize((46, 46), _I.LANCZOS)
-        camada.alpha_composite(s, (texto_x + larg_nome + 12, logo_y + 14))
+        s = _I.open(selo).convert("RGBA").resize((30, 30), _I.LANCZOS)
+        camada.alpha_composite(s, (texto_x + larg_nome + 10, y_nome - 15))
     else:
-        avisos.append("verificado.png não existe — sai sem o selo")
+        avisos.append("verificado.png não existe — sai sem o selo azul")
 
     handle = tp.get("handle") or ""
     if not handle:
         avisos.append("o EDL veio SEM handle — confira contas.json pro nicho "
                       f"'{tp.get('nicho')}'")
     else:
-        d.text((texto_x, logo_y + 42), handle, font=_fonte(handle_font),
-               fill=(255, 255, 255, 255), stroke_width=3,
-               stroke_fill=(0, 0, 0, 255))
+        _texto_rico(camada, d, texto_x, logo_y + 62, handle,
+                    _fonte(int(os.environ.get("HANDLE_FONT", HANDLE_FONT)),
+                           negrito=False), cinza, contorno, cor_contorno)
 
-    # marca d'água discreta no rodapé: quem salva o vídeo leva o @ junto
-    if handle:
-        f_ag = _fonte(30, negrito=False)
-        w = int(d.textlength(handle, font=f_ag))
-        d.text(((W - w) // 2, H - 74), handle, font=f_ag,
-               fill=(255, 255, 255, 150), stroke_width=2,
-               stroke_fill=(0, 0, 0, 120))
+    # ── hook, em preto, à esquerda ──────────────────────────────────────────
+    f_hook = _fonte(HOOK_FONT)
+    for i, linha in enumerate(lay["hook_linhas"]):
+        _texto_rico(camada, d, MARGEM, Y_HOOK + i * HOOK_LINHA + HOOK_LINHA // 2,
+                    linha, f_hook, tinta, contorno, cor_contorno)
+
+    # ── barra fixa de CTA ───────────────────────────────────────────────────
+    # É a mesma do print. Fica o vídeo inteiro porque é isca de comentário, não
+    # o desfecho da história — o CTA do roteiro continua entrando no fim, por
+    # cima da mídia. Trocável por TOPSHOP_CTA_FIXO; vazio desliga.
+    cta = os.environ.get("TOPSHOP_CTA_FIXO", CTA_FIXO)
+    if cta:
+        f_cta = _fonte(CTA_FONT)
+        larg = _texto_rico(None, d, 0, 0, cta, f_cta, None, desenhar=False)
+        _texto_rico(camada, d, (LARG - larg) // 2, lay["y_cta"], cta, f_cta,
+                    tinta, contorno, cor_contorno)
 
     destino.parent.mkdir(parents=True, exist_ok=True)
     camada.save(destino, "PNG")
@@ -364,15 +537,22 @@ def _camada_marca(edl: dict, destino: Path, avisos: list) -> Path:
 
 # ── Legendas e animação (ASS) ────────────────────────────────────────────────
 
-ANCORA = {                     # posição do EDL -> (alinhamento ASS, x, y)
-    "centro_alto": (8, LARG // 2, 470),
-    # 'topo' era 320 e batia exatamente na borda de cima da foto — no quadro de
-    # revisão o texto parecia estar cortando a imagem. 380 põe ele DENTRO da
-    # foto, que com a caixa atrás vira selo, não acidente.
-    "topo":        (8, LARG // 2, 380),
-    "centro":      (5, LARG // 2, 960),
-    "centro_baixo": (2, LARG // 2, ALT - 360),
-}
+def _ancora(pos: str, lay: dict) -> tuple:
+    """Posição do EDL -> (alinhamento ASS, x, y), SEMPRE dentro da mídia.
+
+    As coordenadas são calculadas a partir da faixa da mídia, não fixas no
+    quadro: o hook pode ter 1, 2 ou 3 linhas e empurrar a mídia pra baixo. Com
+    número fixo, a legenda de um vídeo de hook curto flutuaria no branco e a de
+    um hook longo cairia fora da foto — os dois lêem como erro de montagem.
+    """
+    topo = lay["y_midia"]
+    base = lay["y_midia"] + lay["h_midia"]
+    meio = topo + lay["h_midia"] // 2
+    return {"topo":         (8, LARG // 2, topo + 46),
+            "centro_alto":  (8, LARG // 2, topo + 46),
+            "centro":       (5, LARG // 2, meio),
+            "centro_baixo": (2, LARG // 2, base - 54),
+            }.get(pos, (2, LARG // 2, base - 54))
 
 # estilo -> tamanho, cor do texto, contorno/padding, cor do contorno, caixa?
 # 'destaque' é o único com CAIXA (BorderStyle 3): ele cai em cima da foto e
@@ -461,7 +641,7 @@ def _dialogos_palavra(txt: str, ini: float, fim: float, al: int, x: int, y: int,
     return linhas
 
 
-def _ass(edl: dict, destino: Path, avisos: list) -> Path:
+def _ass(edl: dict, lay: dict, destino: Path, avisos: list) -> Path:
     fam, _ = _familia_ass()
     cab = ["[Script Info]", "ScriptType: v4.00+", f"PlayResX: {LARG}",
            f"PlayResY: {ALT}", "WrapStyle: 0", "ScaledBorderAndShadow: yes", "",
@@ -482,9 +662,13 @@ def _ass(edl: dict, destino: Path, avisos: list) -> Path:
     linhas, caidos = [], []
     for tx in edl["trilhas"]["texto"]:
         estilo = tx.get("estilo", "legenda")
+        # o HOOK não passa por aqui: no template publicado ele é fixo e dura o
+        # vídeo inteiro, então quem o desenha é o PIL, com emoji e tudo
+        if estilo == "hook":
+            continue
         if estilo not in ESTILO_ASS:
             estilo = "legenda"
-        al, x, y = ANCORA.get(tx.get("posicao"), ANCORA["centro_baixo"])
+        al, x, y = _ancora(tx.get("posicao"), lay)
         anim = tx.get("anim") or {}
         cabec = "{\\an%d%s}" % (al, _tags_entrada(anim, x, y))
         ini, fim = float(tx["inicio"]), float(tx["fim"])
@@ -513,13 +697,17 @@ def _ass(edl: dict, destino: Path, avisos: list) -> Path:
     # um retângulo branco de 0,12s que some. Sai pelo ASS de propósito: xfade
     # ENCURTA o vídeo pelo tempo da transição, e aí legenda e voz saem do lugar.
     # Aqui a transição não custa um frame da linha do tempo.
+    # O flash cobre SÓ a faixa da mídia. Piscar o template branco junto seria
+    # piscar a marca — e a marca não faz parte da narrativa, ela só está lá.
+    y0, y1 = lay["y_midia"], lay["y_midia"] + lay["h_midia"]
     for a, b in zip(edl["trilhas"]["visual"], edl["trilhas"]["visual"][1:]):
         if b.get("transicao") == "flash":
             t = float(b["inicio"])
             linhas.append((t, t + 0.12, "legenda",
                            "{\\an7\\pos(0,0)\\bord0\\shad0\\1c&HFFFFFF&"
                            "\\alpha&H20&\\fad(0,120)\\p1}"
-                           f"m 0 0 l {LARG} 0 l {LARG} {ALT} l 0 {ALT}{{\\p0}}"))
+                           f"m 0 {y0} l {LARG} {y0} l {LARG} {y1} l 0 {y1}"
+                           "{\\p0}"))
 
     corpo = [f"Dialogue: 0,{_ass_tempo(a)},{_ass_tempo(b)},{e},,0,0,0,,{t}"
              for a, b, e, t in sorted(linhas, key=lambda z: z[0])]
@@ -530,40 +718,81 @@ def _ass(edl: dict, destino: Path, avisos: list) -> Path:
 
 # ── Narração e conformação da linha do tempo ────────────────────────────────
 
+def _falar(fala: str, alvo: Path, nicho: str, ff: str, avisos: list) -> dict:
+    """Uma fala -> MP3, pelo ElevenLabs. Edge-TTS é só a rede de segurança.
+
+    A ORDEM IMPORTA E NÃO É PREFERÊNCIA MINHA. O ElevenLabs é a voz que este
+    projeto já publica, com voz POR NICHO (feminina em beleza, masculina no
+    resto — narracao_ia._voz_do_nicho). Vídeo original narrado por outra voz
+    entra no mesmo feed soando como outro canal.
+
+    E ele devolve o TEMPO EXATO DE CADA CARACTERE, que o Edge-TTS não dá. É
+    disso que a legenda vive: sem alinhamento, o bloco de legenda é repartido
+    proporcionalmente ao número de letras — chute educado que erra sempre um
+    pouco, e legenda fora de sincronia denuncia vídeo automático mesmo quando
+    todo o resto está certo.
+    """
+    try:
+        from narracao_ia import falar_com_tempos
+        r = falar_com_tempos(fala, alvo, nicho)
+    except Exception as e:
+        r = {"ok": False, "erro": f"{type(e).__name__}: {str(e)[:90]}"}
+
+    if r.get("ok"):
+        if not r.get("tempos"):
+            avisos.append(f"ElevenLabs sem alinhamento ({r.get('erro')}) — a "
+                          "legenda volta a ser repartida por tamanho, que erra "
+                          "um pouco sempre")
+        return {"arquivo": alvo, "dur": _dur_midia(ff, alvo) or r.get("dur", 0),
+                "chars": r.get("chars", ""), "tempos": r.get("tempos") or [],
+                "voz": "elevenlabs"}
+
+    erro_11 = r.get("erro")
+    try:
+        from tts_edge import gerar_narracao, edge_tts_disponivel
+        if not edge_tts_disponivel():
+            raise RuntimeError("edge-tts não instalado")
+        kw = {"voz": os.environ["TTS_VOZ"]} if os.environ.get("TTS_VOZ") else {}
+        e = gerar_narracao(fala, alvo, **kw)
+        if not e.get("sucesso"):
+            raise RuntimeError(e.get("erro") or "falha")
+    except Exception as e2:
+        avisos.append(f"nenhum TTS respondeu — ElevenLabs: {erro_11} · "
+                      f"Edge: {str(e2)[:70]}. Este trecho fica MUDO e a legenda "
+                      "continua")
+        return {}
+
+    avisos.append(f"ElevenLabs não respondeu ({erro_11}) — saiu no Edge-TTS, "
+                  "que é rede de segurança e NÃO é a voz da marca. Não publique "
+                  "assim sem ouvir")
+    return {"arquivo": alvo, "dur": _dur_midia(ff, alvo), "chars": "",
+            "tempos": [], "voz": "edge"}
+
+
 def _narrar(edl: dict, tmp: Path, ff: str, avisos: list) -> list:
     """Gera o MP3 de cada bloco de narração e MEDE o que saiu.
 
-    Retorna [{inicio_plano, texto, arquivo, dur}]. É a medição desta lista que
-    manda na linha do tempo depois — não a estimativa de caracteres do EDL.
+    Retorna [{inicio_plano, texto, arquivo, dur, chars, tempos}]. É a medição
+    desta lista que manda na linha do tempo depois — não a estimativa de
+    caracteres do EDL.
     """
     itens = [a for a in edl["trilhas"]["audio"]
              if a.get("tipo") == "narracao" and _limpar_fala(a.get("texto"))]
     if not itens:
         return []
-    try:
-        from tts_edge import gerar_narracao, edge_tts_disponivel, motivo_indisponivel
-    except Exception as e:
-        avisos.append(f"TTS indisponível ({str(e)[:70]}) — vídeo sai MUDO")
-        return []
-    if not edge_tts_disponivel():
-        avisos.append(f"TTS indisponível: {motivo_indisponivel()} — vídeo sai MUDO")
-        return []
+    nicho = (edl.get("template") or {}).get("nicho") or "geral"
 
-    voz = os.environ.get("TTS_VOZ", "").strip()
     fora = []
     for i, a in enumerate(sorted(itens, key=lambda z: float(z["inicio"]))):
         fala = _limpar_fala(a.get("texto"))
-        alvo = tmp / f"narr_{i:02d}.mp3"
-        kw = {"voz": voz} if voz else {}
-        r = gerar_narracao(fala, alvo, **kw)
-        if not r.get("sucesso"):
-            avisos.append(f"narração {i} falhou ({r.get('erro')}) — este trecho "
-                          "fica mudo e a legenda continua")
+        r = _falar(fala, tmp / f"narr_{i:02d}.mp3", nicho, ff, avisos)
+        if not r:
             continue
-        dur = _dur_midia(ff, alvo)
-        fora.append({"inicio_plano": float(a["inicio"]), "texto": fala,
-                     "arquivo": alvo, "dur": dur})
-        _log(f"   🎙️  {dur:5.2f}s  “{fala[:52]}”")
+        r.update({"inicio_plano": float(a["inicio"]), "texto": fala})
+        fora.append(r)
+        marca = "🎙️" if r["voz"] == "elevenlabs" else "⚠️ "
+        exato = "" if not r["tempos"] else f" · {len(r['tempos'])} tempos"
+        _log(f"   {marca}  {r['dur']:5.2f}s{exato}  “{fala[:46]}”")
     return fora
 
 
@@ -617,6 +846,8 @@ def _conformar(edl: dict, narracoes: list, avisos: list) -> dict:
     for n in narracoes:
         n["inicio"] = remap(n["inicio_plano"])
 
+    _resincronizar_legendas(edl, narracoes, avisos)
+
     antes = total
     edl["duracao_total"] = round(novo_ini, 2)
     if abs(novo_ini - antes) > 0.05:
@@ -627,6 +858,70 @@ def _conformar(edl: dict, narracoes: list, avisos: list) -> dict:
                       "storyboard mira (15-20s). Narração longa demais para o "
                       "ritmo planejado")
     return edl
+
+
+def _resincronizar_legendas(edl: dict, narracoes: list, avisos: list):
+    """Cola cada bloco de legenda no instante EXATO em que a voz o diz.
+
+    O `edl.py` reparte o tempo de um bloco pela quantidade de letras dele. É um
+    chute educado: assume que toda letra leva o mesmo tempo, e nenhuma leva.
+    "Cheguei" e "em casa e" têm tamanhos parecidos e durações bem diferentes.
+
+    O ElevenLabs devolve, pra cada caractere do texto, quando ele começa e
+    quando acaba. Então aqui a legenda para de ser estimada e passa a ser LIDA.
+
+    A COMPARAÇÃO É SÓ POR ALFANUMÉRICO, e isso não é frouxidão: o `_batidas`
+    do edl.py faz `strip(" ,;:")` nas pontas de cada batida, então o bloco de
+    legenda quase nunca tem a mesma pontuação do texto que foi falado. Comparar
+    letra por letra com pontuação falharia em praticamente todo bloco.
+
+    Se o casamento falhar, o bloco FICA COM O TEMPO ANTIGO e o render avisa —
+    legenda no tempo aproximado é ruim, legenda no lugar errado é pior.
+    """
+    fim_total = float(edl["duracao_total"])
+    ordem = sorted(narracoes, key=lambda n: n["inicio"])
+    falhas = 0
+
+    for k, n in enumerate(ordem):
+        if not n.get("tempos") or not n.get("chars"):
+            continue
+        ini_seg = float(n["inicio"])
+        fim_seg = float(ordem[k + 1]["inicio"]) if k + 1 < len(ordem) else fim_total
+
+        # posições dos caracteres "de verdade" do que foi falado
+        alfa = [(i, c.lower()) for i, c in enumerate(n["chars"]) if c.isalnum()]
+        blocos = [t for t in edl["trilhas"]["texto"]
+                  if t.get("estilo") == "legenda"
+                  and ini_seg - 0.01 <= float(t["inicio"]) < fim_seg]
+        blocos.sort(key=lambda t: float(t["inicio"]))
+
+        cursor = 0
+        for b in blocos:
+            alvo = [c.lower() for c in b.get("texto", "") if c.isalnum()]
+            if not alvo:
+                continue
+            p = cursor
+            while p < len(alfa) and alfa[p][1] != alvo[0]:
+                p += 1
+            casou = (p + len(alvo) <= len(alfa) and
+                     all(alfa[p + j][1] == alvo[j] for j in range(len(alvo))))
+            if not casou:
+                falhas += 1
+                continue
+            i0 = alfa[p][0]
+            i1 = alfa[p + len(alvo) - 1][0]
+            t0 = min(ini_seg + n["tempos"][i0][0], fim_seg - PISO_LEGENDA)
+            t1 = min(ini_seg + n["tempos"][i1][1], fim_seg)
+            # a fala pode terminar depois do trecho (o corte seguinte já entrou):
+            # sem este piso o bloco viraria duração zero e o _ass o descartaria,
+            # ou seja, a última legenda da cena simplesmente não apareceria
+            b["inicio"] = round(max(0.0, t0), 3)
+            b["fim"] = round(max(t1, b["inicio"] + PISO_LEGENDA), 3)
+            cursor = p + len(alvo)
+
+    if falhas:
+        avisos.append(f"{falhas} bloco(s) de legenda não casaram com o "
+                      "alinhamento da voz e ficaram no tempo estimado")
 
 
 # ── Grafo do FFmpeg ─────────────────────────────────────────────────────────
@@ -653,13 +948,21 @@ def _expr_corte(c: dict, nframes: int) -> tuple:
     return z, x, "(ih-ih/zoom)/2"
 
 
-def _montar_comando(ff: str, edl: dict, placas: dict, marca: Path,
+def _montar_comando(ff: str, edl: dict, placas: dict, marca: Path, lay: dict,
                     ass: Path, narracoes: list, saida: Path,
                     crf: int) -> list:
     entradas, filtros, rotulos = [], [], []
     cortes = edl["trilhas"]["visual"]
+    dur_total = float(edl["duracao_total"])
+    hm = lay["h_midia"]
 
-    for i, c in enumerate(cortes):
+    # entrada 0: a lona do template. Tudo é montado EM CIMA dela, então o
+    # quadro nunca fica com buraco preto se alguma faixa não for coberta.
+    cor = "white" if lay["claro"] else "black"
+    entradas += ["-f", "lavfi", "-t", f"{dur_total:.3f}",
+                 "-i", f"color=c={cor}:s={LARG}x{ALT}:r={FPS}"]
+
+    for i, c in enumerate(cortes, start=1):
         dur = max(1.0 / FPS, float(c["fim"]) - float(c["inicio"]))
         n = max(1, int(round(dur * FPS)))
         placa = placas[c["asset"]]
@@ -667,29 +970,31 @@ def _montar_comando(ff: str, edl: dict, placas: dict, marca: Path,
         # lê pra sempre; o trim abaixo é quem define o tamanho exato.
         entradas += ["-loop", "1", "-t", f"{dur + 0.2:.3f}", "-i", str(placa)]
         z, x, y = _expr_corte(c, n)
+        # o zoompan devolve o tamanho da FAIXA, não do quadro: é isso que faz o
+        # punch-in mexer só na mídia e deixar cabeçalho, hook e CTA parados
         filtros.append(
-            f"[{i}:v]zoompan=z='{z}':x='{x}':y='{y}':d={n}:s={LARG}x{ALT}:"
+            f"[{i}:v]zoompan=z='{z}':x='{x}':y='{y}':d={n}:s={LARG}x{hm}:"
             f"fps={FPS},trim=end_frame={n},setpts=PTS-STARTPTS,"
             f"format=yuv420p,setsar=1[v{i}]")
         rotulos.append(f"[v{i}]")
 
-    i_marca = len(cortes)
+    i_marca = len(cortes) + 1
     entradas += ["-loop", "1", "-i", str(marca)]
 
     fam, fontes = _familia_ass()
     esc = str(ass).replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
     op_ass = f"ass=filename='{esc}'" + (f":fontsdir='{fontes}'" if fontes else "")
 
-    filtros.append("".join(rotulos) + f"concat=n={len(cortes)}:v=1:a=0[vcat]")
-    # a marca entra DEPOIS do concat: assim ela não participa do zoom de
-    # nenhum corte e fica cravada no mesmo lugar o vídeo inteiro
+    filtros.append("".join(rotulos) + f"concat=n={len(cortes)}:v=1:a=0[vmidia]")
+    filtros.append(f"[0:v][vmidia]overlay=0:{lay['y_midia']}:shortest=1[vbase]")
+    # o template entra DEPOIS: assim ele não participa do zoom de nenhum corte
+    # e fica cravado no mesmo lugar o vídeo inteiro
     filtros.append(f"[{i_marca}:v]format=rgba[marca]")
-    filtros.append("[vcat][marca]overlay=0:0:shortest=1[vmarca]")
+    filtros.append("[vbase][marca]overlay=0:0:shortest=1[vmarca]")
     filtros.append(f"[vmarca]{op_ass},format=yuv420p[vout]")
 
-    dur_total = float(edl["duracao_total"])
     if narracoes:
-        base = len(cortes) + 1
+        base = len(cortes) + 2
         rot_a = []
         for k, n in enumerate(narracoes):
             entradas += ["-i", str(n["arquivo"])]
@@ -708,7 +1013,7 @@ def _montar_comando(ff: str, edl: dict, placas: dict, marca: Path,
     else:
         entradas += ["-f", "lavfi", "-t", f"{dur_total:.3f}",
                      "-i", "anullsrc=r=48000:cl=stereo"]
-        mapa_audio = ["-map", f"{len(cortes) + 1}:a", "-c:a", "aac", "-b:a", "96k"]
+        mapa_audio = ["-map", f"{len(cortes) + 2}:a", "-c:a", "aac", "-b:a", "96k"]
 
     return ([ff, "-hide_banner", "-loglevel", "error", "-y"] + entradas +
             ["-filter_complex", ";".join(filtros), "-map", "[vout]"] + mapa_audio +
@@ -780,9 +1085,10 @@ def renderizar(edl: dict, origem_imgs: str, saida: Path, mudo=False,
 
     tmp = Path(tempfile.mkdtemp(prefix="render_"))
     try:
+        lay = _layout(edl, imgs, avisos)
         placas = {}
         for i, f in enumerate(imgs, 1):
-            placas[f"asset_{i}"] = _placa(f, tmp / f"placa_{i}.png", avisos)
+            placas[f"asset_{i}"] = _placa(f, tmp / f"placa_{i}.png", lay, avisos)
 
         narracoes = [] if mudo else _narrar(edl, tmp, ff, avisos)
         if mudo:
@@ -790,11 +1096,12 @@ def renderizar(edl: dict, origem_imgs: str, saida: Path, mudo=False,
                           "prender só pelo texto")
         edl = _conformar(edl, narracoes, avisos)
 
-        marca = _camada_marca(edl, tmp / "marca.png", avisos)
-        ass = _ass(edl, tmp / "legendas.ass", avisos)
+        marca = _camada_marca(edl, lay, tmp / "marca.png", avisos)
+        ass = _ass(edl, lay, tmp / "legendas.ass", avisos)
 
         saida.parent.mkdir(parents=True, exist_ok=True)
-        cmd = _montar_comando(ff, edl, placas, marca, ass, narracoes, saida, crf)
+        cmd = _montar_comando(ff, edl, placas, marca, lay, ass, narracoes,
+                              saida, crf)
         _log(f"   🎬 {len(edl['trilhas']['visual'])} corte(s) · "
              f"{edl['duracao_total']}s · codificando…")
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
@@ -816,7 +1123,14 @@ def renderizar(edl: dict, origem_imgs: str, saida: Path, mudo=False,
                "narracoes": len(narracoes),
                "tamanho_mb": round(saida.stat().st_size / 1e6, 2),
                "template": edl.get("template", {}),
-               "faltou": avisos}
+               "voz": sorted({n.get("voz", "?") for n in narracoes}),
+               # o layout entra no relatório porque é o que o inspetor precisa
+               # pra saber ONDE olhar no quadro (faixa da mídia vs. moldura)
+               "layout": {k: v for k, v in lay.items() if k != "hook_linhas"},
+               "hook_linhas": lay["hook_linhas"],
+               # sem dict.fromkeys, uma falha do ElevenLabs vira 5 linhas
+               # idênticas no relatório e o aviso importante some no meio
+               "faltou": list(dict.fromkeys(avisos))}
         saida.with_suffix(".relatorio.json").write_text(
             json.dumps(rel, ensure_ascii=False, indent=2), encoding="utf-8")
         return rel

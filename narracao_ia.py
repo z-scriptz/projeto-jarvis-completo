@@ -109,17 +109,14 @@ def _voz_do_nicho(nicho: str = ""):
     return os.getenv("ELEVENLABS_VOICE_ID", "").strip(), n, False
 
 
-def falar_elevenlabs(texto: str, destino: Path, nicho: str = "") -> bool:
-    """Sintetiza o texto com o ElevenLabs -> MP3. Retorna True se deu certo.
-    A voz é escolhida pelo nicho (voz feminina p/ beleza, masculina p/ o resto)."""
-    api_key = os.getenv("ELEVENLABS_API_KEY", "")
-    voice, n, voz_propria = _voz_do_nicho(nicho)
-    model = os.getenv("ELEVENLABS_MODEL", "eleven_multilingual_v2")
-    if not api_key or not voice:
-        print("   ⚠️ Faltam ELEVENLABS_API_KEY / ELEVENLABS_VOICE_ID no .env")
-        return False
-    if voz_propria:
-        print(f"   🎙️ voz do nicho '{nicho}' (ELEVENLABS_VOICE_ID_{n})")
+def _voice_settings(n: str) -> dict:
+    """Os `voice_settings` do ElevenLabs, lidos do .env.
+
+    Extraído de dentro do falar_elevenlabs pra o pedido COM TEMPOS usar
+    exatamente os mesmos valores. Voz é identidade da marca: se as duas
+    chamadas divergirem, o mesmo canal fala com dois timbres e ninguém
+    descobre olhando o código — descobre ouvindo, tarde.
+    """
     def _f(nome, padrao):
         # tenta NOME_<NICHO> antes de NOME — voz feminina pode querer settings próprios
         for cand in ((f"{nome}_{n}",) if n else ()) + (nome,):
@@ -141,6 +138,84 @@ def falar_elevenlabs(texto: str, destino: Path, nicho: str = "") -> bool:
     _spd = _f("ELEVENLABS_SPEED", 1.15)
     if _spd and _spd != 1.0:
         vs["speed"] = max(0.7, min(1.2, _spd))   # faixa aceita pela API
+    return vs
+
+
+def falar_com_tempos(texto: str, destino: Path, nicho: str = "") -> dict:
+    """MP3 + O TEMPO EXATO DE CADA CARACTERE falado.
+
+    Mesma voz, mesmo modelo e mesmos settings do falar_elevenlabs — muda só o
+    endpoint, `/with-timestamps`, que devolve o áudio em base64 MAIS o
+    alinhamento: para cada caractere do texto, quando ele começa e quando
+    termina, em segundos.
+
+    POR QUE ISSO IMPORTA MAIS QUE A DURAÇÃO:
+    o render sabia esticar a linha do tempo pela duração do MP3, mas repartia a
+    LEGENDA proporcionalmente ao tamanho de cada bloco — um chute educado. Com o
+    alinhamento, cada bloco de legenda entra e sai no instante em que a voz diz
+    aquelas palavras. Legenda fora de sincronia é o detalhe que denuncia vídeo
+    automático mesmo quando todo o resto está certo.
+
+    Retorna {"ok", "arquivo", "dur", "chars", "tempos", "erro"} — `chars` é a
+    string falada e `tempos` a lista [(inicio, fim)] na mesma ordem.
+    """
+    api_key = os.getenv("ELEVENLABS_API_KEY", "")
+    voice, n, voz_propria = _voz_do_nicho(nicho)
+    model = os.getenv("ELEVENLABS_MODEL", "eleven_multilingual_v2")
+    if not api_key or not voice:
+        return {"ok": False, "erro": "faltam ELEVENLABS_API_KEY / "
+                                     "ELEVENLABS_VOICE_ID no .env"}
+    try:
+        import base64
+        import requests
+        url = (f"https://api.elevenlabs.io/v1/text-to-speech/{voice}"
+               f"/with-timestamps")
+        r = requests.post(url, timeout=90,
+            headers={"xi-api-key": api_key, "Content-Type": "application/json"},
+            json={"text": texto, "model_id": model,
+                  "voice_settings": _voice_settings(n)})
+        if r.status_code != 200:
+            return {"ok": False,
+                    "erro": f"HTTP {r.status_code}: {r.text[:180]}"}
+        d = r.json()
+        audio = base64.b64decode(d.get("audio_base64") or "")
+        if len(audio) < 500:
+            return {"ok": False, "erro": "áudio vazio"}
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        destino.write_bytes(audio)
+
+        # `alignment` casa com o texto ORIGINAL; `normalized_alignment` casa com
+        # o texto depois de a API expandir número e abreviação. Pra grudar a
+        # legenda nas palavras QUE ESCREVEMOS, o original é o que serve.
+        al = d.get("alignment") or d.get("normalized_alignment") or {}
+        chars = al.get("characters") or []
+        ini = al.get("character_start_times_seconds") or []
+        fim = al.get("character_end_times_seconds") or []
+        tempos = list(zip(ini, fim))
+        if not (len(chars) == len(ini) == len(fim)) or not chars:
+            # áudio é bom, alinhamento não veio: quem chama cai no modo antigo
+            return {"ok": True, "arquivo": destino, "dur": 0.0, "chars": "",
+                    "tempos": [], "voz_do_nicho": voz_propria,
+                    "erro": "alinhamento ausente ou inconsistente"}
+        return {"ok": True, "arquivo": destino, "dur": float(fim[-1]),
+                "chars": "".join(chars), "tempos": tempos,
+                "voz_do_nicho": voz_propria, "erro": None}
+    except Exception as e:
+        return {"ok": False, "erro": f"{type(e).__name__}: {str(e)[:140]}"}
+
+
+def falar_elevenlabs(texto: str, destino: Path, nicho: str = "") -> bool:
+    """Sintetiza o texto com o ElevenLabs -> MP3. Retorna True se deu certo.
+    A voz é escolhida pelo nicho (voz feminina p/ beleza, masculina p/ o resto)."""
+    api_key = os.getenv("ELEVENLABS_API_KEY", "")
+    voice, n, voz_propria = _voz_do_nicho(nicho)
+    model = os.getenv("ELEVENLABS_MODEL", "eleven_multilingual_v2")
+    if not api_key or not voice:
+        print("   ⚠️ Faltam ELEVENLABS_API_KEY / ELEVENLABS_VOICE_ID no .env")
+        return False
+    if voz_propria:
+        print(f"   🎙️ voz do nicho '{nicho}' (ELEVENLABS_VOICE_ID_{n})")
+    vs = _voice_settings(n)
 
     try:
         import requests
