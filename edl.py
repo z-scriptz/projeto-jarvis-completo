@@ -75,6 +75,23 @@ PAN = {"pan_left": (0.10, -0.10), "pan_right": (-0.10, 0.10)}
 # soa amador — o som tem que marcar acontecimento, não pontuar edição.
 MAX_SFX = 4
 
+# TRANSIÇÃO ENTRE CORTES. O padrão é CORTE SECO, e isso é escolha: fade e
+# slide entre planos envelheceram nesse formato e denunciam edição amadora —
+# Reels e TikTok vivem de corte seco. Transição só na troca de SEÇÃO, onde ela
+# tem função narrativa: avisar que a história mudou de capítulo.
+TRANSICAO_SECAO = {("hook", "desenvolvimento"): "flash",
+                   ("desenvolvimento", "cta"): "whip"}
+
+# ANIMAÇÃO DE TEXTO. Aqui a ausência ERA defeito: nesse formato o texto ENTRA,
+# não aparece. Texto que surge estático parece legenda de documentário e some
+# no meio do movimento da imagem.
+ANIM_TEXTO = {
+    "hook":     {"entrada": "pop", "saida": "fade", "dur_entrada": 0.25},
+    "destaque": {"entrada": "slide_cima", "saida": "fade", "dur_entrada": 0.2},
+    "legenda":  {"entrada": "pop_palavra", "saida": "corte", "dur_entrada": 0.12},
+    "cta":      {"entrada": "escala", "saida": "nenhuma", "dur_entrada": 0.3},
+}
+
 # Piso de duração de corte. Abaixo disto o olho registra piscada, não corte —
 # e a linha do tempo da saia gerou um de 0,34s. O validador avisava e o arquivo
 # era salvo assim mesmo: aviso que não impede é aviso que vira post.
@@ -270,6 +287,14 @@ def montar(sb: dict) -> dict:
     audio.append({"inicio": 0.0, "tipo": "musica", "volume": 0.12,
                   "obs": "camada de fundo — nunca compete com a narração"})
 
+    # transição só onde a seção muda; o resto é corte seco
+    for a, b in zip(visual, visual[1:]):
+        b["transicao"] = TRANSICAO_SECAO.get((a["secao"], b["secao"]), "corte_seco")
+    visual[0]["transicao"] = "corte_seco"
+
+    for tx in texto_tr:
+        tx["anim"] = ANIM_TEXTO.get(tx.get("estilo"), ANIM_TEXTO["legenda"])
+
     return {
         "produto": sb.get("produto", ""),
         "link": sb.get("link", ""),
@@ -330,8 +355,10 @@ def _resumo(edl):
     print("\n  linha do tempo:")
     for c in v:
         marca = {"hook": "🔥", "desenvolvimento": "▶", "cta": "👆"}.get(c["secao"], " ")
+        tr = c.get("transicao", "corte_seco")
+        tr = "" if tr == "corte_seco" else f"  ⟨{tr}⟩"
         print(f"     {marca} {c['inicio']:5.2f}→{c['fim']:5.2f}  {c['asset']:8} "
-              f"{c['movimento']:10} zoom {c['zoom_de']}→{c['zoom_para']}")
+              f"{c['movimento']:10} zoom {c['zoom_de']}→{c['zoom_para']}{tr}")
 
 
 def main():
