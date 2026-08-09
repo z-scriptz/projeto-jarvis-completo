@@ -82,21 +82,45 @@ SUPER = 2                      # a placa é renderizada em 2x: sobra de pixel
                                # pro punch-in não amolecer a imagem
 
 # ── GEOMETRIA DO TEMPLATE TOPSHOP ────────────────────────────────────────────
-# Tirada do print do feed que o Dre mandou. Tudo em pixels de um quadro
-# 1080x1920, e tudo tunável por .env porque ajuste fino de layout se faz
-# olhando UM render, não lendo código.
-MARGEM = 52                    # margem esquerda do cabeçalho e do hook
-Y_HEADER = 44
-LOGO_TAM = 64
-NOME_FONT = 42
-HANDLE_FONT = 34
-HOOK_FONT = 46
-HOOK_LINHA = 62                # altura de linha do hook
-HOOK_MAX_LINHAS = 3
-Y_HOOK = 176
-FOLGA_MIDIA = 26               # respiro entre o fim do hook e a mídia
-ALT_BARRA_CTA = 190            # faixa branca de baixo, onde mora o CTA fixo
-CTA_FONT = 44
+#
+# ⚠️ ESTES NÚMEROS NÃO SÃO MEUS. Eu os tinha tirado "no olho" de um print do
+# feed e ERRAM QUASE TODOS. O Dre corrigiu: o template está no projeto, é só
+# ler como os vídeos são feitos hoje. Os valores abaixo vêm de
+#   narrated_video_agent._criar_camadas_topo / _criar_cta_fixo   (marca e hook)
+#   telegram_repurpose_hunter (layout 3:4)                       (faixa do vídeo)
+#   produzir_tiktok (regra do fundo por nicho)
+# com os MESMOS nomes de variável de ambiente e os MESMOS padrões. Ajustar o
+# template continua sendo mexer no .env, num lugar só, e os dois renderizadores
+# obedecem — que é a diferença entre um template e dois parecidos.
+#
+# O que eu tinha errado, pra ficar registrado: logo 64 (é 120), nome 42 (é 56),
+# handle 34 (é 46), margem 52 (é 55), hook 46 (é 48), mídia na largura cheia
+# (é 82% centrada, em 3:4), topo da mídia calculado a partir do hook (é FIXO em
+# 470, e é o HOOK que sobe), CTA 👉 a 95px do pé (é 👇 em CTA_Y=1672).
+LOGO_X, LOGO_Y, LOGO_TAM = 100, 112, 120
+NOME_FONT, HANDLE_FONT = 56, 46
+TEXTO_DX, SELO_DX, SELO_TAM = 16, 12, 46
+
+HK_MARGEM, HK_MARGEM_DIR = 55, 45
+HK_FONT, HK_FONT_MIN = 48, 34
+HK_ALTURA_LINHA = 62
+HK_GAP_VIDEO = 16              # respiro entre o rodapé do hook e o topo do vídeo
+HK_EMOJI_TAM = 40
+
+# A FAIXA DA MÍDIA É FIXA, e é o hook que se move.
+# Eu tinha invertido: calculava o topo da mídia a partir do tamanho do hook, o
+# que faz a mídia dançar de vídeo pra vídeo conforme o hook tem 1 ou 2 linhas —
+# e num feed em grade isso salta aos olhos. O template real ancora o RODAPÉ do
+# hook logo acima do vídeo: a mídia fica sempre no mesmo lugar e o hook cresce
+# pra cima.
+VIDEO_Y = 470
+VIDEO_W_FRAC = 0.82            # 885px de largura num quadro de 1080
+VIDEO_ASPECTO = 4 / 3          # 3:4 -> 1180px de altura
+
+CTA_TEXTO = 'COMENTE "QUERO"'
+CTA_EMOJI = "👇"               # é 👇, não 👉 — o CTA aponta pro campo de comentário
+CTA_FONT = 52
+CTA_Y = 1672
 
 # A NotoColorEmoji é bitmap (CBDT): o Pillow só a abre no tamanho da strike.
 # Desenha-se em 109 e reduz-se — é o que faz o emoji sair colorido e nítido.
@@ -313,44 +337,77 @@ def _quebrar(d, texto: str, fonte, larg_max: int, max_linhas: int) -> list:
 
 # ── Layout: onde cada faixa do template começa e termina ─────────────────────
 
-def _layout(edl: dict, imgs: list, avisos: list) -> dict:
-    """Calcula as faixas do quadro a partir do hook e da 1ª foto.
+def _cor_fundo(nicho: str) -> tuple:
+    """(é_claro, cor RGB) pela MESMA regra da produção.
 
-    A faixa da mídia não é fixa: ela começa DEPOIS do hook (que pode ter 1, 2 ou
-    3 linhas) e tem a altura natural da foto em largura cheia. É o que faz o
-    quadro parecer o do print — bloco de mídia com respiro branco embaixo — em
-    vez de uma foto esticada pra preencher.
+    produzir_tiktok:305 decide: geral (@topshop.__) = PRETO, pra manter o grid
+    da conta principal; contas novas = BRANCO, estilo Alana. Override por
+    FORCE_BG (testar os dois) ou BG_<NICHO>. Replicar a regra aqui, com os
+    mesmos nomes, é o que impede o vídeo original de sair com fundo diferente
+    do vídeo reciclado na MESMA conta.
+    """
+    padrao = "preto" if (nicho or "geral") in ("geral", "") else "branco"
+    bg = (os.environ.get("FORCE_BG")
+          or os.environ.get("BG_" + (nicho or "").upper())
+          or os.environ.get("TOPSHOP_BG")
+          or padrao).strip().lower()
+    if bg in ("branco", "white"):
+        return True, (255, 255, 255)
+    if bg in ("bege", "claro"):
+        return True, (232, 224, 210)
+    return False, (0, 0, 0)
+
+
+def _layout(edl: dict, imgs: list, avisos: list) -> dict:
+    """As faixas do quadro, com a geometria do template que já está no ar.
+
+    A FAIXA DA MÍDIA É FIXA (VIDEO_Y=470, 82% da largura, 3:4) e é o HOOK que
+    se acomoda: o rodapé dele é ancorado logo acima do vídeo, então 1 ou 2
+    linhas ficam sempre "coladas" em cima da mídia. Eu tinha feito o contrário
+    — mídia calculada a partir do hook — e isso faz o bloco de vídeo mudar de
+    altura de post pra post, que num grid de perfil salta aos olhos.
     """
     from PIL import Image, ImageDraw
-    claro = os.environ.get("TOPSHOP_BG", "branco").strip().lower() not in (
-        "preto", "black", "escuro", "dark")
 
-    scratch = Image.new("RGBA", (LARG, ALT))
-    d = ImageDraw.Draw(scratch)
+    nicho = (edl.get("template") or {}).get("nicho") or "geral"
+    claro, cor = _cor_fundo(nicho)
+
+    d = ImageDraw.Draw(Image.new("RGBA", (LARG, ALT)))
     hook_txt = next((t.get("texto", "") for t in edl["trilhas"]["texto"]
                      if t.get("estilo") == "hook"), "")
-    linhas = _quebrar(d, hook_txt, _fonte(HOOK_FONT),
-                      LARG - MARGEM - 45, HOOK_MAX_LINHAS)
-    if hook_txt and len(" ".join(linhas)) < len(hook_txt.strip()) - 2:
-        avisos.append(f"o hook não coube em {HOOK_MAX_LINHAS} linhas e foi "
-                      f"CORTADO — o storyboard devia ter escrito mais curto: "
-                      f"{hook_txt[:70]!r}")
+    larg_max = LARG - HK_MARGEM - HK_MARGEM_DIR
 
-    # A MÍDIA OCUPA TODA A FAIXA LIVRE, e isso foi decidido olhando o render.
-    # A 1ª versão dava à faixa a altura NATURAL da foto em largura cheia (1080
-    # pra foto quadrada) e sobrava uma tira branca morta de ~320px entre a foto
-    # e a barra de CTA — o quadro ficava com um buraco no meio de baixo. No
-    # print do feed a mídia é um BLOCO que desce até perto do CTA. Foto que não
-    # preenche a faixa recebe, dentro dela, o preenchimento claro e desfocado
-    # da própria foto: continua sendo um bloco, e nada é cortado.
-    y_midia = Y_HOOK + len(linhas) * HOOK_LINHA + FOLGA_MIDIA
-    h_midia = ALT - ALT_BARRA_CTA - y_midia
-    if h_midia < 700:
-        avisos.append(f"sobrou só {h_midia}px pra mídia — o hook está ocupando "
-                      "quadro demais")
+    # o template real reduz a fonte antes de aceitar uma 3ª linha (HK_FONT_MIN):
+    # hook em 3 linhas empurra o rodapé pra cima do cabeçalho
+    fonte_hook, linhas = None, []
+    for tam in range(HK_FONT, HK_FONT_MIN - 1, -2):
+        fonte_hook = _fonte(tam)
+        linhas = _quebrar(d, hook_txt, fonte_hook, larg_max, 4)
+        if len(linhas) <= 2:
+            break
+    if len(linhas) > 2:
+        avisos.append(f"o hook ficou com {len(linhas)} linhas mesmo em "
+                      f"{HK_FONT_MIN}px — o storyboard precisa escrever mais "
+                      f"curto: {hook_txt[:70]!r}")
 
-    return {"claro": claro, "hook_linhas": linhas, "y_midia": y_midia,
-            "h_midia": h_midia, "y_cta": ALT - ALT_BARRA_CTA // 2}
+    largura_v = int(LARG * VIDEO_W_FRAC)
+    h_midia = int(largura_v * VIDEO_ASPECTO)
+    y_midia = int(os.environ.get("VIDEO_Y", VIDEO_Y))
+    x_midia = (LARG - largura_v) // 2
+
+    piso_hook = LOGO_Y + LOGO_TAM + 20
+    y_hook = max(piso_hook,
+                 y_midia - HK_GAP_VIDEO - len(linhas) * HK_ALTURA_LINHA)
+    if y_hook == piso_hook and hook_txt:
+        avisos.append("o hook encostou no cabeçalho — está comprido demais "
+                      "para a faixa entre a marca e o vídeo")
+
+    return {"claro": claro, "cor_fundo": cor, "nicho": nicho,
+            "hook_linhas": linhas, "hook_font": fonte_hook.size,
+            "y_hook": y_hook,
+            "x_midia": x_midia, "larg_midia": largura_v,
+            "y_midia": y_midia, "h_midia": h_midia,
+            "y_cta": int(os.environ.get("CTA_Y", CTA_Y))}
 
 
 # ── Placas (a imagem parada que o movimento vai percorrer) ───────────────────
@@ -362,15 +419,19 @@ def _placa(origem: Path, destino: Path, lay: dict, avisos: list) -> Path:
     (cabeçalho, hook, barra de CTA) entra depois, por cima, parado. Foi assim
     que o zoom parou de ampliar a logo junto.
 
-    Dentro da faixa a foto entra INTEIRA (contain), nunca cortada — foto de
-    e-commerce é quadrada e cobrir a faixa toda comeria o produto pelas
-    laterais. O que sobra é preenchido com a própria foto ampliada e
-    desfocada, clareada pra conversar com o fundo branco do template em vez
-    de abrir um buraco escuro no meio do quadro.
+    A faixa é a MESMA do template publicado: 82% da largura, proporção 3:4.
+    O hunter chega nela esticando o vídeo pra 9:16 e cortando o meio — o que
+    funciona pra vídeo vertical de terceiro e DESTRUIRIA foto de produto, que é
+    quadrada e sairia deformada. Aqui a foto entra INTEIRA (contain) na mesma
+    caixa: geometria idêntica, produto intacto.
+
+    O que sobra dentro da caixa é preenchido com a própria foto ampliada e
+    desfocada, puxada pro claro ou pro escuro conforme o fundo do template, pra
+    não abrir um bloco de cor estranha no meio do quadro.
     """
     from PIL import Image, ImageFilter, ImageEnhance
 
-    W, H = LARG * SUPER, lay["h_midia"] * SUPER
+    W, H = lay["larg_midia"] * SUPER, lay["h_midia"] * SUPER
     img = Image.open(origem).convert("RGB")
 
     e = max(W / img.width, H / img.height)
@@ -439,9 +500,6 @@ def _logo_circular(caminho: Path, tam: int):
     return img
 
 
-CTA_FIXO = 'COMENTE "QUERO" 👉'
-
-
 def _camada_marca(edl: dict, lay: dict, destino: Path, avisos: list) -> Path:
     """O TEMPLATE INTEIRO num PNG com alfa: cabeçalho, hook e barra de CTA.
 
@@ -465,23 +523,31 @@ def _camada_marca(edl: dict, lay: dict, destino: Path, avisos: list) -> Path:
 
     tp = edl.get("template") or {}
     claro = lay["claro"]
-    tinta = (17, 17, 17, 255) if claro else (255, 255, 255, 255)
-    cinza = (122, 122, 122, 255) if claro else (225, 225, 225, 255)
+    # cores do template real: claro = preto sem contorno, @ em #7a7a7a;
+    # escuro = branco com contorno preto (senão some sobre o vídeo)
+    tinta = (0, 0, 0, 255) if claro else (255, 255, 255, 255)
+    cinza = (122, 122, 122, 255) if claro else (255, 255, 255, 255)
     contorno = 0 if claro else 3
     cor_contorno = (0, 0, 0, 255)
 
     camada = Image.new("RGBA", (LARG, ALT), (0, 0, 0, 0))
     d = ImageDraw.Draw(camada)
 
-    # a moldura branca (ou preta) é o próprio template: ela cobre tudo MENOS a
-    # faixa da mídia, que fica transparente pro vídeo aparecer por baixo
-    fundo = (255, 255, 255, 255) if claro else (10, 10, 10, 255)
-    d.rectangle((0, 0, LARG, lay["y_midia"]), fill=fundo)
-    d.rectangle((0, lay["y_midia"] + lay["h_midia"], LARG, ALT), fill=fundo)
+    # a moldura é o próprio template: cobre tudo MENOS a caixa da mídia, que
+    # fica transparente pro vídeo aparecer por baixo
+    r, g, b = lay["cor_fundo"]
+    fundo = (r, g, b, 255)
+    x0, x1 = lay["x_midia"], lay["x_midia"] + lay["larg_midia"]
+    y0, y1 = lay["y_midia"], lay["y_midia"] + lay["h_midia"]
+    fx0, fx1 = lay["x_midia"], lay["x_midia"] + lay["larg_midia"]
+    d.rectangle((0, 0, LARG, y0), fill=fundo)
+    d.rectangle((0, y1, LARG, ALT), fill=fundo)
+    d.rectangle((0, y0, x0, y1), fill=fundo)          # as tarjas laterais dos
+    d.rectangle((x1, y0, LARG, y1), fill=fundo)       # 18% que a mídia não usa
 
     # ── cabeçalho ───────────────────────────────────────────────────────────
-    logo_x = int(os.environ.get("LOGO_X", MARGEM))
-    logo_y = int(os.environ.get("LOGO_Y", Y_HEADER))
+    logo_x = int(os.environ.get("LOGO_X", LOGO_X))
+    logo_y = int(os.environ.get("LOGO_Y", LOGO_Y))
     logo_tam = int(os.environ.get("LOGO_TAM", LOGO_TAM))
     arq_logo = BRAND_DIR / (tp.get("logo") or "logo_ts.png")
     if arq_logo.exists():
@@ -490,17 +556,24 @@ def _camada_marca(edl: dict, lay: dict, destino: Path, avisos: list) -> Path:
         avisos.append(f"logo '{arq_logo.name}' não existe em {BRAND_DIR} — "
                       "o vídeo sai SEM a marca no canto")
 
-    texto_x = logo_x + logo_tam + int(os.environ.get("TEXTO_DX", 14))
+    texto_x = logo_x + logo_tam + int(os.environ.get("TEXTO_DX", TEXTO_DX))
     f_nome = _fonte(int(os.environ.get("NOME_FONT", NOME_FONT)))
-    y_nome = logo_y + 20
-    larg_nome = _texto_rico(camada, d, texto_x, y_nome, "TopShop", f_nome,
-                            tinta, contorno, cor_contorno)
+    # o template posiciona o clipe do nome em (texto_x, logo_y-12) pelo canto;
+    # aqui o texto é centrado na linha, então o meio fica meia fonte abaixo
+    larg_nome = _texto_rico(camada, d, texto_x, logo_y - 12 + f_nome.size // 2,
+                            "TopShop", f_nome, tinta, contorno, cor_contorno)
 
     selo = BRAND_DIR / "verificado.png"
     if selo.exists():
         from PIL import Image as _I
-        s = _I.open(selo).convert("RGBA").resize((30, 30), _I.LANCZOS)
-        camada.alpha_composite(s, (texto_x + larg_nome + 10, y_nome - 15))
+        s = _I.open(selo).convert("RGBA").resize((SELO_TAM, SELO_TAM), _I.LANCZOS)
+        # o selo é centrado NA LINHA DO NOME. O template o põe em logo_y+14
+        # porque lá o nome é um clipe do MoviePy com folga própria; aqui o
+        # texto é centrado na linha, e copiar o número cru fazia o selo descer
+        # em cima do @handle — apareceu no quadro de revisão.
+        camada.alpha_composite(
+            s, (texto_x + larg_nome + int(os.environ.get("SELO_DX", SELO_DX)),
+                logo_y - 12 + f_nome.size // 2 - SELO_TAM // 2))
     else:
         avisos.append("verificado.png não existe — sai sem o selo azul")
 
@@ -509,25 +582,29 @@ def _camada_marca(edl: dict, lay: dict, destino: Path, avisos: list) -> Path:
         avisos.append("o EDL veio SEM handle — confira contas.json pro nicho "
                       f"'{tp.get('nicho')}'")
     else:
-        _texto_rico(camada, d, texto_x, logo_y + 62, handle,
-                    _fonte(int(os.environ.get("HANDLE_FONT", HANDLE_FONT)),
-                           negrito=False), cinza, contorno, cor_contorno)
+        f_h = _fonte(int(os.environ.get("HANDLE_FONT", HANDLE_FONT)))
+        _texto_rico(camada, d, texto_x, logo_y + 42 + f_h.size // 2, handle,
+                    f_h, cinza, contorno, cor_contorno)
 
-    # ── hook, em preto, à esquerda ──────────────────────────────────────────
-    f_hook = _fonte(HOOK_FONT)
+    # ── hook: rodapé ancorado logo acima do vídeo ───────────────────────────
+    f_hook = _fonte(lay["hook_font"])
+    margem_h = int(os.environ.get("HK_MARGEM", HK_MARGEM))
     for i, linha in enumerate(lay["hook_linhas"]):
-        _texto_rico(camada, d, MARGEM, Y_HOOK + i * HOOK_LINHA + HOOK_LINHA // 2,
+        _texto_rico(camada, d, margem_h,
+                    lay["y_hook"] + i * HK_ALTURA_LINHA + HK_ALTURA_LINHA // 2,
                     linha, f_hook, tinta, contorno, cor_contorno)
 
-    # ── barra fixa de CTA ───────────────────────────────────────────────────
-    # É a mesma do print. Fica o vídeo inteiro porque é isca de comentário, não
-    # o desfecho da história — o CTA do roteiro continua entrando no fim, por
-    # cima da mídia. Trocável por TOPSHOP_CTA_FIXO; vazio desliga.
-    cta = os.environ.get("TOPSHOP_CTA_FIXO", CTA_FIXO)
+    # ── CTA fixo ────────────────────────────────────────────────────────────
+    # `COMENTE "QUERO" 👇` — o texto e a posição são os do template
+    # (CTA_TEXTO/CTA_FONT/CTA_Y). O emoji é 👇, apontando pro campo de
+    # comentário; eu tinha posto 👉 por ter lido o print em vez do código.
+    cta = os.environ.get("CTA_TEXTO", CTA_TEXTO)
     if cta:
-        f_cta = _fonte(CTA_FONT)
+        cta = f"{cta} {os.environ.get('CTA_EMOJI', CTA_EMOJI)}".strip()
+        f_cta = _fonte(int(os.environ.get("CTA_FONT", CTA_FONT)))
         larg = _texto_rico(None, d, 0, 0, cta, f_cta, None, desenhar=False)
-        _texto_rico(camada, d, (LARG - larg) // 2, lay["y_cta"], cta, f_cta,
+        _texto_rico(camada, d, (LARG - larg) // 2,
+                    lay["y_cta"] + f_cta.size // 2, cta, f_cta,
                     tinta, contorno, cor_contorno)
 
     destino.parent.mkdir(parents=True, exist_ok=True)
@@ -551,8 +628,8 @@ def _ancora(pos: str, lay: dict) -> tuple:
     return {"topo":         (8, LARG // 2, topo + 46),
             "centro_alto":  (8, LARG // 2, topo + 46),
             "centro":       (5, LARG // 2, meio),
-            "centro_baixo": (2, LARG // 2, base - 54),
-            }.get(pos, (2, LARG // 2, base - 54))
+            "centro_baixo": (2, LARG // 2, base - 74),
+            }.get(pos, (2, LARG // 2, base - 74))
 
 # estilo -> tamanho, cor do texto, contorno/padding, cor do contorno, caixa?
 # 'destaque' é o único com CAIXA (BorderStyle 3): ele cai em cima da foto e
@@ -651,10 +728,13 @@ def _ass(edl: dict, lay: dict, destino: Path, avisos: list) -> Path:
            "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
            "Alignment, MarginL, MarginR, MarginV, Encoding"]
     for nome, (tam, cor, bord, cor_bord, caixa) in ESTILO_ASS.items():
+        # a margem acompanha a caixa da mídia: legenda mais larga que o vídeo
+        # que ela legenda vaza pra tarja lateral do template
+        marg = lay["x_midia"] + 20
         cab.append(f"Style: {nome},{fam},{tam},{cor},{COR_BRANCO},{cor_bord},"
                    f"&H90000000,-1,0,0,0,100,100,0,0,"
                    f"{3 if caixa else 1},{bord},{0 if caixa else 2},"
-                   f"5,90,90,60,1")
+                   f"5,{marg},{marg},60,1")
     cab += ["", "[Events]",
             "Format: Layer, Start, End, Style, Name, MarginL, MarginR, "
             "MarginV, Effect, Text"]
@@ -700,13 +780,15 @@ def _ass(edl: dict, lay: dict, destino: Path, avisos: list) -> Path:
     # O flash cobre SÓ a faixa da mídia. Piscar o template branco junto seria
     # piscar a marca — e a marca não faz parte da narrativa, ela só está lá.
     y0, y1 = lay["y_midia"], lay["y_midia"] + lay["h_midia"]
+    fx0, fx1 = lay["x_midia"], lay["x_midia"] + lay["larg_midia"]
     for a, b in zip(edl["trilhas"]["visual"], edl["trilhas"]["visual"][1:]):
         if b.get("transicao") == "flash":
             t = float(b["inicio"])
             linhas.append((t, t + 0.12, "legenda",
                            "{\\an7\\pos(0,0)\\bord0\\shad0\\1c&HFFFFFF&"
                            "\\alpha&H20&\\fad(0,120)\\p1}"
-                           f"m 0 {y0} l {LARG} {y0} l {LARG} {y1} l 0 {y1}"
+                           f"m {fx0} {y0} l {fx1} {y0} l {fx1} {y1} "
+                           f"l {fx0} {y1}"
                            "{\\p0}"))
 
     corpo = [f"Dialogue: 0,{_ass_tempo(a)},{_ass_tempo(b)},{e},,0,0,0,,{t}"
@@ -954,7 +1036,7 @@ def _montar_comando(ff: str, edl: dict, placas: dict, marca: Path, lay: dict,
     entradas, filtros, rotulos = [], [], []
     cortes = edl["trilhas"]["visual"]
     dur_total = float(edl["duracao_total"])
-    hm = lay["h_midia"]
+    hm, lm = lay["h_midia"], lay["larg_midia"]
 
     # entrada 0: a lona do template. Tudo é montado EM CIMA dela, então o
     # quadro nunca fica com buraco preto se alguma faixa não for coberta.
@@ -973,7 +1055,7 @@ def _montar_comando(ff: str, edl: dict, placas: dict, marca: Path, lay: dict,
         # o zoompan devolve o tamanho da FAIXA, não do quadro: é isso que faz o
         # punch-in mexer só na mídia e deixar cabeçalho, hook e CTA parados
         filtros.append(
-            f"[{i}:v]zoompan=z='{z}':x='{x}':y='{y}':d={n}:s={LARG}x{hm}:"
+            f"[{i}:v]zoompan=z='{z}':x='{x}':y='{y}':d={n}:s={lm}x{hm}:"
             f"fps={FPS},trim=end_frame={n},setpts=PTS-STARTPTS,"
             f"format=yuv420p,setsar=1[v{i}]")
         rotulos.append(f"[v{i}]")
@@ -986,7 +1068,8 @@ def _montar_comando(ff: str, edl: dict, placas: dict, marca: Path, lay: dict,
     op_ass = f"ass=filename='{esc}'" + (f":fontsdir='{fontes}'" if fontes else "")
 
     filtros.append("".join(rotulos) + f"concat=n={len(cortes)}:v=1:a=0[vmidia]")
-    filtros.append(f"[0:v][vmidia]overlay=0:{lay['y_midia']}:shortest=1[vbase]")
+    filtros.append(f"[0:v][vmidia]overlay={lay['x_midia']}:{lay['y_midia']}:"
+                   "shortest=1[vbase]")
     # o template entra DEPOIS: assim ele não participa do zoom de nenhum corte
     # e fica cravado no mesmo lugar o vídeo inteiro
     filtros.append(f"[{i_marca}:v]format=rgba[marca]")

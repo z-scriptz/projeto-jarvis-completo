@@ -145,14 +145,37 @@ def conferir(video: Path, n_quadros: int = N_QUADROS, contato: bool = False) -> 
     if not quadros:
         raise SystemExit("[conferir] não consegui extrair nenhum quadro")
 
+    # CADA CHECAGEM TEM ESTADO PRÓPRIO, não só a lista do que deu errado.
+    # A sugestão veio do ChatGPT via Dre e é certeira: "reprovado" sozinho não
+    # diz ao CEO/à memória QUAL parte do pipeline investigar. Com estado por
+    # checagem, `moldura_estavel=FALHOU` aponta direto pro render, e uma
+    # checagem que NÃO PÔDE RODAR nunca mais se confunde com uma que passou —
+    # que é o jeito silencioso de um validador virar decoração.
+    checagens = {c: {"estado": "nao_rodou", "medido": None, "nota": ""}
+                 for c in ("duracao", "quadro_morto", "moldura_estavel",
+                           "midia_viva", "contraste_texto", "faixa_preenchida")}
     achados = []
+
+    def marcar(chave, estado, numero=None, nota=""):
+        c = checagens.setdefault(chave, {})
+        # o pior estado observado é o que fica: uma checagem que roda por quadro
+        # não pode ser "passou" porque o último quadro estava bom
+        ordem = {"nao_rodou": 0, "passou": 1, "atencao": 2, "falhou": 3}
+        if ordem.get(estado, 0) >= ordem.get(c.get("estado", "nao_rodou"), 0):
+            c.update({"estado": estado, "medido": numero, "nota": nota})
 
     def achar(chave, gravidade, msg, numero=None):
         achados.append({"checagem": chave, "gravidade": gravidade,
                         "descricao": msg, "medido": numero})
+        marcar(chave, "falhou" if gravidade == "alta" else "atencao",
+               numero, msg)
 
     # ── duração ─────────────────────────────────────────────────────────────
     dur_edl = rel.get("duracao_edl")
+    if not dur_edl:
+        checagens["duracao"]["nota"] = "o relatório do render não trouxe duracao_edl"
+    elif abs(dur - float(dur_edl)) <= TOL_DURACAO:
+        marcar("duracao", "passou", round(dur - float(dur_edl), 2))
     if dur_edl and abs(dur - float(dur_edl)) > TOL_DURACAO:
         achar("duracao", "alta",
               f"o arquivo tem {dur:.2f}s e o EDL pediu {dur_edl}s — a narração "
@@ -163,6 +186,7 @@ def conferir(video: Path, n_quadros: int = N_QUADROS, contato: bool = False) -> 
     L, A = imgs[0][1].size
 
     # ── quadro morto ────────────────────────────────────────────────────────
+    marcar("quadro_morto", "passou")
     for t, im in imgs:
         media, desvio = _stat(im)
         if desvio < DESVIO_MORTO:
@@ -191,6 +215,7 @@ def conferir(video: Path, n_quadros: int = N_QUADROS, contato: bool = False) -> 
                     _diferenca(rodape0, im.crop((0, y1, L, A))))
             if d > pior_moldura:
                 pior_moldura, pior_t = d, t
+        marcar("moldura_estavel", "passou", round(pior_moldura, 1))
         if pior_moldura > DIF_MOLDURA:
             achar("moldura_estavel", "alta",
                   f"a moldura MUDA ao longo do vídeo (pior em {pior_t}s, "
@@ -200,6 +225,7 @@ def conferir(video: Path, n_quadros: int = N_QUADROS, contato: bool = False) -> 
 
         difs = [_diferenca(a[1].crop((0, y0, L, y1)), b[1].crop((0, y0, L, y1)))
                 for a, b in zip(imgs, imgs[1:])]
+        marcar("midia_viva", "passou", round(max(difs), 2) if difs else None)
         if difs and max(difs) < DIF_MIDIA_MIN:
             achar("midia_viva", "alta",
                   f"a mídia mal se mexe (maior diferença {max(difs):.2f}) — "
@@ -212,6 +238,7 @@ def conferir(video: Path, n_quadros: int = N_QUADROS, contato: bool = False) -> 
         # reiniciado) ou ausente deixa a faixa lisa.
         faixa = (0, max(y0, y1 - 150), L, y1)
         magros = [t for t, im in imgs if _stat(im.crop(faixa))[1] < CONTRASTE_MIN]
+        marcar("contraste_texto", "passou", len(magros))
         if len(magros) > len(imgs) * 0.6:
             achar("contraste_texto", "media",
                   f"{len(magros)} de {len(imgs)} quadros com a faixa da legenda "
@@ -219,6 +246,7 @@ def conferir(video: Path, n_quadros: int = N_QUADROS, contato: bool = False) -> 
                   "produto ou simplesmente não desenhada", len(magros))
 
         # ── a faixa da mídia está preenchida? ───────────────────────────────
+        marcar("faixa_preenchida", "passou")
         for t, im in imgs[:3]:
             topo = _stat(im.crop((0, y0, L, y0 + 40)))
             baixo = _stat(im.crop((0, y1 - 40, L, y1)))
@@ -239,6 +267,7 @@ def conferir(video: Path, n_quadros: int = N_QUADROS, contato: bool = False) -> 
         "video": str(video), "duracao": round(dur, 2),
         "duracao_edl": dur_edl, "quadros": len(imgs),
         "pasta_quadros": str(pasta),
+        "checagens": checagens,
         "achados": achados,
         "faltou_no_render": faltou,
         "veredito": ("reprovado" if any(a["gravidade"] == "alta" for a in achados)
@@ -284,6 +313,11 @@ def main():
     print()
     _log(f"{icone} {r['veredito'].upper()} — {v.name} · {r['duracao']}s · "
          f"{r['quadros']} quadros")
+    icones = {"passou": "✅", "atencao": "👀", "falhou": "❌", "nao_rodou": "—"}
+    for nome, c in r["checagens"].items():
+        med = "" if c["medido"] is None else f"  ({c['medido']})"
+        print(f"   {icones[c['estado']]} {nome:17}{med}")
+    print()
     for a in r["achados"]:
         marca = {"alta": "❌", "media": "👀", "baixa": "·"}[a["gravidade"]]
         print(f"   {marca} [{a['checagem']}] {a['descricao']}")

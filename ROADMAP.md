@@ -1250,8 +1250,47 @@ instante de início e fim de CADA CARACTERE**. Duas consequências:
     alinhamento sintético: 4 blocos contíguos, sem sobreposição, e o bloco
     inexistente preservado + avisado.
 
-**2. O TEMPLATE AGORA É O QUE JÁ ESTÁ NO AR.** O Dre mandou o print do feed e
-ele é bem diferente do que eu tinha montado: **fundo branco**, cabeçalho
+**2. O TEMPLATE — E O ERRO QUE EU COMETI DUAS VEZES.** Primeiro montei um
+template inventado. Depois o Dre mandou o print do feed e eu montei um template
+tirado do PRINT, no olho. As duas vezes errado, e o Dre foi direto ao ponto:
+*"o template já está no projeto, é só olhar como são feitos os vídeos."*
+Estava — em `narrated_video_agent._criar_camadas_topo` / `_criar_cta_fixo`, no
+layout 3:4 do `telegram_repurpose_hunter` e na regra de fundo do
+`produzir_tiktok`. **É exatamente a classe de erro do dicionário de logo
+duplicado, que este projeto já pagou**: reescrever do zero o que já existe.
+
+O que eu tinha errado, medido contra o código real:
+
+| campo | eu tinha | é |
+|---|---|---|
+| logo | 64px em (52,44) | **120px em (100,112)** |
+| nome / handle | 42 / 34 | **56 / 46** |
+| margem do hook | 52 | **55** |
+| fonte do hook | 46 fixa | **48, caindo até 34** antes de aceitar 3ª linha |
+| mídia | largura cheia, altura variável | **82% centrada, 3:4 (885x1180)** |
+| topo da mídia | calculado a partir do hook | **FIXO em `VIDEO_Y=470`** |
+| hook | topo fixo, empurra a mídia | **rodapé ancorado acima do vídeo** |
+| CTA | `👉` a ~95px do pé | **`COMENTE "QUERO" 👇`, `CTA_Y=1672`, fonte 52** |
+| fundo | branco por padrão | **geral=preto, contas novas=branco** |
+
+O erro que mais custaria: com o topo da mídia calculado a partir do hook, o
+bloco de vídeo **muda de altura de post pra post** conforme o hook tem 1 ou 2
+linhas. Num grid de perfil isso salta aos olhos. O template real faz o
+contrário — a mídia fica cravada e o hook sobe.
+
+Agora `render.py` lê **as mesmas variáveis de ambiente com os mesmos padrões**
+(`LOGO_X/Y/TAM`, `NOME_FONT`, `HANDLE_FONT`, `TEXTO_DX`, `SELO_DX`, `HK_MARGEM`,
+`HK_GAP_VIDEO`, `VIDEO_Y`, `VIDEO_W_FRAC`, `CTA_TEXTO/FONT/Y`, `TOPSHOP_BG`,
+`FORCE_BG`, `BG_<NICHO>`): ajustar o template continua sendo mexer no `.env`,
+num lugar só, e os dois renderizadores obedecem.
+
+⚠️ **Uma diferença DELIBERADA:** o hunter chega no 3:4 esticando o vídeo pra
+9:16 e cortando o meio. Isso funciona pra vídeo vertical de terceiro e
+**deformaria foto de produto**, que é quadrada. O render de conteúdo original
+usa a MESMA caixa mas encaixa a foto inteira dentro dela. Geometria idêntica,
+produto intacto.
+
+Do print, o que se confirmou: **fundo branco**, cabeçalho
 pequeno no alto (logo redonda · TopShop · selo azul · @handle em cinza),
 **HOOK EM PRETO alinhado à esquerda**, a mídia como um **bloco de largura
 cheia** no meio, e a barra fixa **`COMENTE "QUERO" 👉`** no pé.
@@ -1302,6 +1341,13 @@ de ouro. Cada achado carrega o número que o produziu.
     quadro_morto     quadro chapado         → asset falhou, saiu tela lisa
     contraste_texto  faixa da legenda lisa  → legenda lavada ou ausente
     faixa_preenchida buraco na faixa        → foto pequena demais pro bloco
+
+**Estado POR CHECAGEM, não só um veredito** (sugestão do ChatGPT via Dre, e
+certeira): `reprovado` sozinho não diz ao CEO qual parte do pipeline
+investigar. Com `moldura_estavel=falhou` o dedo aponta direto pro render. E o
+estado `nao_rodou` existe pra que uma checagem que **não pôde** rodar nunca se
+confunda com uma que passou — esse é o jeito silencioso de um validador virar
+decoração.
 
 **E o checador foi TESTADO CONTRA DEFEITO DE VERDADE**, não só contra o vídeo
 bom — senão seria mais um aviso que não avisa. Fabriquei dois vídeos quebrados
