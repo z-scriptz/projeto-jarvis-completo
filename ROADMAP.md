@@ -1114,6 +1114,40 @@ saber detectar que está errado multiplica o estrago na velocidade da máquina.
 A ordem certa é: **primeiro perceber, depois decidir, e só muito depois mexer
 em si mesmo.**
 
+### ⚠️ MÚSICA EM ALTA vs. POSTAGEM POR API — conflito não resolvido (08/08)
+
+**O Dre ia mandar centenas de faixas da biblioteca do Instagram pra catalogar.
+Parei antes, porque a lista pode ser inútil pro fluxo automático.**
+
+`meta_uploader.py:378` manda `{"media_type": "REELS"}` + o arquivo de vídeo.
+**Não há campo de música.** O áudio que vai ao ar é o que está dentro do MP4.
+A biblioteca do Instagram vive DENTRO do app e é escolhida na hora de postar,
+pelo celular.
+
+Consequência: **vídeo postado pela Graph API não usa faixa da biblioteca**, e o
+empurrão de distribuição do "som em alta" não acontece. Os modos `viral` e
+`narracao_viral` do EDL, do jeito que estão, descrevem algo que o pipeline
+automático não consegue executar.
+
+**Três saídas, e a escolha é do Dre:**
+
+  1. **Música própria no render** — arquivos livres de direitos, em disco,
+     embutidos no MP4. Automático, sem empurrão de trending. É o que dá pra
+     fazer hoje sem mudar nada no fluxo.
+  2. **Postagem manual pelo celular** só no braço do experimento que testa
+     música em alta. Não escala, mas responde a pergunta.
+  3. **Verificar** se alguma via oficial permite (Content Publishing API com
+     áudio, ou parceiro). **Não verificado — não afirmar que existe ou não.**
+
+**O que isto NÃO invalida:** `shared/musicas.json` continua útil como guia de
+qual faixa escolher ao postar à mão. E a hipótese "alcance baixo é por conteúdo
+reciclado" continua testável só com conteúdo original — que é automático.
+
+**Recomendação:** rodar o piloto em `narracao` (100% automático, testa a
+hipótese do conteúdo original) e deixar música em alta como experimento
+manual à parte. Misturar as duas variáveis num piloto que nem roda sozinho
+seria gastar o esforço na pergunta que não dá pra responder.
+
 ### Onde parou (04/08, fim do dia)
 
 **Esperando o chip.** Pedido feito — Claro pré-pago, R$ 20,99, chegada prevista
