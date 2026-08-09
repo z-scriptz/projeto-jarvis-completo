@@ -167,7 +167,8 @@ def _cortes(dur_total: float, secao: str) -> int:
 MUSICAS = BASE_DIR / "shared" / "musicas.json"
 
 
-def _musica(nicho: str, energia: str = "media", precisa_instrumental=False) -> dict:
+def _musica(nicho: str, energia: str = "media", precisa_instrumental=False,
+            semente: str = "") -> dict:
     """Escolhe a faixa da biblioteca. {} quando não há candidata.
 
     O Dre olhou a biblioteca do Instagram e a conclusão foi direta: os "áudios
@@ -197,8 +198,21 @@ def _musica(nicho: str, energia: str = "media", precisa_instrumental=False) -> d
                 if not precisa_instrumental or f.get("instrumental")]
     if not cand:
         return {}
+    # PREFERE faixa que lista o nicho ESPECÍFICO. Sem isso, quem tem "geral"
+    # na lista ganha sempre e todo nicho recebe a mesma música.
+    especifica = [f for f in cand if nicho in (f.get("nichos") or [])]
+    cand = especifica or cand
     mesma = [f for f in cand if f.get("energia") == energia]
-    return max(mesma or cand, key=lambda f: f.get("reels", 0))
+    cand = mesma or cand
+
+    # E VARIA entre os candidatos bons. Pegar sempre o de mais reels fez as 8
+    # linhas do tempo saírem com "Wonderful (Instrumental)" — o feed inteiro
+    # com a mesma música, que é justamente o oposto de parecer conteúdo
+    # humano. A escolha é determinística (mesmo produto = mesma faixa, então
+    # regerar não troca a trilha), mas distribuída pelo nome do produto.
+    cand.sort(key=lambda f: -f.get("reels", 0))
+    topo = cand[:4] or cand          # só entre as mais usadas; o resto não
+    return topo[hash(semente) % len(topo)] if topo else {}
 
 
 def _template(nicho: str) -> dict:
@@ -381,13 +395,14 @@ def montar(sb: dict, modo_audio: str = "narracao") -> dict:
         # contada pelo texto. As legendas já existem na trilha de texto, então
         # o vídeo continua legível — o que muda é quem conduz.
         audio = [a for a in audio if a["tipo"] != "narracao"]
-        m = _musica(nicho_v, "alta")
+        m = _musica(nicho_v, "alta", semente=sb.get("produto", ""))
         audio.append({"inicio": 0.0, "tipo": "musica_alta", "volume": 0.9,
                       "faixa": m.get("nome", ""), "artista": m.get("artista", ""),
                       "reels": m.get("reels", 0),
                       "obs": "conduz o vídeo; a história vai pelo texto"})
     elif modo_audio == "narracao_viral":
-        m = _musica(nicho_v, "media", precisa_instrumental=True)
+        m = _musica(nicho_v, "media", precisa_instrumental=True,
+                    semente=sb.get("produto", ""))
         audio.append({"inicio": 0.0, "tipo": "musica_alta", "volume": 0.15,
                       "faixa": m.get("nome", ""), "artista": m.get("artista", ""),
                       "reels": m.get("reels", 0),
