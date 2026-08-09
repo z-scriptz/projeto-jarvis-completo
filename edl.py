@@ -164,7 +164,55 @@ def _cortes(dur_total: float, secao: str) -> int:
     return max(1, round(dur_total / alvo))
 
 
-def montar(sb: dict) -> dict:
+def _template(nicho: str) -> dict:
+    """A camada de MARCA que o render aplica por cima da trilha visual.
+
+    O EDL não desenhava isso e o render sairia SEM a marca TopShop — buraco
+    que o Dre encontrou perguntando "ele já joga no template pronto?".
+    A resposta certa é: UM render só, com o template como CAMADA persistente.
+    Colar dois vídeos daria borda, salto de cor e perda de qualidade.
+
+    Logo e handle saem de shared/marca.py e contas.json — a mesma regra que já
+    decide isso na produção de hoje. Duplicar aqui seria repetir o dicionário
+    que pôs a logo do @topshop.__ num vídeo do @topshopcasa_.
+    """
+    try:
+        from shared.marca import logo_escolhida
+        logo = logo_escolhida(nicho)
+    except Exception:
+        logo = "logo_ts.png"
+    handle = ""
+    try:
+        contas = json.loads((BASE_DIR / "contas.json").read_text(encoding="utf-8"))
+        for chave, c in contas.items():
+            if (chave if chave != "_default" else c.get("nicho", "geral")) == (nicho or "geral"):
+                handle = c.get("handle", "")
+                break
+    except Exception:
+        pass
+    return {"nicho": nicho or "geral", "logo": logo, "handle": handle,
+            "camada": "por_cima", "zona_superior": ["logo", "handle"],
+            "zona_inferior": ["cta_fixo", "marca_dagua"],
+            "obs": "render ÚNICO: a camada acompanha o vídeo inteiro"}
+
+
+# MODO DE ÁUDIO — variável de EXPERIMENTO, não decisão de gosto.
+#
+#   narracao     voz conta a história; música em 0.12 ao fundo.
+#   viral        áudio em alta em primeiro plano; SEM narração, a história é
+#                contada só por texto na tela.
+#
+# Áudio em alta é alavanca de ALCANCE — a plataforma distribui melhor quem usa
+# som que está bombando, e alcance é justamente nosso gargalo (mediana 116).
+# Mas os dois COMPETEM: narração por cima de música alta vira ruído, e música
+# baixa demais perde o efeito de estar "usando o som do momento".
+#
+# Qual ganha é pergunta pra métrica, não pra mim. Por isso é campo, e por isso
+# o EDL registra qual foi usado — sem isso o A/B não separa a causa depois.
+MODOS_AUDIO = ("narracao", "viral")
+
+
+def montar(sb: dict, modo_audio: str = "narracao") -> dict:
     """Storyboard -> EDL. Não chama IA: é decisão de edição, não de criação."""
     visual, texto_tr, audio, sfx_usados = [], [], [], 0
     t = 0.0
@@ -284,8 +332,17 @@ def montar(sb: dict) -> dict:
         audio.append({"inicio": round(t, 2), "tipo": "sfx", "som": "impacto"})
     t += dur_cta
 
-    audio.append({"inicio": 0.0, "tipo": "musica", "volume": 0.12,
-                  "obs": "camada de fundo — nunca compete com a narração"})
+    if modo_audio == "viral":
+        # sem narração: o áudio em alta é o protagonista e a história é
+        # contada pelo texto. As legendas já existem na trilha de texto, então
+        # o vídeo continua legível — o que muda é quem conduz.
+        audio = [a for a in audio if a["tipo"] != "narracao"]
+        audio.append({"inicio": 0.0, "tipo": "audio_viral", "volume": 0.9,
+                      "obs": "PREENCHER com o som em alta do momento; é ele "
+                             "que puxa alcance"})
+    else:
+        audio.append({"inicio": 0.0, "tipo": "musica", "volume": 0.12,
+                      "obs": "camada de fundo — nunca compete com a narração"})
 
     # transição só onde a seção muda; o resto é corte seco
     for a, b in zip(visual, visual[1:]):
@@ -301,6 +358,8 @@ def montar(sb: dict) -> dict:
         "origem": sb.get("origem", "original"),
         "fps": FPS, "resolucao": list(RESOLUCAO),
         "duracao_total": round(t, 2),
+        "modo_audio": modo_audio,
+        "template": _template(sb.get("nicho") or sb.get("categoria") or "geral"),
         "assets_disponiveis": sb.get("assets_disponiveis", 1),
         "trilhas": {"visual": visual, "texto": texto_tr, "audio": audio},
     }
@@ -345,8 +404,11 @@ def _resumo(edl):
         s = c.get("secao", "?")
         secoes.setdefault(s, []).append(c["fim"] - c["inicio"])
     print(f"\n  {edl['produto'][:62]}")
+    tp = edl.get("template", {})
     print(f"  {edl['duracao_total']}s · {len(v)} cortes · "
           f"{edl['assets_disponiveis']} imagem(ns) · {FPS}fps")
+    print(f"  áudio: {edl.get('modo_audio')} · template: {tp.get('logo')} "
+          f"{tp.get('handle') or '(handle?)'}")
     for s, ds in secoes.items():
         print(f"     {s:16} {len(ds):2} corte(s) · média {sum(ds)/len(ds):.2f}s")
     leg = [t for t in edl["trilhas"]["texto"] if t["estilo"] == "legenda"]
@@ -366,6 +428,8 @@ def main():
     p.add_argument("--storyboard", help="arquivo JSON do storyboard")
     p.add_argument("--todos", action="store_true", help="todos de shared/storyboards")
     p.add_argument("--salvar", action="store_true")
+    p.add_argument("--audio", choices=MODOS_AUDIO, default="narracao",
+                   help="narracao (voz conduz) ou viral (som em alta conduz)")
     args = p.parse_args()
 
     if args.todos:
@@ -387,7 +451,7 @@ def main():
             _log(f"não li {f.name}: {e}")
             ruins += 1
             continue
-        edl = montar(sb)
+        edl = montar(sb, args.audio)
         problemas = validar(edl)
         _resumo(edl)
         if problemas:
