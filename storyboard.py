@@ -324,16 +324,24 @@ def _da_fila(indice):
     d = json.loads(FILA.read_text(encoding="utf-8"))
     it = [x for x in d if isinstance(x, dict)][indice]
     nome = (it.get("campeao") or it.get("produto") or "").strip()
-    # NICHO: sem ele o EDL cai em "geral" e TODO vídeo original sai com a logo
-    # e o @ da conta geral. Os 8 primeiros EDLs saíram assim — o defeito só
-    # apareceu quando o template entrou e a linha imprimiu @topshop.__ oito
-    # vezes seguidas. Normalizado aqui pela mesma regra da medição.
-    bruto = it.get("classe") or it.get("categoria") or it.get("nicho") or ""
+    # NICHO — CALCULADO do nome, não lido de campo.
+    #
+    # Minha 1ª tentativa leu it["classe"] achando que era o nicho. Não é:
+    # `classe` é a QUALIDADE do produto ("mina_ouro", "ok"), como o
+    # bio_page_builder deixa claro ao filtrar por ela. Os itens da fila não
+    # guardam nicho nenhum — resultado: os 8 EDLs saíram todos com
+    # @topshop.__, e o Dre viu antes de eu ver.
+    #
+    # Quem decide nicho neste projeto é o roteador_contas, pelo NOME do
+    # produto, e é ele que a produção já usa na hora de postar. Chamar o
+    # roteador em vez de inventar leitura é a mesma lição do dicionário de
+    # logo duplicado: regra num lugar só.
+    nicho = ""
     try:
-        from shared.categorias import normalizar
-        nicho = normalizar(bruto)
-    except Exception:
-        nicho = (bruto or "").split("_")[0].lower()
+        import roteador_contas as _RC
+        nicho = (_RC.nicho_do_produto(nome) or "").strip().lower()
+    except Exception as e:
+        _log(f"   roteador indisponível ({str(e)[:60]}) — nicho fica 'geral'")
     return nome, it.get("preco", ""), it.get("link", ""), nicho
 
 
