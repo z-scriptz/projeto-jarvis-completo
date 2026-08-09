@@ -1027,6 +1027,93 @@ o alcance real — aí vira preditor, não achismo.
 **Próximo passo:** storyboard → EDL → FFmpeg. Só depois que a rodada nova
 mostrar a narração corrigida.
 
+### EDL — decisões de arquitetura antes de codar (08/08)
+
+**A melhor ideia da rodada, e ela é adotada:** o storyboard diz **O QUE**
+comunicar; o EDL decide **COMO**. São dois cérebros, não um.
+
+    storyboard  { narracao, intencao: "demonstracao", energia: "alta",
+                  prioridade_visual: "produto_em_movimento" }
+    EDL         { inicio, fim, assets[], zoom, cut_points[], caption_style, sfx }
+
+Isso não é elegância: é o que permite trocar FFmpeg por outro renderizador, ou
+gerar corte diferente pra Reels e TikTok, **sem mexer no cérebro criativo**. E é
+a mesma separação que já salvou este projeto — `shared/termos.py`,
+`shared/categorias.py`, `shared/marca.py`: regra num lugar, uso em vários.
+
+**A narração comanda o corte, não o cronômetro.** Cortar a cada N segundos vira
+slideshow. O corte cai onde o SENTIDO muda: "ele gira" → produto; "acende as
+luzes" → a foto onde as luzes aparecem. A gente já gera `narracao` por cena;
+falta os `cut_points` seguirem as batidas dela.
+
+**Ritmo por seção:** hook com corte rápido (0,8-1,5s), demonstração com tempo
+pra ver, CTA estável. Vídeo sem respiração cansa.
+
+**UM PILOTO, não oito.** Mesma disciplina do `--teste` do WhatsApp, do
+`--limite 10` das métricas e do `--quantos 1`. Render → crítica → EDL v2 →
+render. Só depois escala. Automatizar um editor mediano é multiplicar mediania.
+
+**Fica pra depois (depende de coisa que não existe):** escolher movimento pelo
+TIPO do asset (detalhe → punch-in, pessoa → seguir região de interesse,
+antes/depois → split). Exige análise por imagem, que a gente ainda não tem. O
+`visual_audit_agent` é o candidato natural.
+
+⚠️ **Não adotado — CTA por objetivo com urgência.** A sugestão incluía "Se
+ainda estiver nesse preço, corre." Urgência foi MEDIDA em 1,8-2,2% contra
+3,8-5,1% dos hooks de 1ª pessoa, e a própria sugestão diz "não inventar
+urgência". CTA fica simples e verdadeiro.
+
+⚠️ **Não adotado — quality gate com nota 0-10.** Já registrado acima: modelo
+dando nota a si mesmo é opinião com casa decimal.
+
+### A REGRA DE OURO (adotada, e vale pro projeto inteiro)
+
+> O Jarvis nunca deve tratar uma experiência como verdade só porque aconteceu
+> uma vez. **fato → observação → hipótese → experimento → evidência → conclusão.**
+
+Isto é o melhor que saiu das conversas paralelas, e o projeto já viveu a lição:
+em 08/08 eu afirmei que o hook "Corre ver isso" era **11x melhor** olhando só
+alcance — e vinte minutos depois, com engajamento, ele virou um dos PIORES.
+Se eu tivesse mexido no gerador na primeira leitura, teria cravado o hook
+errado no código com a confiança de quem tem número.
+
+O `--minimo 3` do ranking já é uma versão primitiva disso: grupo com menos de 3
+posts fica fora, e o total de ignorados é impresso.
+
+### MEMÓRIA — arquitetura desejada (levantada, não construída)
+
+Em arquivos primeiro, índice depois, vetor por último. Nesta escala, arquivo é
+transparente e depurável; banco é peso sem retorno.
+
+    memory/
+      short_term/    contexto e tarefas atuais
+      long_term/     conhecimento, padrões, aprendizados
+      episodic/      AAAA/MM/DD.jsonl — o que aconteceu
+      decisions/     o que foi decidido e por quê
+      mistakes/      o que deu errado
+      hypotheses/    o que ainda não foi confirmado
+      autobiography/ timeline.md — a história legível
+
+**A parte que vale mais:** a memória tem NÍVEL DE CONFIANÇA e evolui.
+
+    "acho que vídeo demonstrativo converte"   → hipótese
+    "evidência moderada"                      → 12 casos
+    "padrão confirmado em 87 vídeos"          → conhecimento
+
+E um **Memory Manager** decide o que merece ser lembrado, em que categoria, com
+que confiança, se contradiz memória antiga e se algo deve ser esquecido. Sem
+ele, o LLM escreve qualquer coisa na memória permanente e coincidência vira
+"conhecimento" — exatamente o que a regra de ouro proíbe.
+
+⚠️ **NÃO adotado: auto-modificação de código.** A ideia de o sistema copiar a
+si mesmo, gerar variantes e selecionar as melhores é interessante como
+experimento mental e é a direção errada aqui, agora. Em 08/08 **uma crase num
+comentário** fez este projeto rodar tudo em quádruplo por semanas sem ninguém
+perceber. Dar ao sistema permissão de escrever no próprio código antes de ele
+saber detectar que está errado multiplica o estrago na velocidade da máquina.
+A ordem certa é: **primeiro perceber, depois decidir, e só muito depois mexer
+em si mesmo.**
+
 ### Onde parou (04/08, fim do dia)
 
 **Esperando o chip.** Pedido feito — Claro pré-pago, R$ 20,99, chegada prevista
