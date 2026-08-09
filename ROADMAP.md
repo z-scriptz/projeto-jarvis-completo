@@ -1136,17 +1136,31 @@ automático não consegue executar.
      fazer hoje sem mudar nada no fluxo.
   2. **Postagem manual pelo celular** só no braço do experimento que testa
      música em alta. Não escala, mas responde a pergunta.
-  3. **Verificar** se alguma via oficial permite (Content Publishing API com
-     áudio, ou parceiro). **Não verificado — não afirmar que existe ou não.**
+  3. ✅ **RESOLVIDO pelo Dre: o METRICOOL tem parceria oficial** e agenda Reels
+     com faixa da biblioteca. Ou seja, o automático É possível — só não pela
+     Graph API direta. **Este é o caminho a investigar** (o Metricool tem API
+     própria; falta ver se ela expõe a escolha de música ou se o agendamento
+     precisa ser feito no painel).
 
 **O que isto NÃO invalida:** `shared/musicas.json` continua útil como guia de
 qual faixa escolher ao postar à mão. E a hipótese "alcance baixo é por conteúdo
 reciclado" continua testável só com conteúdo original — que é automático.
 
-**Recomendação:** rodar o piloto em `narracao` (100% automático, testa a
-hipótese do conteúdo original) e deixar música em alta como experimento
-manual à parte. Misturar as duas variáveis num piloto que nem roda sozinho
-seria gastar o esforço na pergunta que não dá pra responder.
+**Recomendação atualizada:** o piloto sai em `narracao` (100% automático pela
+via de hoje) e, em paralelo, investigar o Metricool. Se ele agendar com música
+por API, o braço "música em alta" também vira automático e o experimento roda
+inteiro sozinho.
+
+**A biblioteca precisa CRESCER, e agora por um motivo medido.** Com 7 faixas,
+as 8 linhas do tempo saíram com a MESMA música — pra tech instrumental de
+energia média só existe uma candidata. O Dre ofereceu mandar centenas; agora
+faz sentido aceitar. O que interessa por faixa:
+
+    nome · artista · nº de reels · duração · instrumental? · energia · nichos
+
+Instrumental é o que mais falta: é o único que serve pro modo narracao_viral,
+e hoje há 5 na lista. **Faixa cantada não serve** por baixo de narração — duas
+vozes brigando.
 
 ### Onde parou (04/08, fim do dia)
 
