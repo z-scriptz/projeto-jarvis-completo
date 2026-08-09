@@ -164,6 +164,43 @@ def _cortes(dur_total: float, secao: str) -> int:
     return max(1, round(dur_total / alvo))
 
 
+MUSICAS = BASE_DIR / "shared" / "musicas.json"
+
+
+def _musica(nicho: str, energia: str = "media", precisa_instrumental=False) -> dict:
+    """Escolhe a faixa da biblioteca. {} quando não há candidata.
+
+    O Dre olhou a biblioteca do Instagram e a conclusão foi direta: os "áudios
+    originais" de terceiros são estourados e esquisitos, sem condição de uso —
+    música COM NOME é o caminho. A lista é mantida à mão porque o Instagram não
+    expõe API pra isso, e listar faixa indisponível geraria vídeo que não posta.
+    
+    A ordem de preferência é por REELS: quantos vídeos já usam a faixa. É esse
+    o sinal que a plataforma premia na distribuição, e distribuição é o gargalo
+    medido (mediana de alcance 116).
+
+    `precisa_instrumental` existe pro modo narracao_viral: faixa cantada por
+    baixo de narração vira duas vozes brigando. Instrumental popular junta o
+    empurrão do algoritmo com a história, sem competir.
+    """
+    try:
+        faixas = json.loads(MUSICAS.read_text(encoding="utf-8"))["faixas"]
+    except Exception:
+        return {}
+    cand = [f for f in faixas
+            if (not precisa_instrumental or f.get("instrumental"))
+            and (nicho in (f.get("nichos") or []) or "geral" in (f.get("nichos") or []))]
+    if not cand:
+        # sem faixa do nicho, aceita qualquer uma que sirva ao modo — melhor
+        # música fora do tom que vídeo mudo
+        cand = [f for f in faixas
+                if not precisa_instrumental or f.get("instrumental")]
+    if not cand:
+        return {}
+    mesma = [f for f in cand if f.get("energia") == energia]
+    return max(mesma or cand, key=lambda f: f.get("reels", 0))
+
+
 def _template(nicho: str) -> dict:
     """A camada de MARCA que o render aplica por cima da trilha visual.
 
@@ -338,19 +375,26 @@ def montar(sb: dict, modo_audio: str = "narracao") -> dict:
         audio.append({"inicio": round(t, 2), "tipo": "sfx", "som": "impacto"})
     t += dur_cta
 
+    nicho_v = sb.get("nicho") or "geral"
     if modo_audio == "viral":
         # sem narração: o áudio em alta é o protagonista e a história é
         # contada pelo texto. As legendas já existem na trilha de texto, então
         # o vídeo continua legível — o que muda é quem conduz.
         audio = [a for a in audio if a["tipo"] != "narracao"]
-        audio.append({"inicio": 0.0, "tipo": "audio_viral", "volume": 0.9,
-                      "obs": "PREENCHER com o som em alta do momento; é ele "
-                             "que puxa alcance"})
+        m = _musica(nicho_v, "alta")
+        audio.append({"inicio": 0.0, "tipo": "musica_alta", "volume": 0.9,
+                      "faixa": m.get("nome", ""), "artista": m.get("artista", ""),
+                      "reels": m.get("reels", 0),
+                      "obs": "conduz o vídeo; a história vai pelo texto"})
     elif modo_audio == "narracao_viral":
-        audio.append({"inicio": 0.0, "tipo": "audio_viral", "volume": 0.15,
-                      "obs": "som em alta POR BAIXO da narração. Se a plataforma "
-                             "creditar o uso mesmo mixado baixo, junta alcance "
-                             "com história — hipótese a testar, não fato"})
+        m = _musica(nicho_v, "media", precisa_instrumental=True)
+        audio.append({"inicio": 0.0, "tipo": "musica_alta", "volume": 0.15,
+                      "faixa": m.get("nome", ""), "artista": m.get("artista", ""),
+                      "reels": m.get("reels", 0),
+                      "obs": "INSTRUMENTAL popular por baixo da narração — sem "
+                             "letra não há duas vozes brigando. Se a plataforma "
+                             "creditar o uso mixado baixo, junta alcance com "
+                             "história: hipótese a testar, não fato"})
     else:
         audio.append({"inicio": 0.0, "tipo": "musica", "volume": 0.12,
                       "obs": "camada de fundo — a batidinha que segura o ritmo "
@@ -419,8 +463,14 @@ def _resumo(edl):
     tp = edl.get("template", {})
     print(f"  {edl['duracao_total']}s · {len(v)} cortes · "
           f"{edl['assets_disponiveis']} imagem(ns) · {FPS}fps")
+    mus = next((a for a in edl["trilhas"]["audio"]
+                if a["tipo"] == "musica_alta"), None)
+    linha_m = ""
+    if mus:
+        linha_m = (f" · ♪ {mus.get('faixa') or '(sem faixa!)'}"
+                   f" ({mus.get('reels', 0):,} reels)".replace(",", "."))
     print(f"  áudio: {edl.get('modo_audio')} · template: {tp.get('logo')} "
-          f"{tp.get('handle') or '(handle?)'}")
+          f"{tp.get('handle') or '(handle?)'}{linha_m}")
     for s, ds in secoes.items():
         print(f"     {s:16} {len(ds):2} corte(s) · média {sum(ds)/len(ds):.2f}s")
     leg = [t for t in edl["trilhas"]["texto"] if t["estilo"] == "legenda"]

@@ -1,0 +1,87 @@
+{
+  "_leia": [
+    "Biblioteca de MÚSICAS do Instagram que o Dre confirmou disponíveis na",
+    "conta (a biblioteca completa abriu depois de marcar a profissão como",
+    "'empresário'). Mantida à mão de propósito: o Instagram não expõe API pra",
+    "isso, e listar faixa que a conta não pode usar geraria vídeo que não posta.",
+    "",
+    "NÃO USAR 'Áudio original' de terceiros. O Dre olhou a biblioteca e a",
+    "conclusão foi direta: são áudios estourados e esquisitos, sem condição de",
+    "uso. Música com NOME e artista é o caminho.",
+    "",
+    "'reels' é quantos Reels usam a faixa — é o sinal de o quanto ela está em",
+    "alta, e é o que a plataforma premia na distribuição.",
+    "",
+    "'instrumental': true é o que permite o modo narracao_viral. Faixa cantada",
+    "por baixo de narração vira duas vozes brigando; instrumental popular junta",
+    "o empurrão do algoritmo com a história sem competir.",
+    "",
+    "Pra acrescentar: abra o seletor de música do Reels, confirme que a faixa",
+    "aparece pra conta, e copie nome/artista/reels exatamente como estão lá."
+  ],
+  "faixas": [
+    {
+      "nome": "Vibe",
+      "artista": "Slomow, himood",
+      "reels": 466000,
+      "duracao": 148,
+      "instrumental": false,
+      "energia": "media",
+      "nichos": ["geral", "casa", "beleza", "moda"]
+    },
+    {
+      "nome": "Rise Up",
+      "artista": "Beast Inside Beats",
+      "reels": 403000,
+      "duracao": 175,
+      "instrumental": false,
+      "energia": "alta",
+      "nichos": ["geral", "tech", "pet"]
+    },
+    {
+      "nome": "Wonderful (Instrumental)",
+      "artista": "Ja Rule",
+      "reels": 163000,
+      "duracao": 271,
+      "instrumental": true,
+      "energia": "media",
+      "nichos": ["geral", "beleza", "moda", "casa"]
+    },
+    {
+      "nome": "Impact (Instrumental)",
+      "artista": "Akhan",
+      "reels": 112000,
+      "duracao": 195,
+      "instrumental": true,
+      "energia": "alta",
+      "nichos": ["geral", "tech", "pet"]
+    },
+    {
+      "nome": "Respected",
+      "artista": "MaskiBeats",
+      "reels": 45000,
+      "duracao": 199,
+      "instrumental": true,
+      "energia": "media",
+      "nichos": ["geral", "tech", "moda"]
+    },
+    {
+      "nome": "Memory Reboot (Reforço de graves)",
+      "artista": "VØJ, Narvent",
+      "reels": 4800,
+      "duracao": 209,
+      "instrumental": true,
+      "energia": "alta",
+      "nichos": ["tech"]
+    },
+    {
+      "nome": "Vision Gold",
+      "artista": "SEVER",
+      "reels": 2600,
+      "duracao": 111,
+      "instrumental": true,
+      "energia": "media",
+      "nichos": ["geral", "moda"]
+    }
+  ]
+}
