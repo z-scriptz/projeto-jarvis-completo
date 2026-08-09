@@ -296,7 +296,7 @@ def validar(sb, n_assets):
     return p
 
 
-def gerar(nome, preco="", n_imagens=3, link=""):
+def gerar(nome, preco="", n_imagens=3, link="", nicho=""):
     dur = random.randint(*DUR_ALVO)
     sb = _por_ia(nome, preco, n_imagens, dur)
     origem_roteiro = "ia"
@@ -311,6 +311,7 @@ def gerar(nome, preco="", n_imagens=3, link=""):
     sb["preco"] = preco
     sb["link"] = link
     sb["assets_disponiveis"] = n_imagens
+    sb["nicho"] = nicho or "geral"
     # ESTE CAMPO É O EXPERIMENTO. Sem ele, daqui a um mês não dá pra separar o
     # que foi original do que foi reciclado na hora de comparar desempenho — e
     # o A/B inteiro vira opinião.
@@ -323,7 +324,17 @@ def _da_fila(indice):
     d = json.loads(FILA.read_text(encoding="utf-8"))
     it = [x for x in d if isinstance(x, dict)][indice]
     nome = (it.get("campeao") or it.get("produto") or "").strip()
-    return nome, it.get("preco", ""), it.get("link", "")
+    # NICHO: sem ele o EDL cai em "geral" e TODO vídeo original sai com a logo
+    # e o @ da conta geral. Os 8 primeiros EDLs saíram assim — o defeito só
+    # apareceu quando o template entrou e a linha imprimiu @topshop.__ oito
+    # vezes seguidas. Normalizado aqui pela mesma regra da medição.
+    bruto = it.get("classe") or it.get("categoria") or it.get("nicho") or ""
+    try:
+        from shared.categorias import normalizar
+        nicho = normalizar(bruto)
+    except Exception:
+        nicho = (bruto or "").split("_")[0].lower()
+    return nome, it.get("preco", ""), it.get("link", ""), nicho
 
 
 def revisar():
@@ -371,6 +382,7 @@ def main():
     p.add_argument("--fila", type=int, help="índice do produto em produtos_fila.json")
     p.add_argument("--nome", help="nome do produto (em vez de --fila)")
     p.add_argument("--preco", default="")
+    p.add_argument("--nicho", default="", help="beleza|tech|casa|moda|pet|geral")
     p.add_argument("--imagens", type=int, default=3,
                    help="quantas imagens do produto existem (o roteiro não pode pedir mais)")
     p.add_argument("--salvar", action="store_true")
@@ -380,14 +392,14 @@ def main():
         return revisar()
 
     if args.fila is not None:
-        nome, preco, link = _da_fila(args.fila)
+        nome, preco, link, nicho = _da_fila(args.fila)
     elif args.nome:
-        nome, preco, link = args.nome, args.preco, ""
+        nome, preco, link, nicho = args.nome, args.preco, "", args.nicho
     else:
         p.error("use --fila N ou --nome '...'")
 
-    _log(f"produto: {nome}")
-    sb = gerar(nome, preco, max(1, args.imagens), link)
+    _log(f"produto: {nome}  [nicho {nicho or 'geral'}]")
+    sb = gerar(nome, preco, max(1, args.imagens), link, nicho)
     problemas = validar(sb, max(1, args.imagens))
 
     print()

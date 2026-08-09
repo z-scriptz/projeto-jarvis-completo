@@ -209,7 +209,13 @@ def _template(nicho: str) -> dict:
 #
 # Qual ganha é pergunta pra métrica, não pra mim. Por isso é campo, e por isso
 # o EDL registra qual foi usado — sem isso o A/B não separa a causa depois.
-MODOS_AUDIO = ("narracao", "viral")
+#   narracao_viral  narração conduz E o som em alta toca por baixo, baixinho.
+#                   HIPÓTESE NÃO VERIFICADA: não sei se a plataforma credita o
+#                   uso do som quando ele está mixado baixo. Se creditar, é o
+#                   melhor dos dois mundos; se não, é só uma música de fundo
+#                   com nome bonito. Testável — e é exatamente por isso que
+#                   está aqui como MODO e não como padrão escondido.
+MODOS_AUDIO = ("narracao", "viral", "narracao_viral")
 
 
 def montar(sb: dict, modo_audio: str = "narracao") -> dict:
@@ -340,9 +346,15 @@ def montar(sb: dict, modo_audio: str = "narracao") -> dict:
         audio.append({"inicio": 0.0, "tipo": "audio_viral", "volume": 0.9,
                       "obs": "PREENCHER com o som em alta do momento; é ele "
                              "que puxa alcance"})
+    elif modo_audio == "narracao_viral":
+        audio.append({"inicio": 0.0, "tipo": "audio_viral", "volume": 0.15,
+                      "obs": "som em alta POR BAIXO da narração. Se a plataforma "
+                             "creditar o uso mesmo mixado baixo, junta alcance "
+                             "com história — hipótese a testar, não fato"})
     else:
         audio.append({"inicio": 0.0, "tipo": "musica", "volume": 0.12,
-                      "obs": "camada de fundo — nunca compete com a narração"})
+                      "obs": "camada de fundo — a batidinha que segura o ritmo "
+                             "sem competir com a narração"})
 
     # transição só onde a seção muda; o resto é corte seco
     for a, b in zip(visual, visual[1:]):
