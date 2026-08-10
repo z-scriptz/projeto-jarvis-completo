@@ -82,12 +82,70 @@ def _item_da_fila(indice: int):
     return None
 
 
+_shop_id_global = [""]
+
+
+def _interna(item_id: str, shop_id: str):
+    """Pergunta à API INTERNA da loja (v4/item/get) se existe galeria.
+
+    POR QUE VALE PERGUNTAR, mesmo o projeto já tendo anotado "a API interna
+    (403)": aquela anotação é sobre RASPAR A PÁGINA e sobre uma tentativa
+    antiga. Este endpoint é o que o próprio site usa e devolve `images` como
+    lista de hashes — que, com o prefixo do CDN, viram URL de imagem.
+    A resposta muda o rumo inteiro do Asset Collector, então merece um pedido.
+
+    ⚠️ SÓ LÊ, uma vez, com o User-Agent de navegador. Se der 403, é 403 — e a
+    conclusão é que o caminho da galeria não é este.
+    """
+    if not shop_id:
+        _log("sem shop_id, pulo a API interna (use --item junto com --shop)")
+        return
+    print()
+    _log("API interna da loja (v4/item/get):")
+    url = (f"https://shopee.com.br/api/v4/item/get?itemid={item_id}"
+           f"&shopid={shop_id}")
+    try:
+        import requests
+        r = requests.get(url, timeout=25, headers={
+            "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                           "AppleWebKit/537.36 Chrome/120.0 Safari/537.36"),
+            "Referer": f"https://shopee.com.br/product/{shop_id}/{item_id}",
+            "X-Requested-With": "XMLHttpRequest",
+        })
+    except Exception as e:
+        _log(f"     ✗ falhou: {str(e)[:90]}")
+        return
+    if r.status_code != 200:
+        _log(f"     ✗ HTTP {r.status_code} — a loja bloqueia este endpoint "
+             "daqui. A galeria não vem por aqui.")
+        return
+    try:
+        dados = (r.json() or {}).get("data") or {}
+    except Exception:
+        _log("     ✗ respondeu 200 mas não era JSON (provável página de bloqueio)")
+        return
+    if not dados:
+        _log("     ✗ 200 com data vazio — bloqueio silencioso")
+        return
+    imgs = dados.get("images") or []
+    video = dados.get("video_info_list") or []
+    _log(f"     ✅ RESPONDEU · {len(imgs)} imagem(ns) · {len(video)} vídeo(s)")
+    for h in imgs[:6]:
+        print(f"        https://cf.shopee.com.br/file/{h}")
+    if video:
+        _log("     ⚠️  TEM VÍDEO DO PRODUTO — vale mais que foto extra")
+
+
 def main():
     p = argparse.ArgumentParser(
         description="Pergunta à Shopee se existe galeria de imagens.")
     p.add_argument("--item", help="itemId da Shopee")
+    p.add_argument("--shop", default="", help="shopId (só com --item --interna)")
     p.add_argument("--fila", type=int, help="índice em produtos_fila.json "
                                             "(descobre o itemId pelo link)")
+    p.add_argument("--interna", action="store_true",
+                   help="testa também a API interna da loja (v4/item/get), "
+                        "que é onde a galeria costuma estar")
     args = p.parse_args()
 
     _carregar_env()
@@ -100,6 +158,8 @@ def main():
             raise SystemExit(f"[probe] não importei o shopee_affiliate: {e}")
 
     item_id = (args.item or "").strip()
+    if args.shop:
+        _shop_id_global[0] = args.shop.strip()
     if not item_id and args.fila is not None:
         it = _item_da_fila(args.fila)
         if not it:
@@ -112,7 +172,7 @@ def main():
             except Exception:
                 extrair_ids_da_url = None
         link = it.get("link") or ""
-        if extrair_ids_da_url and link:
+        if extrair_ids_da_url and link:  # noqa: E501
             ids = extrair_ids_da_url(link) or {}
             if ids.get("ok"):
                 item_id = str(ids.get("item_id") or "")
@@ -126,6 +186,7 @@ def main():
                 from preencher_fotos import _ids_do_link
                 _shop, _item = _ids_do_link(link)
                 item_id = str(_item or "")
+                _shop_id_global[0] = str(_shop or "")
                 if item_id:
                     _log(f"link curto resolvido → shop {_shop} · item {item_id}")
             except Exception as e:
@@ -143,6 +204,13 @@ def main():
             "itemId productName imageUrl } } }")
     r = _executar_graphql(base)
     if r.get("_erro"):
+        # com --interna a pergunta é sobre OUTRA API: não faz sentido desistir
+        # só porque a credencial de afiliado não está aqui
+        if args.interna and _shop_id_global[0]:
+            _log(f"a API de afiliado não respondeu ({r['_erro'][:60]}) — "
+                 "sigo direto pra interna")
+            _interna(item_id, _shop_id_global[0])
+            return 0
         raise SystemExit(f"[probe] nem a query básica passou: {r['_erro']}\n"
                          "        confira SHOPEE_APP_ID / SHOPEE_APP_SECRET no .env")
     nodes = (((r.get("data") or {}).get("productOfferV2") or {}).get("nodes") or [])
@@ -167,6 +235,9 @@ def main():
         valor = (ns[0] or {}).get(campo) if ns else None
         print(f"     ✅ {campo}  →  {json.dumps(valor, ensure_ascii=False)[:150]}")
         achados.append((campo, valor))
+
+    if args.interna:
+        _interna(item_id, _shop_id_global[0])
 
     print()
     if achados:

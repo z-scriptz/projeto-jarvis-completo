@@ -1691,6 +1691,52 @@ C = 1 imagem boa + variações · **D = 1 imagem ruim com texto queimado → BLO
 nem chega ao render**. A foto da escova alisadora era nível D: texto promocional
 dentro da imagem brigando com hook, mini-hook, legenda e CTA.
 
+### ❌ FATO MEDIDO: a API de afiliado NÃO tem galeria (10/08)
+
+`probe_imagens.py --fila 0` na VPS, um campo por pedido:
+
+    ✗ images  ✗ imageUrls  ✗ imageList  ✗ productImages  ✗ itemImages
+    ✗ gallery ✗ galleryImages ✗ mainImages ✗ videoUrl ✗ productVideoUrl ✗ video
+
+**Nenhum existe.** A `productOfferV2` entrega `imageUrl` e mais nada. Isso agora
+é FATO, não suposição minha — e é o que faltava pra o Asset Collector deixar de
+ser palpite e virar necessidade justificada.
+
+E a API interna da loja (`v4/item/get`), que é onde a galeria costuma estar,
+devolveu **HTTP 403** do meu ambiente. Falta o mesmo teste da VPS (IP diferente):
+
+    .venv/bin/python probe_imagens.py --fila 0 --interna
+
+**O que sobra, se a interna também bloquear:**
+  1. **Playwright na página do produto** — o projeto já tem navegador real e
+     contexto persistente (`ig_playwright`, `amazon_playwright`). Navegador de
+     verdade é exatamente o que derruba 403 de requisição crua. É a aposta mais
+     forte, e usa ferramenta que já existe aqui.
+  2. **Amazon / Mercado Livre** pro mesmo produto: as duas expõem galeria, e o
+     `amazon_playwright.py` já está no projeto.
+  3. **Vídeo do hunter** — o `telegram_repurpose_hunter` já traz vídeo real do
+     produto. ⚠️ Mas usar vídeo de terceiro num vídeo "original" contradiz o
+     experimento inteiro: a hipótese em teste é que alcance baixo vem de
+     conteúdo reciclado.
+  4. **`ia_scene_generator`** — caro e arrisca parecer falso.
+
+### CONTAS PET E MODA — os IDs certos (10/08)
+
+O `diag_contas.py` devolveu o que eu precisava, e confirmou o alerta: os IDs
+que tinham vindo antes eram os do APP, não os da Graph API.
+
+    pet   @topshoppet_    ig 17841437267536246  fb 1313800555148371
+                          PAGE_TOKEN_TOPSHOP_PET_SHOP     · voz brian_c
+    moda  @topshopmoda_   ig 17841449168252255  fb 1270945889431368
+                          PAGE_TOKEN_TOPSHOP_MODA_STYLE   · voz jessa
+
+    python3 narracao_ia.py --criar-conta nicho=pet handle=@topshoppet_ \
+        instagram_user_id=... facebook_page_id=... page_token_env=... voz_id=...
+
+⚠️ `ELEVENLABS_VOICE_ID_BELEZA` no `.env` estava sobrepondo a voz do
+`contas.json` — e só se viu porque a listagem mostra a ORIGEM de cada voz. Sem
+essa coluna, o Dre teria configurado a verinity x e continuado ouvindo outra.
+
 ### Onde parou (04/08, fim do dia)
 
 **Esperando o chip.** Pedido feito — Claro pré-pago, R$ 20,99, chegada prevista
