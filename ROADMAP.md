@@ -1317,6 +1317,27 @@ E entrou uma trava: se o CTA encostar no rodapé do vídeo (< 20px), o render
 avisa. Foi um defeito real desta rodada — 14px de folga — e é exatamente o tipo
 que se vê num quadro e não se vê no código.
 
+⚠️⚠️⚠️ **4ª rodada, e a correção mais ESTRUTURAL: a coluna do texto É a coluna
+do vídeo.** No post publicado a logo e o hook começam EXATAMENTE na borda
+esquerda do vídeo, e o hook nunca passa da direita. Eu vinha usando margens
+absolutas (`LOGO_X=100`, `HK_MARGEM=55`) enquanto a caixa do vídeo começa em
+**119** — resultado: logo e hook vazando pras **tarjas brancas laterais**, que
+são parte do template e devem ficar limpas. O Dre: *"tem que ficar em cima do
+vídeo, perfeitamente simétrico, não pode ficar saindo pras pontas brancas"*.
+
+Agora `LOGO_X` e `HK_MARGEM` têm como padrão o `x_midia`, e o hook quebra na
+LARGURA DO VÍDEO. A simetria deixou de ser um número pra acertar e virou
+consequência: mude `VIDEO_W_FRAC` e a coluna inteira acompanha. (Os dois
+continuam existindo como override.) `LOGO_Y` foi de 196 pra **222**, também a
+pedido — logo e @ um pouco mais baixos.
+
+**E este defeito virou checagem: `tarjas_limpas`.** As faixas laterais têm que
+ser chapadas; conteúdo nelas levanta o desvio-padrão. Testada reproduzindo o
+defeito com `LOGO_X=100 HK_MARGEM=55`: **reprovou com desvio 21,9** e o render
+certo passou. É a 3ª checagem que nasce de um defeito que o DRE viu antes de
+mim — e a razão de o `conferir_render` existir: o que um humano pega no olho
+duas vezes, a máquina tem que passar a pegar sozinha.
+
 Do print, o que se confirmou: **fundo branco**, cabeçalho
 pequeno no alto (logo redonda · TopShop · selo azul · @handle em cinza),
 **HOOK EM PRETO alinhado à esquerda**, a mídia como um **bloco de largura

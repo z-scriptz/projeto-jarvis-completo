@@ -38,6 +38,8 @@
 #   contraste_texto  faixa da legenda lisa  → legenda lavada ou ausente
 #                                             (foi EXATAMENTE o bug do fade)
 #   faixa_preenchida buraco na faixa        → foto pequena demais pro bloco
+#   tarjas_limpas    texto na tarja branca  → logo/hook fora da coluna do vídeo
+#                                             (o Dre pegou isso DUAS vezes no olho)
 #
 # Uso:
 #   python3 conferir_render.py --video shared/renders/x.mp4
@@ -244,6 +246,29 @@ def conferir(video: Path, n_quadros: int = N_QUADROS, contato: bool = False) -> 
                   f"{len(magros)} de {len(imgs)} quadros com a faixa da legenda "
                   f"lisa (desvio < {CONTRASTE_MIN}) — legenda lavada, atrás do "
                   "produto ou simplesmente não desenhada", len(magros))
+
+        # ── as tarjas laterais estão limpas? ────────────────────────────────
+        # As faixas brancas dos lados da caixa do vídeo são PARTE do template e
+        # devem ficar vazias: no post real a logo e o hook começam na borda
+        # esquerda do vídeo e nada passa da direita. Eu deixei os dois vazarem
+        # pra lá com margens absolutas (LOGO_X=100, HK_MARGEM=55) enquanto a
+        # caixa começa em 119, e o Dre pegou no olho — duas vezes. Tarja com
+        # conteúdo tem desvio-padrão alto; tarja limpa é chapada.
+        x0 = lay.get("x_midia")
+        lm = lay.get("larg_midia")
+        if x0 and lm and x0 > 6:
+            x1_t = x0 + lm
+            marcar("tarjas_limpas", "passou")
+            for t, im in imgs:
+                esq = _stat(im.crop((0, 0, x0 - 4, A)))[1]
+                dir_ = _stat(im.crop((x1_t + 4, 0, L, A)))[1]
+                if max(esq, dir_) > 8.0:
+                    achar("tarjas_limpas", "alta",
+                          f"{t}s: há conteúdo nas tarjas laterais (desvio "
+                          f"{max(esq, dir_):.1f}) — logo, hook ou legenda estão "
+                          "saindo da coluna do vídeo, que deve ficar limpa",
+                          round(max(esq, dir_), 1))
+                    break
 
         # ── a faixa da mídia está preenchida? ───────────────────────────────
         marcar("faixa_preenchida", "passou")

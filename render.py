@@ -106,7 +106,7 @@ SUPER = 2                      # a placa é renderizada em 2x: sobra de pixel
 # Os valores abaixo são os MEDIDOS, pra o render sair parecido de saída — mas
 # quem manda continua sendo o .env, e é lá que se ajusta pros dois
 # renderizadores de uma vez.
-LOGO_X, LOGO_Y, LOGO_TAM = 100, 196, 120
+LOGO_X, LOGO_Y, LOGO_TAM = 100, 222, 120
 NOME_FONT, HANDLE_FONT = 56, 46
 TEXTO_DX, SELO_DX, SELO_TAM = 16, 12, 46
 
@@ -386,10 +386,28 @@ def _layout(edl: dict, imgs: list, avisos: list) -> dict:
     nicho = (edl.get("template") or {}).get("nicho") or "geral"
     claro, cor = _cor_fundo(nicho)
 
+    # A CAIXA DA MÍDIA É CALCULADA PRIMEIRO, porque ela define a COLUNA.
+    #
+    # Isto foi o 4º acerto do template e o mais estrutural: no post publicado a
+    # logo e o hook começam EXATAMENTE na borda esquerda do vídeo, e o hook
+    # nunca passa da borda direita. A coluna do texto É a coluna do vídeo.
+    # Eu vinha usando margens absolutas (LOGO_X=100, HK_MARGEM=55) enquanto a
+    # caixa do vídeo começa em 119 — resultado: logo e hook vazando pras tarjas
+    # brancas laterais, que são parte do template e devem ficar limpas. O Dre:
+    # "tem que ficar em cima do vídeo, perfeitamente simétrico, não pode ficar
+    # saindo pras pontas brancas".
+    #
+    # Amarrando os dois, a simetria deixa de ser um número pra acertar e passa
+    # a ser consequência: mude VIDEO_W_FRAC e a coluna inteira acompanha.
+    largura_v = int(LARG * VIDEO_W_FRAC)
+    h_midia = int(largura_v * VIDEO_ASPECTO)
+    y_midia = int(os.environ.get("VIDEO_Y", VIDEO_Y))
+    x_midia = (LARG - largura_v) // 2
+
     d = ImageDraw.Draw(Image.new("RGBA", (LARG, ALT)))
     hook_txt = next((t.get("texto", "") for t in edl["trilhas"]["texto"]
                      if t.get("estilo") == "hook"), "")
-    larg_max = LARG - HK_MARGEM - HK_MARGEM_DIR
+    larg_max = largura_v
 
     # o template real reduz a fonte antes de aceitar uma 3ª linha (HK_FONT_MIN):
     # hook em 3 linhas empurra o rodapé pra cima do cabeçalho
@@ -404,11 +422,6 @@ def _layout(edl: dict, imgs: list, avisos: list) -> dict:
                       f"{HK_FONT_MIN}px — o storyboard precisa escrever mais "
                       f"curto: {hook_txt[:70]!r}")
 
-    largura_v = int(LARG * VIDEO_W_FRAC)
-    h_midia = int(largura_v * VIDEO_ASPECTO)
-    y_midia = int(os.environ.get("VIDEO_Y", VIDEO_Y))
-    x_midia = (LARG - largura_v) // 2
-
     y_cta = int(os.environ.get("CTA_Y", CTA_Y))
     if y_cta < y_midia + h_midia + 20:
         avisos.append(
@@ -416,7 +429,7 @@ def _layout(edl: dict, imgs: list, avisos: list) -> dict:
             f"(y={y_midia + h_midia}) — no template publicado há uma faixa "
             "limpa entre os dois. Ajuste VIDEO_Y / VIDEO_W_FRAC / CTA_Y")
 
-    piso_hook = LOGO_Y + LOGO_TAM + 20
+    piso_hook = int(os.environ.get("LOGO_Y", LOGO_Y)) + LOGO_TAM + 20
     y_hook = max(piso_hook,
                  y_midia - HK_GAP_VIDEO - len(linhas) * HK_ALTURA_LINHA)
     if y_hook == piso_hook and hook_txt:
@@ -567,7 +580,9 @@ def _camada_marca(edl: dict, lay: dict, destino: Path, avisos: list) -> Path:
     d.rectangle((x1, y0, LARG, y1), fill=fundo)       # 18% que a mídia não usa
 
     # ── cabeçalho ───────────────────────────────────────────────────────────
-    logo_x = int(os.environ.get("LOGO_X", LOGO_X))
+    # a coluna da marca é a coluna do vídeo (ver _layout): LOGO_X e HK_MARGEM
+    # continuam existindo como override, mas o padrão agora ACOMPANHA a caixa
+    logo_x = int(os.environ.get("LOGO_X", lay["x_midia"]))
     logo_y = int(os.environ.get("LOGO_Y", LOGO_Y))
     logo_tam = int(os.environ.get("LOGO_TAM", LOGO_TAM))
     arq_logo = BRAND_DIR / (tp.get("logo") or "logo_ts.png")
@@ -617,7 +632,7 @@ def _camada_marca(edl: dict, lay: dict, destino: Path, avisos: list) -> Path:
 
     # ── hook: rodapé ancorado logo acima do vídeo ───────────────────────────
     f_hook = _fonte(lay["hook_font"])
-    margem_h = int(os.environ.get("HK_MARGEM", HK_MARGEM))
+    margem_h = int(os.environ.get("HK_MARGEM", lay["x_midia"]))
     for i, linha in enumerate(lay["hook_linhas"]):
         _texto_rico(camada, d, margem_h,
                     lay["y_hook"] + i * HK_ALTURA_LINHA + HK_ALTURA_LINHA // 2,
