@@ -1290,6 +1290,33 @@ num lugar só, e os dois renderizadores obedecem.
 usa a MESMA caixa mas encaixa a foto inteira dentro dela. Geometria idêntica,
 produto intacto.
 
+⚠️⚠️ **E MESMO ASSIM AS ALTURAS ESTAVAM ERRADAS — 3ª rodada.** Os padrões do
+código não são o que está publicado: o `.env` da VPS já foi calibrado à mão e o
+bloco inteiro desce ~90px. Medindo um Reel real por FRAÇÃO DA ALTURA do quadro:
+
+| marca | fração medida | era no código | virou |
+|---|---|---|---|
+| topo da logo | 0,102 | `LOGO_Y=112` | **196** |
+| nome "TopShop" | 0,125 | `logo_y-12` | **`logo_y+44`** |
+| @handle | 0,161 | `logo_y+42` | **`logo_y+113`** |
+| topo do vídeo | 0,295 | `VIDEO_Y=470` | **566** |
+| rodapé do vídeo | 0,877 | 0,909 (`W_FRAC` 0,82) | **0,879 (`W_FRAC` 0,78)** |
+| CTA | ~0,92 | `CTA_Y=1672` | **1745** |
+
+Duas lições distintas aqui:
+  - **O nome e o @ não erraram por descuido: erraram por CONTEXTO.** No template
+    são `TextClip` do MoviePy, e posicionar o CANTO de um clipe não é posicionar
+    a LETRA — o clipe carrega folga própria acima do glifo. Copiar `logo_y+42`
+    cru subia o @ em ~48px e abria um vão branco entre cabeçalho e hook. Número
+    certo, contexto errado. Mesma armadilha do selo verificado.
+  - **O `.env` é a autoridade, não o padrão do código.** Os valores acima são os
+    MEDIDOS, pra o render sair parecido de saída; `LOGO_Y`, `NOME_DY`,
+    `HANDLE_DY`, `VIDEO_Y`, `VIDEO_W_FRAC` e `CTA_Y` continuam mandando.
+
+E entrou uma trava: se o CTA encostar no rodapé do vídeo (< 20px), o render
+avisa. Foi um defeito real desta rodada — 14px de folga — e é exatamente o tipo
+que se vê num quadro e não se vê no código.
+
 Do print, o que se confirmou: **fundo branco**, cabeçalho
 pequeno no alto (logo redonda · TopShop · selo azul · @handle em cinza),
 **HOOK EM PRETO alinhado à esquerda**, a mídia como um **bloco de largura
