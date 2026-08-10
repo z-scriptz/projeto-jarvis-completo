@@ -65,6 +65,8 @@ DIF_MOLDURA = 2.0         # a moldura é a MESMA imagem o vídeo inteiro: qualqu
 DIF_MIDIA_MIN = 1.2       # abaixo disto a mídia está praticamente parada
 DESVIO_MORTO = 6.0        # desvio-padrão de um quadro chapado
 CONTRASTE_MIN = 28.0      # desvio-padrão na faixa da legenda com texto legível
+TOL_TARJA = 24            # quanto logo/hook podem avançar sobre a tarja lateral
+                          # antes de ser vazamento (no template real avançam 11)
 
 
 def _log(m):
@@ -254,14 +256,25 @@ def conferir(video: Path, n_quadros: int = N_QUADROS, contato: bool = False) -> 
         # pra lá com margens absolutas (LOGO_X=100, HK_MARGEM=55) enquanto a
         # caixa começa em 119, e o Dre pegou no olho — duas vezes. Tarja com
         # conteúdo tem desvio-padrão alto; tarja limpa é chapada.
+        # A RÉGUA É O VÍDEO, NÃO A CONFIGURAÇÃO. Minha 1ª tentativa aqui
+        # tirava a borda de `x_coluna` = o mais à esquerda entre vídeo, logo e
+        # hook — e com isso a checagem PASSOU a aprovar o vazamento: eu mandei
+        # o hook pra margem 30 de propósito e ela simplesmente moveu a régua
+        # junto. Checagem que lê o limite da mesma config que produziu o
+        # defeito não pode pegar defeito nenhum. Nunca.
+        #
+        # A borda é a caixa do VÍDEO, com uma tolerância FIXA: no template real
+        # logo (86) e hook (89) avançam ~11px sobre a tarja de propósito, e
+        # isso é template, não erro. 24px cobre a folga real e não cobre um
+        # vazamento de verdade.
         x0 = lay.get("x_midia")
         lm = lay.get("larg_midia")
-        if x0 and lm and x0 > 6:
+        if x0 and lm and x0 > TOL_TARJA + 6:
             x1_t = x0 + lm
             marcar("tarjas_limpas", "passou")
             for t, im in imgs:
-                esq = _stat(im.crop((0, 0, x0 - 4, A)))[1]
-                dir_ = _stat(im.crop((x1_t + 4, 0, L, A)))[1]
+                esq = _stat(im.crop((0, 0, x0 - TOL_TARJA, A)))[1]
+                dir_ = _stat(im.crop((min(L - 1, x1_t + TOL_TARJA), 0, L, A)))[1]
                 if max(esq, dir_) > 8.0:
                     achar("tarjas_limpas", "alta",
                           f"{t}s: há conteúdo nas tarjas laterais (desvio "

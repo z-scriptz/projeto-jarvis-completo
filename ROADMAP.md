@@ -1338,6 +1338,46 @@ certo passou. É a 3ª checagem que nasce de um defeito que o DRE viu antes de
 mim — e a razão de o `conferir_render` existir: o que um humano pega no olho
 duas vezes, a máquina tem que passar a pegar sozinha.
 
+### ✅ FIM DA ADIVINHAÇÃO — o `.env` da VPS (09/08)
+
+O Dre mandou o `grep` do `.env` e ele é a autoridade: é com esses números que os
+vídeos que estão no ar foram feitos. **Duas rodadas minhas foram gastas medindo
+print quando bastava pedir isto.**
+
+    VIDEO_Y=540   HK_GAP_VIDEO=20   HK_MARGEM=89   HK_MARGEM_DIR=100
+    HK_FONT=46    HK_ALT_LINHA=62   LOGO_X=86      LOGO_Y=210
+    LOGO_TAM=118  NOME_FONT=52      HANDLE_FONT=42 CTA_Y=1740
+
+**Calibrando minha confiança em "medir por fração de altura de um print":**
+
+| campo | eu medi | é | erro |
+|---|---|---|---|
+| `VIDEO_Y` | 566 | **540** | +26 |
+| `LOGO_Y` | 222 | **210** | +12 |
+| `CTA_Y` | 1745 | **1740** | +5 |
+| `LOGO_X` | 119 (deduzi) | **86** | +33 |
+| `HK_MARGEM` | 119 (deduzi) | **89** | +30 |
+
+**A leitura VERTICAL do print aproximou bem; a HORIZONTAL não serviu.** Pior: eu
+tinha mexido no `VIDEO_W_FRAC` (0,82 → 0,78) pra fechar uma conta que só não
+fechava porque o `VIDEO_Y` estava errado — mudei o parâmetro certo pra compensar
+o parâmetro errado. Desfeito, voltou pro 0,82 do código.
+
+E uma pegadinha de nome: a variável é **`HK_ALT_LINHA`**, não `HK_ALTURA_LINHA`.
+Ler o nome errado é ler o padrão pra sempre, sem erro nenhum aparecer.
+
+⚠️ **A "coluna perfeitamente simétrica" NÃO é alinhamento exato:** no template
+real a logo (86) e o hook (89) avançam ~11px sobre a tarja em relação ao vídeo
+(97). É template, não erro — e o inspetor precisa saber disso.
+
+**E aí eu quase estraguei a checagem `tarjas_limpas` tentando acomodar isso.**
+Primeiro fiz a borda vir de `x_coluna` = o mais à esquerda entre vídeo, logo e
+hook. Testei mandando o hook pra margem 30 de propósito: **a checagem PASSOU** —
+ela moveu a régua junto com o defeito. **Checagem que lê o limite da mesma
+configuração que produziu o defeito não pega defeito nenhum, nunca.** A régua
+agora é a caixa do VÍDEO com tolerância FIXA (24px): cobre os 11px reais do
+template e reprova o vazamento (desvio 22,2).
+
 Do print, o que se confirmou: **fundo branco**, cabeçalho
 pequeno no alto (logo redonda · TopShop · selo azul · @handle em cinza),
 **HOOK EM PRETO alinhado à esquerda**, a mídia como um **bloco de largura

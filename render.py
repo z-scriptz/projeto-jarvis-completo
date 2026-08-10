@@ -97,44 +97,51 @@ SUPER = 2                      # a placa é renderizada em 2x: sobra de pixel
 # handle 34 (é 46), margem 52 (é 55), hook 46 (é 48), mídia na largura cheia
 # (é 82% centrada, em 3:4), topo da mídia calculado a partir do hook (é FIXO em
 # 470, e é o HOOK que sobe), CTA 👉 a 95px do pé (é 👇 em CTA_Y=1672).
-# ⚠️ ESTES TRÊS SÃO ALTURAS, E ALTURA O .ENV DA VPS SOBRESCREVE.
-# Os padrões do código (LOGO_Y=112, VIDEO_Y=470, CTA_Y=1672) NÃO são o que está
-# publicado: medindo um Reel real do @topshop.__ contra a altura do quadro, a
-# logo começa em ~0,102 da altura (≈196px), o vídeo em ~0,295 (≈566px) e o CTA
-# fica centrado em ~0,93 (≈1786px). Ou seja, o Dre já calibrou isso à mão no
-# .env e o bloco inteiro desce ~90px em relação ao padrão do código.
-# Os valores abaixo são os MEDIDOS, pra o render sair parecido de saída — mas
-# quem manda continua sendo o .env, e é lá que se ajusta pros dois
-# renderizadores de uma vez.
-LOGO_X, LOGO_Y, LOGO_TAM = 100, 222, 120
-NOME_FONT, HANDLE_FONT = 56, 46
-TEXTO_DX, SELO_DX, SELO_TAM = 16, 12, 46
+# ⚠️ OS PADRÕES ABAIXO SÃO OS DO .ENV DA VPS, não os do código nem os que eu
+# medi. O Dre mandou o `grep` do .env e ele é a autoridade — é com esses números
+# que os vídeos que estão no ar foram feitos. Duas rodadas minhas foram gastas
+# medindo print quando bastava pedir isto.
+#
+# O que a medição acertou e o que errou, pra calibrar minha confiança em
+# "medir por fração de altura de um screenshot":
+#   VIDEO_Y      medi 566   é 540    (+26)
+#   LOGO_Y       medi 222   é 210    (+12)
+#   CTA_Y        medi 1745  é 1740   (+5)   ← as alturas ficaram perto
+#   LOGO_X       deduzi 119 é 86     (+33)  ← as larguras, não
+#   HK_MARGEM    deduzi 119 é 89     (+30)
+# Ou seja: a leitura vertical de um print serve pra aproximar; a horizontal
+# não serviu. E eu tinha ainda MEXIDO no VIDEO_W_FRAC (0,82 → 0,78) pra fechar
+# uma conta que só não fechava porque o VIDEO_Y estava errado — desfeito.
+LOGO_X = int(os.environ.get("LOGO_X", 86))
+LOGO_Y = int(os.environ.get("LOGO_Y", 210))
+LOGO_TAM = int(os.environ.get("LOGO_TAM", 118))
+NOME_FONT = int(os.environ.get("NOME_FONT", 52))
+HANDLE_FONT = int(os.environ.get("HANDLE_FONT", 42))
+TEXTO_DX = int(os.environ.get("TEXTO_DX", 16))
+SELO_DX = int(os.environ.get("SELO_DX", 12))
+SELO_TAM = 46
 
-HK_MARGEM, HK_MARGEM_DIR = 55, 45
-HK_FONT, HK_FONT_MIN = 48, 34
-HK_ALTURA_LINHA = 62
-HK_GAP_VIDEO = 16              # respiro entre o rodapé do hook e o topo do vídeo
-HK_EMOJI_TAM = 40
+HK_MARGEM = int(os.environ.get("HK_MARGEM", 89))
+HK_MARGEM_DIR = int(os.environ.get("HK_MARGEM_DIR", 100))
+HK_FONT = int(os.environ.get("HK_FONT", 46))
+HK_FONT_MIN = int(os.environ.get("HK_FONT_MIN", 34))
+# atenção ao nome: a variável é HK_ALT_LINHA, não HK_ALTURA_LINHA. Ler o nome
+# errado é ler o padrão sempre, e o .env do Dre nunca chegaria aqui.
+HK_ALTURA_LINHA = int(os.environ.get("HK_ALT_LINHA", 62))
+HK_GAP_VIDEO = int(os.environ.get("HK_GAP_VIDEO", 20))
+HK_EMOJI_TAM = int(os.environ.get("HK_EMOJI", 40))
 
-# A FAIXA DA MÍDIA É FIXA, e é o hook que se move.
-# Eu tinha invertido: calculava o topo da mídia a partir do tamanho do hook, o
-# que faz a mídia dançar de vídeo pra vídeo conforme o hook tem 1 ou 2 linhas —
-# e num feed em grade isso salta aos olhos. O template real ancora o RODAPÉ do
-# hook logo acima do vídeo: a mídia fica sempre no mesmo lugar e o hook cresce
-# pra cima.
-VIDEO_Y = 566
-VIDEO_W_FRAC = 0.78            # 842px de largura num quadro de 1080.
-                               # O código traz 0.82; com ele o bloco fica 1180
-                               # de altura e o rodapé do vídeo bate no CTA. As
-                               # TRÊS marcas verticais que dá pra medir no post
-                               # real (topo do vídeo 0,295 · rodapé 0,877 · CTA
-                               # 0,93 da altura) concordam entre si com 0,78.
+# A FAIXA DA MÍDIA É FIXA, e é o hook que se move: o rodapé do hook é ancorado
+# logo acima do vídeo, então a mídia fica sempre no mesmo lugar e o hook cresce
+# pra cima. Com 1 ou 2 linhas o bloco de vídeo não dança entre um post e outro.
+VIDEO_Y = int(os.environ.get("VIDEO_Y", 540))
+VIDEO_W_FRAC = float(os.environ.get("VIDEO_W_FRAC", 0.82))   # 885px de largura
 VIDEO_ASPECTO = 4 / 3          # 3:4 -> 1180px de altura
 
 CTA_TEXTO = 'COMENTE "QUERO"'
 CTA_EMOJI = "👇"               # é 👇, não 👉 — o CTA aponta pro campo de comentário
-CTA_FONT = 52
-CTA_Y = 1745
+CTA_FONT = int(os.environ.get('CTA_FONT', 52))
+CTA_Y = int(os.environ.get('CTA_Y', 1740))
 
 # A NotoColorEmoji é bitmap (CBDT): o Pillow só a abre no tamanho da strike.
 # Desenha-se em 109 e reduz-se — é o que faz o emoji sair colorido e nítido.
@@ -401,13 +408,13 @@ def _layout(edl: dict, imgs: list, avisos: list) -> dict:
     # a ser consequência: mude VIDEO_W_FRAC e a coluna inteira acompanha.
     largura_v = int(LARG * VIDEO_W_FRAC)
     h_midia = int(largura_v * VIDEO_ASPECTO)
-    y_midia = int(os.environ.get("VIDEO_Y", VIDEO_Y))
+    y_midia = VIDEO_Y
     x_midia = (LARG - largura_v) // 2
 
     d = ImageDraw.Draw(Image.new("RGBA", (LARG, ALT)))
     hook_txt = next((t.get("texto", "") for t in edl["trilhas"]["texto"]
                      if t.get("estilo") == "hook"), "")
-    larg_max = largura_v
+    larg_max = LARG - HK_MARGEM - HK_MARGEM_DIR
 
     # o template real reduz a fonte antes de aceitar uma 3ª linha (HK_FONT_MIN):
     # hook em 3 linhas empurra o rodapé pra cima do cabeçalho
@@ -422,14 +429,14 @@ def _layout(edl: dict, imgs: list, avisos: list) -> dict:
                       f"{HK_FONT_MIN}px — o storyboard precisa escrever mais "
                       f"curto: {hook_txt[:70]!r}")
 
-    y_cta = int(os.environ.get("CTA_Y", CTA_Y))
+    y_cta = CTA_Y
     if y_cta < y_midia + h_midia + 20:
         avisos.append(
             f"o CTA (y={y_cta}) encosta no rodapé do vídeo "
             f"(y={y_midia + h_midia}) — no template publicado há uma faixa "
             "limpa entre os dois. Ajuste VIDEO_Y / VIDEO_W_FRAC / CTA_Y")
 
-    piso_hook = int(os.environ.get("LOGO_Y", LOGO_Y)) + LOGO_TAM + 20
+    piso_hook = LOGO_Y + LOGO_TAM + 20
     y_hook = max(piso_hook,
                  y_midia - HK_GAP_VIDEO - len(linhas) * HK_ALTURA_LINHA)
     if y_hook == piso_hook and hook_txt:
@@ -441,6 +448,13 @@ def _layout(edl: dict, imgs: list, avisos: list) -> dict:
             "y_hook": y_hook,
             "x_midia": x_midia, "larg_midia": largura_v,
             "y_midia": y_midia, "h_midia": h_midia,
+            # a coluna do template é a MAIS À ESQUERDA entre vídeo, logo e
+            # hook. No .env real a logo está em 86 e o hook em 89, enquanto o
+            # vídeo começa em 97 — ou seja, os dois avançam ~10px sobre a
+            # tarja de propósito. O inspetor precisa saber disso, senão acusa
+            # de vazamento um template que está certo. Alarme falso desmoraliza
+            # a checagem inteira, e checagem desmoralizada ninguém lê.
+            "x_coluna": min(x_midia, LOGO_X, HK_MARGEM),
             "y_cta": y_cta}
 
 
@@ -582,9 +596,9 @@ def _camada_marca(edl: dict, lay: dict, destino: Path, avisos: list) -> Path:
     # ── cabeçalho ───────────────────────────────────────────────────────────
     # a coluna da marca é a coluna do vídeo (ver _layout): LOGO_X e HK_MARGEM
     # continuam existindo como override, mas o padrão agora ACOMPANHA a caixa
-    logo_x = int(os.environ.get("LOGO_X", lay["x_midia"]))
-    logo_y = int(os.environ.get("LOGO_Y", LOGO_Y))
-    logo_tam = int(os.environ.get("LOGO_TAM", LOGO_TAM))
+    logo_x = LOGO_X
+    logo_y = LOGO_Y
+    logo_tam = LOGO_TAM
     arq_logo = BRAND_DIR / (tp.get("logo") or "logo_ts.png")
     if arq_logo.exists():
         camada.alpha_composite(_logo_circular(arq_logo, logo_tam), (logo_x, logo_y))
@@ -592,8 +606,8 @@ def _camada_marca(edl: dict, lay: dict, destino: Path, avisos: list) -> Path:
         avisos.append(f"logo '{arq_logo.name}' não existe em {BRAND_DIR} — "
                       "o vídeo sai SEM a marca no canto")
 
-    texto_x = logo_x + logo_tam + int(os.environ.get("TEXTO_DX", TEXTO_DX))
-    f_nome = _fonte(int(os.environ.get("NOME_FONT", NOME_FONT)))
+    texto_x = logo_x + logo_tam + TEXTO_DX
+    f_nome = _fonte(NOME_FONT)
     # ALTURA DO NOME E DO @ — CALIBRADA CONTRA O POST REAL, não copiada crua.
     # O template posiciona o clipe em (texto_x, logo_y-12) e (texto_x, logo_y+42),
     # mas ali é TextClip do MoviePy, que carrega folga própria acima da letra:
@@ -615,7 +629,7 @@ def _camada_marca(edl: dict, lay: dict, destino: Path, avisos: list) -> Path:
         # texto é centrado na linha, e copiar o número cru fazia o selo descer
         # em cima do @handle — apareceu no quadro de revisão.
         camada.alpha_composite(
-            s, (texto_x + larg_nome + int(os.environ.get("SELO_DX", SELO_DX)),
+            s, (texto_x + larg_nome + SELO_DX,
                 logo_y + int(os.environ.get("NOME_DY", 44)) - SELO_TAM // 2))
     else:
         avisos.append("verificado.png não existe — sai sem o selo azul")
@@ -625,14 +639,14 @@ def _camada_marca(edl: dict, lay: dict, destino: Path, avisos: list) -> Path:
         avisos.append("o EDL veio SEM handle — confira contas.json pro nicho "
                       f"'{tp.get('nicho')}'")
     else:
-        f_h = _fonte(int(os.environ.get("HANDLE_FONT", HANDLE_FONT)))
+        f_h = _fonte(HANDLE_FONT)
         _texto_rico(camada, d, texto_x,
                     logo_y + int(os.environ.get("HANDLE_DY", 113)), handle,
                     f_h, cinza, contorno, cor_contorno)
 
     # ── hook: rodapé ancorado logo acima do vídeo ───────────────────────────
     f_hook = _fonte(lay["hook_font"])
-    margem_h = int(os.environ.get("HK_MARGEM", lay["x_midia"]))
+    margem_h = HK_MARGEM
     for i, linha in enumerate(lay["hook_linhas"]):
         _texto_rico(camada, d, margem_h,
                     lay["y_hook"] + i * HK_ALTURA_LINHA + HK_ALTURA_LINHA // 2,
@@ -645,7 +659,7 @@ def _camada_marca(edl: dict, lay: dict, destino: Path, avisos: list) -> Path:
     cta = os.environ.get("CTA_TEXTO", CTA_TEXTO)
     if cta:
         cta = f"{cta} {os.environ.get('CTA_EMOJI', CTA_EMOJI)}".strip()
-        f_cta = _fonte(int(os.environ.get("CTA_FONT", CTA_FONT)))
+        f_cta = _fonte(CTA_FONT)
         larg = _texto_rico(None, d, 0, 0, cta, f_cta, None, desenhar=False)
         _texto_rico(camada, d, (LARG - larg) // 2,
                     lay["y_cta"] + f_cta.size // 2, cta, f_cta,
