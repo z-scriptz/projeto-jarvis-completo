@@ -118,7 +118,12 @@ LOGO_TAM = int(os.environ.get("LOGO_TAM", 118))
 NOME_FONT = int(os.environ.get("NOME_FONT", 52))
 HANDLE_FONT = int(os.environ.get("HANDLE_FONT", 42))
 TEXTO_DX = int(os.environ.get("TEXTO_DX", 16))
-SELO_DX = int(os.environ.get("SELO_DX", 4))    # colado no nome, como no post
+SELO_DX = int(os.environ.get("SELO_DX", -2))
+# NEGATIVO de propósito: `textlength` inclui o avanço lateral da última letra,
+# então "colar" o selo exige entrar um pouco nesse espaço vazio. Com 12 e
+# depois 4 o Dre continuou vendo o selo longe. Em vez de tentar um terceiro
+# palpite, renderizei a faixa do cabeçalho em -10, -6, -2 e +2 e comparei lado
+# a lado: -10 e -6 cobrem a perna do "p", +2 ainda abre vão, -2 encosta limpo.
 SELO_TAM = 46
 
 HK_MARGEM = int(os.environ.get("HK_MARGEM", 89))

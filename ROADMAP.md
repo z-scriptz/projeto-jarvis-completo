@@ -1826,6 +1826,23 @@ e "medi e não dá" é o que separa uma decisão de uma desculpa.**
 **Enquanto isso o piloto não parou:** 1 foto + 3 enquadramentos derivados por
 região de detalhe, e `--encaixe cover` pra foto com margem sobrando.
 
+### 🎙️ O HOOK SAIU DA NARRAÇÃO (10/08)
+
+O Dre ouviu o piloto do teclado e pegou: *"no início a narração repete o hook,
+vamos remover e já começar direto"*. Está certo, e o desperdício era grande —
+**o hook fica ESCRITO no alto o vídeo inteiro** (é template), então narrá-lo
+gastava os 3 primeiros segundos, os únicos que decidem se a pessoa fica,
+repetindo em voz o que ela acabou de ler com os olhos.
+
+`NARRAR_HOOK = False` no `edl.py` (`--narrar-hook` volta atrás). A seção do
+hook continua existindo como **batida visual** de 0,9s — dois cortes rápidos
+que abrem em movimento — mas sem voz. ⚠️ E a duração precisou encolher junto:
+seção sem fala mantém o tempo do roteiro, então deixar 2,5s ali criaria
+silêncio de abertura. 0,9s abre o vídeo e passa longe do `SILENCIO_MAX` de 1,2s.
+
+Medido no mesmo roteiro: 16,40s → **13,93s**, `silencio_morto` 0,0, ✅ PASSOU.
+O vídeo começa com a história em vez de com o eco do título.
+
 ### 🔒 TEMPLATE V1.0 — CONGELADO (10/08)
 
 O ChatGPT tem razão: *"não deixa o Claude ficar melhorando o design
@@ -1833,7 +1850,13 @@ infinitamente"*. Foram QUATRO rodadas de correção do Dre no mesmo arquivo, e
 todas as quatro eram legítimas — mas o retorno já caiu. **Template fechado.**
 Só se mexe com defeito reportado, não com "acho que fica melhor".
 
-    logo 86,210 (118px) · nome +44 · @ +96 · selo colado (SELO_DX 4)
+O último ajuste foi o selo, e vale como método: depois de errar com 12 e com 4,
+em vez de um terceiro palpite eu **renderizei a faixa do cabeçalho em -10, -6,
+-2 e +2 e comparei lado a lado**. -10 e -6 cobrem a perna do "p", +2 ainda abre
+vão, **-2 encosta limpo**. Quatro renders custam menos que quatro rodadas de
+ida e volta com o Dre — e foram quatro, no mesmo arquivo.
+
+    logo 86,210 (118px) · nome +44 · @ +96 · selo SELO_DX -2
     hook: coluna do vídeo, 2 linhas, 46px caindo até 34
     mídia: x 97→982 · y 540→1720 (82% em 3:4)
     CTA: COMENTE "QUERO" 👇 · CTA_Y 1740 · CTA_DY -8

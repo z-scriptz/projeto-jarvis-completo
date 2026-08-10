@@ -268,8 +268,23 @@ def _template(nicho: str) -> dict:
 #                   está aqui como MODO e não como padrão escondido.
 MODOS_AUDIO = ("narracao", "viral", "narracao_viral")
 
+# O HOOK NÃO É NARRADO — e isso é decisão, não esquecimento.
+#
+# No template publicado o hook fica ESCRITO no alto, e fica o vídeo inteiro.
+# Narrá-lo faz a voz ler em voz alta o que a pessoa acabou de ler sozinha, e
+# gasta os 3 primeiros segundos — os únicos que decidem se ela continua —
+# repetindo informação. O Dre ouviu e foi direto: "no início a narração repete
+# o hook, vamos remover e já começar direto".
+#
+# A seção do hook continua existindo como BATIDA VISUAL: dois cortes rápidos
+# que abrem o vídeo em movimento. Só que curta, porque sem fala ela é silêncio —
+# e silêncio no começo é diferente de silêncio no meio, mas 2,5s ainda é muito.
+NARRAR_HOOK = False
+BATIDA_HOOK = 0.9              # segundos de abertura visual, sem voz
 
-def montar(sb: dict, modo_audio: str = "narracao") -> dict:
+
+def montar(sb: dict, modo_audio: str = "narracao",
+           narrar_hook: bool = NARRAR_HOOK) -> dict:
     """Storyboard -> EDL. Não chama IA: é decisão de edição, não de criação."""
     visual, texto_tr, audio, sfx_usados = [], [], [], 0
     secoes = []                    # onde cada CENA começa e termina
@@ -278,6 +293,9 @@ def montar(sb: dict, modo_audio: str = "narracao") -> dict:
     # ── HOOK ────────────────────────────────────────────────────────────────
     h = sb.get("hook") or {}
     dur_hook = float(h.get("duracao") or 2.5)
+    if not narrar_hook:
+        # sem voz, a abertura vira batida visual curta em vez de 2,5s calados
+        dur_hook = min(dur_hook, BATIDA_HOOK)
     asset_hook = "asset_1"
     n_cortes = _cortes(dur_hook, "hook")
     passo = dur_hook / n_cortes
@@ -291,12 +309,14 @@ def montar(sb: dict, modo_audio: str = "narracao") -> dict:
                        "secao": "hook"})
         t += passo
     secoes.append({"tipo": "hook", "inicio": 0.0, "fim": round(t, 3),
-                   "tem_narracao": bool((h.get("texto") or "").strip())})
+                   "tem_narracao": bool(narrar_hook
+                                        and (h.get("texto") or "").strip())})
     texto_tr.append({"inicio": 0.0, "fim": round(dur_hook, 2),
                      "texto": h.get("texto", ""), "estilo": "hook",
                      "posicao": "centro_alto"})
-    audio.append({"inicio": 0.0, "tipo": "narracao",
-                  "texto": h.get("texto", "")})
+    if narrar_hook:
+        audio.append({"inicio": 0.0, "tipo": "narracao",
+                      "texto": h.get("texto", "")})
     if sfx_usados < MAX_SFX:
         audio.append({"inicio": 0.0, "tipo": "sfx", "som": "whoosh"})
         sfx_usados += 1
@@ -521,6 +541,9 @@ def main():
     p.add_argument("--salvar", action="store_true")
     p.add_argument("--audio", choices=MODOS_AUDIO, default="narracao",
                    help="narracao (voz conduz) ou viral (som em alta conduz)")
+    p.add_argument("--narrar-hook", action="store_true",
+                   help="volta a narrar o hook (padrão: não, ele já está "
+                        "escrito na tela o vídeo inteiro)")
     args = p.parse_args()
 
     if args.todos:
@@ -542,7 +565,7 @@ def main():
             _log(f"não li {f.name}: {e}")
             ruins += 1
             continue
-        edl = montar(sb, args.audio)
+        edl = montar(sb, args.audio, narrar_hook=args.narrar_hook)
         problemas = validar(edl)
         _resumo(edl)
         if problemas:
