@@ -77,6 +77,46 @@ def _fotos_do_item(item: dict, pasta: Path) -> list:
     return fora
 
 
+def _telegram(video: Path, legenda: str, contato: Path = None) -> bool:
+    """Manda o MP4 pro chat de admin. Best-effort, nunca quebra o piloto.
+
+    Existe por um motivo bobo e real: o vídeo nasce na VPS e quem julga está no
+    celular. O Dre tentou `./video.mp4` no shell e levou "Permission denied" —
+    arquivo de vídeo não é executável, e não há navegador ali. Usa as MESMAS
+    variáveis do resto do projeto (TELEGRAM_BOT_TOKEN + TELEGRAM_ALERT_CHAT_ID),
+    e o chat de admin, nunca o grupo público de achadinhos.
+    """
+    import os
+    tok = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    chat = (os.getenv("TELEGRAM_ALERT_CHAT_ID")
+            or os.getenv("TELEGRAM_CHAT_ID") or "").strip()
+    if not tok or not chat:
+        _log("   Telegram não configurado (TELEGRAM_BOT_TOKEN / "
+             "TELEGRAM_ALERT_CHAT_ID) — o vídeo ficou só no disco")
+        return False
+    try:
+        import requests
+        with video.open("rb") as f:
+            r = requests.post(f"https://api.telegram.org/bot{tok}/sendVideo",
+                              timeout=180, data={"chat_id": chat,
+                                                 "caption": legenda[:1020]},
+                              files={"video": (video.name, f, "video/mp4")})
+        if r.status_code != 200:
+            _log(f"   Telegram HTTP {r.status_code}: {r.text[:160]}")
+            return False
+        if contato and contato.exists():
+            with contato.open("rb") as f:
+                requests.post(f"https://api.telegram.org/bot{tok}/sendPhoto",
+                              timeout=120, data={"chat_id": chat,
+                                                 "caption": "quadros do piloto"},
+                              files={"photo": (contato.name, f, "image/png")})
+        _log("   📲 vídeo enviado no Telegram")
+        return True
+    except Exception as e:
+        _log(f"   Telegram falhou: {str(e)[:110]}")
+        return False
+
+
 def _item_da_fila(indice: int) -> dict:
     import storyboard as SB
     if not SB.FILA.exists():
@@ -106,6 +146,8 @@ def main():
                    help="contain: foto inteira, sobra fundo. cover: preenche a "
                         "caixa cortando as laterais")
     p.add_argument("--mudo", action="store_true")
+    p.add_argument("--telegram", action="store_true",
+                   help="manda o MP4 e a folha de contato no chat de admin")
     args = p.parse_args()
 
     import storyboard as SB
@@ -207,6 +249,13 @@ def main():
                 print(f"    · {x}")
         print(f"\n  vídeo    {alvo}")
         print(f"  quadros  {r['pasta_quadros']}")
+        if args.telegram:
+            _telegram(alvo,
+                      f"{icone} {r['veredito'].upper()} · {nome[:70]}\n"
+                      f"{rel['duracao_arquivo']}s · {rel['cortes']} cortes · "
+                      f"voz {'/'.join(rel.get('voz') or ['—'])}",
+                      Path(r["pasta_quadros"]) / "_contato.png")
+
         print("\n  NADA FOI POSTADO. Assista antes de decidir qualquer coisa.")
         return 1 if r["veredito"] == "reprovado" else 0
     finally:

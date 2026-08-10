@@ -93,6 +93,28 @@ PROIBIDO = [
      "superlativo não verificável"),
 ]
 
+# ORÇAMENTO DE TEXTO — os dois números que faltavam, e o piloto na VPS provou.
+#
+# HOOK: o template dá DUAS linhas entre a marca e o vídeo. O roteiro escreveu
+# 110 caracteres e o render teve que encolher a fonte até 34px e mesmo assim
+# saiu em 3 linhas, encostando no cabeçalho. Medido com a fonte do projeto:
+# ~74 caracteres cabem em 2 linhas a 46px. 70 deixa folga pro emoji.
+HOOK_MAX = 70
+HOOK_LIMITE = 84               # acima disto o roteiro é REPROVADO, não avisado
+
+# NARRAÇÃO: 15 caracteres por segundo de fala. Não é chute — é o mesmo número
+# do edl.py, e o ElevenLabs confirmou no piloto: 108 caracteres viraram 7,18s
+# (15,0 c/s) e 81 viraram 5,02s (16,1 c/s).
+#
+# O defeito que isto conserta: o roteiro declarava cena de 4,7s e escrevia
+# narração de 7,2s de fala. O render conforma esticando a linha do tempo, então
+# nada quebra — mas o vídeo de 20s planejados saiu com 27,3s, e a decisão de
+# ritmo do storyboard virou letra morta. Quem escreve a fala tem que caber no
+# tempo que ele mesmo pediu.
+CPS = 15.0
+FOLGA_FALA = 1.35              # 35% de tolerância; acima disso é reprovado
+
+
 _PROMPT = """Você é diretor de vídeos curtos para Reels de achadinhos.
 
 PRODUTO: {nome}
@@ -127,7 +149,12 @@ REGRAS OBRIGATÓRIAS:
    vídeo virar propaganda no segundo 3.
      ruim: "Conheça a saia que une a delicadeza do tricot ao conforto do modal"
      bom:  "Botei pra ver e o caimento me pegou de surpresa — não marca nada"
-9. Responda SÓ o JSON, sem cercas de código e sem comentários.
+9. O HOOK tem no máximo {hook_max} CARACTERES, emoji incluído. Ele é desenhado
+   em duas linhas no alto do vídeo; passando disso, encosta na marca.
+10. A NARRAÇÃO DE CADA CENA TEM QUE CABER NA DURAÇÃO QUE VOCÊ MESMO DEU:
+   no máximo 15 caracteres por segundo. Cena de 4 segundos = até 60
+   caracteres de narração. Escrever mais estica o vídeo inteiro.
+11. Responda SÓ o JSON, sem cercas de código e sem comentários.
 """
 
 
@@ -141,7 +168,7 @@ def _por_ia(nome, preco, n_imagens, dur):
         import requests
         prompt = _PROMPT.format(nome=nome, preco=preco or "não informado",
                                 n=n_imagens, dur=dur,
-                                movs=", ".join(MOVIMENTOS),
+                                hook_max=HOOK_MAX, movs=", ".join(MOVIMENTOS),
                                 dmin=DUR_ALVO[0], dmax=DUR_ALVO[1])
         modelo = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
         r = requests.post(
@@ -258,6 +285,11 @@ def validar(sb, n_assets):
     hook = (sb.get("hook") or {}).get("texto", "")
     if not hook.strip():
         p.append("hook vazio")
+    elif len(hook.strip()) > HOOK_LIMITE:
+        # o render encolhe a fonte até 34px pra tentar caber; passando daqui
+        # nem isso salva, e o hook sobe em cima do cabeçalho da marca
+        p.append(f"hook com {len(hook.strip())} caracteres (máx {HOOK_LIMITE}) "
+                 f"— não cabe em 2 linhas: {hook.strip()!r}")
     cenas = sb.get("cenas") or []
     if not cenas:
         p.append("nenhuma cena")
@@ -286,6 +318,12 @@ def validar(sb, n_assets):
             p.append(f"cena {i}: pede {a} mas só existem {n_assets} imagem(ns)")
         if c.get("movimento") not in MOVIMENTOS:
             p.append(f"cena {i}: movimento '{c.get('movimento')}' desconhecido")
+        # a fala tem que caber no tempo que a própria cena pediu
+        fala = len((c.get("narracao") or "").strip())
+        dur_c = float(c.get("duracao") or 0)
+        if fala and dur_c > 0 and fala > dur_c * CPS * FOLGA_FALA:
+            p.append(f"cena {i}: narração de {fala} caracteres (~"
+                     f"{fala / CPS:.1f}s de fala) numa cena de {dur_c:.1f}s")
 
     total = ((sb.get("hook") or {}).get("duracao", 0)
              + sum(c.get("duracao", 0) for c in cenas)

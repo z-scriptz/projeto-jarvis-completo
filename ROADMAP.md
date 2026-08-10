@@ -1501,6 +1501,45 @@ onde se erra um parâmetro e se perde meia hora culpando o render.
 ElevenLabs com timestamps, logo e selo reais, e o `.env` de verdade. É o teste
 de fogo que falta.
 
+### 🔥 TESTE DE FOGO NA VPS — passou, e achou dois defeitos de ROTEIRO (09/08)
+
+`piloto.py --fila 0` rodou com tudo real. **Veredito: ✅ PASSOU** nas seis
+checagens, e o que importa mais:
+
+  - **ElevenLabs com timestamps FUNCIONOU**: 90, 81, 108, 118 e 26 tempos de
+    caractere nas cinco falas. A legenda deixou de ser estimada de verdade.
+  - **`logo_ts_casa.png` + `@topshopcasa_`** — a marca certa da conta certa.
+  - A linha do tempo conformou 20,0s → 27,26s, e o arquivo bateu com o EDL
+    (diferença 0,00s).
+  - `moldura_estavel` 0,2 · `midia_viva` 35,24 · `tarjas_limpas` ok.
+
+**E o CPS=15 do edl.py foi confirmado pela voz real:** 108 caracteres viraram
+7,18s (15,0 c/s) e 81 viraram 5,02s (16,1 c/s). A estimativa estava certa; quem
+estava errado era o ROTEIRO.
+
+**Os dois defeitos são do storyboard, não do render** — e é exatamente o que a
+separação em três arquivos existe pra permitir descobrir:
+
+1. **Hook de 103 caracteres.** O template dá 2 linhas entre a marca e o vídeo.
+   O render encolheu a fonte de 46 até 34px e mesmo assim saiu em 3 linhas,
+   encostando no cabeçalho. Agora `HOOK_MAX=70` no prompt e `HOOK_LIMITE=84` na
+   validação — acima disso o roteiro é REPROVADO, não avisado.
+2. **Narração que não cabe na cena que ela mesma pediu.** Cena declarada com
+   4,7s e narração de 108 caracteres = 7,2s de fala. O render conforma
+   esticando, então nada quebra — mas o vídeo de 20s vira 27,3s e a decisão de
+   ritmo do storyboard vira letra morta. Agora o prompt dá o orçamento
+   (15 c/s: "cena de 4s = até 60 caracteres") e a validação reprova acima de
+   35% de estouro.
+
+⚠️ **E o meu aviso escondeu a própria evidência:** ele imprimia `hook_txt[:70]`,
+truncando em 70 caracteres justamente o texto cujo problema ERA ter mais de 70.
+Passei a impressão de que o hook tinha 70. Agora sai inteiro, com a contagem.
+**Aviso que corta a evidência é meio aviso** — irmão do "aviso que não avisa".
+
+**`piloto.py --telegram`** manda o MP4 e a folha de contato pro chat de admin.
+Motivo bobo e real: o vídeo nasce na VPS e quem julga está no celular — o Dre
+tentou executar o `.mp4` no shell e levou `Permission denied`.
+
 ### Onde parou (04/08, fim do dia)
 
 **Esperando o chip.** Pedido feito — Claro pré-pago, R$ 20,99, chegada prevista

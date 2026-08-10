@@ -147,6 +147,7 @@ CTA_Y = int(os.environ.get('CTA_Y', 1740))
 # Desenha-se em 109 e reduz-se — é o que faz o emoji sair colorido e nítido.
 FONTE_EMOJI = "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf"
 STRIKE_EMOJI = 109
+HOOK_MAX_SUGERIDO = 70   # o storyboard tem o mesmo número, com a medição
 
 PAUSA_APOS_FALA = 0.25         # respiro no fim de cada bloco de narração; sem
                                # ele a última sílaba encosta no corte seguinte
@@ -425,9 +426,13 @@ def _layout(edl: dict, imgs: list, avisos: list) -> dict:
         if len(linhas) <= 2:
             break
     if len(linhas) > 2:
-        avisos.append(f"o hook ficou com {len(linhas)} linhas mesmo em "
-                      f"{HK_FONT_MIN}px — o storyboard precisa escrever mais "
-                      f"curto: {hook_txt[:70]!r}")
+        # o texto INTEIRO e o tamanho: eu tinha truncado em 70 caracteres e
+        # foi justamente isso que escondeu a causa quando o piloto rodou na
+        # VPS — o hook tinha mais de 70, e o aviso cortava a prova disso.
+        # Aviso que corta a evidência é meio aviso.
+        avisos.append(f"o hook tem {len(hook_txt)} caracteres e ficou com "
+                      f"{len(linhas)} linhas mesmo em {HK_FONT_MIN}px "
+                      f"(cabem ~{HOOK_MAX_SUGERIDO}): {hook_txt!r}")
 
     y_cta = CTA_Y
     if y_cta < y_midia + h_midia + 20:
