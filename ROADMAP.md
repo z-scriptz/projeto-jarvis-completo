@@ -1737,6 +1737,37 @@ que tinham vindo antes eram os do APP, não os da Graph API.
 `contas.json` — e só se viu porque a listagem mostra a ORIGEM de cada voz. Sem
 essa coluna, o Dre teria configurado a verinity x e continuado ouvindo outra.
 
+### ASSET COLLECTOR — construído DEPOIS de duas medições (10/08)
+
+    API de afiliado (productOfferV2)   11 campos de galeria testados · 0 existem
+    API interna (v4/item/get) crua     HTTP 403 · aqui E na VPS
+
+**Só com esses dois fatos o coletor se justificou.** Se eu tivesse construído
+quando o Dre apontou o problema, teria construído em cima do meu palpite — e o
+palpite ("não dá pra resolver") estava errado.
+
+`coletor_assets.py` **não raspa a página: escuta o que ela pede.** A própria
+página de produto chama a `v4/item/get` — a MESMA rota que dá 403 na requisição
+crua — e dentro do navegador ela responde 200, porque vai com cookie, cabeçalho
+e impressão digital que o site espera. Então o coletor abre a página e ouve a
+resposta daquela chamada (`page.on("response")`). É mais robusto que ler DOM,
+que quebra a cada redesenho, e é exatamente a informação que o site usa pra
+montar a galeria — inclusive `video_info_list`, que é material melhor que foto.
+
+Rails: `COLETOR_ASSETS=0` desliga · só lê · um produto por vez · a fila só é
+tocada com `--gravar`, preservando o resto do item.
+
+    python3 coletor_assets.py --fila 0
+    python3 coletor_assets.py --fila 0 --gravar     → `imagens` na fila
+    python3 piloto.py --fila 0                      → o piloto já usa `imagens`
+
+⚠️ **O QUE EU PUDE PROVAR E O QUE NÃO PUDE.** O ambiente onde escrevi isto não
+alcança a Shopee (`ERR_CONNECTION_RESET` pelo proxy), então **o caminho feliz
+não foi testado por mim**. O que testei foi a parte onde mora o risco real — a
+leitura do payload — isolada em `extrair()`: hash virando URL do CDN, hash
+vazio descartado, vídeo sem `url` ignorado, URL já completa preservada, payload
+sem `data` avisando. Passou. O resto depende da VPS alcançar a loja.
+
 ### Onde parou (04/08, fim do dia)
 
 **Esperando o chip.** Pedido feito — Claro pré-pago, R$ 20,99, chegada prevista
