@@ -1583,6 +1583,52 @@ imagem por produto e o vídeo inteiro vive dela (com punch-in, que disfarça, ma
 não resolve). **Nenhum ajuste de render conserta isso** — precisa de mais
 imagem na origem. É o próximo gargalo do produtor original.
 
+### VOZ POR PERFIL + UMA FOTO SÓ (10/08)
+
+**Voz por perfil: o mecanismo já existia e morava no lugar errado.**
+`ELEVENLABS_VOICE_ID_<NICHO>` resolvia no `.env` — que é o arquivo menos
+visível do projeto. Ninguém abre o `.env` pra saber "que voz o
+@topshopbeauty._ usa?". Agora a voz mora no **`contas.json`**, campo `voz_id`,
+ao lado do handle e do `instagram_user_id`. Voz é identidade da conta tanto
+quanto o @; é a mesma lição da logo por nicho — informação de conta espalhada
+faz um perfil publicar com a cara de outro.
+
+    ELEVENLABS_VOICE_ID_<NICHO>   .env       override rápido, pra testar
+    contas.json[nicho].voz_id                a voz OFICIAL do perfil
+    ELEVENLABS_VOICE_ID           .env       a voz padrão da casa
+
+    python3 narracao_ia.py --vozes
+
+lista perfil → handle → voz → de onde veio, e **avisa quando dois perfis
+compartilham a mesma voz** ou quando um está sem voz própria. Configuração que
+ninguém consegue listar é configuração que ninguém confere.
+
+**UMA FOTO SÓ — o gargalo que o Dre apontou duas vezes.** A `productOfferV2`
+devolve um `imageUrl` por produto. O punch-in disfarça, e ele percebeu na
+primeira olhada: *"só tem uma imagem durante todo o vídeo"*.
+
+`piloto.py` agora deriva **enquadramentos** de uma foto só: plano geral +
+closes escolhidos pela região de MAIOR DETALHE (variância do cinza numa grade
+deslizante). Foto de e-commerce raramente tem o produto no centro — é produto
+num canto, modelo no outro, "antes/depois" espremido embaixo; cortar no centro
+pegaria fundo liso. Testado numa foto composta: 3 planos visivelmente
+diferentes, um deles fechando no produto + insets.
+
+⚠️ **Isto NÃO substitui ter mais foto.** É o melhor que dá pra fazer com o
+material que existe. O gargalo continua na ORIGEM, e o próximo passo real é
+buscar mais imagem por produto (ou filtrar as ruins — a foto do piloto tinha
+texto promocional queimado, que briga com a nossa legenda).
+
+**E o conserto do silêncio criou um bug que o piloto pegou na hora.** Com o
+trecho passando a valer o tempo da FALA, uma linha do tempo de 18,6s desabou
+pra **6,4s**: as fronteiras vinham do início de cada NARRAÇÃO, então três cenas
+sem fala foram engolidas pelo trecho do hook e encolheram junto. O `edl.py`
+passou a carimbar `secoes` (início/fim de cada cena) e o `_conformar` usa
+essas fronteiras. Agora:
+  - roteiro COM narração: 18,00s → 16,95s, `silencio_morto` 0,0 ✅
+  - roteiro SEM narração nas cenas: mantém 20,67s e **REPROVA** com 14,8s de
+    silêncio — que é a verdade, e vídeo assim não deve ser publicado.
+
 ### Onde parou (04/08, fim do dia)
 
 **Esperando o chip.** Pedido feito — Claro pré-pago, R$ 20,99, chegada prevista

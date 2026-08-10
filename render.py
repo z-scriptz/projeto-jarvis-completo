@@ -118,7 +118,7 @@ LOGO_TAM = int(os.environ.get("LOGO_TAM", 118))
 NOME_FONT = int(os.environ.get("NOME_FONT", 52))
 HANDLE_FONT = int(os.environ.get("HANDLE_FONT", 42))
 TEXTO_DX = int(os.environ.get("TEXTO_DX", 16))
-SELO_DX = int(os.environ.get("SELO_DX", 12))
+SELO_DX = int(os.environ.get("SELO_DX", 4))    # colado no nome, como no post
 SELO_TAM = 46
 
 HK_MARGEM = int(os.environ.get("HK_MARGEM", 89))
@@ -718,13 +718,13 @@ def _camada_marca(edl: dict, lay: dict, destino: Path, avisos: list) -> Path:
         cta = f"{cta} {os.environ.get('CTA_EMOJI', CTA_EMOJI)}".strip()
         f_cta = _fonte(CTA_FONT)
         larg = _texto_rico(None, d, 0, 0, cta, f_cta, None, desenhar=False)
-        # CTA_DY: o clipe do MoviePy no template tem folga própria acima da
-        # letra, então copiar CTA_Y cru põe o texto mais embaixo do que ele
-        # aparece no post publicado. -26 sobe "um tiquinho", como o Dre pediu,
-        # sem mexer no CTA_Y do .env (que os dois renderizadores compartilham).
+        # CTA_DY calibrado em duas rodadas com o Dre olhando: -26 subiu demais
+        # e o texto encostou no rodapé do vídeo; -8 deixa a faixa de respiro
+        # que o post publicado tem. Sem mexer no CTA_Y do .env, que os dois
+        # renderizadores compartilham.
         _texto_rico(camada, d, (LARG - larg) // 2,
                     lay["y_cta"] + f_cta.size // 2
-                    + int(os.environ.get("CTA_DY", -26)), cta, f_cta,
+                    + int(os.environ.get("CTA_DY", -8)), cta, f_cta,
                     tinta, contorno, cor_contorno)
 
     destino.parent.mkdir(parents=True, exist_ok=True)
@@ -1018,7 +1018,16 @@ def _conformar(edl: dict, narracoes: list, avisos: list) -> dict:
         return edl
 
     total = float(edl["duracao_total"])
-    marcos = sorted({round(n["inicio_plano"], 3) for n in narracoes} | {0.0})
+    # AS FRONTEIRAS SÃO AS DAS SEÇÕES, não as das narrações.
+    # Usar só o início de cada narração junta cenas mudas com a cena falada
+    # anterior — e como o trecho passou a valer o tempo da FALA, as cenas mudas
+    # sumiam. Medido: 18,6s viraram 6,4s num roteiro sem narração nas cenas.
+    # O edl.py agora carimba `secoes`; sem elas (EDL antigo), cai no modo velho.
+    secoes = edl.get("secoes") or []
+    if secoes:
+        marcos = sorted({round(float(x["inicio"]), 3) for x in secoes} | {0.0})
+    else:
+        marcos = sorted({round(n["inicio_plano"], 3) for n in narracoes} | {0.0})
     bordas = marcos + [total]
 
     novo_ini, mapa = 0.0, []       # (ini_velho, fim_velho, ini_novo, escala)

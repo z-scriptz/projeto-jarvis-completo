@@ -77,6 +77,70 @@ def _fotos_do_item(item: dict, pasta: Path) -> list:
     return fora
 
 
+def _detalhe(img, frac: float):
+    """A região de MAIOR DETALHE da foto, na fração pedida do quadro.
+
+    Foto de e-commerce quase nunca é o produto centralizado: é o produto num
+    canto, uma modelo de outro, e um recorte de "antes/depois" espremido embaixo.
+    Cortar no centro pegaria fundo liso. Aqui a imagem é dividida numa grade e
+    cada célula recebe a variância do cinza — que é uma medida crua de "quanta
+    coisa acontece aqui". A janela com mais detalhe acumulado vira o close.
+
+    Cru de propósito: detectar produto de verdade é trabalho pro Gemini Vision
+    (o visual_audit_agent já tem a tubulação). Variância não sabe o que é
+    produto, mas sabe onde NÃO é fundo — e pra escolher um close isso basta.
+    """
+    from PIL import ImageStat
+    L = img.convert("L")
+    W, H = img.size
+    jw, jh = int(W * frac), int(H * frac)
+    passo_x, passo_y = max(1, (W - jw) // 6), max(1, (H - jh) // 6)
+    melhor, alvo = -1.0, (0, 0)
+    for y in range(0, H - jh + 1, passo_y):
+        for x in range(0, W - jw + 1, passo_x):
+            v = ImageStat.Stat(L.crop((x, y, x + jw, y + jh))).stddev[0]
+            if v > melhor:
+                melhor, alvo = v, (x, y)
+    x, y = alvo
+    return img.crop((x, y, x + jw, y + jh))
+
+
+def _variacoes(foto: Path, pasta: Path, quantas: int, avisos: list) -> list:
+    """UMA foto -> vários ENQUADRAMENTOS distintos.
+
+    POR QUE ISTO EXISTE (10/08)
+    A `productOfferV2` da Shopee devolve UM `imageUrl` por produto. O Dre viu o
+    resultado e resumiu: "só tem uma imagem durante todo o vídeo". O punch-in
+    do EDL disfarça — mas disfarçar não é resolver, e ele percebeu na primeira
+    olhada.
+
+    Editor humano com uma foto só não mostra a foto inteira vinte segundos: ele
+    ABRE em plano geral, FECHA num detalhe, volta. São planos diferentes da
+    mesma imagem, e o olho aceita como cortes de verdade.
+
+    ⚠️ ISTO NÃO SUBSTITUI TER MAIS FOTO. É o melhor que dá pra fazer com o
+    material que existe; o gargalo continua sendo a origem.
+    """
+    from PIL import Image
+    pasta.mkdir(parents=True, exist_ok=True)
+    img = Image.open(foto).convert("RGB")
+    if min(img.size) < 500:
+        avisos.append(f"{foto.name} tem {img.width}x{img.height} — pequena "
+                      "demais pra recortar close sem borrar; vai só o plano geral")
+        return [foto]
+
+    fora = [foto]
+    for i, frac in enumerate([0.62, 0.78][:max(0, quantas - 1)], 2):
+        try:
+            corte = _detalhe(img, frac)
+            alvo = pasta / f"var_{i}.jpg"
+            corte.save(alvo, quality=94)
+            fora.append(alvo)
+        except Exception as e:
+            avisos.append(f"variação {i} falhou: {str(e)[:70]}")
+    return fora
+
+
 def _telegram(video: Path, legenda: str, contato: Path = None) -> bool:
     """Manda o MP4 pro chat de admin. Best-effort, nunca quebra o piloto.
 
@@ -145,6 +209,9 @@ def main():
     p.add_argument("--encaixe", choices=("contain", "cover"), default="contain",
                    help="contain: foto inteira, sobra fundo. cover: preenche a "
                         "caixa cortando as laterais")
+    p.add_argument("--variacoes", type=int, default=3,
+                   help="com UMA foto só, deriva N enquadramentos dela "
+                        "(1 desliga)")
     p.add_argument("--mudo", action="store_true")
     p.add_argument("--telegram", action="store_true",
                    help="manda o MP4 e a folha de contato no chat de admin")
@@ -186,9 +253,18 @@ def main():
                 "ou o produto entrou sem imagem. Use --fotos PASTA, ou rode "
                 "`python3 preencher_fotos.py` antes")
 
+        avisos_fotos = []
+        if len(fotos) == 1 and args.variacoes > 1:
+            fotos = _variacoes(fotos[0], tmp / "vars", args.variacoes,
+                               avisos_fotos)
+
         _log(f"produto: {nome}")
         _log(f"   nicho {nicho or 'geral'} · R$ {preco or '—'} · "
-             f"{len(fotos)} foto(s)")
+             f"{len(fotos)} enquadramento(s)"
+             + (" (derivados de 1 foto)" if len(fotos) > 1
+                and fotos[0].parent != fotos[-1].parent else ""))
+        for a in avisos_fotos:
+            _log(f"   👀 {a}")
 
         # ── 2. roteiro ──────────────────────────────────────────────────────
         _log("1/4 roteiro")
@@ -223,6 +299,18 @@ def main():
         slug = _re.sub(r"[^a-z0-9]+", "_",
                        nome.lower()).strip("_")[:48] or "produto"
         alvo = SAIDA / f"piloto_{slug}.mp4"
+        # com variações, as fotos ficam em pastas diferentes (a original no
+        # download, os cortes em vars/). Copio todas pra uma pasta só, porque o
+        # render lê uma pasta e ordena por nome — e ordem errada é cena errada.
+        if len(fotos) > 1:
+            juntas = tmp / "quadros"
+            juntas.mkdir(parents=True, exist_ok=True)
+            novas = []
+            for i, f in enumerate(fotos, 1):
+                d = juntas / f"a{i:02d}{f.suffix}"
+                shutil.copy2(f, d)
+                novas.append(d)
+            fotos = novas
         rel = R.renderizar(linha, str(fotos[0].parent if len(fotos) > 1 else fotos[0]),
                            alvo, mudo=args.mudo, encaixe=args.encaixe)
         _log(f"   {rel['duracao_arquivo']}s · {rel['tamanho_mb']} MB · "

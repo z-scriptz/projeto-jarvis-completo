@@ -97,16 +97,77 @@ def _norm_nicho(n: str) -> str:
     return "".join(c for c in n.upper() if c.isalnum())
 
 
+def _voz_da_conta(nicho: str) -> str:
+    """A voz do perfil, lida do contas.json (campo `voz_id`).
+
+    POR QUE contas.json E NÃO SÓ .env:
+    o `.env` já resolvia isto por ELEVENLABS_VOICE_ID_<NICHO>, mas é o lugar
+    menos visível do projeto — ninguém abre o .env pra saber "que voz o
+    @topshopbeauty._ usa?". O contas.json é onde o perfil JÁ mora: handle,
+    instagram_user_id, page_token_env. A voz é identidade da conta tanto quanto
+    o @ — pertence ao mesmo lugar.
+
+    É a mesma lição da logo por nicho: quando a informação da conta fica
+    espalhada, um perfil acaba publicando com a cara de outro.
+    """
+    try:
+        import json
+        d = json.loads((BASE_DIR / "contas.json").read_text(encoding="utf-8"))
+    except Exception:
+        return ""
+    n = (nicho or "geral").strip().lower()
+    conta = d.get(n) or (d.get("_default") if n in ("", "geral") else None) or {}
+    return str(conta.get("voz_id") or "").strip()
+
+
 def _voz_do_nicho(nicho: str = ""):
-    """Escolhe a VOZ pelo nicho: ELEVENLABS_VOICE_ID_<NICHO> (ex.: _BELEZA = voz
-    feminina) e, se não houver, cai na ELEVENLABS_VOICE_ID (Michael, padrão).
-    Assim beleza/skincare fala com voz feminina e tech/geral com a masculina."""
+    """Escolhe a VOZ do perfil. Devolve (voice_id, NICHO, é_voz_própria).
+
+    Ordem, do mais específico pro mais geral:
+      1. ELEVENLABS_VOICE_ID_<NICHO>  no .env  — override rápido, pra testar
+      2. contas.json[<nicho>].voz_id           — a voz OFICIAL do perfil
+      3. ELEVENLABS_VOICE_ID           no .env  — a voz padrão da casa
+
+    O .env vem antes de propósito: é onde se testa uma voz nova sem commitar
+    nada. Mas quem manda no dia a dia é o contas.json, que é versionado e onde
+    dá pra LER, num arquivo só, qual perfil fala com qual voz.
+    """
     n = _norm_nicho(nicho)
     if n:
         v = os.getenv(f"ELEVENLABS_VOICE_ID_{n}", "").strip()
         if v:
             return v, n, True
+    v = _voz_da_conta(nicho)
+    if v:
+        return v, n, True
     return os.getenv("ELEVENLABS_VOICE_ID", "").strip(), n, False
+
+
+def vozes_por_perfil() -> list:
+    """[(nicho, handle, voz_id, origem)] — pra CONFERIR de relance.
+
+    Existe porque configuração que ninguém consegue listar é configuração que
+    ninguém confere: dois perfis acabam com a mesma voz e só se descobre
+    ouvindo os dois vídeos lado a lado, semanas depois.
+    """
+    import json
+    try:
+        d = json.loads((BASE_DIR / "contas.json").read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    fora = []
+    for chave, c in d.items():
+        nicho = "geral" if chave == "_default" else chave
+        n = _norm_nicho(nicho)
+        if os.getenv(f"ELEVENLABS_VOICE_ID_{n}", "").strip():
+            origem = f".env (ELEVENLABS_VOICE_ID_{n})"
+        elif str(c.get("voz_id") or "").strip():
+            origem = "contas.json"
+        else:
+            origem = "PADRÃO DA CASA — este perfil não tem voz própria"
+        voz, _, propria = _voz_do_nicho(nicho)
+        fora.append((nicho, c.get("handle", ""), voz, origem, propria))
+    return sorted(fora)
 
 
 def _voice_settings(n: str) -> dict:
@@ -250,6 +311,31 @@ def gerar(produto: str, contexto: str, destino: Path, nicho: str = "") -> str:
 
 
 def main():
+    if "--vozes" in sys.argv:
+        linhas = vozes_por_perfil()
+        if not linhas:
+            print("não consegui ler o contas.json")
+            return 1
+        print("\nVOZ POR PERFIL\n" + "─" * 74)
+        sem = 0
+        for nicho, handle, voz, origem, propria in linhas:
+            marca = "🎙️ " if propria else "⚠️ "
+            sem += 0 if propria else 1
+            print(f" {marca} {nicho:8} {handle:20} {voz or '(nenhuma!)':24} {origem}")
+        print("─" * 74)
+        repetidas = {}
+        for nicho, _, voz, _, _ in linhas:
+            if voz:
+                repetidas.setdefault(voz, []).append(nicho)
+        for voz, nichos in repetidas.items():
+            if len(nichos) > 1:
+                print(f" ⚠️  a MESMA voz {voz} em: {', '.join(nichos)}")
+        if sem:
+            print(f" ⚠️  {sem} perfil(is) sem voz própria — acrescente "
+                  '"voz_id": "..." no contas.json')
+        print()
+        return 0
+
     if len(sys.argv) < 2:
         print('Uso: python3 narracao_ia.py "Nome do Produto" "contexto (opcional)" "nicho (opcional: beleza/tech/geral)"')
         return 1

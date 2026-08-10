@@ -272,6 +272,7 @@ MODOS_AUDIO = ("narracao", "viral", "narracao_viral")
 def montar(sb: dict, modo_audio: str = "narracao") -> dict:
     """Storyboard -> EDL. Não chama IA: é decisão de edição, não de criação."""
     visual, texto_tr, audio, sfx_usados = [], [], [], 0
+    secoes = []                    # onde cada CENA começa e termina
     t = 0.0
 
     # ── HOOK ────────────────────────────────────────────────────────────────
@@ -289,6 +290,8 @@ def montar(sb: dict, modo_audio: str = "narracao") -> dict:
                        "zoom_de": z, "zoom_para": round(z + 0.06, 3),
                        "secao": "hook"})
         t += passo
+    secoes.append({"tipo": "hook", "inicio": 0.0, "fim": round(t, 3),
+                   "tem_narracao": bool((h.get("texto") or "").strip())})
     texto_tr.append({"inicio": 0.0, "fim": round(dur_hook, 2),
                      "texto": h.get("texto", ""), "estilo": "hook",
                      "posicao": "centro_alto"})
@@ -371,6 +374,13 @@ def montar(sb: dict, modo_audio: str = "narracao") -> dict:
             audio.append({"inicio": round(ini_cena, 2), "tipo": "sfx",
                           "som": "pop"})
             sfx_usados += 1
+        # A FRONTEIRA DA CENA VAI PRO EDL. Sem isso o render só sabe onde cada
+        # NARRAÇÃO começa — e cena sem narração some dentro do trecho anterior.
+        # Foi assim que uma linha do tempo de 18,6s desabou pra 6,4s quando o
+        # roteiro veio sem fala nas cenas: o trecho inteiro encolheu pro tamanho
+        # da fala do hook, levando junto três cenas que não falavam nada.
+        secoes.append({"tipo": "cena", "inicio": round(ini_cena, 3),
+                       "fim": round(t, 3), "tem_narracao": bool(narr.strip())})
 
     # ── CTA ─────────────────────────────────────────────────────────────────
     c = sb.get("cta") or {}
@@ -385,6 +395,9 @@ def montar(sb: dict, modo_audio: str = "narracao") -> dict:
                      "posicao": "centro"})
     audio.append({"inicio": round(t, 2), "tipo": "narracao",
                   "texto": c.get("texto", "")})
+    secoes.append({"tipo": "cta", "inicio": round(t, 3),
+                   "fim": round(t + dur_cta, 3),
+                   "tem_narracao": bool((c.get("texto") or "").strip())})
     if sfx_usados < MAX_SFX:
         audio.append({"inicio": round(t, 2), "tipo": "sfx", "som": "impacto"})
     t += dur_cta
@@ -432,6 +445,7 @@ def montar(sb: dict, modo_audio: str = "narracao") -> dict:
         "modo_audio": modo_audio,
         "template": _template(sb.get("nicho") or sb.get("categoria") or "geral"),
         "assets_disponiveis": sb.get("assets_disponiveis", 1),
+        "secoes": secoes,
         "trilhas": {"visual": visual, "texto": texto_tr, "audio": audio},
     }
 
