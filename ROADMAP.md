@@ -1540,6 +1540,49 @@ Passei a impressão de que o hook tinha 70. Agora sai inteiro, com a contagem.
 Motivo bobo e real: o vídeo nasce na VPS e quem julga está no celular — o Dre
 tentou executar o `.mp4` no shell e levou `Permission denied`.
 
+### 🎧 O DEFEITO QUE NENHUMA CHECAGEM DE PIXEL PEGARIA (09/08)
+
+O piloto da Garrafa Squeeze **passou em tudo** — moldura estável, mídia viva,
+duração exata, tarjas limpas — e mesmo assim era um vídeo ruim. O Dre ouviu:
+
+> "a narração fica muito curta, literalmente 2-3 segundos sem narração, sem
+> música... parece que fica um climão horrível, o pessoal certamente vai pular"
+
+**Medido no arquivo dele:** 3 buracos de **2,0s, 2,2s e 3,6s** = 7,9s calados
+num vídeo de 19,9s. **40% do vídeo era silêncio puro.**
+
+**A causa é uma decisão minha, escrita com justificativa e errada.** O
+`_conformar` fazia `max(largura_planejada, fala)` — eu tinha comentado que
+"sobrar imagem é respiro; faltar é frase cortada". A primeira metade é falsa:
+3,16s de fala numa cena de 4,7s não é respiro, é BURACO. **A voz manda nos DOIS
+sentidos** — agora o trecho com fala vale o tempo da fala (com piso de 1,4s), e
+só trecho sem narração nenhuma mantém o tempo do roteiro.
+Resultado no mesmo roteiro: 18,00s → **16,95s**, e zero buracos.
+
+**E virou checagem: `silencio_morto`.** Roda o `silencedetect` a cada render e
+reprova buraco > 1,2s no meio (o silêncio do FIM não conta — é respiro). É a
+primeira checagem de ÁUDIO, e nasceu de um defeito que passou por todas as de
+pixel. Prova de que "tecnicamente correto" e "bom" não são a mesma pergunta.
+
+**Três acertos de design, todos do olho do Dre:**
+  - **selo verificado sumindo** — eu redimensionava o PNG direto. A lição já
+    estava escrita no projeto, em `narrated_video_agent._emoji_aparado`: PNG de
+    marca vem com muita margem transparente, e sem APARAR o alfa antes o resize
+    conta o vazio e o desenho sai bem menor. Agora apara.
+  - **@ longe do nome** — `HANDLE_DY` de 113 → 96 (entrelinha normal pra 52px).
+  - **CTA baixo demais** — `CTA_DY=-26`, sem tocar no `CTA_Y` do `.env`, que os
+    dois renderizadores compartilham.
+
+**O relatório agora grava o `voz_id` do ElevenLabs.** O Dre achou que a voz não
+era a do ElevenLabs; o log dizia que era (52, 43, 55, 44 e 29 tempos de
+caractere só saem de lá). Impressão contra impressão não resolve — ID resolve.
+
+⚠️ **Limitação real que o piloto expôs e que NÃO é do render: UMA foto.** A
+`productOfferV2` da Shopee devolve um `imageUrl` só, então a fila guarda uma
+imagem por produto e o vídeo inteiro vive dela (com punch-in, que disfarça, mas
+não resolve). **Nenhum ajuste de render conserta isso** — precisa de mais
+imagem na origem. É o próximo gargalo do produtor original.
+
 ### Onde parou (04/08, fim do dia)
 
 **Esperando o chip.** Pedido feito — Claro pré-pago, R$ 20,99, chegada prevista

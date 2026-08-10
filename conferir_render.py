@@ -44,6 +44,9 @@
 #  Checagem que não distingue o certo do errado não é checagem frouxa, é ruído.)
 #   tarjas_limpas    texto na tarja branca  → logo/hook fora da coluna do vídeo
 #                                             (o Dre pegou isso DUAS vezes no olho)
+#   silencio_morto   buraco de áudio        → trecho longo sem voz nem trilha
+#                                             (o Dre pegou DE OUVIDO: "2-3
+#                                              segundos sem nada... climão")
 #
 # Uso:
 #   python3 conferir_render.py --video shared/renders/x.mp4
@@ -71,6 +74,13 @@ DESVIO_MORTO = 6.0        # desvio-padrão de um quadro chapado
 CONTRASTE_MIN = 28.0      # desvio-padrão na faixa da legenda com texto legível
 TOL_TARJA = 24            # quanto logo/hook podem avançar sobre a tarja lateral
                           # antes de ser vazamento (no template real avançam 11)
+
+# BURACO DE ÁUDIO. 1,2s calado no MEIO de um Reels já é tempo de a pessoa
+# deslizar o dedo. O Dre ouviu 2-3s no piloto da garrafa e resumiu: "parece que
+# fica um climão horrível, o pessoal certamente vai pular um vídeo desse".
+# O fim não conta: o último meio segundo sem voz é respiro, não buraco.
+SILENCIO_MAX = 1.2
+SILENCIO_dB = -45
 
 
 def _log(m):
@@ -112,6 +122,35 @@ def _extrair(ff: str, video: Path, pasta: Path, n: int, dur: float) -> list:
                         str(alvo)], capture_output=True, timeout=120)
         if alvo.exists():
             fora.append((round(t, 2), alvo))
+    return fora
+
+
+def _silencios(ff: str, video: Path, dur: float) -> list:
+    """[(inicio, duração)] dos trechos calados longos, sem contar o fim.
+
+    Usa o silencedetect do próprio FFmpeg — o mesmo que eu usei à mão pra
+    conferir se as cinco narrações caíam no lugar certo. A diferença é que
+    agora ele roda sempre, e não só quando eu lembro de olhar.
+    """
+    import re
+    try:
+        r = subprocess.run(
+            [ff, "-hide_banner", "-i", str(video), "-af",
+             f"silencedetect=n={SILENCIO_dB}dB:d={SILENCIO_MAX}", "-f", "null", "-"],
+            capture_output=True, text=True, timeout=300)
+    except Exception:
+        return []
+    fora, aberto = [], None
+    for m in re.finditer(r"silence_(start|end):\s*(-?[\d.]+)", r.stderr):
+        tipo, val = m.group(1), float(m.group(2))
+        if tipo == "start":
+            aberto = val
+        elif aberto is not None:
+            # o silêncio do FIM é respiro, não buraco: só conta o que fecha
+            # antes dos últimos 0,6s
+            if val < dur - 0.6 and val - aberto >= SILENCIO_MAX:
+                fora.append((max(0.0, aberto), val - aberto))
+            aberto = None
     return fora
 
 
@@ -161,7 +200,8 @@ def conferir(video: Path, n_quadros: int = N_QUADROS, contato: bool = False) -> 
     # que é o jeito silencioso de um validador virar decoração.
     checagens = {c: {"estado": "nao_rodou", "medido": None, "nota": ""}
                  for c in ("duracao", "quadro_morto", "moldura_estavel",
-                           "midia_viva", "contraste_texto", "tarjas_limpas")}
+                           "midia_viva", "contraste_texto", "tarjas_limpas",
+                           "silencio_morto")}
     achados = []
 
     def marcar(chave, estado, numero=None, nota=""):
@@ -296,6 +336,24 @@ def conferir(video: Path, n_quadros: int = N_QUADROS, contato: bool = False) -> 
                     break
 
         # ── a faixa da mídia está preenchida? ───────────────────────────────
+    # ── buraco de áudio ─────────────────────────────────────────────────────
+    # Esta checagem nasceu de um defeito que passou por TODAS as outras: o
+    # vídeo estava tecnicamente perfeito — moldura estável, mídia viva, duração
+    # certa — e mesmo assim era ruim, porque ficava mudo no meio. Nenhuma
+    # checagem de PIXEL pegaria isso. Ouvido pega; agora o silencedetect também.
+    if rel.get("mudo"):
+        checagens["silencio_morto"]["nota"] = "rodou com --mudo, de propósito"
+    else:
+        buracos = _silencios(ff, video, dur)
+        marcar("silencio_morto", "passou",
+               round(max([b for _, b in buracos], default=0.0), 2))
+        for ini, tam in buracos:
+            achar("silencio_morto", "alta",
+                  f"{ini:.1f}s: {tam:.1f}s sem áudio nenhum no meio do vídeo — "
+                  "sem voz e sem trilha, e silêncio no meio de um Reels é dedo "
+                  "no 'pular'", round(tam, 2))
+            break
+
     if contato:
         _contato(imgs, pasta / "_contato.png")
 

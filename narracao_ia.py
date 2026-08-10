@@ -199,6 +199,10 @@ def falar_com_tempos(texto: str, destino: Path, nicho: str = "") -> dict:
                     "erro": "alinhamento ausente ou inconsistente"}
         return {"ok": True, "arquivo": destino, "dur": float(fim[-1]),
                 "chars": "".join(chars), "tempos": tempos,
+                # o ID da voz vai no retorno pra o render poder REGISTRAR qual
+                # voz falou. "não parece a voz do ElevenLabs" tem que virar um
+                # ID conferível, não uma discussão de impressão.
+                "voz_id": voice, "modelo": model,
                 "voz_do_nicho": voz_propria, "erro": None}
     except Exception as e:
         return {"ok": False, "erro": f"{type(e).__name__}: {str(e)[:140]}"}

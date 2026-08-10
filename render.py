@@ -153,6 +153,9 @@ PAUSA_APOS_FALA = 0.25         # respiro no fim de cada bloco de narração; sem
                                # ele a última sílaba encosta no corte seguinte
 PISO_LEGENDA = 0.25            # nenhum bloco de legenda fica menos que isto na
                                # tela, mesmo que a voz o diga correndo
+PISO_SEGMENTO = 1.4            # nenhuma cena dura menos que isto, mesmo com
+                               # fala curtíssima — abaixo disso o olho não
+                               # chega a ler a imagem
 
 # Cor da legenda em ASS é &HBBGGRR (invertido em relação ao HTML).
 COR_BRANCO = "&H00FFFFFF"
@@ -664,7 +667,17 @@ def _camada_marca(edl: dict, lay: dict, destino: Path, avisos: list) -> Path:
     selo = BRAND_DIR / "verificado.png"
     if selo.exists():
         from PIL import Image as _I
-        s = _I.open(selo).convert("RGBA").resize((SELO_TAM, SELO_TAM), _I.LANCZOS)
+        s = _I.open(selo).convert("RGBA")
+        # APARA A MARGEM TRANSPARENTE ANTES DE REDIMENSIONAR.
+        # O Dre: "o verificado não está aparecendo, está muito pequeno". E a
+        # lição já estava escrita no projeto, em narrated_video_agent
+        # `_emoji_aparado`: muitos PNGs têm bastante espaço transparente em
+        # volta do desenho; sem aparar, o resize conta o VAZIO e o desenho
+        # visível sai bem menor que o tamanho pedido. Eu redimensionava direto.
+        bb = s.getbbox()
+        if bb:
+            s = s.crop(bb)
+        s = s.resize((SELO_TAM, SELO_TAM), _I.LANCZOS)
         # o selo é centrado NA LINHA DO NOME. O template o põe em logo_y+14
         # porque lá o nome é um clipe do MoviePy com folga própria; aqui o
         # texto é centrado na linha, e copiar o número cru fazia o selo descer
@@ -682,7 +695,10 @@ def _camada_marca(edl: dict, lay: dict, destino: Path, avisos: list) -> Path:
     else:
         f_h = _fonte(HANDLE_FONT)
         _texto_rico(camada, d, texto_x,
-                    logo_y + int(os.environ.get("HANDLE_DY", 113)), handle,
+                    # 113 deixava um vão entre o nome e o @ ("deixa mais junto
+                    # os dois"). 96 dá ~52px entre as linhas, que é entrelinha
+                    # normal pra um nome de 52px.
+                    logo_y + int(os.environ.get("HANDLE_DY", 96)), handle,
                     f_h, cinza, contorno, cor_contorno)
 
     # ── hook: rodapé ancorado logo acima do vídeo ───────────────────────────
@@ -702,8 +718,13 @@ def _camada_marca(edl: dict, lay: dict, destino: Path, avisos: list) -> Path:
         cta = f"{cta} {os.environ.get('CTA_EMOJI', CTA_EMOJI)}".strip()
         f_cta = _fonte(CTA_FONT)
         larg = _texto_rico(None, d, 0, 0, cta, f_cta, None, desenhar=False)
+        # CTA_DY: o clipe do MoviePy no template tem folga própria acima da
+        # letra, então copiar CTA_Y cru põe o texto mais embaixo do que ele
+        # aparece no post publicado. -26 sobe "um tiquinho", como o Dre pediu,
+        # sem mexer no CTA_Y do .env (que os dois renderizadores compartilham).
         _texto_rico(camada, d, (LARG - larg) // 2,
-                    lay["y_cta"] + f_cta.size // 2, cta, f_cta,
+                    lay["y_cta"] + f_cta.size // 2
+                    + int(os.environ.get("CTA_DY", -26)), cta, f_cta,
                     tinta, contorno, cor_contorno)
 
     destino.parent.mkdir(parents=True, exist_ok=True)
@@ -926,7 +947,8 @@ def _falar(fala: str, alvo: Path, nicho: str, ff: str, avisos: list) -> dict:
                           "um pouco sempre")
         return {"arquivo": alvo, "dur": _dur_midia(ff, alvo) or r.get("dur", 0),
                 "chars": r.get("chars", ""), "tempos": r.get("tempos") or [],
-                "voz": "elevenlabs"}
+                "voz": "elevenlabs", "voz_id": r.get("voz_id", ""),
+                "voz_do_nicho": bool(r.get("voz_do_nicho"))}
 
     erro_11 = r.get("erro")
     try:
@@ -1006,7 +1028,22 @@ def _conformar(edl: dict, narracoes: list, avisos: list) -> dict:
         falas = [n["dur"] for n in narracoes
                  if abs(n["inicio_plano"] - marcos[i]) < 0.005]
         preciso = (max(falas) + PAUSA_APOS_FALA) if falas else 0.0
-        nova = max(largura, preciso)
+        # A VOZ MANDA NOS DOIS SENTIDOS. Este é o conserto do defeito mais
+        # grave que o piloto real revelou, e o Dre pegou de ouvido:
+        #
+        #   "a narração fica muito curta, literalmente 2-3 segundos de vídeo
+        #    sem narração, sem música... o pessoal certamente vai pular"
+        #
+        # Eu tinha escrito `max(largura, preciso)` com a justificativa de que
+        # "sobrar imagem é respiro". Errado: 3,16s de fala numa cena de 4,7s
+        # não é respiro, é BURACO. No piloto da garrafa foram 12,7s de fala num
+        # vídeo de 19,9s — SETE SEGUNDOS de silêncio picotados no meio, e num
+        # Reels silêncio no meio é dedo no "pular".
+        #
+        # Agora o trecho com fala vale o tempo da FALA. Trecho sem narração
+        # nenhuma continua valendo o que o storyboard pediu (ali o silêncio é
+        # escolha do roteiro, não sobra de conta).
+        nova = max(PISO_SEGMENTO, preciso) if preciso else largura
         mapa.append((v0, v1, novo_ini, nova / largura))
         novo_ini += nova
 
@@ -1038,6 +1075,12 @@ def _conformar(edl: dict, narracoes: list, avisos: list) -> dict:
         avisos.append(f"vídeo ficou com {novo_ini:.0f}s — acima do que o "
                       "storyboard mira (15-20s). Narração longa demais para o "
                       "ritmo planejado")
+    fala_total = sum(n["dur"] for n in narracoes)
+    if novo_ini > 0 and fala_total / novo_ini < 0.72:
+        avisos.append(f"só {fala_total / novo_ini:.0%} do vídeo tem voz "
+                      f"({fala_total:.1f}s de fala em {novo_ini:.1f}s) — sem "
+                      "trilha, o resto é silêncio, e silêncio no meio de um "
+                      "Reels é dedo no 'pular'")
     return edl
 
 
@@ -1307,6 +1350,9 @@ def renderizar(edl: dict, origem_imgs: str, saida: Path, mudo=False,
                "tamanho_mb": round(saida.stat().st_size / 1e6, 2),
                "template": edl.get("template", {}),
                "voz": sorted({n.get("voz", "?") for n in narracoes}),
+               "voz_id": sorted({n.get("voz_id", "") for n in narracoes
+                                 if n.get("voz_id")}),
+               "voz_do_nicho": any(n.get("voz_do_nicho") for n in narracoes),
                # o inspetor precisa distinguir "legenda lavada" de "não havia
                # legenda nenhuma": o 1º é defeito do render, o 2º é o roteiro
                # ter saído sem narração. Diagnóstico errado manda consertar o
