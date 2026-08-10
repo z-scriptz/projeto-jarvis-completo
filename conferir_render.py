@@ -37,7 +37,11 @@
 #   quadro_morto     quadro chapado         → asset falhou, saiu tela lisa
 #   contraste_texto  faixa da legenda lisa  → legenda lavada ou ausente
 #                                             (foi EXATAMENTE o bug do fade)
-#   faixa_preenchida buraco na faixa        → foto pequena demais pro bloco
+# (havia uma checagem `faixa_preenchida` aqui. Ela tentava deduzir dos pixels
+#  que a foto era pequena demais pro bloco, e reprovava justamente o caso BOM:
+#  produto sobre fundo branco gera preenchimento branco que se funde com o
+#  template. Quem sabe essa proporção é o RENDER, que a calcula; foi pra lá.
+#  Checagem que não distingue o certo do errado não é checagem frouxa, é ruído.)
 #   tarjas_limpas    texto na tarja branca  → logo/hook fora da coluna do vídeo
 #                                             (o Dre pegou isso DUAS vezes no olho)
 #
@@ -157,7 +161,7 @@ def conferir(video: Path, n_quadros: int = N_QUADROS, contato: bool = False) -> 
     # que é o jeito silencioso de um validador virar decoração.
     checagens = {c: {"estado": "nao_rodou", "medido": None, "nota": ""}
                  for c in ("duracao", "quadro_morto", "moldura_estavel",
-                           "midia_viva", "contraste_texto", "faixa_preenchida")}
+                           "midia_viva", "contraste_texto", "tarjas_limpas")}
     achados = []
 
     def marcar(chave, estado, numero=None, nota=""):
@@ -242,12 +246,20 @@ def conferir(video: Path, n_quadros: int = N_QUADROS, contato: bool = False) -> 
         # reiniciado) ou ausente deixa a faixa lisa.
         faixa = (0, max(y0, y1 - 150), L, y1)
         magros = [t for t, im in imgs if _stat(im.crop(faixa))[1] < CONTRASTE_MIN]
+        n_leg = rel.get("legendas")
         marcar("contraste_texto", "passou", len(magros))
-        if len(magros) > len(imgs) * 0.6:
+        if n_leg == 0:
+            # não é defeito do render: é roteiro sem narração. Apontar pro
+            # arquivo errado faz alguém depurar o render por horas.
+            achar("contraste_texto", "media",
+                  "o vídeo saiu SEM legenda nenhuma — o roteiro veio sem "
+                  "narração nas cenas (storyboard, não render). Metade do "
+                  "público assiste sem som", 0)
+        elif len(magros) > len(imgs) * 0.6:
             achar("contraste_texto", "media",
                   f"{len(magros)} de {len(imgs)} quadros com a faixa da legenda "
-                  f"lisa (desvio < {CONTRASTE_MIN}) — legenda lavada, atrás do "
-                  "produto ou simplesmente não desenhada", len(magros))
+                  f"lisa (desvio < {CONTRASTE_MIN}) — legenda lavada ou atrás "
+                  "do produto", len(magros))
 
         # ── as tarjas laterais estão limpas? ────────────────────────────────
         # As faixas brancas dos lados da caixa do vídeo são PARTE do template e
@@ -284,16 +296,6 @@ def conferir(video: Path, n_quadros: int = N_QUADROS, contato: bool = False) -> 
                     break
 
         # ── a faixa da mídia está preenchida? ───────────────────────────────
-        marcar("faixa_preenchida", "passou")
-        for t, im in imgs[:3]:
-            topo = _stat(im.crop((0, y0, L, y0 + 40)))
-            baixo = _stat(im.crop((0, y1 - 40, L, y1)))
-            if topo[1] < 3 and baixo[1] < 3 and abs(topo[0] - baixo[0]) < 3:
-                achar("faixa_preenchida", "baixa",
-                      f"{t}s: topo e base da faixa da mídia estão chapados e "
-                      "iguais — a foto pode estar pequena demais pro bloco")
-                break
-
     if contato:
         _contato(imgs, pasta / "_contato.png")
 

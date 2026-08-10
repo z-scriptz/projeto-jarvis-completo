@@ -460,7 +460,8 @@ def _layout(edl: dict, imgs: list, avisos: list) -> dict:
 
 # ── Placas (a imagem parada que o movimento vai percorrer) ───────────────────
 
-def _placa(origem: Path, destino: Path, lay: dict, avisos: list) -> Path:
+def _placa(origem: Path, destino: Path, lay: dict, avisos: list,
+           encaixe: str = "contain") -> Path:
     """Foto do produto -> SÓ a faixa da mídia, pronta pro punch-in.
 
     A placa não é o quadro inteiro: é só o bloco que se mexe. O template branco
@@ -493,10 +494,45 @@ def _placa(origem: Path, destino: Path, lay: dict, avisos: list) -> Path:
     if lay["claro"]:
         fundo = ImageEnhance.Color(fundo).enhance(0.5)
 
-    r = min(W / img.width, H / img.height)
-    prod = img.resize((max(1, int(img.width * r)), max(1, int(img.height * r))),
-                      Image.LANCZOS)
-    fundo.paste(prod, ((W - prod.width) // 2, (H - prod.height) // 2))
+    # CONTAIN x COVER — e a escolha depende da FOTO, não do gosto.
+    #
+    # A caixa é 3:4 e foto de e-commerce é quadrada: no contain sobram ~12% de
+    # fundo em cima e embaixo. Com a minha foto de teste (paisagem em P&B) isso
+    # aparece como uma faixa cinza e parece defeito; com foto de produto sobre
+    # FUNDO BRANCO — que é a esmagadora maioria na Shopee — o preenchimento sai
+    # quase branco e some dentro do template claro.
+    #
+    # O cover preenche a caixa, mas pra levar uma foto quadrada a 3:4 ele corta
+    # ~25% da LARGURA — e o que mora nas laterais de uma foto de produto é o
+    # produto. Por isso o padrão é contain: sobrar fundo é feio, cortar o
+    # produto é perder o vídeo.
+    if encaixe == "cover":
+        r = max(W / img.width, H / img.height)
+        prod = img.resize((max(1, int(img.width * r)),
+                           max(1, int(img.height * r))), Image.LANCZOS)
+        cx, cy = (prod.width - W) // 2, (prod.height - H) // 2
+        fundo.paste(prod.crop((cx, cy, cx + W, cy + H)), (0, 0))
+        perdido = 1 - min(1.0, (W / r) / img.width)
+        if perdido > 0.18:
+            avisos.append(f"cover cortou {perdido:.0%} da largura de "
+                          f"{origem.name} — confira se o produto não perdeu "
+                          "pedaço nas laterais")
+    else:
+        r = min(W / img.width, H / img.height)
+        prod = img.resize((max(1, int(img.width * r)),
+                           max(1, int(img.height * r))), Image.LANCZOS)
+        fundo.paste(prod, ((W - prod.width) // 2, (H - prod.height) // 2))
+        # QUEM MEDE ISTO É O RENDER, não o inspetor.
+        # O inspetor tentava deduzir "foto pequena demais pro bloco" olhando se
+        # o topo e a base da faixa estavam chapados — e acusava justamente o
+        # caso BOM: foto de produto sobre fundo branco gera preenchimento
+        # branco, que se funde com o template. Era o resultado desejado sendo
+        # reprovado. Aqui a proporção é sabida, não inferida.
+        ocupa = (prod.width * prod.height) / float(W * H)
+        if ocupa < 0.62:
+            avisos.append(f"{origem.name}: o produto ocupa {ocupa:.0%} da caixa "
+                          "do vídeo — foto muito fora do 3:4. Considere "
+                          "--encaixe cover se o produto tiver margem de sobra")
 
     destino.parent.mkdir(parents=True, exist_ok=True)
     fundo.save(destino, "PNG")
@@ -1191,7 +1227,7 @@ def _resolver_imagens(origem: str, n: int, avisos: list) -> list:
 # ── Render ───────────────────────────────────────────────────────────────────
 
 def renderizar(edl: dict, origem_imgs: str, saida: Path, mudo=False,
-               crf=20, quadros=0) -> dict:
+               crf=20, quadros=0, encaixe="contain") -> dict:
     avisos = []
     ff = _ffmpeg()
     if not ff:
@@ -1229,7 +1265,8 @@ def renderizar(edl: dict, origem_imgs: str, saida: Path, mudo=False,
         lay = _layout(edl, imgs, avisos)
         placas = {}
         for i, f in enumerate(imgs, 1):
-            placas[f"asset_{i}"] = _placa(f, tmp / f"placa_{i}.png", lay, avisos)
+            placas[f"asset_{i}"] = _placa(f, tmp / f"placa_{i}.png", lay,
+                                          avisos, encaixe)
 
         narracoes = [] if mudo else _narrar(edl, tmp, ff, avisos)
         if mudo:
@@ -1265,6 +1302,12 @@ def renderizar(edl: dict, origem_imgs: str, saida: Path, mudo=False,
                "tamanho_mb": round(saida.stat().st_size / 1e6, 2),
                "template": edl.get("template", {}),
                "voz": sorted({n.get("voz", "?") for n in narracoes}),
+               # o inspetor precisa distinguir "legenda lavada" de "não havia
+               # legenda nenhuma": o 1º é defeito do render, o 2º é o roteiro
+               # ter saído sem narração. Diagnóstico errado manda consertar o
+               # arquivo errado.
+               "legendas": sum(1 for t in edl["trilhas"]["texto"]
+                               if t.get("estilo") == "legenda"),
                # o layout entra no relatório porque é o que o inspetor precisa
                # pra saber ONDE olhar no quadro (faixa da mídia vs. moldura)
                "layout": {k: v for k, v in lay.items() if k != "hook_linhas"},
@@ -1307,6 +1350,9 @@ def main():
     p.add_argument("--mudo", action="store_true",
                    help="sem narração — testa se o vídeo prende só pelo texto")
     p.add_argument("--crf", type=int, default=20)
+    p.add_argument("--encaixe", choices=("contain", "cover"), default="contain",
+                   help="contain: foto inteira, sobra fundo. cover: preenche a "
+                        "caixa cortando as laterais")
     p.add_argument("--quadros", type=int, default=0,
                    help="tira N quadros do resultado pra revisar sem player")
     args = p.parse_args()
@@ -1317,7 +1363,7 @@ def main():
 
     _log(f"{edl.get('produto', '')[:60]}  [{edl.get('modo_audio')}]")
     rel = renderizar(edl, args.imagens, saida, mudo=args.mudo, crf=args.crf,
-                     quadros=args.quadros)
+                     quadros=args.quadros, encaixe=args.encaixe)
 
     print()
     _log(f"✅ {rel['arquivo']}")

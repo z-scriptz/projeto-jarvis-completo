@@ -1462,6 +1462,45 @@ fica a ~95px do rodapé. No print (grade do perfil) ela aparece inteira, mas no
 no template publicado por causa disso — é medição pra fazer no app, não palpite
 meu.
 
+### PILOTO — `piloto.py`, a cadeia inteira num comando (09/08)
+
+    produto da fila → roteiro → linha do tempo → MP4 → conferência
+
+    .venv/bin/python piloto.py --fila 0
+
+Baixa a foto do produto (a fila guarda URL, não arquivo), gera o roteiro, monta
+a linha do tempo, renderiza e confere. **NÃO POSTA NADA.** Existe porque cada
+peça foi provada separada e com foto genérica; defeito de integração só aparece
+quando todas as peças reais se encontram — e encadear seis comandos à mão é
+onde se erra um parâmetro e se perde meia hora culpando o render.
+
+**A 1ª rodada do piloto já pagou o próprio custo**, com duas descobertas:
+
+1. ✅ **O "erro" que o Dre viu no print era a MINHA FOTO DE TESTE, não o
+   render.** Com foto de produto sobre fundo BRANCO — que é a esmagadora
+   maioria na Shopee — o preenchimento da caixa 3:4 sai quase branco e **funde
+   com o template**. Com a minha foto (paisagem P&B) virava uma faixa cinza que
+   parecia defeito. Fica registrado o `--encaixe cover` pra quem tiver foto com
+   margem de sobra: preenche a caixa cortando ~25% da largura, e avisa quando
+   corta demais.
+
+2. ❌ **Duas checagens minhas estavam erradas, e o piloto expôs as duas:**
+   - `faixa_preenchida` reprovava o caso BOM. Ela deduzia dos pixels que "a
+     foto é pequena demais pro bloco" — e o preenchimento branco fundido com o
+     template é exatamente o resultado desejado. **REMOVIDA.** Quem sabe essa
+     proporção é o render, que a CALCULA; virou aviso lá (`ocupa < 62%`).
+     Checagem que não distingue o certo do errado não é frouxa, é ruído.
+   - `contraste_texto` acusava "legenda lavada" quando o vídeo **não tinha
+     legenda nenhuma** — o roteiro tinha caído no modelo base, sem narração nas
+     cenas. Diagnóstico errado manda consertar o arquivo errado: mandaria
+     depurar o render por horas quando o problema está no storyboard. Agora o
+     relatório do render carrega a CONTAGEM de legendas e o inspetor separa os
+     dois casos.
+
+⚠️ **O que ainda não foi provado** (não dá pra provar fora da VPS): voz do
+ElevenLabs com timestamps, logo e selo reais, e o `.env` de verdade. É o teste
+de fogo que falta.
+
 ### Onde parou (04/08, fim do dia)
 
 **Esperando o chip.** Pedido feito — Claro pré-pago, R$ 20,99, chegada prevista
