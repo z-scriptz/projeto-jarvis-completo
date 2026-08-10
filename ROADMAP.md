@@ -1862,6 +1862,17 @@ encostado"*. Encostado vs. com respiro é escolha de DESIGN, não de precisão, 
 quem decide é o dono da marca. **Produzir a evidência era meu trabalho;
 concluir por ele, não.** Ficou `SELO_DX +2`.
 
+**E a confusão que veio depois virou melhoria.** O Dre mandou outro vídeo com o
+selo ainda encostado; eu não tinha como saber se o valor estava errado ou se
+era o build antigo — era o build antigo (o `+2` foi commitado depois do comando
+de deploy que eu tinha mandado). Antes de mexer em pixel de novo, medi se o
+offset dependia da fonte: `textlength` e `textbbox` batem (0,4px de diferença
+em Liberation, -0,1 em DejaVu), então o valor é estável entre fontes e não era
+essa a causa.
+**O relatório do render passou a gravar os KNOBS que geraram o arquivo**
+(`SELO_DX`, `LOGO_*`, `VIDEO_Y`, `CTA_*`, `narrar_hook`). "Qual versão gerou
+este vídeo" deixa de ser dedução e vira leitura — mesma ideia do `voz_id`.
+
     logo 86,210 (118px) · nome +44 · @ +96 · selo SELO_DX +2
     hook: coluna do vídeo, 2 linhas, 46px caindo até 34
     mídia: x 97→982 · y 540→1720 (82% em 3:4)

@@ -1378,6 +1378,20 @@ def renderizar(edl: dict, origem_imgs: str, saida: Path, mudo=False,
                # pra saber ONDE olhar no quadro (faixa da mídia vs. moldura)
                "layout": {k: v for k, v in lay.items() if k != "hook_linhas"},
                "hook_linhas": lay["hook_linhas"],
+               # OS KNOBS QUE GERARAM ESTE ARQUIVO.
+               # O Dre viu o selo encostado num vídeo e eu fiquei sem saber se
+               # era o valor errado ou o build velho — era o build velho. Com
+               # os números no relatório, "qual versão gerou isto" para de ser
+               # dedução e vira leitura. Mesma ideia do `voz_id`.
+               "knobs": {"SELO_DX": SELO_DX, "LOGO_X": LOGO_X,
+                         "LOGO_Y": LOGO_Y, "NOME_FONT": NOME_FONT,
+                         "HANDLE_FONT": HANDLE_FONT, "VIDEO_Y": VIDEO_Y,
+                         "CTA_Y": CTA_Y,
+                         "CTA_DY": int(os.environ.get("CTA_DY", -8)),
+                         "narrar_hook": any(
+                             a.get("tipo") == "narracao"
+                             and a.get("inicio", 1) == 0.0
+                             for a in edl["trilhas"]["audio"])},
                # sem dict.fromkeys, uma falha do ElevenLabs vira 5 linhas
                # idênticas no relatório e o aviso importante some no meio
                "faltou": list(dict.fromkeys(avisos))}
