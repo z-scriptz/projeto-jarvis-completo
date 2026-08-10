@@ -408,7 +408,79 @@ def definir_vozes(pares: list) -> int:
     return 0
 
 
+def criar_conta(campos: list) -> int:
+    """Acrescenta uma conta ao contas.json — com TODOS os campos ou nenhum.
+
+    ⚠️ EXIGE handle, instagram_user_id, facebook_page_id e page_token_env de
+    propósito. Conta pela metade neste arquivo é pior que conta ausente: o
+    `daemon_maestro._nichos_das_contas` passa a produzir vídeo pro nicho e o
+    post só falha lá na frente, na hora de publicar, sem ninguém ligar as duas
+    coisas.
+
+    ⚠️ E CONFERE O FORMATO DOS IDs. O `instagram_user_id` da Graph API é o
+    IGSID: 17 dígitos, começando em 178414 nas contas deste projeto. Número de
+    11 dígitos ou código alfanumérico é OUTRO identificador (o que o app
+    mostra), e com ele a publicação falha com erro genérico. Quem devolve os
+    corretos é o `diag_contas.py`.
+    """
+    import json
+    arq = BASE_DIR / "contas.json"
+    try:
+        d = json.loads(arq.read_text(encoding="utf-8"))
+    except Exception as e:
+        print(f"não li {arq}: {e}")
+        return 1
+
+    novo, nicho = {}, ""
+    for c in campos:
+        if "=" not in c:
+            continue
+        k, _, v = c.partition("=")
+        k, v = k.strip(), v.strip()
+        if k == "nicho":
+            nicho = v.lower()
+        else:
+            novo[k] = v
+
+    obrigatorios = ("handle", "instagram_user_id", "facebook_page_id",
+                    "page_token_env")
+    faltam = [c for c in obrigatorios if not novo.get(c)]
+    if not nicho or faltam:
+        print("faltou: " + ", ".join(([] if nicho else ["nicho"]) + faltam))
+        print("\n  uso: --criar-conta nicho=pet handle=@topshoppet_ \\")
+        print("         instagram_user_id=178414... facebook_page_id=123... \\")
+        print("         page_token_env=PAGE_TOKEN_TOPSHOP_PET voz_id=... voz_nome=...")
+        print("\n  os IDs corretos saem de:  .venv/bin/python diag_contas.py")
+        return 1
+    if nicho in d:
+        print(f"o nicho {nicho!r} já existe — use --definir-voz pra só a voz")
+        return 1
+
+    igs = novo["instagram_user_id"]
+    if not (igs.isdigit() and len(igs) >= 16):
+        print(f"⚠️  instagram_user_id {igs!r} não parece um IGSID da Graph API "
+              "(17 dígitos, começa em 178414 nas outras contas).")
+        print("    As contas que funcionam hoje têm este formato. Rode "
+              "`.venv/bin/python diag_contas.py` e use o número que ele mostra.")
+        return 1
+    if not novo["facebook_page_id"].isdigit():
+        print(f"⚠️  facebook_page_id {novo['facebook_page_id']!r} não é "
+              "numérico — o que o app mostra não é o ID da Graph API. "
+              "Rode `diag_contas.py`.")
+        return 1
+
+    d[nicho] = novo
+    arq.write_text(json.dumps(d, ensure_ascii=False, indent=2) + "\n",
+                   encoding="utf-8")
+    print(f"  ✅ {nicho} criada: {novo.get('handle')}")
+    print("     confira com: .venv/bin/python narracao_ia.py --vozes")
+    return 0
+
+
 def main():
+    if "--criar-conta" in sys.argv:
+        i = sys.argv.index("--criar-conta")
+        return criar_conta([a for a in sys.argv[i + 1:] if not a.startswith("--")])
     if "--definir-voz" in sys.argv:
         i = sys.argv.index("--definir-voz")
         return definir_vozes([a for a in sys.argv[i + 1:] if not a.startswith("--")])

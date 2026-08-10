@@ -116,6 +116,20 @@ def main():
             ids = extrair_ids_da_url(link) or {}
             if ids.get("ok"):
                 item_id = str(ids.get("item_id") or "")
+        if not item_id and link:
+            # A FILA GUARDA LINK CURTO (s.shopee.com.br/9Kh92XRVv8), e o
+            # extrair_ids_da_url só entende o formato longo com i.SHOP.ITEM.
+            # Quem já resolvia isso é o preencher_fotos._ids_do_link, que SEGUE
+            # o redirecionamento até a página do produto. Reusar em vez de
+            # reescrever: é a mesma regra num lugar só que o projeto já cobra.
+            try:
+                from preencher_fotos import _ids_do_link
+                _shop, _item = _ids_do_link(link)
+                item_id = str(_item or "")
+                if item_id:
+                    _log(f"link curto resolvido → shop {_shop} · item {item_id}")
+            except Exception as e:
+                _log(f"não segui o link curto: {str(e)[:80]}")
         if not item_id:
             raise SystemExit(f"[probe] não extraí o itemId de {link[:70]!r} — "
                              "passe --item ITEMID")
