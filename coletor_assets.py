@@ -206,6 +206,27 @@ def coletar(shop_id: str, item_id: str, espera_ms: int = 5000,
                 j = resp.json()
             except Exception:
                 return
+            # GUARDA O CORPO das rotas de produto quando em diagnóstico.
+            # A rodada anterior provou que `pdp/get_pc` responde 200 — ou seja,
+            # a galeria CHEGOU e eu não a reconheci. Adivinhar o formato de
+            # novo seria o terceiro chute; ler o corpo encerra a dúvida.
+            if diagnostico and ("pdp" in u or "item" in u):
+                try:
+                    alvo = diagnostico.parent / (
+                        diagnostico.stem + "_" +
+                        u.split("/api/")[-1].split("?")[0].replace("/", "_") +
+                        ".json")
+                    alvo.write_text(json.dumps(j, ensure_ascii=False)[:400000],
+                                    encoding="utf-8")
+                    capturado.setdefault("dumps", []).append(str(alvo))
+                    # o resumo já responde metade das perguntas sem abrir nada
+                    chaves = list(j.keys())[:8] if isinstance(j, dict) else []
+                    erro = j.get("error") if isinstance(j, dict) else None
+                    capturado.setdefault("resumo", []).append(
+                        f"{u.split('/api/')[-1].split('?')[0]}: "
+                        f"chaves={chaves} error={erro}")
+                except Exception:
+                    pass
             listas = procurar_galeria(j)
             if listas:
                 atual = capturado.get("melhor") or []
@@ -255,6 +276,8 @@ def coletar(shop_id: str, item_id: str, espera_ms: int = 5000,
                 "imagens": [f"{CDN}{h}" for h in unicos[:12]]}
 
     return {"ok": False, "titulo": titulo, "chamadas": vistas,
+            "dumps": capturado.get("dumps") or [],
+            "resumo": capturado.get("resumo") or [],
             "erro": ("nenhuma chamada trouxe galeria e o HTML não tem hash de "
                      f"imagem (título da página: {titulo[:50]!r})")}
 
@@ -335,6 +358,10 @@ def main():
         _log(f"🔎 {len(chamadas)} chamada(s) /api/ vistas:")
         for c in chamadas[:25]:
             print(f"      {c}")
+        for linha in (r.get("resumo") or []):
+            _log(f"   📄 {linha}")
+        for d in (r.get("dumps") or []):
+            _log(f"   💾 corpo salvo: {d}")
         if tiro and tiro.exists():
             _log(f"   🖼️  print da página em {tiro}")
 

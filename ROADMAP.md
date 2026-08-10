@@ -1774,6 +1774,13 @@ Se nada vier por XHR, ainda procura o mesmo formato no HTML — página renderiz
 no servidor traz o JSON embutido. E `--diagnostico` salva print + lista todas as
 chamadas `/api/` vistas, pra a próxima decisão ser por evidência.
 
+**2ª rodada na VPS — a rota APARECEU:** `200 /api/v4/pdp/get_pc`. Ou seja, a
+chamada da galeria chegou e minha busca não a reconheceu, ou ela veio com erro
+silencioso (a Shopee responde 200 com `error` no corpo quando bloqueia). Duas
+causas muito diferentes, e nenhuma delas se decide adivinhando pela terceira
+vez. Com `--diagnostico` o corpo das rotas de produto agora é SALVO em JSON, com
+um resumo de chaves e do campo `error` — é o que encerra a dúvida.
+
 Testado com três payloads: rota inventada com campo `image_list` (achou pelo
 formato), formato antigo `images` + `video_info_list` (não regrediu), e JSON com
 listas que NÃO são galeria (não inventou). ⚠️ O caminho feliz continua sem teste
