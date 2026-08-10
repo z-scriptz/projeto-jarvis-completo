@@ -1761,9 +1761,23 @@ tocada com `--gravar`, preservando o resto do item.
     python3 coletor_assets.py --fila 0 --gravar     → `imagens` na fila
     python3 piloto.py --fila 0                      → o piloto já usa `imagens`
 
-⚠️ **O QUE EU PUDE PROVAR E O QUE NÃO PUDE.** O ambiente onde escrevi isto não
-alcança a Shopee (`ERR_CONNECTION_RESET` pelo proxy), então **o caminho feliz
-não foi testado por mim**. O que testei foi a parte onde mora o risco real — a
+⚠️ **1ª VERSÃO FALHOU NA VPS, E FALHOU MAL:** *"a página abriu mas a chamada
+da galeria não veio"*. Eu tinha amarrado o ouvinte a UMA rota
+(`/api/v4/item/get`) — o mesmo erro de amarrar-se a um seletor de DOM. E o
+aviso não distinguia "o site mudou de rota" de "renderizou no servidor" de
+"bloqueou": **diagnóstico que não distingue causa não é diagnóstico**.
+
+**Redesenhado pra procurar FORMATO, não nome.** Agora captura TODA resposta
+JSON de qualquer `/api/` e vasculha atrás de listas com cara de hash da Shopee
+(`br-11134207-7r98o-abc123`). Não importa se a rota vira `pdp/get_pc` amanhã.
+Se nada vier por XHR, ainda procura o mesmo formato no HTML — página renderizada
+no servidor traz o JSON embutido. E `--diagnostico` salva print + lista todas as
+chamadas `/api/` vistas, pra a próxima decisão ser por evidência.
+
+Testado com três payloads: rota inventada com campo `image_list` (achou pelo
+formato), formato antigo `images` + `video_info_list` (não regrediu), e JSON com
+listas que NÃO são galeria (não inventou). ⚠️ O caminho feliz continua sem teste
+meu — este ambiente não alcança a Shopee (`ERR_CONNECTION_RESET`). O que testei foi a parte onde mora o risco real — a
 leitura do payload — isolada em `extrair()`: hash virando URL do CDN, hash
 vazio descartado, vídeo sem `url` ignorado, URL já completa preservada, payload
 sem `data` avisando. Passou. O resto depende da VPS alcançar a loja.

@@ -13,12 +13,20 @@
 # em cima de palpite meu** — e o palpite ("não dá pra resolver") estava errado.
 #
 # A IDEIA CENTRAL: NÃO RASPAR A PÁGINA, ESCUTAR O QUE ELA PEDE
-# A própria página de produto chama a `v4/item/get` — a mesma que responde 403
-# pra requisição crua. Dentro do navegador ela responde 200, porque vai com os
-# cookies, o cabeçalho e a impressão digital que o site espera. Então aqui não
-# se lê HTML nem se procura seletor: abre-se a página e ESCUTA-SE a resposta
-# daquela chamada. É mais robusto que raspar DOM (que quebra a cada redesenho)
-# e é a mesma informação que o site usa pra montar a galeria.
+# A página de produto busca os próprios dados por XHR. Dentro do navegador
+# essas chamadas respondem 200, porque vão com cookie, cabeçalho e impressão
+# digital que o site espera — a mesma rota que dá 403 na requisição crua.
+#
+# ⚠️ E NÃO SE ESPERA UMA ROTA ESPECÍFICA. A 1ª versão escutava só
+# `/api/v4/item/get` e na VPS voltou "a página abriu mas a chamada não veio" —
+# sem dizer se o site mudou de rota, se renderizou no servidor, ou se era
+# bloqueio. Amarrar-se a um nome de rota é o mesmo erro de amarrar-se a um
+# seletor de DOM: quebra no primeiro redesenho e o diagnóstico vira adivinhação.
+#
+# Agora: captura-se TODA resposta JSON e procura-se, em qualquer profundidade,
+# uma lista que se pareça com galeria (hashes de imagem da Shopee). Se o site
+# renderizar no servidor, o `--diagnostico` mostra o que ele realmente fez, com
+# print e a lista de chamadas — em vez de eu chutar de novo.
 #
 # ⚠️ SÓ LÊ. Não posta, não compra, não mexe na fila (a não ser com --gravar).
 # ⚠️ UM produto por vez, com pausa. Isto não é um raspador em massa.
@@ -32,6 +40,7 @@
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -77,6 +86,42 @@ def _ids(link: str):
         return None, None
 
 
+_HASH = re.compile(r"^[a-z0-9]{2}-[a-z0-9]{8,}-[a-z0-9]{4,}-[a-z0-9]{4,}$", re.I)
+
+
+def _parece_hash(v) -> bool:
+    """O hash de imagem da Shopee tem cara própria: br-11134207-7r98o-abc123.
+
+    Reconhecer pelo FORMATO, e não pelo nome do campo, é o que deixa a busca
+    funcionar mesmo quando o site troca `images` por outro nome.
+    """
+    return isinstance(v, str) and (_HASH.match(v) or
+                                   (32 <= len(v) <= 48 and v.isalnum()))
+
+
+def procurar_galeria(obj, achados=None, profundidade=0):
+    """Vasculha um JSON qualquer atrás de listas de hash de imagem.
+
+    Devolve a MAIOR lista encontrada. Route-agnostic de propósito: não importa
+    se a rota se chama item/get, pdp/get_pc ou o que a Shopee inventar amanhã —
+    o que se procura é o FORMATO do dado.
+    """
+    achados = [] if achados is None else achados
+    if profundidade > 8:
+        return achados
+    if isinstance(obj, dict):
+        for v in obj.values():
+            procurar_galeria(v, achados, profundidade + 1)
+    elif isinstance(obj, list):
+        hashes = [x for x in obj if _parece_hash(x)]
+        if len(hashes) >= 2:
+            achados.append(hashes)
+        for v in obj:
+            if isinstance(v, (dict, list)):
+                procurar_galeria(v, achados, profundidade + 1)
+    return achados
+
+
 def extrair(payload: dict) -> dict:
     """Payload da v4/item/get -> {imagens, videos, titulo}.
 
@@ -90,14 +135,27 @@ def extrair(payload: dict) -> dict:
     """
     dados = (payload or {}).get("data") or {}
     if not dados:
-        return {"ok": False, "imagens": [], "videos": [], "titulo": "",
-                "erro": "payload sem `data`"}
+        # sem `data` ainda pode haver galeria em outro lugar do JSON — quem
+        # decide é o formato do dado, não o nome do campo
+        listas = procurar_galeria(payload)
+        if not listas:
+            return {"ok": False, "imagens": [], "videos": [], "titulo": "",
+                    "erro": "payload sem `data` e sem lista de hash"}
+        maior = max(listas, key=len)
+        return {"ok": True, "titulo": "", "videos": [], "erro": None,
+                "imagens": [h if h.startswith("http") else f"{CDN}{h}"
+                            for h in maior]}
 
     imgs = []
     for h in (dados.get("images") or []):
         if not h:
             continue
         imgs.append(h if str(h).startswith("http") else f"{CDN}{h}")
+    if not imgs:
+        listas = procurar_galeria(dados)
+        if listas:
+            imgs = [h if h.startswith("http") else f"{CDN}{h}"
+                    for h in max(listas, key=len)]
 
     videos = []
     for v in (dados.get("video_info_list") or []):
@@ -111,7 +169,8 @@ def extrair(payload: dict) -> dict:
             "titulo": dados.get("name") or "", "erro": None}
 
 
-def coletar(shop_id: str, item_id: str, espera_ms: int = 5000) -> dict:
+def coletar(shop_id: str, item_id: str, espera_ms: int = 5000,
+            diagnostico: Path = None) -> dict:
     """Abre a página do produto e escuta a resposta da API que ela mesma chama.
 
     Retorna {"ok", "imagens": [url], "videos": [url], "titulo", "erro"}.
@@ -136,37 +195,68 @@ def coletar(shop_id: str, item_id: str, espera_ms: int = 5000) -> dict:
             viewport={"width": 1366, "height": 900})
         pagina = ctx.new_page()
 
+        vistas = []
+
         def ouvir(resp):
-            # a página chama /api/v4/item/get pra montar a própria galeria;
-            # é a MESMA rota que dá 403 na requisição crua
-            if "/api/v4/item/get" in resp.url and "dados" not in capturado:
-                try:
-                    capturado["dados"] = resp.json()
-                except Exception:
-                    pass
+            u = resp.url
+            if "/api/" not in u:
+                return
+            vistas.append(f"{resp.status} {u.split('?')[0]}")
+            try:
+                j = resp.json()
+            except Exception:
+                return
+            listas = procurar_galeria(j)
+            if listas:
+                atual = capturado.get("melhor") or []
+                maior = max(listas, key=len)
+                if len(maior) > len(atual):
+                    capturado["melhor"] = maior
+                    capturado["dados"] = j
+                    capturado["rota"] = u.split("?")[0]
 
         pagina.on("response", ouvir)
+        titulo, html = "", ""
         try:
             pagina.goto(url, wait_until="domcontentloaded", timeout=60000)
             pagina.wait_for_timeout(espera_ms)
+            # rolar acorda XHR que só dispara quando a galeria entra em tela
+            try:
+                pagina.mouse.wheel(0, 1200)
+                pagina.wait_for_timeout(2500)
+            except Exception:
+                pass
+            titulo = (pagina.title() or "").split("|")[0].strip()
+            html = pagina.content()
+            if diagnostico:
+                pagina.screenshot(path=str(diagnostico), full_page=False)
         except Exception as e:
             ctx.close(); navegador.close()
-            return {"ok": False, "erro": f"não abri a página: {str(e)[:110]}"}
-        titulo = ""
-        try:
-            titulo = (pagina.title() or "").split("|")[0].strip()
-        except Exception:
-            pass
+            return {"ok": False, "erro": f"não abri a página: {str(e)[:110]}",
+                    "chamadas": vistas}
         ctx.close()
         navegador.close()
 
-    if not (capturado.get("dados") or {}).get("data"):
-        return {"ok": False, "titulo": titulo,
-                "erro": "a página abriu mas a chamada da galeria não veio "
-                        "(bloqueio, ou o site mudou a rota)"}
-    r = extrair(capturado["dados"])
-    r["titulo"] = r.get("titulo") or titulo
-    return r
+    if capturado.get("melhor"):
+        r = extrair(capturado["dados"])
+        r["titulo"] = r.get("titulo") or titulo
+        r["rota"] = capturado.get("rota", "")
+        r["chamadas"] = vistas
+        return r
+
+    # ÚLTIMA TENTATIVA: a página pode ter vindo pronta do servidor, com o JSON
+    # embutido num <script>. Procura-se o mesmo FORMATO de hash direto no HTML.
+    achados = re.findall(r'"([a-z]{2}-[a-z0-9]{6,}-[a-z0-9]{4,}-[a-z0-9]{4,})"',
+                         html or "", re.I)
+    unicos = list(dict.fromkeys(achados))
+    if len(unicos) >= 2:
+        return {"ok": True, "titulo": titulo, "videos": [], "erro": None,
+                "rota": "HTML embutido", "chamadas": vistas,
+                "imagens": [f"{CDN}{h}" for h in unicos[:12]]}
+
+    return {"ok": False, "titulo": titulo, "chamadas": vistas,
+            "erro": ("nenhuma chamada trouxe galeria e o HTML não tem hash de "
+                     f"imagem (título da página: {titulo[:50]!r})")}
 
 
 def _baixar(urls: list, destino: Path, prefixo: str) -> list:
@@ -199,6 +289,9 @@ def main():
                    help="escreve a lista em `imagens` no item da fila")
     p.add_argument("--espera", type=int, default=5000,
                    help="ms esperando a página chamar a API (padrão 5000)")
+    p.add_argument("--diagnostico", action="store_true",
+                   help="salva print da página e lista TODAS as chamadas /api/ "
+                        "— pra ver o que o site fez, em vez de adivinhar")
     args = p.parse_args()
 
     _carregar_env()
@@ -231,7 +324,20 @@ def main():
             raise SystemExit(f"[assets] não extraí os IDs de {link[:70]!r}")
         _log(f"link resolvido → shop {shop_id} · item {item_id}")
 
-    r = coletar(str(shop_id), str(item_id), args.espera)
+    tiro = (BASE_DIR / "shared" / "assets" / f"diag_{item_id}.png"
+            if args.diagnostico else None)
+    if tiro:
+        tiro.parent.mkdir(parents=True, exist_ok=True)
+    r = coletar(str(shop_id), str(item_id), args.espera, tiro)
+
+    if args.diagnostico:
+        chamadas = r.get("chamadas") or []
+        _log(f"🔎 {len(chamadas)} chamada(s) /api/ vistas:")
+        for c in chamadas[:25]:
+            print(f"      {c}")
+        if tiro and tiro.exists():
+            _log(f"   🖼️  print da página em {tiro}")
+
     if not r.get("ok"):
         _log(f"❌ {r.get('erro')}")
         _log("   se for bloqueio, o caminho vira: galeria da Amazon/ML pro "
@@ -239,7 +345,8 @@ def main():
         return 1
 
     _log(f"✅ {r.get('titulo', '')[:60]}")
-    _log(f"   {len(r['imagens'])} imagem(ns) · {len(r['videos'])} vídeo(s)")
+    _log(f"   {len(r['imagens'])} imagem(ns) · {len(r.get('videos') or [])} "
+         f"vídeo(s) · via {r.get('rota', '?')}")
     for u in r["imagens"][:8]:
         print(f"      {u}")
     if r["videos"]:
