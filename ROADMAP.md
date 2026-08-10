@@ -1789,6 +1789,43 @@ leitura do payload — isolada em `extrair()`: hash virando URL do CDN, hash
 vazio descartado, vídeo sem `url` ignorado, URL já completa preservada, payload
 sem `data` avisando. Passou. O resto depende da VPS alcançar a loja.
 
+### 🔒 GALERIA DA SHOPEE: FECHADO POR BLOQUEIO — três medições (10/08)
+
+    1. API de afiliado (productOfferV2)   11 campos testados · nenhum existe
+    2. API interna (v4/item/get) crua     HTTP 403 · aqui E na VPS
+    3. Página real, navegador headless    200 /api/v4/pdp/get_pc, MAS:
+                                          error=90309999 · sem `data`
+                                          chaves numeradas = resposta ofuscada
+                                          título da página "Shopee Brasil"
+
+**`error=90309999` é anti-bot.** Não é formato, não é rota, não é tempo de
+espera: é o IP do servidor. Insistir daqui não muda resultado, e o coletor
+agora DIZ isso em vez de reportar "não achei galeria" — que era verdade e
+escondia a causa.
+
+⚠️ **Valeu a pena mesmo assim, e por um motivo:** eu tinha declarado "não dá
+pra resolver" no primeiro palpite. Estava errado — havia caminhos, e só três
+medições fecharam a porta de verdade. **A diferença entre "eu acho que não dá"
+e "medi e não dá" é o que separa uma decisão de uma desculpa.**
+
+**O que muda resultado, com o custo honesto de cada um:**
+
+  1. **Amazon / Mercado Livre pro mesmo produto** — as duas expõem galeria e o
+     `amazon_playwright.py` já existe. ⚠️ Só serve pra produto que exista nos
+     dois lugares, e o link de afiliado continua sendo o da Shopee.
+  2. **Sessão logada da Shopee** — cookie de conta real no contexto persistente
+     do Playwright (o projeto já faz isso pro Instagram). Custo: um login
+     manual, e o risco de a conta ser marcada.
+  3. **Proxy residencial** — o ROADMAP já dizia *"proxies por conta: só se vier
+     punição/bloqueio, não antes"*. **Veio.** Custo mensal e mais uma peça.
+  4. **Aceitar 1 foto** e investir em SELEÇÃO em vez de quantidade: rejeitar
+     foto ruim (texto promocional queimado, como a da escova alisadora) antes
+     de produzir. Não aumenta o material, mas aumenta o piso da qualidade — e é
+     independente de qualquer decisão acima.
+
+**Enquanto isso o piloto não parou:** 1 foto + 3 enquadramentos derivados por
+região de detalhe, e `--encaixe cover` pra foto com margem sobrando.
+
 ### Onde parou (04/08, fim do dia)
 
 **Esperando o chip.** Pedido feito — Claro pré-pago, R$ 20,99, chegada prevista

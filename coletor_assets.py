@@ -227,6 +227,13 @@ def coletar(shop_id: str, item_id: str, espera_ms: int = 5000,
                         f"chaves={chaves} error={erro}")
                 except Exception:
                     pass
+            # BLOQUEIO SILENCIOSO: a Shopee responde 200 com um código de erro
+            # no corpo em vez de 403. Medido na VPS: error=90309999 e `data`
+            # ausente, com as chaves do JSON numeradas — resposta ofuscada de
+            # anti-bot. Sem reconhecer isto, o coletor diria "não achei
+            # galeria", que é verdade e esconde a causa.
+            if isinstance(j, dict) and j.get("error") and ("pdp" in u or "item" in u):
+                capturado["bloqueio"] = j.get("error")
             listas = procurar_galeria(j)
             if listas:
                 atual = capturado.get("melhor") or []
@@ -275,6 +282,15 @@ def coletar(shop_id: str, item_id: str, espera_ms: int = 5000,
                 "rota": "HTML embutido", "chamadas": vistas,
                 "imagens": [f"{CDN}{h}" for h in unicos[:12]]}
 
+    if capturado.get("bloqueio"):
+        return {"ok": False, "titulo": titulo, "chamadas": vistas,
+                "bloqueio": capturado["bloqueio"],
+                "dumps": capturado.get("dumps") or [],
+                "resumo": capturado.get("resumo") or [],
+                "erro": (f"BLOQUEIO da Shopee (error={capturado['bloqueio']}): "
+                         "a rota da galeria respondeu 200 mas com código de "
+                         "anti-bot e sem dados. Não é formato nem rota — é o IP "
+                         "deste servidor. Insistir daqui não resolve")}
     return {"ok": False, "titulo": titulo, "chamadas": vistas,
             "dumps": capturado.get("dumps") or [],
             "resumo": capturado.get("resumo") or [],
@@ -367,8 +383,15 @@ def main():
 
     if not r.get("ok"):
         _log(f"❌ {r.get('erro')}")
-        _log("   se for bloqueio, o caminho vira: galeria da Amazon/ML pro "
-             "mesmo produto, ou banco próprio de assets")
+        if r.get("bloqueio"):
+            _log("   NÃO adianta trocar seletor, rota ou espera. O que muda "
+                 "resultado é mudar de ORIGEM ou de IP:")
+            _log("     · galeria da Amazon/ML pro mesmo produto "
+                 "(amazon_playwright.py já existe)")
+            _log("     · sessão logada da Shopee (cookie de conta real)")
+            _log("     · proxy residencial — o ROADMAP já dizia 'só se vier "
+                 "bloqueio'. Veio.")
+            _log("   Enquanto isso o piloto segue com 1 foto + enquadramentos.")
         return 1
 
     _log(f"✅ {r.get('titulo', '')[:60]}")
