@@ -1826,6 +1826,57 @@ e "medi e não dá" é o que separa uma decisão de uma desculpa.**
 **Enquanto isso o piloto não parou:** 1 foto + 3 enquadramentos derivados por
 região de detalhe, e `--encaixe cover` pra foto com margem sobrando.
 
+### 🔒 TEMPLATE V1.0 — CONGELADO (10/08)
+
+O ChatGPT tem razão: *"não deixa o Claude ficar melhorando o design
+infinitamente"*. Foram QUATRO rodadas de correção do Dre no mesmo arquivo, e
+todas as quatro eram legítimas — mas o retorno já caiu. **Template fechado.**
+Só se mexe com defeito reportado, não com "acho que fica melhor".
+
+    logo 86,210 (118px) · nome +44 · @ +96 · selo colado (SELO_DX 4)
+    hook: coluna do vídeo, 2 linhas, 46px caindo até 34
+    mídia: x 97→982 · y 540→1720 (82% em 3:4)
+    CTA: COMENTE "QUERO" 👇 · CTA_Y 1740 · CTA_DY -8
+
+Voz por perfil: ✅ seis contas, cada uma com `voz_id` no `contas.json`.
+
+### ASSET RANKER — diversidade é o número que faltava (10/08)
+
+> "9 cortes não significam 9 informações visuais — o cérebro percebe que é a
+> mesma foto." — ChatGPT, e é a frase que define o arquivo.
+
+`asset_ranker.py` responde, ANTES de gastar roteiro, voz e render: *com estas
+imagens dá pra fazer um vídeo, ou dá nove cortes da mesma coisa?* Usa dHash +
+distância de Hamming — assinatura perceptual, sem modelo nenhum.
+
+Medido nos três casos que importam:
+
+    5 fotos reais diferentes         5 distintas · diversidade 0,391 → nível A
+    3 fotos quase iguais             1 distinta                     → ressalva
+    1 foto + 2 enquadramentos meus   3 distintas · diversidade 0,521 → ok
+
+⚠️ **O 3º resultado me surpreendeu e vale registrar:** os enquadramentos que o
+piloto deriva de UMA foto pontuaram diversidade **maior** (0,521) que três
+fotos "diferentes" do mesmo produto (0,125). Ou seja — recortar bem uma foto
+boa pode render mais informação visual que três fotos redundantes. Isso não
+apaga o gargalo, mas muda o que "mais imagens" significa: **diversidade, não
+quantidade**, exatamente como o ChatGPT colocou.
+
+O piloto agora consulta o ranker e **barra nível D** (`--forcar` ignora).
+
+⚠️⚠️ **UMA MÉTRICA FOI REMOVIDA ANTES DE ENTRAR, e o motivo importa.**
+Eu tinha incluído NITIDEZ (variância de Laplaciano, limiar 90). Calibrei contra
+fotos reais antes de mandar: cinco fotos boas deram 0,9 · 4,0 · 10,6 · 11,0 ·
+15,0, e duas DEGRADADAS de propósito deram 1,5 (esticada de 260px) e **7,3
+(comprimida a qualidade 8) — mais alto que duas fotos boas.** Os intervalos se
+sobrepõem: a métrica não separa o que promete. Removida.
+É a terceira vez nesta sequência que a mesma lição aparece — `faixa_preenchida`,
+a régua do `tarjas_limpas`, e agora esta. **Métrica que não distingue não é
+métrica rigorosa; é ruído com casa decimal.**
+
+Falta, e está dito: **texto promocional queimado na foto** (o defeito da escova
+alisadora) sai como `nao_avaliado`, nunca "aprovado" — depende do Gemini Vision.
+
 ### Onde parou (04/08, fim do dia)
 
 **Esperando o chip.** Pedido feito — Claro pré-pago, R$ 20,99, chegada prevista

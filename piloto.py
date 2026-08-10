@@ -212,6 +212,8 @@ def main():
     p.add_argument("--variacoes", type=int, default=3,
                    help="com UMA foto só, deriva N enquadramentos dela "
                         "(1 desliga)")
+    p.add_argument("--forcar", action="store_true",
+                   help="produz mesmo com material nível D")
     p.add_argument("--mudo", action="store_true")
     p.add_argument("--telegram", action="store_true",
                    help="manda o MP4 e a folha de contato no chat de admin")
@@ -257,6 +259,25 @@ def main():
         if len(fotos) == 1 and args.variacoes > 1:
             fotos = _variacoes(fotos[0], tmp / "vars", args.variacoes,
                                avisos_fotos)
+
+        # ── o que temos, ANTES de gastar roteiro, voz e render ──────────────
+        try:
+            import asset_ranker as AR
+            nota = AR.avaliar(fotos)
+            _log(f"assets: nível {nota['nivel']} · {nota['distintas']} "
+                 f"distinta(s) de {nota['quantas']} · diversidade "
+                 f"{nota['diversidade']}")
+            _log(f"   → {nota['veredito']}")
+            for a, b, d in nota["pares_iguais"][:3]:
+                _log(f"   🔁 {a} e {b} são a mesma imagem pro olho ({d})")
+            if nota["nivel"] == "D" and not args.forcar:
+                raise SystemExit(
+                    "[piloto] material insuficiente — nível D. Use --forcar "
+                    "pra produzir assim mesmo, sabendo do que se trata")
+        except SystemExit:
+            raise
+        except Exception as e:
+            _log(f"   (ranker indisponível: {str(e)[:70]})")
 
         _log(f"produto: {nome}")
         _log(f"   nicho {nicho or 'geral'} · R$ {preco or '—'} · "
