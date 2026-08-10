@@ -1850,13 +1850,19 @@ infinitamente"*. Foram QUATRO rodadas de correção do Dre no mesmo arquivo, e
 todas as quatro eram legítimas — mas o retorno já caiu. **Template fechado.**
 Só se mexe com defeito reportado, não com "acho que fica melhor".
 
-O último ajuste foi o selo, e vale como método: depois de errar com 12 e com 4,
-em vez de um terceiro palpite eu **renderizei a faixa do cabeçalho em -10, -6,
--2 e +2 e comparei lado a lado**. -10 e -6 cobrem a perna do "p", +2 ainda abre
-vão, **-2 encosta limpo**. Quatro renders custam menos que quatro rodadas de
-ida e volta com o Dre — e foram quatro, no mesmo arquivo.
+O último ajuste foi o selo, e ele rendeu duas lições — uma boa e uma minha.
 
-    logo 86,210 (118px) · nome +44 · @ +96 · selo SELO_DX -2
+**A boa:** depois de errar com 12 e com 4, em vez de um terceiro palpite eu
+**renderizei a faixa do cabeçalho em -10, -6, -2 e +2 e comparei lado a lado**.
+Quatro renders custam menos que quatro rodadas de ida e volta.
+
+⚠️ **A minha:** gerei a comparação certa e **li o resultado errado**. Escolhi
+-2 porque "encosta limpo"; o Dre queria +2 — *"abre só um vãozinho e não fica
+encostado"*. Encostado vs. com respiro é escolha de DESIGN, não de precisão, e
+quem decide é o dono da marca. **Produzir a evidência era meu trabalho;
+concluir por ele, não.** Ficou `SELO_DX +2`.
+
+    logo 86,210 (118px) · nome +44 · @ +96 · selo SELO_DX +2
     hook: coluna do vídeo, 2 linhas, 46px caindo até 34
     mídia: x 97→982 · y 540→1720 (82% em 3:4)
     CTA: COMENTE "QUERO" 👇 · CTA_Y 1740 · CTA_DY -8
