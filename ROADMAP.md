@@ -1629,6 +1629,68 @@ essas fronteiras. Agora:
   - roteiro SEM narração nas cenas: mantém 20,67s e **REPROVA** com 14,8s de
     silêncio — que é a verdade, e vídeo assim não deve ser publicado.
 
+### VOZ POR PERFIL — configurada (10/08)
+
+    geral   @topshop.__        7b9mYhmnp0y2qSH1FnBL   bunty
+    beleza  @topshopbeauty._   1hlpeD1ydbI2ow0Tt3EW   verinity x
+    casa    @topshopcasa_      DYkrAHD8iwork3YSUBbs   tom
+    tech    @topshoptech_      n1PvBOwxb8X6m7tahp2h   michael c vincent
+    pet     @topshoppet_       Czw3Dn181ypdrCOnPfif   brian c
+    moda    @topshopmoda_      yj30vwTGJxSHezdAGsv9   jessa
+
+    python3 narracao_ia.py --definir-voz geral=ID:nome beleza=ID:nome ...
+    python3 narracao_ia.py --vozes
+
+⚠️⚠️ **O `contas.json` NÃO é commitado com as vozes, e isso é deliberado.**
+O arquivo da VPS tem contas que este repo não tem (pet e moda foram criadas
+depois). Commitar a minha versão e deployar **apagaria a configuração delas** —
+`instagram_user_id`, `page_token_env`, tudo. Por isso a voz entra por COMANDO,
+que faz merge no arquivo que já está lá.
+
+⚠️ **E o comando se RECUSA a criar conta nova.** O
+`daemon_maestro._nichos_das_contas` monta os nichos de PRODUÇÃO a partir das
+chaves deste arquivo: criar "pet" aqui com só handle e voz faria o daemon
+produzir pra uma conta sem `instagram_user_id`, e o post falharia depois, longe
+daqui, sem ninguém ligar uma coisa à outra. Nicho que não existe vira aviso.
+
+**Ajustes de voz por perfil** (`voz_ajustes` no contas.json) sobrepõem o padrão
+da casa — a sugestão do ChatGPT via Dre, e ela é certa: *"daqui a seis meses
+você não quer descobrir que trocaram um parâmetro"*. Voz é asset de marca.
+
+### O GARGALO AGORA É ALIMENTAÇÃO VISUAL, NÃO EDIÇÃO (10/08)
+
+O piloto tem 9 cortes e **uma composição só**. O ChatGPT resumiu bem: *"9
+cortes não significam 9 informações visuais — o cérebro percebe que é a mesma
+foto"*. O motor de edição está pronto; o que falta é matéria-prima.
+
+⚠️ **E eu afirmei uma coisa que não verifiquei.** Disse que "a API da Shopee
+devolve uma imagem só, então não dá pra resolver". A verdade é mais estreita:
+**a nossa query pede `imageUrl` e mais nada**, então ela nunca teve chance de
+devolver outra coisa. Construir coletor, ranker e fila de assets em cima dessa
+suposição seria construir em cima de um palpite meu.
+
+`probe_imagens.py` pergunta à API, um campo por pedido (GraphQL derruba a query
+inteira por um campo inválido — é o mesmo motivo do truque do
+`priceDiscountRate`). Testa `images`, `imageUrls`, `gallery`, `videoUrl` e mais
+alguns. **Se existir galeria, metade do problema some hoje e de graça; se não
+existir, pelo menos vira FATO** e o coletor se justifica.
+
+**A ordem acordada** (do ChatGPT, e eu concordo — não mexer mais em corte/zoom):
+
+    ✅ template · cortes · zoom · mini-hooks · timestamps · voz por perfil
+    🔄 probe: a API tem galeria?          ← primeiro, é uma pergunta
+    🔴 Asset Collector (mais imagem/vídeo por produto)
+    🔴 Asset Ranker (rejeita texto queimado, marca d'água, duplicata)
+    🔴 Storyboard escolhe o asset por PAPEL (hero / feature / uso / detalhe)
+    🔴 Variation Engine como FALLBACK, não como solução
+    🧠 CEO aprende: retenção × quantidade de assets
+
+**Níveis de material visual** (a ideia é do ChatGPT e vale adotar quando o
+coletor existir): S = vídeo + 5 imagens · A = 4+ imagens · B = 2-3 + variações ·
+C = 1 imagem boa + variações · **D = 1 imagem ruim com texto queimado → BLOCK,
+nem chega ao render**. A foto da escova alisadora era nível D: texto promocional
+dentro da imagem brigando com hook, mini-hook, legenda e CTA.
+
 ### Onde parou (04/08, fim do dia)
 
 **Esperando o chip.** Pedido feito — Claro pré-pago, R$ 20,99, chegada prevista

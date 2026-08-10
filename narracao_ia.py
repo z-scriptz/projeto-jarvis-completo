@@ -170,8 +170,34 @@ def vozes_por_perfil() -> list:
     return sorted(fora)
 
 
-def _voice_settings(n: str) -> dict:
-    """Os `voice_settings` do ElevenLabs, lidos do .env.
+def _ajustes_da_conta(nicho: str) -> dict:
+    """Os `voice_settings` gravados no contas.json, se houver.
+
+    "Voz é asset de marca" — e asset de marca não pode depender de alguém
+    lembrar qual era o `stability` seis meses depois. O perfil pode guardar o
+    conjunto inteiro junto do `voz_id`:
+
+        "casa": {"handle": "@topshopcasa_", "voz_id": "...",
+                 "voz_nome": "tom",
+                 "voz_ajustes": {"stability": 0.48, "similarity_boost": 0.82,
+                                 "style": 0.20, "speed": 1.0}}
+
+    Sem isso, uma troca de parâmetro no .env muda o timbre de TODOS os perfis
+    de uma vez e a descoberta vem pelo ouvido, tarde.
+    """
+    try:
+        import json
+        d = json.loads((BASE_DIR / "contas.json").read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    n = (nicho or "geral").strip().lower()
+    conta = d.get(n) or (d.get("_default") if n in ("", "geral") else None) or {}
+    a = conta.get("voz_ajustes")
+    return dict(a) if isinstance(a, dict) else {}
+
+
+def _voice_settings(n: str, nicho: str = "") -> dict:
+    """Os `voice_settings` do ElevenLabs: contas.json por cima do .env.
 
     Extraído de dentro do falar_elevenlabs pra o pedido COM TEMPOS usar
     exatamente os mesmos valores. Voz é identidade da marca: se as duas
@@ -199,6 +225,13 @@ def _voice_settings(n: str) -> dict:
     _spd = _f("ELEVENLABS_SPEED", 1.15)
     if _spd and _spd != 1.0:
         vs["speed"] = max(0.7, min(1.2, _spd))   # faixa aceita pela API
+    # o que o PERFIL definiu ganha do padrão da casa
+    for k, v in _ajustes_da_conta(nicho).items():
+        if k in ("stability", "similarity_boost", "style", "speed"):
+            try:
+                vs[k] = float(v)
+            except (TypeError, ValueError):
+                pass
     return vs
 
 
@@ -234,7 +267,7 @@ def falar_com_tempos(texto: str, destino: Path, nicho: str = "") -> dict:
         r = requests.post(url, timeout=90,
             headers={"xi-api-key": api_key, "Content-Type": "application/json"},
             json={"text": texto, "model_id": model,
-                  "voice_settings": _voice_settings(n)})
+                  "voice_settings": _voice_settings(n, nicho)})
         if r.status_code != 200:
             return {"ok": False,
                     "erro": f"HTTP {r.status_code}: {r.text[:180]}"}
@@ -280,7 +313,7 @@ def falar_elevenlabs(texto: str, destino: Path, nicho: str = "") -> bool:
         return False
     if voz_propria:
         print(f"   🎙️ voz do nicho '{nicho}' (ELEVENLABS_VOICE_ID_{n})")
-    vs = _voice_settings(n)
+    vs = _voice_settings(n, nicho)
 
     try:
         import requests
@@ -310,7 +343,75 @@ def gerar(produto: str, contexto: str, destino: Path, nicho: str = "") -> str:
     return ""
 
 
+def definir_vozes(pares: list) -> int:
+    """Grava `voz_id` no contas.json SEM tocar em mais nada.
+
+    ⚠️ NÃO CRIA CONTA NOVA, de propósito. O `daemon_maestro._nichos_das_contas`
+    monta os nichos de PRODUÇÃO a partir das chaves deste arquivo: criar "pet"
+    aqui com só handle e voz faria o daemon produzir pra uma conta sem
+    `instagram_user_id` nem `page_token_env`, e o post falharia depois — longe
+    daqui, sem ninguém ligar uma coisa à outra.
+
+    E é por isso que isto é um COMANDO e não um contas.json commitado: o
+    arquivo da VPS tem contas que o repo não tem. Substituí-lo apagaria a
+    configuração delas.
+    """
+    import json
+    arq = BASE_DIR / "contas.json"
+    try:
+        texto = arq.read_text(encoding="utf-8")
+        d = json.loads(texto)
+    except Exception as e:
+        print(f"não li {arq}: {e}")
+        return 1
+
+    # mapa nicho -> chave real do arquivo ("geral" mora em "_default")
+    chave_de = {}
+    for chave, c in d.items():
+        nicho = "geral" if chave == "_default" else chave
+        chave_de[nicho] = chave
+
+    mudou, faltando = [], []
+    for par in pares:
+        if "=" not in par:
+            print(f"ignorado (formato nicho=ID): {par!r}")
+            continue
+        nicho, _, resto = par.partition("=")
+        nicho = nicho.strip().lower()
+        voz_id, _, nome = resto.partition(":")
+        voz_id, nome = voz_id.strip(), nome.strip()
+        if nicho not in chave_de:
+            faltando.append((nicho, voz_id, nome))
+            continue
+        c = d[chave_de[nicho]]
+        antes = c.get("voz_id", "")
+        c["voz_id"] = voz_id
+        if nome:
+            c["voz_nome"] = nome
+        mudou.append((nicho, antes, voz_id, nome))
+
+    if mudou:
+        arq.write_text(json.dumps(d, ensure_ascii=False, indent=2) + "\n",
+                       encoding="utf-8")
+    for nicho, antes, agora, nome in mudou:
+        de = antes or "(padrão da casa)"
+        print(f"  ✅ {nicho:8} {de} → {agora}" + (f"  [{nome}]" if nome else ""))
+    for nicho, voz, nome in faltando:
+        print(f"  ⚠️  {nicho:8} NÃO existe no contas.json — a voz {voz}"
+              + (f" [{nome}]" if nome else "")
+              + " ficou de fora.\n      Crie a conta com TODOS os campos "
+                "(handle, instagram_user_id, facebook_page_id, page_token_env) "
+                "antes,\n      senão o daemon vai produzir pra ela e o post "
+                "falha na hora de publicar.")
+    if not mudou and not faltando:
+        print("nada pra fazer")
+    return 0
+
+
 def main():
+    if "--definir-voz" in sys.argv:
+        i = sys.argv.index("--definir-voz")
+        return definir_vozes([a for a in sys.argv[i + 1:] if not a.startswith("--")])
     if "--vozes" in sys.argv:
         linhas = vozes_por_perfil()
         if not linhas:
