@@ -1917,6 +1917,13 @@ relatório, e a ferramenta pra responder eu já tinha construído no dia anterio
 **Quando um ajuste no código não muda o resultado, a primeira hipótese é que o
 código não foi lido — não que a fórmula está errada.**
 
+✅ **RESOLVIDO:** `.env` da VPS, linha 76, tinha `SELO_DX=28` → agora `12`.
+(`TEXTO_DX=8` na linha 80 fica como está: é o espaçamento real do template.)
+Geometria fechada e conferida contra o MP4: `texto_x 212 + tinta 238 + 12 =
+462`, vão de 12px. **TEMPLATE V1.0 FECHADO DE VERDADE** — cinco rodadas, e
+nenhuma delas era sobre design: quatro foram diagnóstico meu errado e uma foi
+o `.env`.
+
 ### ~~O SELO: eu media a fonte que não é a de produção~~ (11/08 — SUPERADA)
 
 Quinta rodada do mesmo selo. O Dre: *"é só esse verificado cara, tá enchendo o
