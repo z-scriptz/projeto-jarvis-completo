@@ -1880,6 +1880,51 @@ este vídeo" deixa de ser dedução e vira leitura — mesma ideia do `voz_id`.
 
 Voz por perfil: ✅ seis contas, cada uma com `voz_id` no `contas.json`.
 
+### ⚠️ O SELO, ENFIM: eu media a fonte que não é a de produção (11/08)
+
+Quinta rodada do mesmo selo. O Dre: *"é só esse verificado cara, tá enchendo o
+saco já, o resto tá perfeito"*. Ele estava certo de estar cansado — e a causa
+não era nenhum dos quatro palpites anteriores.
+
+**Medido no MP4 dele:** "TopShop" termina em x=449, selo começa em x=478.
+**Vão real de 28px, com `SELO_DX = 2`.** O knob estava mentindo.
+
+**A causa:** `render.py` posicionava o selo em `texto_x + d.textlength(...)`.
+`textlength` é o **AVANÇO** da fonte — quanto o cursor anda, incluindo o espaço
+reservado depois da última letra. O template original **nunca** teve esse
+defeito: `narrated_video_agent.py:1042` mede com `_textclip_justo`, um clip
+JUSTO cujo `.w` é a **TINTA**, e soma `SELO_DX=12`. Estava escrito no projeto o
+tempo todo — de novo.
+
+⚠️⚠️ **E o erro que fez isso durar cinco rodadas:** na rodada anterior eu
+"provei" que avanço ≈ tinta medindo **Liberation (0,4px) e DejaVu (-0,1px)**.
+As duas fontes que eu tinha na minha máquina. A produção usa
+**`assets/brand/Montserrat-Bold.ttf`** (`_fonte()` prefere ela; só cai em
+Liberation/DejaVu quando a brand não existe — que é exatamente o meu ambiente).
+No Montserrat a sobra do avanço é de **26px**. **Eu medi as duas fontes que
+tinha, não a fonte que envia o produto**, e apresentei o resultado como se
+fechasse a questão.
+
+**Correção:** `_fim_da_tinta()` (usa `textbbox`, com `stroke_width`, porque no
+fundo escuro o contorno 3 também é tinta que aparece). O selo passa a ser
+`fim_da_tinta + SELO_DX`, e **`SELO_DX` agora É o vão em pixels** — mesmo
+sentido que ele tem no template original. Padrão de volta pra **12**.
+Verificado medindo o pixel em 8 combinações (dx 2/8/12/20 × contorno 0/3): o
+vão sai igual ao `SELO_DX` (+1px, borda exclusiva do `textbbox`), em qualquer
+fonte, porque agora nada depende de métrica de avanço.
+
+Junto, um bug latente: `Image.getbbox()` em RGBA olha os **quatro** canais, e
+pixel branco-transparente `(255,255,255,0)` não é zero — margem de PNG branca
+não era aparada. Agora usa `s.getchannel("A").getbbox()`.
+
+    selo: fim_da_tinta("TopShop") + SELO_DX(12)   ← vão real, não avanço
+
+**A lição, que vale além do selo:** medir na minha máquina só prova o que
+acontece na minha máquina. Quando o número depende de um asset que a produção
+tem e eu não (fonte, logo, binário), a medição precisa sair de um artefato
+DELA — foi o quadro do MP4 do Dre que resolveu, em cinco minutos, o que quatro
+rodadas de palpite não resolveram.
+
 ### ASSET RANKER — diversidade é o número que faltava (10/08)
 
 > "9 cortes não significam 9 informações visuais — o cérebro percebe que é a

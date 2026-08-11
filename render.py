@@ -118,7 +118,10 @@ LOGO_TAM = int(os.environ.get("LOGO_TAM", 118))
 NOME_FONT = int(os.environ.get("NOME_FONT", 52))
 HANDLE_FONT = int(os.environ.get("HANDLE_FONT", 42))
 TEXTO_DX = int(os.environ.get("TEXTO_DX", 16))
-SELO_DX = int(os.environ.get("SELO_DX", 2))
+# 12 é o número do template original (narrated_video_agent, SELO_DX=12), e lá
+# ele sempre foi somado à TINTA. Aqui virou vão de 28px porque eu somava ao
+# avanço; com _fim_da_tinta o 12 volta a valer 12.
+SELO_DX = int(os.environ.get("SELO_DX", 12))
 # Comparei a faixa do cabeçalho renderizada em -10, -6, -2 e +2, lado a lado,
 # em vez de tentar um terceiro palpite depois de errar com 12 e com 4.
 # ⚠️ E eu li a comparação errado: escolhi -2 ("encosta limpo") quando o Dre
@@ -346,6 +349,48 @@ def _texto_rico(img, d, x: int, y_meio: int, texto: str, fonte, cor,
                        stroke_fill=cor_contorno)
             cur += int(d.textlength(pedaco, font=fonte))
     return cur - x
+
+
+def _fim_da_tinta(d, x: int, y_meio: int, texto: str, fonte,
+                  contorno: int = 0) -> int:
+    """Onde a TINTA termina — não onde o cursor para.
+
+    POR QUE ISSO EXISTE (11/08). O selo de verificado ficou quatro rodadas
+    longe demais do "TopShop". Eu vinha mexendo no SELO_DX, e o SELO_DX nunca
+    foi o problema: eu somava ele ao `d.textlength()`, que é o AVANÇO da
+    fonte — a largura que o cursor anda, incluindo o espaço reservado depois
+    da última letra. Medido no quadro real: avanço 256px, tinta 229px. Sobra
+    de 27px que aparecia na tela como vão, e nenhum ajuste do offset conserta
+    isso, só disfarça.
+
+    O template original nunca teve esse defeito: `narrated_video_agent`
+    (linha ~1042) mede com `_textclip_justo`, um clip JUSTO cujo `.w` é a
+    tinta, e soma 12. Estava escrito no projeto o tempo todo.
+
+    Com esta função o SELO_DX passa a significar o que qualquer um assume que
+    ele significa: o vão em pixels entre a última letra e o selo.
+    """
+    cur, fim = x, x
+    for pedaco, eh_emoji in _pedacos(texto):
+        if eh_emoji:
+            im = _img_emoji(pedaco, int(getattr(fonte, "size", 40) * 1.12))
+            if im is None:
+                continue
+            fim = cur + im.width
+            cur += im.width + 4
+        else:
+            try:
+                # stroke_width entra na conta: no fundo escuro o nome sai com
+                # contorno 3, e o contorno é tinta que aparece na tela. Medir
+                # sem ele encostaria o selo nesse fundo e não no claro.
+                bb = d.textbbox((cur, y_meio), pedaco, font=fonte,
+                                anchor="lm", stroke_width=contorno)
+                fim = max(fim, bb[2])
+            except Exception:
+                # sem textbbox, o avanço é pior que a tinta mas melhor que nada
+                fim = max(fim, cur + int(d.textlength(pedaco, font=fonte)))
+            cur += int(d.textlength(pedaco, font=fonte))
+    return fim
 
 
 def _quebrar(d, texto: str, fonte, larg_max: int, max_linhas: int) -> list:
@@ -666,9 +711,9 @@ def _camada_marca(edl: dict, lay: dict, destino: Path, avisos: list) -> Path:
     # cabeçalho e o hook — o Dre viu isso na primeira olhada.
     # Medido num Reel publicado (fração da altura do quadro): nome em 0,125
     # (≈240px) e @ em 0,161 (≈309px), com a logo começando em 0,102 (196px).
-    larg_nome = _texto_rico(camada, d, texto_x,
-                            logo_y + int(os.environ.get("NOME_DY", 44)),
-                            "TopShop", f_nome, tinta, contorno, cor_contorno)
+    _texto_rico(camada, d, texto_x,
+                logo_y + int(os.environ.get("NOME_DY", 44)),
+                "TopShop", f_nome, tinta, contorno, cor_contorno)
 
     selo = BRAND_DIR / "verificado.png"
     if selo.exists():
@@ -680,7 +725,11 @@ def _camada_marca(edl: dict, lay: dict, destino: Path, avisos: list) -> Path:
         # `_emoji_aparado`: muitos PNGs têm bastante espaço transparente em
         # volta do desenho; sem aparar, o resize conta o VAZIO e o desenho
         # visível sai bem menor que o tamanho pedido. Eu redimensionava direto.
-        bb = s.getbbox()
+        # getbbox() do RGBA olha os QUATRO canais: um pixel branco e
+        # transparente (255,255,255,0) não é zero, então não é aparado. Como
+        # margem de PNG costuma ser branca-transparente, o corte podia não
+        # cortar nada. O canal alfa sozinho é que responde "aqui tem desenho?".
+        bb = s.getchannel("A").getbbox() or s.getbbox()
         if bb:
             s = s.crop(bb)
         s = s.resize((SELO_TAM, SELO_TAM), _I.LANCZOS)
@@ -688,8 +737,12 @@ def _camada_marca(edl: dict, lay: dict, destino: Path, avisos: list) -> Path:
         # porque lá o nome é um clipe do MoviePy com folga própria; aqui o
         # texto é centrado na linha, e copiar o número cru fazia o selo descer
         # em cima do @handle — apareceu no quadro de revisão.
+        # tinta, não avanço — ver _fim_da_tinta. SELO_DX agora É o vão.
+        fim_nome = _fim_da_tinta(d, texto_x,
+                                 logo_y + int(os.environ.get("NOME_DY", 44)),
+                                 "TopShop", f_nome, contorno)
         camada.alpha_composite(
-            s, (texto_x + larg_nome + SELO_DX,
+            s, (fim_nome + SELO_DX,
                 logo_y + int(os.environ.get("NOME_DY", 44)) - SELO_TAM // 2))
     else:
         avisos.append("verificado.png não existe — sai sem o selo azul")
