@@ -196,6 +196,106 @@ def _ajustes_da_conta(nicho: str) -> dict:
     return dict(a) if isinstance(a, dict) else {}
 
 
+_APELIDOS = {
+    # o Dre lê os nomes da TELA do ElevenLabs; o código fala a língua da API.
+    # Traduzir aqui evita que ele tenha que traduzir de cabeça toda vez — e
+    # errar "estilo" por "similaridade" é o tipo de troca que ninguém percebe
+    # lendo, só ouvindo semanas depois.
+    "estabilidade": "stability", "stability": "stability",
+    "similaridade": "similarity_boost", "similarity": "similarity_boost",
+    "similarity_boost": "similarity_boost",
+    "estilo": "style", "exagero": "style", "exagero_de_estilo": "style",
+    "style": "style",
+    "velocidade": "speed", "speed": "speed",
+}
+# stability/similarity/style são frações 0-1 na API, mas a TELA mostra %.
+# speed não: 1.17 é 1.17. Por isso a conversão é por campo, não global.
+_FRACIONARIOS = {"stability", "similarity_boost", "style"}
+
+
+def _valor_ajuste(campo: str, bruto) -> float:
+    """Aceita 0.70, "70", "70%" para os fracionários; speed passa direto.
+
+    Mesma lição do `texto_queimado._densidade`: aceitar o formato que a pessoa
+    TEM na mão. "70" virando 70.0 num campo que vai até 1.0 seria clamped pra
+    1.0 em silêncio — voz errada, sem erro nenhum na tela.
+    """
+    s = str(bruto).strip().replace(",", ".").rstrip("%")
+    v = float(s)
+    if campo in _FRACIONARIOS:
+        if v > 1.0:
+            v = v / 100.0
+        return max(0.0, min(1.0, v))
+    return max(0.7, min(1.2, v))       # faixa que a API aceita pra speed
+
+
+def definir_ajustes(pares: list) -> int:
+    """Grava `voz_ajustes` no contas.json, por perfil.
+
+    POR QUE EXISTE (11/08). O Dre perguntou se as configs de voz (estabilidade,
+    similaridade, estilo, velocidade) "vêm da API ou precisa configurar". Vêm
+    do NOSSO pedido: `_voice_settings` sempre manda `voice_settings`, então os
+    sliders ajustados no site do ElevenLabs são IGNORADOS. E o padrão do código
+    dizia no comentário ser "os valores do Michael" sem ser: style 0.40 contra
+    o 0% que ele calibrou — a diferença mais audível das quatro.
+
+    Uso:
+      python3 narracao_ia.py --definir-ajustes \
+        "tech=estabilidade:70,similaridade:75,estilo:0,velocidade:1.17"
+    """
+    import json
+    arq = BASE_DIR / "contas.json"
+    try:
+        d = json.loads(arq.read_text(encoding="utf-8"))
+    except Exception as e:
+        print(f"não li {arq}: {e}")
+        return 1
+
+    chave_de = {("geral" if k == "_default" else k): k for k in d}
+    mudou, erros = [], []
+
+    for par in pares:
+        nicho, _, resto = par.partition("=")
+        nicho = nicho.strip().lower()
+        if nicho not in chave_de:
+            erros.append(f"{nicho}: não existe no contas.json")
+            continue
+        ajustes = {}
+        for pedaco in resto.split(","):
+            if not pedaco.strip():
+                continue
+            nome, _, valor = pedaco.partition(":")
+            campo = _APELIDOS.get(nome.strip().lower())
+            if not campo:
+                erros.append(f"{nicho}: campo desconhecido {nome.strip()!r} "
+                             f"(use: {', '.join(sorted(set(_APELIDOS)))[:60]}…)")
+                continue
+            try:
+                ajustes[campo] = _valor_ajuste(campo, valor)
+            except ValueError:
+                erros.append(f"{nicho}: valor ilegível em {nome.strip()}={valor!r}")
+        if ajustes:
+            c = d[chave_de[nicho]]
+            antes = dict(c.get("voz_ajustes") or {})
+            c.setdefault("voz_ajustes", {}).update(ajustes)
+            mudou.append((nicho, antes, dict(c["voz_ajustes"])))
+
+    if mudou:
+        arq.write_text(json.dumps(d, ensure_ascii=False, indent=2) + "\n",
+                       encoding="utf-8")
+    for nicho, antes, agora in mudou:
+        print(f"  ✅ {nicho}")
+        for k in ("stability", "similarity_boost", "style", "speed"):
+            if k in agora:
+                de = antes.get(k, "—")
+                print(f"       {k:18} {de} → {agora[k]}")
+    for e in erros:
+        print(f"  ⚠️  {e}")
+    if not mudou and not erros:
+        print("nada pra fazer")
+    return 0 if mudou or not erros else 1
+
+
 def _voice_settings(n: str, nicho: str = "") -> dict:
     """Os `voice_settings` do ElevenLabs: contas.json por cima do .env.
 
@@ -484,6 +584,10 @@ def main():
     if "--definir-voz" in sys.argv:
         i = sys.argv.index("--definir-voz")
         return definir_vozes([a for a in sys.argv[i + 1:] if not a.startswith("--")])
+    if "--definir-ajustes" in sys.argv:
+        i = sys.argv.index("--definir-ajustes")
+        return definir_ajustes([a for a in sys.argv[i + 1:]
+                                if not a.startswith("--")])
     if "--vozes" in sys.argv:
         linhas = vozes_por_perfil()
         if not linhas:
@@ -495,6 +599,16 @@ def main():
             marca = "🎙️ " if propria else "⚠️ "
             sem += 0 if propria else 1
             print(f" {marca} {nicho:8} {handle:20} {voz or '(nenhuma!)':24} {origem}")
+            # os SETTINGS efetivos, com a origem — mesma lição dos `knobs` do
+            # render: valor sem origem não responde "por que mudei e não mudou".
+            proprios = _ajustes_da_conta(nicho)
+            vs = _voice_settings(_norm_nicho(nicho), nicho)
+            campos = " · ".join(
+                f"{k.replace('similarity_boost','simil')}={vs[k]}"
+                + ("*" if k in proprios else "")
+                for k in ("stability", "similarity_boost", "style", "speed")
+                if k in vs)
+            print(f"      {campos}")
         print("─" * 74)
         repetidas = {}
         for nicho, _, voz, _, _ in linhas:
