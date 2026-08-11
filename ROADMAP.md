@@ -1880,7 +1880,44 @@ este vídeo" deixa de ser dedução e vira leitura — mesma ideia do `voz_id`.
 
 Voz por perfil: ✅ seis contas, cada uma com `voz_id` no `contas.json`.
 
-### ⚠️ O SELO, ENFIM: eu media a fonte que não é a de produção (11/08)
+### ⚠️⚠️ O SELO: A SEÇÃO ABAIXO ESTÁ ERRADA — a causa era o `.env` (11/08)
+
+**Leia esta parte antes da de baixo.** A seção seguinte foi escrita por mim
+horas antes e a explicação dela é falsa. Deixo as duas porque o jeito como eu
+errei importa mais que o erro.
+
+O que eu afirmei: que `textlength` (avanço) tinha 26px de sobra sobre a tinta em
+Montserrat, e que por isso o selo saía longe. **Medido depois, na Montserrat
+Bold 52 de verdade (baixada do repo do Google Fonts): avanço 238,4 · tinta
+0..238 · sobra de 0,4px.** A sobra não existe. O `_fim_da_tinta` que escrevi era
+no-op duas vezes: `textbbox` do PIL é baseado em AVANÇO (acompanha espaços à
+direita — testado), e mesmo que fosse tinta não mudaria 0,4px.
+
+**A causa real, por aritmética do quadro do MP4:**
+
+    logo termina em 204 · nome começa em 212  -> TEXTO_DX = 8  (padrão do código: 16)
+    tinta do nome = 238px  (= Montserrat Bold 52 ✓)
+    selo começa em 478    -> SELO_DX = 478-212-238 = 28  (padrão do código: 12)
+
+**O `.env` da VPS define `SELO_DX` e `TEXTO_DX`, e ambiente ganha do código.**
+Eu mudei o padrão no fonte duas vezes (2 → 12) e o vídeo não mudou um pixel,
+porque aquela linha nunca foi lida. É a MESMA armadilha do
+`ELEVENLABS_VOICE_ID_<NICHO>` mascarando o `contas.json`, documentada aqui em
+10/08 — eu documentei a lição e caí nela de novo em 24h.
+
+**Correção que fecha a classe inteira:** `knobs` no relatório agora grava
+**valor + origem + padrão** (`{"valor": 28, "origem": "env", "padrao": 12}`) e
+uma lista `_divergentes`. Valor sozinho não bastava: `"SELO_DX": 28` não conta
+que o código dizia 12 e foi ignorado. `"28 (env, padrão 12)"` conta.
+
+⚠️ **E o erro de método, que é o que não pode repetir:** eu diagnostiquei por
+teoria e só medi o que confirmava a teoria. A pergunta certa — "o valor que
+chegou no render é o que está no código?" — era uma linha de `grep` no
+relatório, e a ferramenta pra responder eu já tinha construído no dia anterior.
+**Quando um ajuste no código não muda o resultado, a primeira hipótese é que o
+código não foi lido — não que a fórmula está errada.**
+
+### ~~O SELO: eu media a fonte que não é a de produção~~ (11/08 — SUPERADA)
 
 Quinta rodada do mesmo selo. O Dre: *"é só esse verificado cara, tá enchendo o
 saco já, o resto tá perfeito"*. Ele estava certo de estar cansado — e a causa

@@ -118,9 +118,12 @@ LOGO_TAM = int(os.environ.get("LOGO_TAM", 118))
 NOME_FONT = int(os.environ.get("NOME_FONT", 52))
 HANDLE_FONT = int(os.environ.get("HANDLE_FONT", 42))
 TEXTO_DX = int(os.environ.get("TEXTO_DX", 16))
-# 12 é o número do template original (narrated_video_agent, SELO_DX=12), e lá
-# ele sempre foi somado à TINTA. Aqui virou vão de 28px porque eu somava ao
-# avanço; com _fim_da_tinta o 12 volta a valer 12.
+# 12 é o número do template original (narrated_video_agent.py:1048).
+# ⚠️ ESTE PADRÃO QUASE NUNCA VALE: o `.env` da VPS define SELO_DX, e o ambiente
+# ganha do código. Em 11/08 o vão medido no MP4 era 28px, o `.env` mandava 28,
+# e eu passei duas rodadas mexendo neste número aqui — que nunca foi lido.
+# Pra saber o que REALMENTE valeu num vídeo, leia `knobs` no relatório: ele
+# grava valor E origem.
 SELO_DX = int(os.environ.get("SELO_DX", 12))
 # Comparei a faixa do cabeçalho renderizada em -10, -6, -2 e +2, lado a lado,
 # em vez de tentar um terceiro palpite depois de errar com 12 e com 4.
@@ -170,6 +173,37 @@ PISO_SEGMENTO = 1.4            # nenhuma cena dura menos que isto, mesmo com
 COR_BRANCO = "&H00FFFFFF"
 COR_PRETO = "&H00000000"
 COR_OURO = "&H0042C5F5"        # #F5C542
+
+
+# (nome da env, valor em uso, padrão escrito no código). O padrão vai junto de
+# propósito: ver "28 (env, padrão 12)" responde numa linha a pergunta que me
+# custou duas rodadas — "eu mudei o código e o vídeo não mudou, por quê?".
+def _knobs(edl: dict) -> dict:
+    itens = [
+        ("SELO_DX", SELO_DX, 12), ("TEXTO_DX", TEXTO_DX, 16),
+        ("LOGO_X", LOGO_X, 86), ("LOGO_Y", LOGO_Y, 210),
+        ("LOGO_TAM", LOGO_TAM, 118),
+        ("NOME_FONT", NOME_FONT, 52), ("HANDLE_FONT", HANDLE_FONT, 42),
+        ("NOME_DY", int(os.environ.get("NOME_DY", 44)), 44),
+        ("HANDLE_DY", int(os.environ.get("HANDLE_DY", 96)), 96),
+        ("HK_MARGEM", HK_MARGEM, 89), ("HK_FONT", HK_FONT, 46),
+        ("VIDEO_Y", VIDEO_Y, 540),
+        ("CTA_Y", CTA_Y, 1740),
+        ("CTA_DY", int(os.environ.get("CTA_DY", -8)), -8),
+    ]
+    fora = {}
+    for nome, valor, padrao in itens:
+        do_ambiente = os.environ.get(nome) is not None
+        fora[nome] = {"valor": valor,
+                      "origem": "env" if do_ambiente else "padrao",
+                      "padrao": padrao}
+    fora["_divergentes"] = sorted(
+        n for n, v in fora.items()
+        if isinstance(v, dict) and v["valor"] != v["padrao"])
+    fora["narrar_hook"] = any(
+        a.get("tipo") == "narracao" and a.get("inicio", 1) == 0.0
+        for a in edl["trilhas"]["audio"])
+    return fora
 
 
 def _log(m):
@@ -349,48 +383,6 @@ def _texto_rico(img, d, x: int, y_meio: int, texto: str, fonte, cor,
                        stroke_fill=cor_contorno)
             cur += int(d.textlength(pedaco, font=fonte))
     return cur - x
-
-
-def _fim_da_tinta(d, x: int, y_meio: int, texto: str, fonte,
-                  contorno: int = 0) -> int:
-    """Onde a TINTA termina — não onde o cursor para.
-
-    POR QUE ISSO EXISTE (11/08). O selo de verificado ficou quatro rodadas
-    longe demais do "TopShop". Eu vinha mexendo no SELO_DX, e o SELO_DX nunca
-    foi o problema: eu somava ele ao `d.textlength()`, que é o AVANÇO da
-    fonte — a largura que o cursor anda, incluindo o espaço reservado depois
-    da última letra. Medido no quadro real: avanço 256px, tinta 229px. Sobra
-    de 27px que aparecia na tela como vão, e nenhum ajuste do offset conserta
-    isso, só disfarça.
-
-    O template original nunca teve esse defeito: `narrated_video_agent`
-    (linha ~1042) mede com `_textclip_justo`, um clip JUSTO cujo `.w` é a
-    tinta, e soma 12. Estava escrito no projeto o tempo todo.
-
-    Com esta função o SELO_DX passa a significar o que qualquer um assume que
-    ele significa: o vão em pixels entre a última letra e o selo.
-    """
-    cur, fim = x, x
-    for pedaco, eh_emoji in _pedacos(texto):
-        if eh_emoji:
-            im = _img_emoji(pedaco, int(getattr(fonte, "size", 40) * 1.12))
-            if im is None:
-                continue
-            fim = cur + im.width
-            cur += im.width + 4
-        else:
-            try:
-                # stroke_width entra na conta: no fundo escuro o nome sai com
-                # contorno 3, e o contorno é tinta que aparece na tela. Medir
-                # sem ele encostaria o selo nesse fundo e não no claro.
-                bb = d.textbbox((cur, y_meio), pedaco, font=fonte,
-                                anchor="lm", stroke_width=contorno)
-                fim = max(fim, bb[2])
-            except Exception:
-                # sem textbbox, o avanço é pior que a tinta mas melhor que nada
-                fim = max(fim, cur + int(d.textlength(pedaco, font=fonte)))
-            cur += int(d.textlength(pedaco, font=fonte))
-    return fim
 
 
 def _quebrar(d, texto: str, fonte, larg_max: int, max_linhas: int) -> list:
@@ -711,9 +703,9 @@ def _camada_marca(edl: dict, lay: dict, destino: Path, avisos: list) -> Path:
     # cabeçalho e o hook — o Dre viu isso na primeira olhada.
     # Medido num Reel publicado (fração da altura do quadro): nome em 0,125
     # (≈240px) e @ em 0,161 (≈309px), com a logo começando em 0,102 (196px).
-    _texto_rico(camada, d, texto_x,
-                logo_y + int(os.environ.get("NOME_DY", 44)),
-                "TopShop", f_nome, tinta, contorno, cor_contorno)
+    larg_nome = _texto_rico(camada, d, texto_x,
+                            logo_y + int(os.environ.get("NOME_DY", 44)),
+                            "TopShop", f_nome, tinta, contorno, cor_contorno)
 
     selo = BRAND_DIR / "verificado.png"
     if selo.exists():
@@ -737,12 +729,12 @@ def _camada_marca(edl: dict, lay: dict, destino: Path, avisos: list) -> Path:
         # porque lá o nome é um clipe do MoviePy com folga própria; aqui o
         # texto é centrado na linha, e copiar o número cru fazia o selo descer
         # em cima do @handle — apareceu no quadro de revisão.
-        # tinta, não avanço — ver _fim_da_tinta. SELO_DX agora É o vão.
-        fim_nome = _fim_da_tinta(d, texto_x,
-                                 logo_y + int(os.environ.get("NOME_DY", 44)),
-                                 "TopShop", f_nome, contorno)
+        # SELO_DX É o vão em pixels: medido em Montserrat Bold 52, o avanço
+        # de "TopShop" (238,4) e a tinta (238) diferem 0,4px. Eu já supus que
+        # aqui houvesse 26px de sobra e reescrevi isto por causa disso — era
+        # falso, e o vão de 28px vinha de SELO_DX=28 vindo do .env.
         camada.alpha_composite(
-            s, (fim_nome + SELO_DX,
+            s, (texto_x + larg_nome + SELO_DX,
                 logo_y + int(os.environ.get("NOME_DY", 44)) - SELO_TAM // 2))
     else:
         avisos.append("verificado.png não existe — sai sem o selo azul")
@@ -1431,20 +1423,15 @@ def renderizar(edl: dict, origem_imgs: str, saida: Path, mudo=False,
                # pra saber ONDE olhar no quadro (faixa da mídia vs. moldura)
                "layout": {k: v for k, v in lay.items() if k != "hook_linhas"},
                "hook_linhas": lay["hook_linhas"],
-               # OS KNOBS QUE GERARAM ESTE ARQUIVO.
-               # O Dre viu o selo encostado num vídeo e eu fiquei sem saber se
-               # era o valor errado ou o build velho — era o build velho. Com
-               # os números no relatório, "qual versão gerou isto" para de ser
-               # dedução e vira leitura. Mesma ideia do `voz_id`.
-               "knobs": {"SELO_DX": SELO_DX, "LOGO_X": LOGO_X,
-                         "LOGO_Y": LOGO_Y, "NOME_FONT": NOME_FONT,
-                         "HANDLE_FONT": HANDLE_FONT, "VIDEO_Y": VIDEO_Y,
-                         "CTA_Y": CTA_Y,
-                         "CTA_DY": int(os.environ.get("CTA_DY", -8)),
-                         "narrar_hook": any(
-                             a.get("tipo") == "narracao"
-                             and a.get("inicio", 1) == 0.0
-                             for a in edl["trilhas"]["audio"])},
+               # OS KNOBS QUE GERARAM ESTE ARQUIVO — com a ORIGEM de cada um.
+               # Só o valor não bastou. Em 11/08 eu ajustei o padrão do
+               # SELO_DX duas vezes no código e o vídeo não mudou nada: o
+               # `.env` da VPS define SELO_DX=28 e o ambiente ganha sempre.
+               # Gravar "28 (env)" em vez de "28" transforma duas rodadas de
+               # palpite numa linha de leitura. Mesma lição do
+               # ELEVENLABS_VOICE_ID_<NICHO> mascarando o contas.json: o que
+               # resolve não é o valor, é saber QUEM mandou.
+               "knobs": _knobs(edl),
                # sem dict.fromkeys, uma falha do ElevenLabs vira 5 linhas
                # idênticas no relatório e o aviso importante some no meio
                "faltou": list(dict.fromkeys(avisos))}
