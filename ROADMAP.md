@@ -2137,6 +2137,53 @@ a ordem imposta pelo Dre e pelo ChatGPT — medir primeiro, não consertar. Se e
 tivesse "arrumado" a postagem, teria mexido no único subsistema que estava
 funcionando a 92%.
 
+### ✅ TEXTO QUEIMADO NA FOTO — o último `nao_avaliado` da escada (11/08)
+
+`texto_queimado.py`. Fecha o campo que o `asset_ranker` carregava como literal
+`"nao_avaliado"` desde 10/08, e que era o defeito da escova alisadora: a foto do
+anúncio vem com texto promocional queimado e o render escreve hook, legenda e
+CTA por cima.
+
+⚠️ **NÃO é "tem texto → reprova"**, e a correção é do ChatGPT: *"uma foto de
+produto pode naturalmente ter nome da marca, especificação, pequeno texto
+informativo"*. Reprovar todo texto reprovaria quase toda foto de e-commerce —
+o erro do `faixa_preenchida`, que reprovava o caso bom.
+
+**O que decide é a BRIGA, não a presença.** O template tem geometria conhecida
+(`render.py`): a legenda anima na BASE da caixa de vídeo, o destaque fica no
+TOPO, e o miolo é onde o produto aparece. O modelo é perguntado ONDE o texto
+está (topo/meio/base) e o risco é calculado NO NOSSO CÓDIGO contra a NOSSA
+geometria — não estimado por ele. Texto no meio é quase inofensivo; na base,
+colide de frente.
+
+    ESCOVA: promocional 32% na base  →  reprovado  (conflito alto)
+    só a marca, 3% no meio           →  aprovado
+    specs cobrindo 30%, no meio      →  ressalva
+
+`decidir()` fica separada da chamada de rede de propósito: é a única parte
+testável sem chave, e é onde mora a POLÍTICA. O modelo diz o que VÊ; o que isso
+significa pro vídeo é decisão do projeto. Verificada em 8 casos.
+
+**Três regras que não podem cair:**
+1. Sem chave, sem cota, timeout ou JSON inválido → `nao_avaliado`, **NUNCA
+   "aprovado"**. ⚠️ Aqui eu divirjo DE PROPÓSITO do `visual_audit_agent`, que na
+   dúvida MANTÉM o clipe: lá descartar vídeo pronto por falha de infra é caro;
+   aqui dizer "aprovado" por falta de cota é inventar avaliação.
+2. O Vision só REBAIXA o nível, nunca sobe. Diversidade e tamanho seguem
+   determinísticos — opinião de modelo não vira foto grande.
+3. Uma foto usável entre reprovadas NÃO bloqueia o conjunto: o EDL escolhe o
+   corte.
+
+Cache por hash do CONTEÚDO, não do nome — o piloto deriva enquadramentos com
+nomes novos a cada rodada, e por nome o cache nunca acertaria (cota embora à
+toa). Fica em `shared/cache_texto_queimado.json`, gitignored.
+
+⏳ **O que NÃO foi verificado:** a chamada real ao Gemini (não tenho chave no
+ambiente de desenvolvimento). Testados: a decisão, os três caminhos de
+degradação e a integração com o ranker. O formato da resposta do modelo só se
+confirma na primeira rodada na VPS — e se vier fora do contrato, sai
+`nao_avaliado` com o motivo, não uma aprovação falsa.
+
 ### Onde parou (04/08, fim do dia)
 
 **Esperando o chip.** Pedido feito — Claro pré-pago, R$ 20,99, chegada prevista
