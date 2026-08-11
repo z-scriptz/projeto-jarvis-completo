@@ -79,10 +79,17 @@ def _fotos_do_item(item: dict, pasta: Path) -> list:
     pasta.mkdir(parents=True, exist_ok=True)
     urls = _urls_do_item(item)
     if not urls:
-        _log("   ⚠️  este item da fila não tem NENHUMA URL de foto "
-             "('imagem' e 'imagens' vazios) — não é download que falhou, "
-             "não há o que baixar")
-        _log(f"      campos presentes no item: {', '.join(sorted(item))}")
+        # NÃO dizer "campo vazio": 11/08 o item tinha `imagem` presente, e a
+        # mensagem mandou o Dre procurar campo faltando que não estava
+        # faltando. O campo existe; o VALOR é que não serve. Então mostra o
+        # valor.
+        bruto = item.get("imagem")
+        como = ("ausente" if bruto is None
+                else f"{type(bruto).__name__} {str(bruto)[:60]!r}")
+        _log("   ⚠️  este item da fila não tem URL de foto utilizável — "
+             "não é download que falhou, não há o que baixar")
+        _log(f"      imagem = {como}   ·   imagens = "
+             f"{len(item.get('imagens') or [])} item(ns)")
         return []
     vistas, fora = set(), []
     for u in urls:
@@ -297,8 +304,12 @@ def main():
                     saida_erro.append(
                         f"  O índice {args.fila} está sem foto. Com foto: "
                         f"{amostra}{' …' if len(com_foto) > 12 else ''}")
+                    # sys.executable, NUNCA "python3": o piloto roda no
+                    # .venv, e o python3 do sistema não tem PIL. Sugerir
+                    # "python3" mandou o Dre direto pro ModuleNotFoundError.
                     saida_erro.append(
-                        f"  Tente:  python3 piloto.py --fila {com_foto[0]}")
+                        f"  Tente:  {sys.executable} piloto.py "
+                        f"--fila {com_foto[0]}")
                 else:
                     saida_erro.append(
                         "  NENHUM item da fila tem URL de foto. Isso é problema "
