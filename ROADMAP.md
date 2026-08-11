@@ -2094,6 +2094,37 @@ Junto: `auditoria_postagem` ganhou a escadinha de envelhecimento, com degraus
 relativos à validade (0,65/0,8/0,92) em vez de cravados — degrau fixo em "20
 dias" mentiria no dia em que a validade virasse 14.
 
+### 🚨 A ARMADILHA DO DÉFICIT: zerar o piso ia produzir SÓ moda e pet (11/08)
+
+Consequência que só apareceu com o deploy no ar, e que eu tinha subestimado.
+A produção escolhe por DÉFICIT: `falta = alvo - estoque` (`_priorizar_por_estoque`),
+e o loop de seleção **só aceita produto cujo nicho tem `falta > 0`**. Com o piso
+em 1, todas as contas tinham `falta ≥ 1` e a coisa se diluía. Com o piso em 0:
+
+    beleza 25/6 → 0     moda 0/6 → 6
+    casa   11/6 → 0     pet  0/6 → 6
+    geral  88/6 → 0
+    tech   33/6 → 0
+
+**As duas contas que o Dre disse pra NÃO produzir viraram as únicas com
+déficit** — conta nova tem estoque zero, então tem o maior déficit e fura a
+fila de todas as outras. A produção inteira passaria a servir duas contas que
+não publicam, enchendo a fila de pacote que venceria sem sair.
+
+Não explodiu por sorte: o roteador não classificou nenhum produto em moda/pet
+em ~1 dia, então `falta` ficou sem candidato. Sorte não é desenho.
+
+**Guarda:** `"ativa": false` no `contas.json` tira o nicho de
+`_nichos_das_contas()`. Cadastrar a conta e ligar a produção dela são duas
+decisões diferentes, e até hoje o arquivo não conseguia dizer isso. Com a
+flag, `falta` fica vazio e a produção para — que é exatamente o que a drenagem
+precisa.
+
+⚠️ **A lição:** eu tinha visto esse risco e arquivei como "guarda pra fazer
+junto com a autonomia", porque associei o problema ao PISO. O problema era do
+DÉFICIT, e remover o piso não o adiava — o ativava. Risco que eu descrevo mas
+classifico no mecanismo errado continua sendo risco que eu não vi.
+
 ⚠️ Correção no plano do ChatGPT: ele leu que a rota `pdp/get_pc` teria
 "estrutura aninhada que pode conter a galeria (`data.item.product_images.
 images`)". **Não.** Aquele era um nome de campo que o probe TESTOU; a resposta

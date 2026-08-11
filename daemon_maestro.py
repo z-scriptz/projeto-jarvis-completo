@@ -787,15 +787,27 @@ def _produzidos_hoje_por_conta() -> dict:
 
 
 def _nichos_das_contas() -> set:
-    """Os nichos que existem hoje ({'beleza','tech','geral'}).
+    """Os nichos ATIVOS hoje ({'beleza','tech','geral'}).
 
     No contas.json o nicho é a CHAVE; só o "_default" traz o campo "nicho"
     dentro. Ler o campo em todas colapsaria tudo em "geral".
+
+    ⚠️ CONTA COM `"ativa": false` FICA DE FORA, e isso não é detalhe (11/08).
+    A produção escolhe por DÉFICIT: `falta = alvo - estoque`. Uma conta recém
+    cadastrada tem estoque 0, então ela tem o MAIOR déficit e fura a fila de
+    todas as outras. Quando o Dre zerou `producao_minima_por_conta` pra drenar
+    a esteira, `moda` e `pet` (cadastradas no dia anterior, sem postar ainda,
+    estoque 0/6) viraram as ÚNICAS contas com `falta > 0` — a produção inteira
+    passaria a servir duas contas que não publicam, enchendo a fila de pacotes
+    que venceriam sem sair. Cadastrar a conta e ligar a produção dela são duas
+    decisões diferentes, e agora o arquivo consegue dizer isso.
     """
     try:
         import roteador_contas as _RC
         nichos = set()
         for chave, conta in _RC.carregar_contas().items():
+            if isinstance(conta, dict) and conta.get("ativa") is False:
+                continue
             nichos.add((conta.get("nicho") or "geral") if chave == "_default" else chave)
         return nichos or {"geral"}
     except Exception:
