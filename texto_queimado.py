@@ -124,6 +124,60 @@ def _hash(caminho: Path) -> str:
     return h.hexdigest()[:32]
 
 
+def _verdadeiro(v) -> bool:
+    """bool tolerante: o modelo às vezes devolve "true"/"sim" como texto."""
+    if isinstance(v, str):
+        return v.strip().lower() in ("true", "sim", "yes", "1")
+    return bool(v)
+
+
+def _faixas(v) -> set:
+    """As faixas como conjunto, aceitando lista OU string.
+
+    ⚠️ O contrato pede lista, mas modelo devolve `"faixas": "base"` sem avisar.
+    Iterar uma string dá as LETRAS: 'base' virava {'b','a','s','e'}, que não
+    colide com {'topo','base'} — e uma foto com promoção na base saía como
+    `ressalva` em vez de `reprovado`. Falha silenciosa, e para o lado errado.
+    """
+    if v is None:
+        return set()
+    if isinstance(v, str):
+        v = [p for p in v.replace(";", ",").replace("/", ",").split(",")]
+    try:
+        return {str(f).strip().lower() for f in v if str(f).strip()}
+    except TypeError:
+        return set()
+
+
+def _densidade(v):
+    """Fração 0-1, aceitando 0.32, "0.32", "32%" e 32. None se não der.
+
+    None NÃO é zero: quem chama trata como ausência de informação. Aceitar
+    porcentagem importa porque o prompt pede fração e o modelo responde no
+    formato que quiser — e "32%" lido como 0.0 aprovaria um banner inteiro.
+    """
+    if v is None:
+        return None
+    if isinstance(v, str):
+        v = v.strip().replace(",", ".")
+        pct = v.endswith("%")
+        try:
+            n = float(v.rstrip("%").strip())
+        except ValueError:
+            return None
+        if pct:
+            n /= 100.0
+    else:
+        try:
+            n = float(v)
+        except (TypeError, ValueError):
+            return None
+    # 32 quando o contrato pede 0-1 é claramente porcentagem escrita crua
+    if n > 1.0:
+        n = n / 100.0 if n <= 100.0 else 1.0
+    return max(0.0, min(1.0, n))
+
+
 def decidir(bruto: dict) -> dict:
     """Do laudo do modelo pro veredito, com a geometria do NOSSO template.
 
@@ -131,14 +185,21 @@ def decidir(bruto: dict) -> dict:
     testar sem chave, e é onde mora a política. O modelo diz o que VÊ; quem
     decide o que isso significa pro vídeo é este projeto.
     """
-    tem = bool(bruto.get("tem_texto"))
+    tem = _verdadeiro(bruto.get("tem_texto"))
     tipo = str(bruto.get("tipo") or "nenhum").strip().lower()
-    try:
-        dens = max(0.0, min(1.0, float(bruto.get("densidade") or 0.0)))
-    except (TypeError, ValueError):
-        dens = 0.0
-    faixas = {str(f).strip().lower() for f in (bruto.get("faixas") or [])}
+    faixas = _faixas(bruto.get("faixas"))
     colide = bool(faixas & FAIXAS_NOSSAS)
+
+    dens = _densidade(bruto.get("densidade"))
+    if tem and dens is None:
+        # ⚠️ NÃO assumir 0. Densidade ilegível com texto presente é ausência de
+        # informação, e o padrão 0.0 significaria "foto limpa" — aprovaria
+        # justamente o caso que este arquivo existe pra pegar. Toda falha de
+        # parse tem que cair pro mesmo lado: `nao_avaliado`.
+        r = _nao_avaliado(f"densidade ilegível: {bruto.get('densidade')!r}")
+        r.update(tipo=tipo, faixas=sorted(faixas))
+        return r
+    dens = dens or 0.0
 
     if not tem or tipo == "nenhum":
         return {"veredito": "aprovado", "densidade": dens, "tipo": tipo,

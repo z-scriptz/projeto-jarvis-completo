@@ -2180,9 +2180,21 @@ toa). Fica em `shared/cache_texto_queimado.json`, gitignored.
 
 ⏳ **O que NÃO foi verificado:** a chamada real ao Gemini (não tenho chave no
 ambiente de desenvolvimento). Testados: a decisão, os três caminhos de
-degradação e a integração com o ranker. O formato da resposta do modelo só se
-confirma na primeira rodada na VPS — e se vier fora do contrato, sai
-`nao_avaliado` com o motivo, não uma aprovação falsa.
+degradação e a integração com o ranker.
+
+⚠️ **E revisar essa própria pendência achou dois furos sérios**, os dois
+falhando PARA O LADO DA APROVAÇÃO — que é o único lado que a regra 1 proíbe:
+- `"faixas": "base"` (string em vez de lista) era iterado como STRING e virava
+  `{'b','a','s','e'}`, que não colide com `{topo, base}`: a escova saía
+  `ressalva` em vez de `reprovado`;
+- `"densidade": "32%"` não era parseável e caía no padrão `0.0`, que significa
+  "foto limpa" → **`aprovado`**. Um banner inteiro passaria como limpo.
+
+Agora `_faixas()` aceita lista ou string, `_densidade()` aceita `0.32`, `"0.32"`,
+`"0,32"`, `"32%"` e `32`, e o que NÃO dá pra ler vira `nao_avaliado` em vez de
+zero. Oito variantes de formato testadas, todas convergindo no mesmo veredito.
+**"Declarei como não verificado" não é o mesmo que "tratei o caso":** o contrato
+só vale se o código sobreviver a ele sendo quebrado.
 
 ### Onde parou (04/08, fim do dia)
 
