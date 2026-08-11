@@ -55,17 +55,35 @@ def _baixar(url: str, destino: Path) -> bool:
         return False
 
 
+def _urls_do_item(item: dict) -> list:
+    """As URLs de foto de um item da fila, na ordem em que valem a pena.
+
+    Aceita tanto `imagem` (uma) quanto `imagens` (lista) — a vitrine usa a
+    primeira forma e nem todo item tem a segunda.
+    """
+    return [u for u in ([item.get("imagem")] + (item.get("imagens") or []))
+            if isinstance(u, str) and u.startswith("http")]
+
+
 def _fotos_do_item(item: dict, pasta: Path) -> list:
     """Baixa as fotos do produto. A fila guarda URL, não arquivo.
 
-    Aceita tanto `imagem` (uma) quanto `imagens` (lista) — a vitrine usa a
-    primeira forma e nem todo item tem a segunda. Um produto com UMA foto ainda
-    rende vídeo: o EDL faz punch-in na mesma imagem, que é como editor humano
-    trabalha com pouco material.
+    Um produto com UMA foto ainda rende vídeo: o EDL faz punch-in na mesma
+    imagem, que é como editor humano trabalha com pouco material.
+
+    Volta lista vazia por DOIS motivos diferentes, e quem chama precisa saber
+    qual foi — 11/08 o Dre levou três rodadas de terminal pra descobrir que o
+    item simplesmente não tinha URL, porque a mensagem de erro listava as duas
+    causas possíveis sem dizer qual tinha acontecido. Por isso o log aqui.
     """
     pasta.mkdir(parents=True, exist_ok=True)
-    urls = [u for u in ([item.get("imagem")] + (item.get("imagens") or []))
-            if isinstance(u, str) and u.startswith("http")]
+    urls = _urls_do_item(item)
+    if not urls:
+        _log("   ⚠️  este item da fila não tem NENHUMA URL de foto "
+             "('imagem' e 'imagens' vazios) — não é download que falhou, "
+             "não há o que baixar")
+        _log(f"      campos presentes no item: {', '.join(sorted(item))}")
+        return []
     vistas, fora = set(), []
     for u in urls:
         if u in vistas:
@@ -195,6 +213,22 @@ def _item_da_fila(indice: int) -> dict:
     return dados[indice]
 
 
+def _indices_com_foto() -> list:
+    """Os índices da fila que têm pelo menos uma URL de foto.
+
+    Existe só para o erro poder dizer 'use o índice 7' em vez de 'não achei
+    foto'. Falha em silêncio: é ajuda de mensagem de erro, e mensagem de erro
+    que estoura ao explicar outro erro é pior que mensagem curta.
+    """
+    try:
+        import storyboard as SB
+        dados = [x for x in json.loads(SB.FILA.read_text(encoding="utf-8"))
+                 if isinstance(x, dict)]
+        return [i for i, it in enumerate(dados) if _urls_do_item(it)]
+    except Exception:
+        return []
+
+
 def main():
     p = argparse.ArgumentParser(
         description="Produto -> roteiro -> EDL -> MP4 -> conferência.")
@@ -250,10 +284,27 @@ def main():
             fotos = sorted(f for f in pasta.iterdir()
                            if f.suffix.lower() in EXT_OK) if pasta.is_dir() else [pasta]
         if not fotos:
-            raise SystemExit(
-                "[piloto] nenhuma foto — a fila guarda URL e o download falhou, "
-                "ou o produto entrou sem imagem. Use --fotos PASTA, ou rode "
-                "`python3 preencher_fotos.py` antes")
+            # A mensagem antiga listava causas possíveis e mandava rodar
+            # `preencher_fotos.py` — que mexe na VITRINE, não nesta fila. Quem
+            # seguiu a instrução gastou uma rodada de terminal pra descobrir
+            # que ela não tinha nada a ver com o problema. Agora o erro diz o
+            # que houve E qual índice usar.
+            saida_erro = ["[piloto] nenhuma foto — sem imagem não há vídeo."]
+            if args.fila is not None:
+                com_foto = _indices_com_foto()
+                if com_foto:
+                    amostra = ", ".join(str(i) for i in com_foto[:12])
+                    saida_erro.append(
+                        f"  O índice {args.fila} está sem foto. Com foto: "
+                        f"{amostra}{' …' if len(com_foto) > 12 else ''}")
+                    saida_erro.append(
+                        f"  Tente:  python3 piloto.py --fila {com_foto[0]}")
+                else:
+                    saida_erro.append(
+                        "  NENHUM item da fila tem URL de foto. Isso é problema "
+                        "da coleta, não do piloto — a fila entrou sem imagem.")
+            saida_erro.append("  Ou aponte fotos locais:  --fotos PASTA")
+            raise SystemExit("\n".join(saida_erro))
 
         avisos_fotos = []
         if len(fotos) == 1 and args.variacoes > 1:
