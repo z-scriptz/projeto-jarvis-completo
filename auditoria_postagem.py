@@ -120,6 +120,23 @@ def _idade_dias(p: Path) -> float:
     return (time.time() - p.stat().st_mtime) / 86400
 
 
+def _posts_no_dia(slots: dict) -> int:
+    """Quantos VÍDEOS saíram no dia — não quantos horários foram usados.
+
+    ⚠️ ERRO QUE ESTA FUNÇÃO CONSERTA (11/08): eu contava `len(por_dia[dia])` e
+    concluí "publicação a 23% da capacidade". `daemon_maestro:1226` guarda
+    `por_dia[dia][HORARIO] = slug` (modo clássico) ou `= [slug, slug, ...]`
+    (modo `post_por_conta`, que está LIGADO na VPS). A chave é o horário, então
+    aquele `len` contava SLOTS. O teto da pirâmide é 3 slots/dia — e a série
+    "nunca passar de 3" era a assinatura do bug, não um achado sobre o sistema.
+    Um slot com 4 contas vale 4 vídeos e eu contava 1.
+    """
+    total = 0
+    for valor in (slots or {}).values():
+        total += len(valor) if isinstance(valor, list) else 1
+    return total
+
+
 def auditar(dias_janela: int = 7) -> dict:
     cfg, hist = _cfg(), _hist()
     postados = set(hist.get("postados", []))
@@ -168,17 +185,26 @@ def auditar(dias_janela: int = 7) -> dict:
     # ── PUBLICAÇÃO ──────────────────────────────────────────────────────────
     por_dia = hist.get("por_dia", {}) or {}
     hoje = date.today()
-    serie = []
+    serie, serie_slots = [], []
     for i in range(dias_janela):
         d = hoje - timedelta(days=i)
         chave = d.isoformat()
-        n = len(por_dia.get(chave, {}) or {})
-        serie.append((chave, n))
+        slots = por_dia.get(chave, {}) or {}
+        serie.append((chave, _posts_no_dia(slots)))
+        serie_slots.append((chave, len(slots)))
     ult1 = sum(n for _, n in serie[:1])
     ult3 = sum(n for _, n in serie[:3])
     ult7 = sum(n for _, n in serie[:7])
     dias_com_dado = [n for _, n in serie]
     media = round(sum(dias_com_dado) / max(1, len(dias_com_dado)), 2)
+
+    # quem postou na janela — o slug guardado no histórico leva ao conta.json
+    por_conta_publicado = Counter()
+    for i in range(dias_janela):
+        chave = (hoje - timedelta(days=i)).isoformat()
+        for valor in (por_dia.get(chave, {}) or {}).values():
+            for slug in (valor if isinstance(valor, list) else [valor]):
+                por_conta_publicado[_conta(str(slug))] += 1
 
     # ── CAPACIDADE CONFIGURADA ──────────────────────────────────────────────
     contas_ativas = len([c for c in por_conta if c not in ("?", "SEM conta.json")])
@@ -198,6 +224,11 @@ def auditar(dias_janela: int = 7) -> dict:
     estoque = len(visiveis)
     semanas_pra_drenar = (round(estoque / cap_semana_total, 1)
                           if cap_semana_total else None)
+    # ⚠️ O NÚMERO QUE DECIDE não é este acima. Drenar na capacidade CONFIGURADA
+    # é hipótese; drenar na cadência REAL é o que vai acontecer. Comparar o
+    # segundo com a validade é o que diz se o rabo da fila vence antes de sair.
+    ritmo_real = sum(n for _, n in serie) / max(1, len(serie))
+    dias_drenar_real = (round(estoque / ritmo_real) if ritmo_real else None)
 
     return {
         "como_mediu": COMO,
@@ -228,6 +259,8 @@ def auditar(dias_janela: int = 7) -> dict:
             "ultimas_24h": ult1, "ultimos_3d": ult3, "ultimos_7d": ult7,
             "media_por_dia": media,
             "serie": serie,
+            "serie_slots": serie_slots,
+            "por_conta": dict(por_conta_publicado.most_common()),
             "total_historico": len(postados),
         },
         "capacidade": {
@@ -236,6 +269,8 @@ def auditar(dias_janela: int = 7) -> dict:
             "capacidade_semanal_total": cap_semana_total,
             "validade_dias": validade,
             "semanas_pra_drenar": semanas_pra_drenar,
+            "ritmo_real_por_dia": round(ritmo_real, 2),
+            "dias_pra_drenar_no_ritmo_real": dias_drenar_real,
             "piramide": cfg.get("posts_por_dia_semana"),
             "post_por_conta": cfg.get("post_por_conta"),
             "janela": f"{cfg.get('janela_inicio','?')}–{cfg.get('janela_fim','?')}",
@@ -304,18 +339,21 @@ def _veredito(r: dict) -> list:
             "ser postados, e nem aparecem como problema em lugar nenhum.",
             f"amostra: {r['amostras']['sem_video_mp4'][:3]}"))
 
-    if c["capacidade_semanal_total"] and c["semanas_pra_drenar"]:
-        dias_drenar = c["semanas_pra_drenar"] * 7
-        if dias_drenar > c["validade_dias"] > 0:
-            fora.append((
-                "A FILA NÃO DRENA ANTES DE VENCER",
-                f"{e['visiveis_pro_daemon']} pacotes ÷ "
-                f"{c['capacidade_semanal_total']}/semana = "
-                f"{c['semanas_pra_drenar']} semanas ({dias_drenar:.0f} dias) "
-                f"pra esvaziar, mas a validade é {c['validade_dias']} dias. "
-                "O rabo da fila vence antes de ser alcançado — e como a ordem "
-                "é MAIS NOVO PRIMEIRO, é sempre o mesmo rabo.",
-                f"pirâmide {c['piramide']} × {c['contas']} contas"))
+    # o que decide é o RITMO REAL, não a capacidade configurada
+    dr = c.get("dias_pra_drenar_no_ritmo_real")
+    if dr and c["validade_dias"] > 0 and dr > c["validade_dias"]:
+        sobra = max(0, e["visiveis_pro_daemon"] -
+                    round(c["ritmo_real_por_dia"] * c["validade_dias"]))
+        fora.append((
+            "A FILA NÃO DRENA ANTES DE VENCER",
+            f"{e['visiveis_pro_daemon']} pacotes ÷ {c['ritmo_real_por_dia']}"
+            f"/dia (ritmo REAL) = {dr} dias pra esvaziar, contra validade de "
+            f"{c['validade_dias']} dias. Como a ordem é MAIS NOVO PRIMEIRO "
+            "(daemon_maestro:1050), é sempre o mesmo rabo que espera: "
+            f"~{sobra} pacote(s) tendem a vencer sem nunca sair.",
+            f"no ritmo configurado ({c['capacidade_semanal_total']}/semana) "
+            f"seriam {c['semanas_pra_drenar'] * 7:.0f} dias — cabe na validade. "
+            "A diferença entre os dois é o problema."))
 
     esperado_7d = c["capacidade_semanal_total"]
     if esperado_7d and p["ultimos_7d"] < esperado_7d * 0.5:
@@ -334,6 +372,16 @@ def _veredito(r: dict) -> list:
             "registrar.",
             f"último dia com registro: "
             f"{next((d for d, n in p['serie'] if n), 'nenhum na janela')}"))
+
+    if e["ja_marcados_postados"] > e["total_pastas"] * 0.2:
+        fora.append((
+            "O NÚMERO DA ESTEIRA ESTÁ INFLADO",
+            f"{e['ja_marcados_postados']} das {e['total_pastas']} pastas JÁ "
+            "foram postadas e continuam em pronto_para_postar/ — só saem "
+            f"quando vencem ({c['validade_dias']}d). O estoque real é "
+            f"{e['visiveis_pro_daemon']}, não {e['total_pastas']}.",
+            "quem olha a pasta (inclusive eu, na revisão geral) vê quase o "
+            "dobro do que existe pra postar"))
 
     if e["vencidos_ainda_na_pasta"]:
         fora.append((
@@ -398,12 +446,17 @@ def main():
         print(f"    {conta:24} {d['pacotes']:4} pacotes · mais antigo "
               f"{d['mais_antigo_dias']:5}d · mediana {d['mediana_dias']}d")
 
-    print(f"\n  PUBLICAÇÃO")
+    print(f"\n  PUBLICAÇÃO  (vídeos, não slots)")
     print(f"    últimas 24h: {pu['ultimas_24h']}   últimos 3d: {pu['ultimos_3d']}"
           f"   últimos 7d: {pu['ultimos_7d']}")
     print(f"    média/dia: {pu['media_por_dia']} · total no histórico: "
           f"{pu['total_historico']}")
-    print("    série: " + " ".join(f"{d[5:]}={n}" for d, n in pu["serie"]))
+    print("    vídeos/dia: " + " ".join(f"{d[5:]}={n}" for d, n in pu["serie"]))
+    print("    slots/dia:  " + " ".join(f"{d[5:]}={n}"
+                                        for d, n in pu["serie_slots"]))
+    if pu["por_conta"]:
+        print("    por conta na janela: " + " · ".join(
+            f"{c} {n}" for c, n in pu["por_conta"].items()))
 
     print(f"\n  CAPACIDADE CONFIGURADA")
     print(f"    pirâmide {c['piramide']} = {c['posts_por_conta_semana']}/conta/semana")
@@ -411,8 +464,12 @@ def main():
     print(f"    validade {c['validade_dias']}d · janela {c['janela']} · "
           f"post_por_conta={c['post_por_conta']}")
     if c["semanas_pra_drenar"]:
-        print(f"    drenar o estoque atual levaria {c['semanas_pra_drenar']} "
-              f"semanas ({c['semanas_pra_drenar'] * 7:.0f} dias)")
+        print(f"    no ritmo CONFIGURADO: {c['semanas_pra_drenar'] * 7:.0f} "
+              f"dias pra drenar {e['visiveis_pro_daemon']} pacotes")
+    if c.get("dias_pra_drenar_no_ritmo_real"):
+        print(f"    no ritmo REAL ({c['ritmo_real_por_dia']}/dia): "
+              f"{c['dias_pra_drenar_no_ritmo_real']} dias   "
+              f"← este é o que vale, validade {c['validade_dias']}d")
 
     print(f"\n{L}\n  GARGALO\n{L}")
     ver = _veredito(r)
