@@ -141,6 +141,14 @@ DEFAULTS = {
     # envelhece é o PRODUTO. E com a pirâmide (12 posts/conta/semana) a esteira
     # leva ~23 dias pra drenar, então 7 jogava fora vídeo bom por idade.
     "fila_validade_dias":         27,
+    # ORDEM DA FILA. 'auto' troca sozinha conforme a saúde dela: fila funda
+    # (mais antigo além de limiar_drenagem × validade) sai por IDADE, fila rasa
+    # volta a priorizar o FRESCO. Medido em 11/08: com 152 pacotes a 6,3/dia,
+    # novo-primeiro faz o mais antigo sair no dia 24 com 39 dias — vencido.
+    # Antigo-primeiro drena o mesmo estoque com o último saindo aos 24 dias.
+    # 'mais_antigo' / 'mais_novo' forçam, pra poder testar sem adivinhar.
+    "ordem_da_fila":              "auto",
+    "limiar_drenagem":            0.4,
     # Segunda chance pro que venceu: confere se o produto ainda está vivo e,
     # se morreu, procura o MESMO produto em outro vendedor antes de desistir.
     # Roda junto do expurgo, no ciclo de postagem. 0 desliga.
@@ -1027,10 +1035,25 @@ def _vencido(pasta: Path, dias: int) -> bool:
 def _prontos_nao_postados(hist: dict) -> list:
     """Slugs prontos (com video.mp4) que ainda não foram postados.
 
-    Ordem: MAIS NOVO PRIMEIRO. Era alfabética, e isso matava de fome o fim do
-    alfabeto — enquanto entrasse pacote em 'a', o que começava com 'v' nunca era
-    alcançado. Além disso, achadinho é oferta perecível: o mais fresco converte
-    melhor, então ele tem que sair na frente.
+    A ORDEM DEPENDE DA SAÚDE DA FILA, e isso foi medido (11/08).
+
+    Era MAIS NOVO PRIMEIRO, sempre — antes disso era alfabética, que matava de
+    fome o fim do alfabeto. Novo-primeiro resolvia aquilo e tinha razão própria:
+    achadinho é oferta perecível, o mais fresco converte melhor. Isso vale com
+    fila rasa.
+
+    ⚠️ COM FILA FUNDA ELA SE INVERTE, e a auditoria mostrou o número: 152
+    pacotes, ritmo real de 6,3/dia, mais antigo com 15,3 dias, validade 27.
+    Novo-primeiro faz o mais antigo ser o ÚLTIMO a sair — dia 24, com 39 dias
+    de idade, 12 além da validade. Ele vence sem nunca ser postado. Parar a
+    produção NÃO resolve isso: só muda quantos entram, não quem sai primeiro.
+    Com mais-antigo-primeiro, o mesmo estoque drena em 24 dias e o pacote mais
+    NOVO é o último, saindo com 24 dias — cabe nos 27.
+
+    Por isso "auto": fila funda drena por idade; fila rasa volta a priorizar o
+    fresco. FIFO não é política permanente, é modo de drenagem — sem isso a
+    esteira ficaria pra sempre postando material velho depois que o estoque
+    normalizasse.
 
     Pacote vencido não entra na lista (o expurgo tira ele da pasta no ciclo).
     """
@@ -1046,10 +1069,49 @@ def _prontos_nao_postados(hist: dict) -> list:
         if pasta.name in postados or _vencido(pasta, dias):
             continue
         candidatos.append((pasta.stat().st_mtime, pasta.name))
+    if not candidatos:
+        return []
 
-    # mais novo primeiro; nome como desempate, pra ordem ser estável
-    candidatos.sort(key=lambda p: (-p[0], p[1]))
+    if _drenar_por_idade(candidatos, dias):
+        # mais ANTIGO primeiro; nome como desempate, pra ordem ser estável
+        candidatos.sort(key=lambda p: (p[0], p[1]))
+    else:
+        candidatos.sort(key=lambda p: (-p[0], p[1]))
     return [nome for _mtime, nome in candidatos]
+
+
+def _drenar_por_idade(candidatos: list, validade: int) -> bool:
+    """A fila está funda o bastante pra ordenar por idade?
+
+    Critério: o pacote mais antigo já passou de `limiar_drenagem` da validade.
+    Isso responde à única pergunta que importa — "tem gente na fila em risco de
+    vencer?" — sem precisar saber a cadência de postagem aqui dentro.
+
+    Config:
+      ordem_da_fila       'auto' (padrão) | 'mais_antigo' | 'mais_novo'
+      limiar_drenagem     fração da validade (padrão 0.4 → 10,8d em 27d)
+    """
+    cfg = carregar_config()
+    modo = str(cfg.get("ordem_da_fila", "auto")).strip().lower()
+    if modo == "mais_antigo":
+        return True
+    if modo == "mais_novo":
+        return False
+    if validade <= 0:
+        return False        # sem validade não há o que vencer
+
+    try:
+        fracao = float(cfg.get("limiar_drenagem", 0.4))
+    except (TypeError, ValueError):
+        fracao = 0.4
+    limiar = validade * max(0.0, min(1.0, fracao))
+    mais_velho = (time.time() - min(m for m, _ in candidatos)) / 86400
+    drenar = mais_velho > limiar
+    log.info(f"   📋 fila: {len(candidatos)} pacote(s), mais antigo "
+             f"{mais_velho:.1f}d (limiar {limiar:.1f}d) → ordem "
+             + ("MAIS ANTIGO primeiro (drenagem)" if drenar
+                else "mais novo primeiro (fila saudável)"))
+    return drenar
 
 
 def _expurgar_vencidos() -> int:

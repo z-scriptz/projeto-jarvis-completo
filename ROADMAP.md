@@ -2066,6 +2066,40 @@ estoque e vence sem sair.
 3. `RAIZ = parent.parent` do daemon aponta pra fora do projeto no repo achatado;
    a auditoria media `/home/user` e imprimia "0 pastas" com cara de resposta.
 
+### ⚠️ PARAR A PRODUÇÃO NÃO BASTA — a ORDEM é que mata a fila (11/08)
+
+O ChatGPT aprovou `producao_minima_por_conta: 0` e pediu FIFO "como melhoria".
+Fazendo a conta, FIFO não é melhoria: **sem ela o resto não funciona.**
+
+    estoque 152 · ritmo 6,3/dia · mais antigo 15,3d · validade 27d
+    drenar tudo = 24,2 dias
+
+    MAIS NOVO PRIMEIRO   o mais antigo é o ÚLTIMO a sair: dia 24, idade 39d → VENCE
+    MAIS ANTIGO PRIMEIRO o mais antigo sai hoje; o mais NOVO é o último,
+                         sai no dia 24 com 24d → cabe nos 27
+
+Zerar o piso muda **quantos entram**, não **quem sai primeiro**. Com a ordem
+antiga, o rabo vence de qualquer jeito.
+
+**Mas FIFO não é política permanente, é MODO DE DRENAGEM.** Com fila rasa o
+argumento original volta a valer (achadinho é perecível, o fresco converte
+melhor), e postar sempre o mais velho seria trocar um problema por outro. Por
+isso `ordem_da_fila: "auto"` (`daemon_maestro._drenar_por_idade`): se o mais
+antigo passou de `limiar_drenagem × validade` (0.4 → 10,8d), ordena por IDADE;
+abaixo disso, pelo FRESCO. `mais_antigo`/`mais_novo` forçam, e o log diz em
+toda rodada qual escolheu e por quê. Testado nos quatro estados: fila funda,
+no limiar, sarada e novinha.
+
+Junto: `auditoria_postagem` ganhou a escadinha de envelhecimento, com degraus
+relativos à validade (0,65/0,8/0,92) em vez de cravados — degrau fixo em "20
+dias" mentiria no dia em que a validade virasse 14.
+
+⚠️ Correção no plano do ChatGPT: ele leu que a rota `pdp/get_pc` teria
+"estrutura aninhada que pode conter a galeria (`data.item.product_images.
+images`)". **Não.** Aquele era um nome de campo que o probe TESTOU; a resposta
+medida foi `error=90309999`, sem `data`, chaves numeradas. A galeria continua
+fechada pelas três medições acima.
+
 **A lição:** eu abri esta investigação com uma hipótese ("a postagem é o
 gargalo") e ela estava errada em todos os pontos verificáveis. O que salvou foi
 a ordem imposta pelo Dre e pelo ChatGPT — medir primeiro, não consertar. Se eu

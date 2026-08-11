@@ -137,6 +137,24 @@ def _posts_no_dia(slots: dict) -> int:
     return total
 
 
+def _envelhecimento(visiveis: list, validade: int) -> dict:
+    """Escadinha de quanto falta pra vencer, só do que ainda pode ser postado.
+
+    Os degraus são relativos à validade, não fixos: com validade 27 eles caem
+    em 17/22/25, e mudar `fila_validade_dias` reajusta tudo sozinho. Degrau
+    cravado em "20 dias" mentiria no dia em que a validade virasse 14.
+    """
+    if validade <= 0 or not visiveis:
+        return {"em_risco": 0, "escadinha": {}}
+    degraus = [int(validade * f) for f in (0.65, 0.8, 0.92)]
+    escada = {}
+    for d in degraus:
+        escada[d] = sum(1 for _s, _c, idade in visiveis if idade > d)
+    return {"em_risco": sum(1 for _s, _c, i in visiveis if i > validade - 7),
+            "escadinha": escada,
+            "mais_velho": round(max(i for _s, _c, i in visiveis), 1)}
+
+
 def auditar(dias_janela: int = 7) -> dict:
     cfg, hist = _cfg(), _hist()
     postados = set(hist.get("postados", []))
@@ -248,6 +266,11 @@ def auditar(dias_janela: int = 7) -> dict:
                                  f">{validade}d (vencido)"] if faixas.get(k)},
             "fila_vencida_dir": (len(list(VENCIDA.iterdir()))
                                  if VENCIDA.exists() else 0),
+            # escadinha do que está perto do fim: só contando os VISÍVEIS, que
+            # são os que ainda podem ser postados. Incluir os já postados aqui
+            # transformaria "vou perder isto" em número inflado — foi assim que
+            # o 274 virou alarme.
+            "envelhecendo": _envelhecimento(visiveis, validade),
         },
         "por_conta": {
             c: {"pacotes": n,
@@ -391,6 +414,16 @@ def _veredito(r: dict) -> list:
             "registrar.",
             f"último dia com registro: "
             f"{next((d for d, n in p['serie'] if n), 'nenhum na janela')}"))
+
+    # ── envelhecimento: quanto do estoque está perto de virar prejuízo ──────
+    env = e.get("envelhecendo") or {}
+    if env.get("em_risco"):
+        v = c["validade_dias"]
+        fora.append((
+            "ESTOQUE ENVELHECENDO",
+            f"{env['em_risco']} pacote(s) a menos de 7 dias de vencer "
+            f"(validade {v}d) — produção já paga que vira zero se não sair.",
+            " · ".join(f">{k}d: {n}" for k, n in env["escadinha"].items())))
 
     if e["ja_marcados_postados"] > e["total_pastas"] * 0.2:
         fora.append((
