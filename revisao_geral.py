@@ -449,19 +449,59 @@ def bloco_servicos():
 
 
 # ── 10. travas esquecidas ───────────────────────────────────────────────────
+def _processo_vivo(pid: int, nome: str) -> bool:
+    """O PID existe E parece ser o job certo? Só leitura de /proc.
+
+    Checar o PID em vez de tentar pegar o flock mantém a promessa de "só lê":
+    adquirir a trava, mesmo por microssegundos, faria um cron que subisse
+    naquele instante desistir da rodada.
+    """
+    try:
+        cmd = Path(f"/proc/{pid}/cmdline").read_bytes().decode(
+            "utf-8", "replace").replace("\x00", " ")
+    except Exception:
+        return False
+    # PID é reciclado; o nome do job na linha de comando dá a confirmação
+    return nome.split("_")[0] in cmd or nome in cmd
+
+
 def bloco_travas():
     B = "travas"
-    achou = False
-    for p in list(RAIZ.glob(".trava_*")) + list((RAIZ / "shared").glob(".trava_*")):
-        achou = True
-        h = (time.time() - p.stat().st_mtime) / 3600
-        if h > 6:
-            # Trava velha normalmente é processo que morreu sem soltar o flock
-            # — e enquanto ela existir, aquela etapa não roda mais.
-            _diz(ALERTA, B, f"{p.name} parada há {_idade(p)}",
-                 "provável processo morto sem soltar a trava")
-    if not achou:
-        _diz(OK, B, "nenhuma trava pendurada")
+    # ⚠️ ARQUIVO DE TRAVA VELHO NÃO É TRAVA PRESA. `shared/trava.py` usa flock,
+    # e o cabeçalho dele diz o porquê: "o flock é solto pelo KERNEL quando o
+    # processo morre — inclusive com -9 ou reboot". O arquivo `.trava_*` nunca
+    # é apagado, então ele sobrevive à execução e o que a data dele conta é
+    # QUANDO AQUELE JOB RODOU PELA ÚLTIMA VEZ.
+    # A primeira versão deste bloco dizia "provável processo morto sem soltar a
+    # trava" e assustou à toa — era exatamente o contrário do que o mecanismo
+    # garante. Quem responde de verdade é o PID gravado dentro do arquivo.
+    travas = list(RAIZ.glob(".trava_*")) + list((RAIZ / "shared").glob(".trava_*"))
+    if not travas:
+        _diz(INFO, B, "nenhum arquivo de trava (nenhum job com trava rodou "
+                      "nesta pasta)")
+        return
+
+    presas, ociosas = [], []
+    for p in sorted(travas, key=lambda q: q.stat().st_mtime):
+        nome = p.name.replace(".trava_", "")
+        try:
+            pid = int((p.read_text(errors="replace").strip() or "0"))
+        except Exception:
+            pid = 0
+        if pid and _processo_vivo(pid, nome):
+            presas.append((nome, pid, _idade(p)))
+        else:
+            ociosas.append((nome, _idade(p)))
+
+    for nome, pid, idade in presas:
+        h = idade
+        _diz(ALERTA, B, f"{nome} está RODANDO agora (pid {pid}), desde {h}",
+             "se isso passar de algumas horas, é processo pendurado")
+    if ociosas:
+        _diz(OK, B, f"{len(ociosas)} trava(s) livre(s) — nenhuma presa")
+        # a data vira relógio: "quando este job rodou pela última vez"
+        _diz(INFO, B, "última execução de cada job: " + " · ".join(
+            f"{n} {i}" for n, i in ociosas))
 
 
 # ── 11. erros recentes nos logs ─────────────────────────────────────────────
