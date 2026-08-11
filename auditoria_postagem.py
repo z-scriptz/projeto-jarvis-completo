@@ -295,7 +295,7 @@ def _erros_de_postagem() -> dict:
     chaves = ("erro ao postar", "falha ao publicar", "upload falhou",
               "todas_plataformas_falharam", "OAuthException",
               "rate limit", "publish", "meta_uploader", "youtube_uploader")
-    achados = Counter()
+    achados, sem_data = Counter(), Counter()
     exemplos = []
     for p in list(RAIZ.glob("*.log")) + list(RAIZ.glob("logs/*.log")):
         try:
@@ -313,10 +313,29 @@ def _erros_de_postagem() -> dict:
                 continue
             if not any(k.lower() in baixa for k in chaves):
                 continue
+            # ⚠️ a data da LINHA, não a do arquivo. Um .log escrito hoje pode
+            # ter linhas de um mês atrás no rabo: a primeira versão daqui
+            # reportou erros de 14/07 e 01/08 como "últimas 72h". Evidência
+            # com carimbo errado manda caçar problema que já não existe.
+            quando = _data_da_linha(linha)
+            if quando is not None and quando < alvo:
+                continue
+            if quando is None:
+                sem_data[p.name] += 1
+                continue
             achados[p.name] += 1
             if len(exemplos) < 6:
                 exemplos.append(f"{p.name}: {linha.strip()[:130]}")
-    return {"por_arquivo": dict(achados), "exemplos": exemplos}
+    return {"por_arquivo": dict(achados), "exemplos": exemplos,
+            "linhas_sem_data_ignoradas": dict(sem_data)}
+
+
+def _data_da_linha(linha: str):
+    """Epoch do carimbo `AAAA-MM-DD HH:MM:SS` no início da linha, ou None."""
+    try:
+        return datetime.strptime(linha[:19], "%Y-%m-%d %H:%M:%S").timestamp()
+    except Exception:
+        return None
 
 
 def _veredito(r: dict) -> list:
