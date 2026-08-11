@@ -54,3 +54,6 @@ shared/tiktok_tokens.json
 shared/storyboards/
 shared/edl/
 shared/renders/
+
+# cache do Gemini Vision (texto queimado) — custo de API, nao conteudo
+shared/cache_texto_queimado.json

@@ -325,10 +325,22 @@ def main():
         # ── o que temos, ANTES de gastar roteiro, voz e render ──────────────
         try:
             import asset_ranker as AR
-            nota = AR.avaliar(fotos)
+            # o nome do produto vai junto: o Vision decide melhor sabendo o que
+            # deveria estar na foto ("50% OFF" numa foto de escova é promoção;
+            # numa foto de plaquinha de preço poderia ser o produto)
+            nota = AR.avaliar(fotos, produto=nome)
             _log(f"assets: nível {nota['nivel']} · {nota['distintas']} "
                  f"distinta(s) de {nota['quantas']} · diversidade "
                  f"{nota['diversidade']}")
+            tq = nota.get("texto_queimado") or {}
+            if isinstance(tq, dict) and tq.get("itens"):
+                _log(f"   texto na foto: {tq.get('usaveis')}/"
+                     f"{len(tq['itens'])} usável(is) · pior: {tq.get('pior')}")
+                for i in tq["itens"]:
+                    if i.get("veredito") in ("reprovado", "ressalva"):
+                        _log(f"     {i['arquivo']}: {i['motivo'][:88]}")
+                if tq.get("pior") == "nao_avaliado":
+                    _log("     (nao_avaliado = sem chave/cota — NÃO é aprovação)")
             _log(f"   → {nota['veredito']}")
             for a, b, d in nota["pares_iguais"][:3]:
                 _log(f"   🔁 {a} e {b} são a mesma imagem pro olho ({d})")

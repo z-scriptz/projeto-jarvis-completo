@@ -29,10 +29,16 @@
 # Manter seria repetir o erro do `faixa_preenchida`, que reprovava o caso bom.
 # Métrica que não distingue não é métrica rigorosa — é ruído com casa decimal.
 #
-# NÃO mede texto promocional queimado na foto — que foi o defeito da escova
-# alisadora e briga com hook, legenda e CTA. Isso é trabalho pro Gemini Vision,
-# e ele **só entra se a chave existir**. Sem chave, o campo sai `nao_avaliado`,
-# NUNCA "aprovado". Fingir que avaliou é pior que não avaliar.
+# Texto promocional queimado na foto — o defeito da escova alisadora — passou a
+# ser medido em 11/08, no `texto_queimado.py` (Gemini Vision), e ele **só entra
+# se a chave existir**. Sem chave, sem cota ou com falha, o campo sai
+# `nao_avaliado`, NUNCA "aprovado". Fingir que avaliou é pior que não avaliar.
+#
+# ⚠️ O Vision só REBAIXA o nível, nunca sobe. Diversidade e tamanho continuam
+# medidos aqui, deterministicamente: opinião de modelo não transforma foto
+# pequena em foto grande. E não é "tem texto → reprova" — foto de produto tem
+# marca e especificação naturalmente. O que reprova é texto PROMOCIONAL denso
+# NA FAIXA onde o template escreve (base = legenda, topo = destaque).
 #
 # A ESCADA DE MATERIAL (ideia do ChatGPT via Dre, adotada):
 #   S  vídeo + 4 imagens distintas      produção completa
@@ -92,15 +98,20 @@ def distancia(a: int, b: int) -> float:
     return bin(a ^ b).count("1") / 64.0
 
 
-def avaliar(imagens: list) -> dict:
+def avaliar(imagens: list, produto: str = "", checar_texto: bool = True) -> dict:
     """Nota o CONJUNTO, não cada foto isolada.
 
     A pergunta que interessa não é "esta foto é boa?", e sim "com estas fotos
     dá pra fazer um vídeo que não pareça a mesma imagem nove vezes?".
+
+    `checar_texto` consulta o `texto_queimado` (Gemini Vision). Ele só pode
+    REBAIXAR o nível, nunca subir: diversidade e tamanho continuam sendo
+    medidos aqui, deterministicamente, e uma opinião de modelo não transforma
+    uma foto pequena em foto grande.
     """
     from PIL import Image
 
-    itens, hashes = [], []
+    itens, hashes, validos = [], [], []
     for caminho in imagens:
         try:
             with Image.open(caminho) as im:
@@ -115,6 +126,7 @@ def avaliar(imagens: list) -> dict:
         itens.append({"arquivo": Path(caminho).name, "largura": w, "altura": h,
                       "problemas": problemas})
         hashes.append((Path(caminho).name, hs))
+        validos.append(caminho)      # caminho COMPLETO, pro Vision abrir depois
 
     # ── diversidade: o número que o ChatGPT propôs, e ele estava certo ──────
     pares, iguais = [], []
@@ -139,6 +151,21 @@ def avaliar(imagens: list) -> dict:
     else:
         nivel = "D"
 
+    # ── texto queimado: o último campo que faltava da escada ────────────────
+    texto = {"pior": "nao_avaliado", "bloqueia": False, "usaveis": None}
+    if checar_texto and validos:
+        try:
+            import texto_queimado as TQ
+            texto = TQ.avaliar_varias(validos, produto)
+        except Exception as e:
+            texto = {"pior": "nao_avaliado", "bloqueia": False,
+                     "usaveis": None, "erro": str(e)[:80]}
+
+    # O Vision só REBAIXA. Se TODAS as fotos têm texto promocional brigando com
+    # a legenda, não adianta a diversidade estar ótima: o vídeo sai ilegível.
+    if texto.get("bloqueia"):
+        nivel = "D"
+
     return {
         "quantas": len(itens),
         "distintas": n_distintas,
@@ -146,8 +173,11 @@ def avaliar(imagens: list) -> dict:
         "pares_iguais": iguais,
         "nivel": nivel,
         "itens": itens,
-        "texto_queimado": "nao_avaliado",   # só o Vision responde isto
-        "veredito": _veredito(nivel, media, n_distintas),
+        "texto_queimado": texto,
+        "veredito": (_veredito(nivel, media, n_distintas)
+                     if not texto.get("bloqueia") else
+                     "NÃO PRODUZIR: toda foto tem texto promocional queimado "
+                     "onde entram legenda e destaque — o vídeo sairia ilegível"),
     }
 
 
@@ -219,11 +249,23 @@ def main():
               f"{'; '.join(i['problemas'])}")
     for a, b, d in r["pares_iguais"]:
         print(f"   🔁 {a} e {b} são a MESMA imagem pro olho (distância {d})")
+    tq = r.get("texto_queimado") or {}
+    if isinstance(tq, dict) and tq.get("itens"):
+        print(f"\n   texto queimado: {tq.get('usaveis')}/{len(tq['itens'])} "
+              f"usável(is) · pior: {tq.get('pior')}")
+        for i in tq["itens"]:
+            if i.get("veredito") != "aprovado":
+                print(f"      {i.get('arquivo','?'):24} {i['veredito']:13} "
+                      f"{i.get('motivo','')[:60]}")
+    elif isinstance(tq, dict):
+        print(f"\n   texto queimado: {tq.get('pior')} "
+              f"({tq.get('erro') or 'sem chave/sem fotos válidas'})")
+
     print(f"\n   → {r['veredito']}")
-    print("   (texto queimado na foto e nitidez: NÃO avaliados aqui. O "
-          "primeiro precisa do Gemini Vision;")
-    print("    o segundo eu tentei medir e a métrica não separou foto boa de "
-          "foto degradada — então saiu)")
+    print("   (nitidez NÃO é avaliada: eu tentei medir e a métrica não separou "
+          "foto boa de foto degradada — então saiu.")
+    print("    'nao_avaliado' no texto queimado NÃO é aprovação: é ausência de "
+          "informação)")
     return 0 if r["nivel"] != "D" else 1
 
 
