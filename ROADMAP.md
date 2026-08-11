@@ -2006,6 +2006,72 @@ métrica rigorosa; é ruído com casa decimal.**
 Falta, e está dito: **texto promocional queimado na foto** (o defeito da escova
 alisadora) sai como `nao_avaliado`, nunca "aprovado" — depende do Gemini Vision.
 
+### 📊 AUDITORIA DA PUBLICAÇÃO — o gargalo não era onde eu apontei (11/08)
+
+A revisão geral achou "274 pacotes prontos, mais antigo de 15 dias" e eu
+levantei a hipótese de que a postagem era o gargalo. O Dre e o ChatGPT pararam
+a fila de melhorias e mandaram **medir antes de consertar**. Fizemos
+`auditoria_postagem.py` (só lê; importa as funções do próprio daemon em vez de
+reimplementar). O resultado derrubou a minha hipótese.
+
+**NÃO HÁ GARGALO DE PUBLICAÇÃO:**
+
+    44 vídeos em 7 dias  ·  capacidade configurada 48/semana  →  92%
+    por conta: beauty 11 · tech 11 · geral 11 · casa 11  (balanceamento perfeito)
+
+`post_por_conta` funciona. E as duas hipóteses que EU tinha levantado morreram
+com dado: **0** pacotes com `.mp4` de nome errado, **0** vencidos na fila.
+
+**O ESTOQUE ERA 152, NÃO 274.** 122 pastas (45%) já foram postadas e só saem de
+`pronto_para_postar/` quando vencem (27d). Quem olha a pasta vê quase o dobro —
+e foi esse número inflado que gerou o alarme inteiro.
+
+**O PROBLEMA REAL — a produção não desliga, e a ordem mata o rabo da fila:**
+`daemon_maestro.py:841-845` calcula `falta = alvo - estoque` (colchão de
+`estoque_alvo_dias: 3` ≈ 5 pacotes/conta) e **depois** o piso sobrescreve:
+`falta[n] = max(falta[n], piso - ja_hoje[n])`. Com geral em 126 e casa em 19, o
+`falta` é zero em todas — mas `producao_minima_por_conta: 1` produz assim mesmo.
+
+    entram ~4/dia · saem 6,29/dia → drenagem líquida ~2/dia
+    152 ÷ 2 = 66 dias pra esvaziar   ·   validade = 27 dias
+
+E a ordem é MAIS NOVO PRIMEIRO (`daemon_maestro.py:1050`): os 6,29 postados
+consomem primeiro os 4 que chegaram hoje, e só ~2,3/dia sobram pra comer a
+pilha antiga — pelo TOPO dela. O pacote de 15,3 dias está no fundo de 152:
+alcançado em ~66 dias, vence em 11,7. **Os 23 pacotes na faixa 15-27d estão a
+caminho da `fila_vencida/` por aritmética, não por lentidão.**
+
+O comentário do próprio código descreve a premissa que quebrou: *"produz 3/dia
+contra ~5/dia postados — a esteira encolhe"*. Valia com 3 contas e fila
+pequena.
+
+⚠️ **A trava que o ChatGPT propôs (`se fila > LIMITE: reduzir produção`) JÁ
+EXISTE** — é o `estoque_alvo_dias`. Está sendo anulada pelo piso. É config
+(`producao_minima_por_conta: 0`), não código.
+
+**Decisão do Dre (11/08):** `moda` e `pet` só entram quando o Jarvis produzir
+conteúdo de forma autônoma. Zero pacotes nelas é o comportamento certo, não
+defeito. ⏳ Guarda a fazer junto com a autonomia: o piso itera as CHAVES do
+`contas.json`, então quando o roteador começar a classificar em moda/pet ele vai
+gerar 1/dia pra contas que não postam — pacote que entra na fila, conta como
+estoque e vence sem sair.
+
+**Três erros MEUS nesta auditoria, achados medindo:**
+1. `len(por_dia[dia])` conta SLOTS, não posts (`por_dia[dia][HORARIO] = [slugs]`
+   no modo `post_por_conta`). Reportei "publicação a 23% da capacidade" — o
+   número certo é 92%. A assinatura estava na saída: a série nunca passava de 3,
+   que é o teto de slots da pirâmide, e eu li como achado sobre o sistema.
+2. Janela de erro de log pela data do ARQUIVO, não da LINHA: reportou erros de
+   14/07 e 01/08 como "últimas 72h".
+3. `RAIZ = parent.parent` do daemon aponta pra fora do projeto no repo achatado;
+   a auditoria media `/home/user` e imprimia "0 pastas" com cara de resposta.
+
+**A lição:** eu abri esta investigação com uma hipótese ("a postagem é o
+gargalo") e ela estava errada em todos os pontos verificáveis. O que salvou foi
+a ordem imposta pelo Dre e pelo ChatGPT — medir primeiro, não consertar. Se eu
+tivesse "arrumado" a postagem, teria mexido no único subsistema que estava
+funcionando a 92%.
+
 ### Onde parou (04/08, fim do dia)
 
 **Esperando o chip.** Pedido feito — Claro pré-pago, R$ 20,99, chegada prevista
