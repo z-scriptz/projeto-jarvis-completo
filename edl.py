@@ -35,7 +35,9 @@
 #   python3 edl.py --todos --salvar
 
 import argparse
+import hashlib
 import json
+import os
 import math
 import re
 import sys
@@ -188,6 +190,14 @@ def _musica(nicho: str, energia: str = "media", precisa_instrumental=False,
         faixas = json.loads(MUSICAS.read_text(encoding="utf-8"))["faixas"]
     except Exception:
         return {}
+    # ⚠️ FAIXA EXPLÍCITA SAI POR PADRÃO (selo "E" no app). São 13 das 118 em
+    # 12/08 — Bad Bunny, Kanye, Drake, Cardi B e afins. Conta comercial
+    # vendendo utilidade doméstica não combina com letra explícita, e o custo
+    # de um deslize de marca é muito maior que o de trocar de faixa. Fica no
+    # arquivo (a lista é inventário, não curadoria) e o SELETOR é que pula.
+    if not os.environ.get("EDL_PERMITIR_EXPLICITO"):
+        faixas = [f for f in faixas if not f.get("explicito")]
+
     cand = [f for f in faixas
             if (not precisa_instrumental or f.get("instrumental"))
             and (nicho in (f.get("nichos") or []) or "geral" in (f.get("nichos") or []))]
@@ -202,8 +212,14 @@ def _musica(nicho: str, energia: str = "media", precisa_instrumental=False,
     # na lista ganha sempre e todo nicho recebe a mesma música.
     especifica = [f for f in cand if nicho in (f.get("nichos") or [])]
     cand = especifica or cand
+    # Energia é PREFERÊNCIA, não exigência — e o `or` sozinho só socorria o
+    # caso vazio. Medido em 12/08: "casa" + "alta" sobrava com 2 faixas de 118,
+    # porque as trilhas calmas foram quase todas pra casa. Poço de 2 é o mesmo
+    # feed repetido. Abaixo de PISO_POCO a energia cede e o nicho continua
+    # valendo, que é a ordem certa de importância.
+    PISO_POCO = 6
     mesma = [f for f in cand if f.get("energia") == energia]
-    cand = mesma or cand
+    cand = mesma if len(mesma) >= PISO_POCO else cand
 
     # E VARIA entre os candidatos bons. Pegar sempre o de mais reels fez as 8
     # linhas do tempo saírem com "Wonderful (Instrumental)" — o feed inteiro
@@ -211,8 +227,22 @@ def _musica(nicho: str, energia: str = "media", precisa_instrumental=False,
     # humano. A escolha é determinística (mesmo produto = mesma faixa, então
     # regerar não troca a trilha), mas distribuída pelo nome do produto.
     cand.sort(key=lambda f: -f.get("reels", 0))
-    topo = cand[:4] or cand          # só entre as mais usadas; o resto não
-    return topo[hash(semente) % len(topo)] if topo else {}
+    # A JANELA ACOMPANHA A BIBLIOTECA. Era `cand[:4]` fixo, escolhido quando a
+    # lista tinha 7 faixas. Em 12/08 ela foi pra 118 (prints da biblioteca do
+    # Dre) e o 4 virou o gargalo: medido, 200 sorteios em "geral" devolviam 4
+    # faixas — 118 músicas e o feed inteiro com quatro trilhas. Um terço dos
+    # candidatos, com piso 4 e teto 20, mantém o viés de faixa MUITO usada
+    # (que é o sinal de distribuição) sem transformar a biblioteca em enfeite.
+    topo = cand[:max(4, min(20, len(cand) // 3))] or cand
+
+    # ⚠️ hashlib, NÃO hash(): o hash de str em Python é ALEATORIZADO por
+    # processo (PYTHONHASHSEED). O comentário acima prometia "mesmo produto =
+    # mesma faixa, regerar não troca a trilha" e isso era falso entre uma
+    # execução e outra — três chamadas ao mesmo `hash("Garrafa Squeeze")` dão
+    # três números diferentes. Com a trilha trocando sozinha, comparar dois
+    # renders do mesmo produto compara duas coisas ao mesmo tempo.
+    n = int(hashlib.sha256((semente or "").encode("utf-8")).hexdigest(), 16)
+    return topo[n % len(topo)] if topo else {}
 
 
 def _template(nicho: str) -> dict:
