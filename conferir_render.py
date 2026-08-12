@@ -83,6 +83,51 @@ SILENCIO_MAX = 1.2
 SILENCIO_dB = -45
 
 
+# ── O LAUDO: dimensão, causa e LEVER de cada checagem ───────────────────────
+# Fatia 1 de ARQUITETURA_CRITICO.md. Até aqui o conferidor dizia ✅/❌ e o
+# humano deduzia o resto. Três campos mudam isso:
+#
+#   dimensao  agrupa o achado (nomes vindos do ChatGPT via Dre, 12/08)
+#   causa     por que aquilo acontece — o que o ✅/❌ nunca disse
+#   lever     QUAL parâmetro conserta, ou None quando NADA conserta
+#
+# ⚠️ `lever: None` é o campo mais importante do arquivo, e é o que impede o
+# laço de correção de virar a loucura descrita pelo ChatGPT (crop → IA → zoom →
+# render → ruim → render…). Achado sem lever não dispara tentativa nenhuma: ele
+# vira BLOQUEADO_SEM_LEVER e para. "1 imagem só" não se conserta editando —
+# edição não cria informação que não existe.
+LAUDO = {
+    "duracao": {
+        "dimensao": "render",
+        "causa": "o arquivo não bateu com a duração que o EDL pediu",
+        "lever": "_conformar / duracao_total do EDL"},
+    "quadro_morto": {
+        "dimensao": "ritmo",
+        "causa": "quadro sem informação (preto, branco ou chapado)",
+        "lever": "corte do EDL / placa do render"},
+    "moldura_estavel": {
+        "dimensao": "template",
+        "causa": "o cabeçalho/CTA se mexeu — a marca deveria ficar cravada",
+        "lever": "camada de marca do render (ela entra DEPOIS do zoom)"},
+    "midia_viva": {
+        "dimensao": "ritmo",
+        "causa": "a imagem quase não muda entre os quadros: parece foto parada",
+        "lever": None},          # ⚠️ é matéria-prima: 1 foto não vira 5
+    "contraste_texto": {
+        "dimensao": "legendas",
+        "causa": "texto sem contraste suficiente contra o fundo",
+        "lever": "cor/contorno da legenda no render"},
+    "tarjas_limpas": {
+        "dimensao": "template",
+        "causa": "elemento avançou sobre a tarja lateral branca do template",
+        "lever": "HK_MARGEM / LOGO_X / caixa do vídeo"},
+    "silencio_morto": {
+        "dimensao": "narracao",
+        "causa": "buraco de áudio no meio do vídeo",
+        "lever": "PAUSA_APOS_FALA / trilha de música (assets/musicas)"},
+}
+
+
 def _log(m):
     print(f"[conferir] {m}", flush=True)
 
@@ -361,6 +406,34 @@ def conferir(video: Path, n_quadros: int = N_QUADROS, contato: bool = False) -> 
     # não deve precisar abrir dois arquivos pra saber o estado do vídeo
     faltou = rel.get("faltou") or []
 
+    # ── enriquece cada checagem com dimensão / causa / lever ────────────────
+    for chave, c in checagens.items():
+        c.update({k: v for k, v in LAUDO.get(chave, {}).items()})
+
+    # ── ESTADO TERMINAL (ARQUITETURA_CRITICO §8.1) ──────────────────────────
+    # A pergunta não é só "passou?", é "quem age agora?". Um achado que NENHUM
+    # parâmetro conserta não pode entrar no laço de correção: ele precisa de
+    # asset novo, e tentar de novo só gasta render.
+    graves = [a for a in achados if a["gravidade"] == "alta"]
+    sem_lever = [a for a in graves
+                 if LAUDO.get(a["checagem"], {}).get("lever") is None]
+    com_lever = [a for a in graves if a not in sem_lever]
+
+    if sem_lever:
+        estado, quem_age = "BLOQUEADO_SEM_LEVER", (
+            "precisa de asset novo — nenhum parâmetro do render conserta isto")
+    elif com_lever:
+        estado, quem_age = "CORRIGIVEL", (
+            "tem lever mapeado: dá pra corrigir e re-renderizar")
+    elif achados:
+        estado, quem_age = "REVISAO_HUMANA", (
+            "só ressalvas — nada objetivo reprovou")
+    else:
+        estado, quem_age = "APROVADO", "ninguém: segue pra esteira"
+
+    acoes = sorted({LAUDO[a["checagem"]]["lever"] for a in com_lever
+                    if LAUDO.get(a["checagem"], {}).get("lever")})
+
     resultado = {
         "video": str(video), "duracao": round(dur, 2),
         "duracao_edl": dur_edl, "quadros": len(imgs),
@@ -368,7 +441,12 @@ def conferir(video: Path, n_quadros: int = N_QUADROS, contato: bool = False) -> 
         "checagens": checagens,
         "achados": achados,
         "faltou_no_render": faltou,
-        "veredito": ("reprovado" if any(a["gravidade"] == "alta" for a in achados)
+        "estado": estado,
+        "quem_age": quem_age,
+        "acoes": acoes,
+        "sem_lever": [a["checagem"] for a in sem_lever],
+        # mantido: o piloto e a memória antiga leem este campo
+        "veredito": ("reprovado" if graves
                      else "revisar" if achados else "passou"),
     }
     for _, im in imgs:
@@ -412,13 +490,32 @@ def main():
     _log(f"{icone} {r['veredito'].upper()} — {v.name} · {r['duracao']}s · "
          f"{r['quadros']} quadros")
     icones = {"passou": "✅", "atencao": "👀", "falhou": "❌", "nao_rodou": "—"}
+    # agrupado por DIMENSÃO: sete linhas soltas viram quatro grupos com sentido
+    por_dim = {}
     for nome, c in r["checagens"].items():
-        med = "" if c["medido"] is None else f"  ({c['medido']})"
-        print(f"   {icones[c['estado']]} {nome:17}{med}")
+        por_dim.setdefault(c.get("dimensao", "outros"), []).append((nome, c))
+    for dim in sorted(por_dim):
+        print(f"   [{dim}]")
+        for nome, c in por_dim[dim]:
+            med = "" if c["medido"] is None else f"  ({c['medido']})"
+            print(f"     {icones[c['estado']]} {nome:17}{med}")
     print()
     for a in r["achados"]:
         marca = {"alta": "❌", "media": "👀", "baixa": "·"}[a["gravidade"]]
         print(f"   {marca} [{a['checagem']}] {a['descricao']}")
+        laudo = LAUDO.get(a["checagem"], {})
+        if a["gravidade"] == "alta":
+            print(f"       causa: {laudo.get('causa','?')}")
+            lever = laudo.get("lever") or ("⚠️ NENHUM — não se conserta "
+                                           "editando, precisa de asset novo")
+            print(f"       lever: {lever}")
+
+    print(f"\n   ESTADO: {r['estado']}")
+    print(f"   {r['quem_age']}")
+    if r["acoes"]:
+        print("   o que mexer:")
+        for x in r["acoes"]:
+            print(f"     → {x}")
     if not r["achados"]:
         print("   nenhum defeito mecânico. O julgamento estético continua "
               "sendo seu — os quadros estão em")
