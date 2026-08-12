@@ -252,13 +252,37 @@ def definir_ajustes(pares: list) -> int:
         return 1
 
     chave_de = {("geral" if k == "_default" else k): k for k in d}
+    # ⚠️ o arquivo é indexado por NICHO, mas quem calibra a voz pensa no NOME
+    # dela ("jessa", "brian c"). Aceitar os dois evita o único erro caro aqui:
+    # gravar os ajustes da Jessa no perfil do Tom. Ninguém percebe lendo.
+    por_nome = {}
+    for nicho, chave in chave_de.items():
+        nome = str(d[chave].get("voz_nome") or "").strip().lower()
+        if nome:
+            por_nome.setdefault(nome, []).append(nicho)
+
     mudou, erros = [], []
 
     for par in pares:
-        nicho, _, resto = par.partition("=")
-        nicho = nicho.strip().lower()
-        if nicho not in chave_de:
-            erros.append(f"{nicho}: não existe no contas.json")
+        alvo, _, resto = par.partition("=")
+        alvo = " ".join(alvo.strip().lower().split())
+        if alvo in chave_de:
+            nicho = alvo
+        elif alvo in por_nome and len(por_nome[alvo]) == 1:
+            nicho = por_nome[alvo][0]
+        elif alvo in por_nome:
+            erros.append(f"{alvo!r}: essa voz está em mais de um perfil "
+                         f"({', '.join(por_nome[alvo])}) — use o nicho")
+            continue
+        else:
+            # NÃO tentar adivinhar por semelhança: "verity x" vs "verinity x"
+            # casaria errado e o vídeo sairia com outro timbre, sem erro nenhum.
+            disponiveis = ", ".join(
+                f"{n}" + (f" [{d[chave_de[n]].get('voz_nome')}]"
+                          if d[chave_de[n]].get("voz_nome") else "")
+                for n in sorted(chave_de))
+            erros.append(f"{alvo!r}: não é nicho nem voz_nome conhecido.\n"
+                         f"      disponíveis: {disponiveis}")
             continue
         ajustes = {}
         for pedaco in resto.split(","):
