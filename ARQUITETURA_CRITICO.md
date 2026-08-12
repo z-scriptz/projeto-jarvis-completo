@@ -228,24 +228,195 @@ por serem fundamentais.
 
 ---
 
-## 8. Primeira fatia proposta
+## 8. O ciclo completo, com todos os estados
+
+Pedido do Dre/ChatGPT: *"quero que o desenho mostre claramente o ciclo
+completo… Também quero um estado explícito para problemas sem lever."*
+
+```
+   ┌─────────────────────────────────────────────────────────────┐
+   │                    ANTES DE PRODUZIR                        │
+   │  consulta a memória pela ASSINATURA DA ENTRADA (§8.3)       │
+   │  "já produzi sob estas condições? o que deu errado?"        │
+   └──────────────────────────┬──────────────────────────────────┘
+                              ↓
+                    ①  PRODUZIR  (storyboard → edl → render)
+                              ↓
+                    ②  OBSERVAR  (extrai frames, áudio, tempos)
+                              ↓
+                    ③  CRITICAR
+                       camada 1 defeito · camada 2 ofício · camada 3 gosto
+                              ↓
+                    ④  DIAGNOSTICAR
+                       para cada achado: qual a CAUSA? existe LEVER?
+                              ↓
+        ┌──────────────┬──────┴───────┬──────────────┬───────────────┐
+        ↓              ↓              ↓              ↓               ↓
+   sem achado    tem lever      SEM lever      teto batido    só ressalva
+        │              │        (matéria-      (2 tentativas)   camada 3
+        │              │         prima)             │               │
+        ↓              ↓              ↓              ↓               ↓
+   ✅ APROVADO   ⑤ CORRIGIR   🔴 BLOQUEADO   🔴 BLOQUEADO   🟡 REVISÃO
+    (terminal)         │       SEM_LEVER        TETO          HUMANA
+                       ↓        (terminal)     (terminal)     (terminal)
+                 ⑥ RE-RENDER         │              │              │
+                       ↓             │              │              │
+                 ⑦ REAVALIAR         │              │              │
+                       │             │              │              │
+                       └──────→ volta a ③           │              │
+                                     │              │              │
+        ┌────────────────────────────┴──────────────┴──────────────┘
+        ↓
+   ⑧ REGISTRAR EXPERIÊNCIA  (memory_agent) — em TODOS os finais,
+     inclusive no aprovado de primeira: "nada deu errado" também é dado
+        ↓
+   ⑨ a próxima produção consulta isto no passo ZERO
+```
+
+### 8.1 Os estados terminais, e o que cada um exige de quem
+
+| estado | significa | quem age |
+|---|---|---|
+| ✅ `APROVADO` | camadas 1 e 2 passaram | ninguém — segue pra esteira |
+| 🟡 `REVISAO_HUMANA` | só a camada 3 apontou | Dre assiste e diz se concorda → vira calibração (§8.4) |
+| 🔴 `BLOQUEADO_SEM_LEVER` | defeito real, **nenhum parâmetro conserta** | precisa de asset novo, não de re-render |
+| 🔴 `BLOQUEADO_TETO` | tinha lever, tentou 2x, não resolveu | Dre decide: forçar, descartar, ou investigar |
+
+⚠️ **`BLOQUEADO_SEM_LEVER` é a peça que impede a loucura** que o ChatGPT
+descreveu (crop → crop → IA → zoom → render → ruim → render…). O critério é
+duro: *o problema é corrigível POR MIM, mexendo em parâmetro que eu controlo?*
+Se a resposta é "não, falta matéria-prima", **parar é a resposta certa** — e é
+mais barato que qualquer tentativa.
+
+    🔴 BLOQUEADO — material insuficiente
+       achado:  1 informação visual, 3 enquadramentos derivados da mesma foto
+       causa:   a origem entregou 1 imagem (Shopee, galeria fechada)
+       lever:   NENHUM — edição não cria informação que não existe
+       ação:    coletar assets; produzir assim mesmo só com --forcar
+
+### 8.2 O que é lever, e o que não é
+
+| achado | lever | corrigível? |
+|---|---|---|
+| silêncio morto de 2,1s | `PAUSA_APOS_FALA`, re-conformar cena à fala | ✅ |
+| hook > 84 caracteres | pedir hook novo ao storyboard | ✅ |
+| legenda sobre texto queimado | faixa evitada no recorte / `--encaixe cover` | ✅ |
+| corte < `PISO_SEGMENTO` | re-conformar a linha do tempo | ✅ |
+| foto 496px, close amolece | — | ❌ matéria-prima |
+| 1 informação visual só | — | ❌ matéria-prima |
+| "parece amador" (camada 3) | — | ❌ não é defeito, é gosto → ressalva |
+| produto pouco atraente | — | ❌ é o produto, não o vídeo |
+
+**Regra:** achado sem lever mapeado **nunca** dispara correção. Ele vira estado
+terminal com a causa escrita. O crítico não inventa conserto.
+
+### 8.3 O registro de experiência — e a coisa que faltava nele
+
+Adoto o formato do ChatGPT, com **dois campos que ele não tinha** e sem os
+quais a memória não serve pro passo ⑨:
+
+```json
+{
+  "id": "exp_184",
+  "quando": "2026-08-12T14:22:00",
+  "produto": "Garrafa Squeeze com Infusor 700ml",
+
+  "assinatura_da_entrada": {
+    "n_fotos": 1, "n_distintas": 1, "menor_lado": 900,
+    "nicho": "casa", "hook_chars": 62, "n_cenas": 8,
+    "texto_queimado": "ressalva", "modo_audio": "narracao"
+  },
+
+  "achado":     "cena 3 com 2,1s sem informação audiovisual",
+  "como_detectei": "conferir_render.silencio_morto · camada 1",
+  "causa":      "duração da cena maior que a duração da narração dela",
+  "lever":      "conformar a cena à fala (PAUSA_APOS_FALA / _conformar)",
+  "correcao":   "cena 3: 4,8s → 2,7s",
+  "resultado":  "silencio_morto 2,1s → 0,0s",
+  "verificado": true,
+
+  "licao": "cena que depende só de narração não guarda tempo sobrando"
+}
+```
+
+⚠️ **`assinatura_da_entrada` é o campo que faz o passo ⑨ existir.** Sem ele, a
+busca de "experiências relacionadas" só acha por nome de produto — e nome de
+produto não se repete. Com ele, a pergunta vira respondível: *"o que deu errado
+nas outras vezes em que produzi com 1 foto, nicho casa, hook de ~60 chars?"*.
+É a diferença entre memória que arquiva e memória que **antecipa**.
+
+⚠️ **`verificado` é o que separa experiência de boato.** Só vira lição se a
+re-renderização confirmou. Correção registrada sem reavaliação é palpite com
+data — e o passo ⑦ existe justamente pra preencher este campo.
+
+### 8.4 Calibração: as fases A/B/C, com uma correção importante
+
+Aceito as três fases. Mas **"confiança" não pode ser o modelo dizendo o quanto
+ele confia em si mesmo** — modelo de linguagem é notoriamente mal calibrado
+nisso, e seria o `confianca_global: 0.74` voltando por outra porta.
+
+**Confiança tem que ser CONCORDÂNCIA MEDIDA, por categoria de achado:**
+
+```
+Fase A — o Vision fala, você julga, e a gente CONTA
+
+   "corte estranho"        Dre concordou 17/20  →  85%
+   "produto mal apresentado" Dre concordou 14/18  →  78%
+   "sensação de slideshow"   Dre concordou  4/15  →  27%   ← não confiável
+   "hook pouco impactante"   Dre concordou  6/19  →  32%   ← não confiável
+
+Fase B — autonomia POR CATEGORIA, não global
+   categoria acima de 80% → vira ressalva automática, sem perguntar
+   categoria abaixo disso → continua indo pra revisão humana
+   (e a que ficar sempre baixa é uma categoria que a gente APOSENTA:
+    o modelo não enxerga aquilo, e insistir é ruído)
+
+Fase C — a autonomia cresce sozinha, e é auditável
+   a cada N julgamentos a taxa é recalculada; se cair, a categoria volta
+   pra revisão. Ninguém precisa "confiar": dá pra ver o número.
+```
+
+⚠️ **Custo honesto disso:** ~20 julgamentos por categoria pra ter qualquer
+sinal, e ~10 categorias = **200 julgamentos seus**. A 5 vídeos por dia, são uns
+40 dias. Isso não é motivo pra não fazer — é motivo pra não desenhar como se a
+Fase C chegasse semana que vem.
+
+💡 **E dá pra acelerar muito:** a esteira tem **152 vídeos prontos** e mais em
+`fila_vencida/`. A Fase A não precisa esperar produção nova — o crítico pode
+rodar sobre o que já existe, e você julga em lote. Semanas viram dias.
+
+### 8.5 O override também é dado
+
+Quando você usa `--forcar` num `BLOQUEADO`, isso **é** um julgamento seu sobre
+o crítico e tem que virar experiência. Se um tipo de bloqueio é forçado toda
+vez, o bloqueio está errado — e só o registro mostra isso.
+
+---
+
+## 9. Primeira fatia proposta
 
 Nada aqui depende de views, vendas ou ferramenta paga.
 
-1. **Plugar a cadeia nova no `memory_agent`.** `piloto` grava
-   `registrar_avaliacao_video` com o laudo do `conferir_render`, e consulta
-   `buscar_contexto_para_tarefa` antes de produzir. Barato, e acaba com a
-   orfandade.
-2. **Camada 2 como arquivo de regras.** Tirar os limiares de dentro de cinco
-   arquivos e dar a cada um nome, valor, origem e data. Isso é conhecimento
-   explícito e some com a categoria "número mágico".
-3. **Laudo estruturado** substituindo os `✅/❌` do `conferir_render`, com
-   evidência e lever por item.
-4. **Camada 3 (Vision) em modo observador**, sem poder de veto, gravando na
-   memória. Depois de N vídeos, dá pra comparar o que ela disse com o que você
-   achou — e aí sim calibrar.
-5. **Cache de TTS** (pré-requisito do laço, e economiza dinheiro mesmo sem ele).
-6. Só então **ligar o laço de correção**, com os três limites do §5.
+1. **Laudo estruturado** no lugar dos `✅/❌` do `conferir_render`: cada achado
+   com estado, evidência, causa e **lever** (ou a ausência dele). É o passo ④
+   e é pré-requisito de todo o resto — sem ele não existe `BLOQUEADO_SEM_LEVER`.
+2. **Plugar a cadeia nova no `memory_agent`**, gravando o registro do §8.3 com
+   `assinatura_da_entrada`. Acaba com a orfandade e habilita o passo ⑨.
+3. **Consulta no passo ZERO**: antes de produzir, buscar experiências com
+   assinatura parecida e avisar o que costuma dar errado nessas condições.
+4. **Camada 2 como arquivo de regras** — tirar os limiares de dentro de cinco
+   arquivos e dar a cada um nome, valor, origem e data.
+5. **Camada 3 (Vision) em modo observador**, sem veto, com o placar de
+   concordância por categoria do §8.4. Rodando **sobre a esteira que já
+   existe**, pra Fase A não depender de produção nova.
+6. **Cache de TTS** — pré-requisito do laço, e economiza dinheiro mesmo sem ele.
+7. Só então **ligar o laço de correção** (⑤⑥⑦), com os três limites do §5.
+
+⚠️ **Um pré-requisito fora desta lista:** a assinatura do ElevenLabs está com
+pagamento pendente e **todo vídeo novo sai mudo**. Enquanto isso durar, metade
+das checagens do crítico (silêncio, sincronismo, narração x duração) mede um
+vídeo que nunca teve áudio — e o crítico aprenderia sobre um defeito que é da
+fatura, não da edição.
 
 **O que fica de fora, e o Dre decide quando entra:** hipóteses, sandbox,
 conselho e reflexão — todos precisam de retorno do mundo real pra não virarem
