@@ -63,6 +63,7 @@
 #   python3 render.py --edl ... --imagens ... --quadros 6     (só PNGs, sem MP4)
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -204,6 +205,72 @@ def _knobs(edl: dict) -> dict:
         a.get("tipo") == "narracao" and a.get("inicio", 1) == 0.0
         for a in edl["trilhas"]["audio"])
     return fora
+
+
+MUSICA_DIR = BASE_DIR / "assets" / "musicas"
+EXT_AUDIO = (".mp3", ".m4a", ".aac", ".wav", ".ogg", ".opus", ".flac")
+MUSICA_FADE_IN = 0.4
+MUSICA_FADE_OUT = 1.2
+
+
+def _musica_local(edl: dict, avisos: list):
+    """A faixa que vai DENTRO do arquivo, e o volume que o EDL pediu.
+
+    POR QUE ISSO EXISTE (12/08)
+    O `musicas.json` NÃO é biblioteca de arquivos: é uma lista de faixas da
+    biblioteca do INSTAGRAM (nome + artista), pra escolher no app na hora de
+    postar. O EDL escolhe uma e grava `faixa`/`artista` — e o render nunca
+    mixou nada, só avisava "não existe arquivo local".
+
+    Isso funcionava enquanto a postagem fosse manual. Só que o daemon posta
+    pela Graph API, e música da biblioteca do Instagram **não entra por API**:
+    ela é escolhida no app. Ou seja, todo vídeo publicado pelo daemon saía
+    literalmente sem som — e agora que o Dre decidiu tocar a maioria dos
+    vídeos SÓ com música (sem narração, enquanto o ElevenLabs está parado),
+    som dentro do arquivo deixou de ser enfeite e virou o caminho crítico.
+
+    Onde ficam os arquivos:
+        assets/musicas/<nicho>/*.mp3     preferido — trilha por nicho
+        assets/musicas/*.mp3             fallback comum a todos
+
+    ⚠️ A escolha é DETERMINÍSTICA por produto (hash do nome). Sorteio puro
+    faria o mesmo produto trocar de trilha a cada re-render, e o laço de
+    correção do crítico compararia dois vídeos que diferem em duas coisas ao
+    mesmo tempo — o conserto e a música. Aí não dá pra saber o que melhorou.
+    """
+    pedidos = [a for a in edl["trilhas"]["audio"]
+               if a.get("tipo") in ("musica", "musica_alta")]
+    if not pedidos:
+        return None
+
+    pedido = pedidos[0]
+    nicho = (edl.get("nicho") or "geral").strip().lower()
+    candidatos = []
+    for pasta in (MUSICA_DIR / nicho, MUSICA_DIR):
+        if pasta.is_dir():
+            candidatos = sorted(p for p in pasta.iterdir()
+                                if p.suffix.lower() in EXT_AUDIO)
+            if candidatos:
+                break
+
+    if not candidatos:
+        avisos.append(
+            f"o EDL pede trilha ({pedido.get('tipo')}) e não há arquivo em "
+            f"{MUSICA_DIR}. A faixa '{pedido.get('faixa') or '?'}' é da "
+            "biblioteca do Instagram, que só entra postando pelo APP — pela "
+            "API o vídeo sai sem som. Ponha .mp3 em assets/musicas/ "
+            f"(ou assets/musicas/{nicho}/)")
+        return None
+
+    semente = (edl.get("produto") or "") + nicho
+    escolha = candidatos[int(hashlib.sha256(semente.encode()).hexdigest(), 16)
+                         % len(candidatos)]
+    try:
+        volume = float(pedido.get("volume", 0.12))
+    except (TypeError, ValueError):
+        volume = 0.12
+    return {"arquivo": escolha, "volume": max(0.0, min(1.5, volume)),
+            "tipo": pedido.get("tipo"), "nome": escolha.name}
 
 
 def _log(m):
@@ -1234,7 +1301,7 @@ def _expr_corte(c: dict, nframes: int) -> tuple:
 
 def _montar_comando(ff: str, edl: dict, placas: dict, marca: Path, lay: dict,
                     ass: Path, narracoes: list, saida: Path,
-                    crf: int) -> list:
+                    crf: int, musica: dict = None) -> list:
     entradas, filtros, rotulos = [], [], []
     cortes = edl["trilhas"]["visual"]
     dur_total = float(edl["duracao_total"])
@@ -1278,22 +1345,48 @@ def _montar_comando(ff: str, edl: dict, placas: dict, marca: Path, lay: dict,
     filtros.append("[vbase][marca]overlay=0:0:shortest=1[vmarca]")
     filtros.append(f"[vmarca]{op_ass},format=yuv420p[vout]")
 
-    if narracoes:
-        base = len(cortes) + 2
-        rot_a = []
-        for k, n in enumerate(narracoes):
-            entradas += ["-i", str(n["arquivo"])]
-            atraso = int(round(float(n.get("inicio", n["inicio_plano"])) * 1000))
-            filtros.append(f"[{base + k}:a]adelay={atraso}|{atraso},"
-                           f"aformat=sample_fmts=fltp:sample_rates=48000:"
-                           f"channel_layouts=stereo[a{k}]")
-            rot_a.append(f"[a{k}]")
+    base = len(cortes) + 2
+    rot_a = []
+    for k, n in enumerate(narracoes):
+        entradas += ["-i", str(n["arquivo"])]
+        atraso = int(round(float(n.get("inicio", n["inicio_plano"])) * 1000))
+        filtros.append(f"[{base + k}:a]adelay={atraso}|{atraso},"
+                       f"aformat=sample_fmts=fltp:sample_rates=48000:"
+                       f"channel_layouts=stereo[a{k}]")
+        rot_a.append(f"[a{k}]")
+
+    if musica:
+        # -stream_loop -1: a faixa se repete até cobrir o vídeo. Trilha de 12s
+        # num vídeo de 20s terminaria no meio, e silêncio no fim é pior que
+        # repetição — o `atrim` corta no ponto exato.
+        i_mus = len(cortes) + 2 + len(narracoes)
+        entradas += ["-stream_loop", "-1", "-i", str(musica["arquivo"])]
+        saida_fade = max(0.0, dur_total - MUSICA_FADE_OUT)
+        filtros.append(
+            f"[{i_mus}:a]volume={musica['volume']:.3f},"
+            f"aformat=sample_fmts=fltp:sample_rates=48000:"
+            f"channel_layouts=stereo,"
+            f"atrim=0:{dur_total:.3f},asetpts=PTS-STARTPTS,"
+            # fade nas duas pontas: entrada seca "estala" e corte seco no fim
+            # soa como falha de arquivo, não como fim de vídeo
+            f"afade=t=in:st=0:d={MUSICA_FADE_IN},"
+            f"afade=t=out:st={saida_fade:.3f}:d={MUSICA_FADE_OUT}[amus]")
+        rot_a.append("[amus]")
+
+    if len(rot_a) > 1:
         # normalize=0: com normalize=1 o amix DIVIDE o volume pelo número de
         # entradas e a narração sai sussurrada, porque as falas nem se
-        # sobrepõem — cada uma toca sozinha no seu trecho.
+        # sobrepõem — cada uma toca sozinha no seu trecho. E a música já vem
+        # com o volume que o EDL pediu (0.12 sob narração, 0.9 sozinha);
+        # deixar o amix renormalizar jogaria essa decisão fora.
         filtros.append("".join(rot_a) +
                        f"amix=inputs={len(rot_a)}:normalize=0:dropout_transition=0,"
                        f"apad,atrim=0:{dur_total:.3f}[aout]")
+        mapa_audio = ["-map", "[aout]", "-c:a", "aac", "-b:a", "160k"]
+    elif rot_a:
+        # uma trilha só (só música, ou uma narração só): amix de 1 entrada é
+        # ruído no grafo — o apad garante que ela cubra o vídeo inteiro
+        filtros.append(f"{rot_a[0]}apad,atrim=0:{dur_total:.3f}[aout]")
         mapa_audio = ["-map", "[aout]", "-c:a", "aac", "-b:a", "160k"]
     else:
         entradas += ["-f", "lavfi", "-t", f"{dur_total:.3f}",
@@ -1353,10 +1446,15 @@ def renderizar(edl: dict, origem_imgs: str, saida: Path, mudo=False,
             "`pip install imageio-ffmpeg`, que traz um estático com libass")
 
     modo = edl.get("modo_audio", "narracao")
+    musica = _musica_local(edl, avisos)
+    if musica:
+        _log(f"   🎵 trilha: {musica['nome']} (volume {musica['volume']})")
+
     if any(a["tipo"] == "sfx" for a in edl["trilhas"]["audio"]):
         avisos.append("SFX pedidos pelo EDL (whoosh/pop/impacto) — não há "
                       "arquivo de som no projeto, saem de fora")
-    if any(x["tipo"] in ("musica", "musica_alta") for x in edl["trilhas"]["audio"]):
+    if not musica and any(x["tipo"] in ("musica", "musica_alta")
+                          for x in edl["trilhas"]["audio"]):
         avisos.append(f"modo '{modo}' pede música — não existe arquivo local, e "
                       "música do Instagram não se baixa: entra no app (ou pelo "
                       "Metricool). O vídeo sai sem trilha")
@@ -1387,7 +1485,7 @@ def renderizar(edl: dict, origem_imgs: str, saida: Path, mudo=False,
 
         saida.parent.mkdir(parents=True, exist_ok=True)
         cmd = _montar_comando(ff, edl, placas, marca, lay, ass, narracoes,
-                              saida, crf)
+                              saida, crf, musica)
         _log(f"   🎬 {len(edl['trilhas']['visual'])} corte(s) · "
              f"{edl['duracao_total']}s · codificando…")
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=900)

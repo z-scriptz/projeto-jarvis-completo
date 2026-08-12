@@ -57,3 +57,6 @@ shared/renders/
 
 # cache do Gemini Vision (texto queimado) — custo de API, nao conteudo
 shared/cache_texto_queimado.json
+
+# musicas locais: arquivos de audio (licenca + tamanho) ficam fora do git
+assets/musicas/
