@@ -2196,6 +2196,51 @@ zero. Oito variantes de formato testadas, todas convergindo no mesmo veredito.
 **"Declarei como não verificado" não é o mesmo que "tratei o caso":** o contrato
 só vale se o código sobreviver a ele sendo quebrado.
 
+### 🎯 O RECORTE MIRAVA NO TEXTO — e o detector novo provou (11/08)
+
+Achado que só existiu porque o `texto_queimado` passou a dar número. Nas duas
+rodadas do piloto, quem reprovava eram os recortes DERIVADOS, não a foto:
+
+    fila 11   foto_1 (original) 10% de promo  →  var_3 (derivada) 35%
+    fila 41   foto_1 (original) 15% de promo  →  var_2 (derivada) 25%, e na BASE
+
+**Mecanismo:** `_detalhe()` escolhe a janela de maior variância de cinza, e
+TEXTO é a coisa de maior variância numa foto de produto. O docstring dele
+dizia *"variância não sabe o que é produto, mas sabe onde NÃO é fundo — e pra
+escolher um close isso basta"*. Não basta: ele acha texto. **A mitigação da
+foto única estava concentrando o texto promocional e jogando ele pra base,
+que é exatamente onde a legenda entra.**
+
+**Correção sem heurística nova:** o detector já diz em QUE FAIXA está o texto.
+O piloto passou a consultá-lo na foto ORIGINAL **antes** de recortar
+(`_faixas_com_texto`), e `_detalhe(img, frac, evitar)` foge dessas faixas. A
+ordem é o ponto todo — consultando depois, o detector só constata o estrago.
+
+⚠️ **Primeira versão exigia invasão ZERO e não funcionou**, medido: numa janela
+de `frac 0.78` sobre foto quadrada, NENHUMA posição cabe fora de um terço
+proibido, então ela desistia e voltava ao comportamento antigo (17% de texto no
+corte). Trocado por MINIMIZAR a invasão, ordenando por `(invasão, -variância)`:
+
+    texto na foto original: 11,6%
+    frac    antigo   novo
+    0.62     21,7%   0,0%
+    0.70     19,2%   0,0%
+    0.78     17,2%   3,4%
+    0.85     15,8%   8,4%
+
+Sem faixa proibida o resultado é byte a byte idêntico ao anterior — foto limpa
+não regride. **Exigir o ideal e desistir é pior que garantir o melhor
+possível**, e só a medição por tamanho de corte mostrou isso.
+
+### 💳 ELEVENLABS COM PAGAMENTO PENDENTE (11/08) — vídeo saindo MUDO
+
+    HTTP 401 payment_required · "failed or incomplete payment"
+    Edge (fallback): No module named 'tts_edge'
+
+Nenhum TTS funcionando. O piloto sai com `voz —` e o vídeo vai mudo, sem que
+nada além do `faltou` avise. ⏳ Conferir se algum pacote da esteira entrou sem
+faixa de áudio enquanto isso durou — esses seriam postados sem narração.
+
 ### Onde parou (04/08, fim do dia)
 
 **Esperando o chip.** Pedido feito — Claro pré-pago, R$ 20,99, chegada prevista

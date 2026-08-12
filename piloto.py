@@ -102,7 +102,7 @@ def _fotos_do_item(item: dict, pasta: Path) -> list:
     return fora
 
 
-def _detalhe(img, frac: float):
+def _detalhe(img, frac: float, evitar: set = None):
     """A região de MAIOR DETALHE da foto, na fração pedida do quadro.
 
     Foto de e-commerce quase nunca é o produto centralizado: é o produto num
@@ -111,26 +111,87 @@ def _detalhe(img, frac: float):
     cada célula recebe a variância do cinza — que é uma medida crua de "quanta
     coisa acontece aqui". A janela com mais detalhe acumulado vira o close.
 
-    Cru de propósito: detectar produto de verdade é trabalho pro Gemini Vision
-    (o visual_audit_agent já tem a tubulação). Variância não sabe o que é
-    produto, mas sabe onde NÃO é fundo — e pra escolher um close isso basta.
+    ⚠️ A PREMISSA ORIGINAL ESTAVA ERRADA, E FOI MEDIDA (11/08). Ela dizia:
+    "variância não sabe o que é produto, mas sabe onde NÃO é fundo — e pra
+    escolher um close isso basta". Não basta: TEXTO é a coisa de maior
+    variância numa foto de produto, então o recorte MIRA no texto promocional.
+    Medido em duas rodadas do piloto, com o detector novo dando os números:
+
+        fila 11   foto_1 (original)  10% de promo  →  var_3 (derivada)  35%
+        fila 41   foto_1 (original)  15% de promo  →  var_2 (derivada)  25%, e na BASE
+
+    Ou seja: a mitigação da foto única estava concentrando o texto E jogando
+    ele pra onde a legenda entra. `evitar` recebe as faixas onde o
+    `texto_queimado` viu texto ({"topo"}, {"base"}...) e a busca deixa de
+    considerar janelas que caem nelas.
+
+    Se evitar tudo não deixar janela nenhuma, volta a considerar a imagem
+    inteira: um close ruim é melhor que erro, e quem chama registra o aviso.
     """
     from PIL import ImageStat
     L = img.convert("L")
     W, H = img.size
     jw, jh = int(W * frac), int(H * frac)
     passo_x, passo_y = max(1, (W - jw) // 6), max(1, (H - jh) // 6)
-    melhor, alvo = -1.0, (0, 0)
+
+    # as faixas são terços horizontais — a mesma divisão que o prompt do
+    # texto_queimado pede ao modelo, senão os dois falariam de coisas diferentes
+    proibidas = []
+    for nome in (evitar or ()):
+        i = {"topo": 0, "meio": 1, "base": 2}.get(str(nome).lower())
+        if i is not None:
+            proibidas.append((H * i // 3, H * (i + 1) // 3))
+
+    def _invasao(y0, y1) -> int:
+        """Quantos pixels de altura a janela mete dentro de faixa proibida."""
+        return sum(max(0, min(y1, fim) - max(y0, ini))
+                   for ini, fim in proibidas)
+
+    # MINIMIZA a invasão em vez de exigir zero. Numa janela larga (frac 0.78
+    # de uma foto quadrada) NENHUMA posição cabe fora de um terço proibido, e
+    # a versão que exigia zero simplesmente desistia e voltava ao
+    # comportamento antigo — medido: o corte largo continuava com 17% de
+    # texto. Ordenando por (invasão, -variância) o corte sobe o quanto der e
+    # leva o mínimo de texto possível, mesmo quando zero é impossível.
+    melhor, alvo = None, (0, 0)
     for y in range(0, H - jh + 1, passo_y):
+        inv = _invasao(y, y + jh)
         for x in range(0, W - jw + 1, passo_x):
             v = ImageStat.Stat(L.crop((x, y, x + jw, y + jh))).stddev[0]
-            if v > melhor:
-                melhor, alvo = v, (x, y)
+            nota = (inv, -v)
+            if melhor is None or nota < melhor:
+                melhor, alvo = nota, (x, y)
     x, y = alvo
     return img.crop((x, y, x + jw, y + jh))
 
 
-def _variacoes(foto: Path, pasta: Path, quantas: int, avisos: list) -> list:
+def _faixas_com_texto(foto: Path, produto: str, avisos: list) -> set:
+    """Onde o texto queimado está na foto ORIGINAL, pro recorte fugir dali.
+
+    A ordem importa e é o ponto todo: consultar ANTES de derivar. Consultando
+    depois, o detector só constata o estrago — foi o que aconteceu em 11/08,
+    com o `var_2` reprovado por concentrar em 25% um texto que no original
+    ocupava 15%.
+    """
+    try:
+        import texto_queimado as TQ
+        r = TQ.avaliar(foto, produto)
+        if r.get("veredito") in ("aprovado", "nao_avaliado"):
+            # aprovado = texto irrelevante; nao_avaliado = não sei, e chutar
+            # faixa proibida sem informação só pioraria o enquadramento
+            return set()
+        faixas = set(r.get("faixas") or [])
+        if faixas:
+            avisos.append(f"{foto.name}: texto em {'/'.join(sorted(faixas))} — "
+                          "os enquadramentos vão evitar essas faixas")
+        return faixas
+    except Exception as e:
+        avisos.append(f"não consultei texto queimado pro recorte: {str(e)[:60]}")
+        return set()
+
+
+def _variacoes(foto: Path, pasta: Path, quantas: int, avisos: list,
+               evitar: set = None) -> list:
     """UMA foto -> vários ENQUADRAMENTOS distintos.
 
     POR QUE ISTO EXISTE (10/08)
@@ -157,7 +218,7 @@ def _variacoes(foto: Path, pasta: Path, quantas: int, avisos: list) -> list:
     fora = [foto]
     for i, frac in enumerate([0.62, 0.78][:max(0, quantas - 1)], 2):
         try:
-            corte = _detalhe(img, frac)
+            corte = _detalhe(img, frac, evitar)
             alvo = pasta / f"var_{i}.jpg"
             corte.save(alvo, quality=94)
             fora.append(alvo)
@@ -319,8 +380,11 @@ def main():
 
         avisos_fotos = []
         if len(fotos) == 1 and args.variacoes > 1:
+            # pergunta ONDE está o texto ANTES de recortar; sem isso o recorte
+            # mira justamente nele (texto é o pico de variância da foto)
+            evitar = _faixas_com_texto(fotos[0], nome, avisos_fotos)
             fotos = _variacoes(fotos[0], tmp / "vars", args.variacoes,
-                               avisos_fotos)
+                               avisos_fotos, evitar)
 
         # ── o que temos, ANTES de gastar roteiro, voz e render ──────────────
         try:
