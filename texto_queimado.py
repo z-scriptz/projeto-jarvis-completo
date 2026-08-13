@@ -91,6 +91,45 @@ chamada de venda. "especificacao" para medidas, voltagem, capacidade. \
 - "faixas" lista TODAS as faixas onde há texto."""
 
 
+def _carregar_env():
+    """Lê o .env pro processo, se ninguém leu antes.
+
+    ⚠️ POR QUE ISTO EXISTE (12/08): este módulo lia `GEMINI_API_KEY` do
+    ambiente e nunca carregava o `.env`. Dentro do `piloto.py` funcionava,
+    porque algum import anterior já tinha carregado — rodado sozinho, ele
+    degradava para `nao_avaliado: GEMINI_API_KEY não definida`.
+
+    E `nao_avaliado` é uma resposta LEGÍTIMA deste arquivo, então a falha não
+    parecia falha: a medição do recorte saiu com nao_avaliado nos dois lados e
+    eu quase li como "o Vision não viu diferença". Degradação silenciosa num
+    módulo cujo modo de erro é indistinguível do modo normal.
+
+    Mesmo formato do `amazon_playwright._carregar_env`: não sobrescreve o que
+    já está no ambiente (systemd manda), e falha calado se não houver .env.
+    """
+    for cand in (BASE_DIR / ".env", Path(".env")):
+        if not cand.exists():
+            continue
+        try:
+            for linha in cand.read_text(encoding="utf-8").splitlines():
+                linha = linha.strip()
+                if not linha or linha.startswith("#") or "=" not in linha:
+                    continue
+                if linha.lower().startswith("export "):
+                    linha = linha[7:]
+                chave, _, valor = linha.partition("=")
+                chave = chave.strip()
+                valor = valor.strip().strip('"').strip("'")
+                if chave and chave not in os.environ:
+                    os.environ[chave] = valor
+        except Exception:
+            pass
+        break
+
+
+_carregar_env()
+
+
 def _log(m):
     print(f"[texto] {m}", flush=True)
 
@@ -259,7 +298,11 @@ def avaliar(caminho, produto: str = "", usar_cache: bool = True) -> dict:
         return _nao_avaliado(f"arquivo não existe: {caminho}")
 
     if not os.getenv("GEMINI_API_KEY"):
-        return _nao_avaliado("GEMINI_API_KEY não definida")
+        _carregar_env()          # 2ª chance: o cwd pode ter mudado desde o import
+    if not os.getenv("GEMINI_API_KEY"):
+        return _nao_avaliado(
+            "GEMINI_API_KEY não definida (nem no ambiente, nem no .env de "
+            f"{BASE_DIR})")
 
     chave = None
     if usar_cache:
