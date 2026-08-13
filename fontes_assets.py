@@ -396,6 +396,57 @@ def _da_fila(indice: int, destino: Path):
     return nome, ref
 
 
+def _amostrar(n: int, destino: Path) -> int:
+    """A taxa de acerto da fonte, medida em N produtos reais.
+
+    POR QUE ISTO EXISTE: testar um produto por vez responde "achou este?", e a
+    pergunta que decide investimento é outra — "de cada 10 da NOSSA fila,
+    quantos existem lá?". Produto genérico de marketplace (blusa, calcinha)
+    quase nunca tem equivalente na Amazon; gadget de marca tem. Sem o número,
+    a decisão de investir mais nesta fonte seria pelo humor da última tentativa.
+
+    Roda sempre SECO: só busca e julga, nunca abre página de produto. Respeita
+    o teto e a pausa do próprio amazon_playwright.
+    """
+    try:
+        import storyboard as SB
+        itens = [x for x in json.loads(SB.FILA.read_text(encoding="utf-8"))
+                 if isinstance(x, dict)]
+    except Exception as e:
+        _log(f"não li a fila: {str(e)[:70]}")
+        return 1
+
+    com_foto = [i for i, it in enumerate(itens)
+                if any(isinstance(u, str) and u.startswith("http")
+                       for u in ([it.get("imagem")] + (it.get("imagens") or [])))]
+    alvo = com_foto[:n]
+    _log(f"medindo {len(alvo)} produto(s) da fila (seco, sem abrir página)\n")
+
+    from collections import Counter
+    placar = Counter()
+    for i in alvo:
+        nome = (itens[i].get("campeao") or itens[i].get("produto") or "")[:52]
+        cands = candidatos_amazon(nome, destino, seco=True)
+        estado = "achou" if cands else "não achou"
+        placar[estado] += 1
+        _log(f"  [{i:3}] {estado:10} {nome}")
+
+    total = sum(placar.values()) or 1
+    achou = placar["achou"]
+    print()
+    _log(f"TAXA DE ACERTO: {achou}/{total} ({100*achou/total:.0f}%)")
+    if achou == 0:
+        _log("nenhum produto da amostra existe na Amazon pelo termo da fila.")
+        _log("Isso não é bug: é a resposta. Produto genérico de marketplace")
+        _log("chinês não tem equivalente lá — e insistir nesta fonte não muda.")
+    elif achou < total * 0.3:
+        _log("taxa baixa: a fonte resolve a minoria dos casos. Vale como")
+        _log("complemento, não como solução do gargalo de assets.")
+    else:
+        _log("taxa relevante: vale abrir as páginas e coletar galeria de fato.")
+    return 0
+
+
 def main():
     p = argparse.ArgumentParser(
         description="Mesma peça em outras fontes, com prova de identidade.")
@@ -410,12 +461,17 @@ def main():
                    help="busca e julga, mas não baixa galeria")
     p.add_argument("--so-confirmado", action="store_true",
                    help="recusa até os 'provavel' — só foto de fábrica igual")
+    p.add_argument("--amostra", type=int,
+                   help="roda --seco em N produtos da fila e mede a taxa de "
+                        "acerto — decide se vale investir mais nesta fonte")
     p.add_argument("--json", action="store_true")
     args = p.parse_args()
 
     if args.simular:
         _simular()
         return 0
+    if args.amostra:
+        return _amostrar(args.amostra, Path(args.saida))
     if args.fila is not None:
         # o piloto baixa as fotos pra um temporário que some, então NÃO existe
         # foto de referência em disco pra apontar. Tirar da fila é o único
