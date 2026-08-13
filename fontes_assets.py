@@ -252,8 +252,8 @@ def galeria_da_pagina(url: str, destino: Path, prefixo: str,
     return fotos
 
 
-def candidatos_amazon(termo: str, destino: Path, seco: bool = False,
-                      limite: int = 1) -> list:
+def candidatos_amazon(termo: str, destino: Path,
+                      seco: bool = False) -> list:
     """Usa o amazon_playwright que já existe — inclusive o cache e as travas
     dele (teto por rodada, pausa longa, para em captcha). Reimplementar a busca
     seria criar um segundo caminho pra tomar bloqueio, e o módulo é conservador
@@ -266,14 +266,24 @@ def candidatos_amazon(termo: str, destino: Path, seco: bool = False,
     if not AP.ligado():
         _log("AMAZON_PLAYWRIGHT=0 — Amazon desligada no .env")
         return []
+    # ⚠️ A ASSINATURA É buscar(termos, diag=False, vazios_antes=None) e ela
+    # devolve um DICIONÁRIO {termo: {ok, asin, titulo, preco, imagem, link}}.
+    # Eu tinha suposto `buscar([termo], limite=N)` devolvendo lista — errado
+    # nos dois pontos, e o `for r in achados` iterava as CHAVES (strings). O
+    # `--seco` pegou na primeira rodada; supor API alheia é o mesmo que supor
+    # medição.
     try:
-        achados = AP.buscar([termo], limite=limite)
-    except AttributeError:
-        _log("amazon_playwright não expõe buscar() — versão diferente na VPS")
-        return []
+        achados = AP.buscar([termo])
     except Exception as e:
         _log(f"busca Amazon falhou: {str(e)[:80]}")
         return []
+
+    r = (achados or {}).get(termo) or {}
+    if not r.get("ok"):
+        _log(f"   Amazon não resolveu o termo (ok={r.get('ok')}) — "
+             f"{str(r.get('motivo') or 'sem motivo')[:60]}")
+        return []
+    achados = [r]
 
     fora = []
     for r in (achados or []):
