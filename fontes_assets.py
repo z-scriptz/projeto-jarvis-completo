@@ -396,17 +396,21 @@ def _da_fila(indice: int, destino: Path):
     return nome, ref
 
 
-def _amostrar(n: int, destino: Path) -> int:
-    """A taxa de acerto da fonte, medida em N produtos reais.
+def _amostrar(n: int, destino: Path, seco: bool = True) -> int:
+    """Quantos produtos da NOSSA fila têm o MESMO produto na fonte?
 
-    POR QUE ISTO EXISTE: testar um produto por vez responde "achou este?", e a
-    pergunta que decide investimento é outra — "de cada 10 da NOSSA fila,
-    quantos existem lá?". Produto genérico de marketplace (blusa, calcinha)
-    quase nunca tem equivalente na Amazon; gadget de marca tem. Sem o número,
-    a decisão de investir mais nesta fonte seria pelo humor da última tentativa.
+    ⚠️ A PRIMEIRA VERSÃO MEDIU A PERGUNTA ERRADA (12/08). Ela contava "a busca
+    devolveu algo" e chamava isso de TAXA DE ACERTO — deu 5/10 e sugeriu que
+    valia investir. Mas os retornos eram:
+        Mini Inflador CYCLAMI  →  ENLEE Mini bomba elétrica   (outra marca)
+        Capa Personalizada     →  Capa Anti Impacto genérica  (outro produto)
+    Isso é taxa de RESPOSTA da busca, não de acerto. É o mesmo erro de contar
+    slot como post: o número existia, estava certo, e respondia outra coisa.
 
-    Roda sempre SECO: só busca e julga, nunca abre página de produto. Respeita
-    o teto e a pausa do próprio amazon_playwright.
+    Acerto de verdade exige o `parecer` completo, e o `parecer` exige a
+    GALERIA — é a foto de fábrica repetida que prova identidade, não o título.
+    Por isso `--amostra` agora roda com galeria por padrão, e o placar é a
+    distribuição de vereditos, não achou/não achou.
     """
     try:
         import storyboard as SB
@@ -420,30 +424,49 @@ def _amostrar(n: int, destino: Path) -> int:
                 if any(isinstance(u, str) and u.startswith("http")
                        for u in ([it.get("imagem")] + (it.get("imagens") or [])))]
     alvo = com_foto[:n]
-    _log(f"medindo {len(alvo)} produto(s) da fila (seco, sem abrir página)\n")
+    _log(f"medindo {len(alvo)} produto(s)"
+         + (" (SECO: sem galeria, só a resposta da busca)" if seco
+            else " (com galeria — o veredito de identidade de verdade)") + "\n")
 
     from collections import Counter
-    placar = Counter()
+    placar, sem_resposta = Counter(), 0
     for i in alvo:
         nome = (itens[i].get("campeao") or itens[i].get("produto") or "")[:52]
-        cands = candidatos_amazon(nome, destino, seco=True)
-        estado = "achou" if cands else "não achou"
-        placar[estado] += 1
-        _log(f"  [{i:3}] {estado:10} {nome}")
+        pasta = destino / f"amostra_{i}"
+        ref_nome, ref = _da_fila(i, pasta)
+        if not ref:
+            _log(f"  [{i:3}] sem referência  {nome}")
+            continue
+        cands = candidatos_amazon(ref_nome, pasta, seco=seco)
+        if not cands:
+            sem_resposta += 1
+            _log(f"  [{i:3}] sem resposta    {nome}")
+            continue
+        for c in cands:
+            p = parecer(ref_nome, ref, c)
+            placar[p["veredito"]] += 1
+            icone = {"confirmado": "✅", "provavel": "👍",
+                     "duvidoso": "❓", "recusado": "✗"}[p["veredito"]]
+            _log(f"  [{i:3}] {icone} {p['veredito']:11} {nome}")
+            _log(f"        veio: {p['titulo'][:64]}")
+            if not seco:
+                _log(f"        {len(p['fotos_novas'])} foto(s) nova(s) · "
+                     f"{p['motivo'][:60]}")
 
-    total = sum(placar.values()) or 1
-    achou = placar["achou"]
+    total = sum(placar.values()) + sem_resposta or 1
+    usaveis = placar["confirmado"] + placar["provavel"]
     print()
-    _log(f"TAXA DE ACERTO: {achou}/{total} ({100*achou/total:.0f}%)")
-    if achou == 0:
-        _log("nenhum produto da amostra existe na Amazon pelo termo da fila.")
-        _log("Isso não é bug: é a resposta. Produto genérico de marketplace")
-        _log("chinês não tem equivalente lá — e insistir nesta fonte não muda.")
-    elif achou < total * 0.3:
-        _log("taxa baixa: a fonte resolve a minoria dos casos. Vale como")
-        _log("complemento, não como solução do gargalo de assets.")
-    else:
-        _log("taxa relevante: vale abrir as páginas e coletar galeria de fato.")
+    _log(f"de {total}: {placar['confirmado']} confirmado · "
+         f"{placar['provavel']} provável · {placar['duvidoso']} duvidoso · "
+         f"{placar['recusado']} recusado · {sem_resposta} sem resposta")
+    _log(f"APROVEITÁVEL: {usaveis}/{total} ({100*usaveis/total:.0f}%)")
+    if seco:
+        _log("⚠️ SECO não busca galeria, então NENHUM pode ser 'confirmado' —")
+        _log("   a prova de identidade é a foto de fábrica repetida. Rode")
+        _log("   `--amostra N --com-galeria` pro número que decide.")
+    elif usaveis == 0:
+        _log("a Amazon responde, mas não é o mesmo produto. Trocar de fonte")
+        _log("(Mercado Livre) vale mais que insistir nesta.")
     return 0
 
 
@@ -462,8 +485,10 @@ def main():
     p.add_argument("--so-confirmado", action="store_true",
                    help="recusa até os 'provavel' — só foto de fábrica igual")
     p.add_argument("--amostra", type=int,
-                   help="roda --seco em N produtos da fila e mede a taxa de "
-                        "acerto — decide se vale investir mais nesta fonte")
+                   help="mede a taxa de identidade em N produtos da fila")
+    p.add_argument("--com-galeria", action="store_true",
+                   help="na amostra, abre as páginas — é o único jeito de "
+                        "chegar a 'confirmado'")
     p.add_argument("--json", action="store_true")
     args = p.parse_args()
 
@@ -471,7 +496,8 @@ def main():
         _simular()
         return 0
     if args.amostra:
-        return _amostrar(args.amostra, Path(args.saida))
+        return _amostrar(args.amostra, Path(args.saida),
+                         seco=not args.com_galeria)
     if args.fila is not None:
         # o piloto baixa as fotos pra um temporário que some, então NÃO existe
         # foto de referência em disco pra apontar. Tirar da fila é o único
