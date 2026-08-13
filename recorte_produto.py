@@ -201,6 +201,18 @@ def main():
     print(f"  {'faixas':12} {'/'.join(a.get('faixas') or []) or '—':>26}   "
           f"{'/'.join(d.get('faixas') or []) or '—':>26}")
     print("  " + "─" * 68)
+
+    # ⚠️ nao_avaliado dos DOIS lados não é resultado: é ausência de medição, e
+    # a primeira versão imprimia a tabela como se fosse comparação. Comparar
+    # None com None e chamar de "antes e depois" é o tipo de saída que faz
+    # alguém concluir por um experimento que não aconteceu.
+    if a.get("veredito") == "nao_avaliado" or d.get("veredito") == "nao_avaliado":
+        _log("⚠️ MEDIÇÃO INVÁLIDA — o detector não avaliou:")
+        _log(f"     antes:  {a.get('motivo', '?')}")
+        _log(f"     depois: {d.get('motivo', '?')}")
+        _log("   Nada aqui prova que o texto saiu ou ficou. Resolva o "
+             "detector e rode de novo.")
+
     _log(f"{r['recorte']['motivo']}")
     if r.get("comparacao"):
         _log(f"lado a lado: {r['comparacao']}")
