@@ -361,11 +361,38 @@ def _simular():
     print()
 
 
+def _da_fila(indice: int, destino: Path):
+    """(nome, foto_de_referencia) do item N da fila. (motivo, None) se não der."""
+    try:
+        import storyboard as SB
+        itens = [x for x in json.loads(SB.FILA.read_text(encoding="utf-8"))
+                 if isinstance(x, dict)]
+    except Exception as e:
+        return f"não li a fila: {str(e)[:70]}", None
+    if not (0 <= indice < len(itens)):
+        return f"fora da fila (há {len(itens)} itens: 0 a {len(itens)-1})", None
+
+    it = itens[indice]
+    nome = (it.get("campeao") or it.get("produto") or "").strip()
+    urls = [u for u in ([it.get("imagem")] + (it.get("imagens") or []))
+            if isinstance(u, str) and u.startswith("http")]
+    if not urls:
+        return f"'{nome[:40]}' não tem URL de foto — nada pra comparar", None
+
+    destino.mkdir(parents=True, exist_ok=True)
+    ref = destino / "referencia_shopee.jpg"
+    if not _baixar(urls[0], ref):
+        return f"não baixei a foto de referência de {urls[0][:60]}", None
+    return nome, ref
+
+
 def main():
     p = argparse.ArgumentParser(
         description="Mesma peça em outras fontes, com prova de identidade.")
     p.add_argument("--produto")
     p.add_argument("--foto", help="a foto que já temos (referência de identidade)")
+    p.add_argument("--fila", type=int,
+                   help="índice em produtos_fila.json — tira nome E foto de lá")
     p.add_argument("--saida", default="/tmp/coleta_fontes")
     p.add_argument("--simular", action="store_true",
                    help="roda só a política de identidade, sem rede")
@@ -379,8 +406,21 @@ def main():
     if args.simular:
         _simular()
         return 0
+    if args.fila is not None:
+        # o piloto baixa as fotos pra um temporário que some, então NÃO existe
+        # foto de referência em disco pra apontar. Tirar da fila é o único
+        # caminho que não obriga o Dre a caçar arquivo — e é a mesma fonte que
+        # a produção usa, então a referência é exatamente a que virou vídeo.
+        nome_f, foto_f = _da_fila(args.fila, Path(args.saida))
+        if not foto_f:
+            _log(f"índice {args.fila}: {nome_f}")
+            return 1
+        args.produto, args.foto = nome_f, str(foto_f)
+        _log(f"da fila: {args.produto[:60]}")
+        _log(f"referência: {args.foto}")
+
     if not (args.produto and args.foto):
-        p.error("use --simular, ou --produto NOME --foto CAMINHO")
+        p.error("use --simular, --fila N, ou --produto NOME --foto CAMINHO")
 
     r = coletar(args.produto, Path(args.foto), Path(args.saida),
                 aceitar_provavel=not args.so_confirmado, seco=args.seco)
