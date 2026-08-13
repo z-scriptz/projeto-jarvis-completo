@@ -2241,6 +2241,43 @@ Nenhum TTS funcionando. O piloto sai com `voz —` e o vídeo vai mudo, sem que
 nada além do `faltou` avise. ⏳ Conferir se algum pacote da esteira entrou sem
 faixa de áudio enquanto isso durou — esses seriam postados sem narração.
 
+### 🔒 COLETA EXTERNA: as três portas fechadas, e o que isso decide (12/08)
+
+O Kit 10 Calcinhas foi barrado pelo detector (43% de texto promocional, nível
+D). Como edição não conserta matéria-prima, a saída seria a MESMA peça em outra
+loja. Medimos as três fontes.
+
+| fonte | resultado | como soubemos |
+|---|---|---|
+| Shopee | anti-bot `error=90309999` | 3 medições (10/08) |
+| **Amazon** | **0/6 identidade confirmada** | 6 produtos, galeria extraída, distâncias 0,35–0,40 |
+| Mercado Livre | 403 em `/sites/MLB/search` | endpoint oficial, mesmo autenticado |
+
+**A premissa do `fontes_assets` foi falsificada.** Ela era: *"em marketplace a
+foto de FÁBRICA é reusada entre vendedores e entre lojas"*. Entre Shopee e
+Amazon, não é — nenhuma das 21 fotos coletadas (9+7+5) chegou perto do limiar
+de 0,14, e nem do 0,28 do inconclusivo. Os títulos casavam (8, 4 e 3 palavras);
+as fotos discordavam. O módulo recusou os três, que é o comportamento certo:
+"a busca devolveu algo parecido" nunca foi "é o mesmo produto".
+
+✅ **O que funcionou e fica:** a extração de galeria (`colorImages` achou 9, 7 e
+5 URLs — a parte que eu não pude testar está provada), e o veredito de
+identidade em duas vias. A Amazon continua utilizável para o caso minoritário
+do produto de marca de verdade; ela só não resolve o gargalo.
+
+⚠️ **E o primeiro número que eu produzi estava errado.** A amostra inicial deu
+"TAXA DE ACERTO: 5/10 (50%)" e sugeriu investir. Era taxa de RESPOSTA da busca:
+o Mini Inflador CYCLAMI voltou como "ENLEE Mini bomba elétrica" e eu contei
+como acerto. Mesmo erro de contar slot como post — o dado existia, a leitura é
+que estava errada. Com o `parecer` completo e galeria, o número virou 0/6.
+
+**A DECISÃO QUE ISSO FORÇA:** parar de tentar coletar e passar a fazer UMA foto
+funcionar. Não por preferência — por eliminação medida. E há um caminho que
+ataca o defeito exato que nos trouxe aqui: **recortar o produto do fundo deixa
+o texto promocional para trás**. Uma foto 43% banner vira um recorte limpo do
+produto, e o `midia_viva`/`texto_queimado` saem de `lever: None`. É a conversão
+de BLOQUEADO_SEM_LEVER em CORRIGÍVEL, local e sem custo de API.
+
 ### Onde parou (04/08, fim do dia)
 
 **Esperando o chip.** Pedido feito — Claro pré-pago, R$ 20,99, chegada prevista
