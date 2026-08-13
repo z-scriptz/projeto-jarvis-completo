@@ -1530,6 +1530,19 @@ def renderizar(edl: dict, origem_imgs: str, saida: Path, mudo=False,
                # ELEVENLABS_VOICE_ID_<NICHO> mascarando o contas.json: o que
                # resolve não é o valor, é saber QUEM mandou.
                "knobs": _knobs(edl),
+               # QUAL faixa foi embutida NESTE arquivo. Sem isso, um post
+               # silenciado dias depois não tem como ser ligado de volta ao
+               # .mp3 que o causou — e um experimento que não dá pra rastrear
+               # não é experimento, é torcida. Guarda também a faixa que o EDL
+               # sugeriu (a da biblioteca do Instagram), que é outra coisa: ela
+               # vale pro caminho manual/Metricool, não pro arquivo.
+               "trilha": ({"arquivo": musica["nome"],
+                           "volume": musica["volume"],
+                           "tipo": musica["tipo"]} if musica else None),
+               "trilha_sugerida_no_edl": next(
+                   ({"faixa": a.get("faixa"), "artista": a.get("artista")}
+                    for a in edl["trilhas"]["audio"]
+                    if a.get("tipo") in ("musica", "musica_alta")), None),
                # sem dict.fromkeys, uma falha do ElevenLabs vira 5 linhas
                # idênticas no relatório e o aviso importante some no meio
                "faltou": list(dict.fromkeys(avisos))}
