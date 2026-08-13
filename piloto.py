@@ -417,6 +417,21 @@ def main():
         except Exception as e:
             _log(f"   (ranker indisponível: {str(e)[:70]})")
 
+        # ── PASSO ZERO: a memória fala ANTES de gastar roteiro, voz e render ──
+        # ARQUITETURA_CRITICO §8: "o que deu errado nas outras vezes em que
+        # produzi NESTAS condições?". Consultar depois seria só constatar.
+        try:
+            import memoria_producao as MEM
+            ass_previa = {"nicho": nicho or "geral",
+                          "n_fotos": len(fotos),
+                          "nivel_assets": (nota or {}).get("nivel"),
+                          "distintas": (nota or {}).get("distintas")}
+            prev = MEM.consultar({k: v for k, v in ass_previa.items() if v})
+            if prev.get("aviso"):
+                _log(f"memória: {prev['aviso']}")
+        except Exception as e:
+            _log(f"   (memória indisponível: {str(e)[:60]})")
+
         _log(f"produto: {nome}")
         _log(f"   nicho {nicho or 'geral'} · R$ {preco or '—'} · "
              f"{len(fotos)} enquadramento(s)"
@@ -478,6 +493,20 @@ def main():
         # ── 5. conferência ──────────────────────────────────────────────────
         _log("4/4 conferência")
         r = CR.conferir(alvo, contato=True)
+
+        # ── e a experiência entra na memória, TENHA DADO CERTO OU NÃO ────────
+        # "aprovado de primeira" também é dado: sem os casos bons, a contagem
+        # do passo zero viraria "de 8 produções, 8 tiveram defeito" — porque só
+        # as com defeito teriam sido gravadas.
+        try:
+            import memoria_producao as MEM
+            g = MEM.registrar(rel, r, nota)
+            if g.get("sucesso"):
+                _log(f"   🧠 experiência gravada ({g.get('id','?')})")
+            else:
+                _log(f"   🧠 não gravei: {g.get('mensagem','?')}")
+        except Exception as e:
+            _log(f"   🧠 memória indisponível: {str(e)[:70]}")
 
         print()
         icone = {"passou": "✅", "revisar": "👀", "reprovado": "❌"}[r["veredito"]]
