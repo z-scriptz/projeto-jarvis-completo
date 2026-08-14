@@ -1,281 +1,484 @@
-# 🤖 Jarvis AI
+🤖 JARVIS AI
 
-> Um agente de Inteligência Artificial desenvolvido para automatizar praticamente todo o fluxo de criação de conteúdo para afiliados digitais.
+Autonomous AI-Powered Content Production & Automation System
 
-![Python](https://img.shields.io/badge/Python-3.11+-blue)
-![License](https://img.shields.io/badge/License-MIT-green)
-![Status](https://img.shields.io/badge/Status-Development-orange)
+«A modular AI-driven system designed to orchestrate content discovery, planning, generation, multimedia production, quality control, analytics and automated distribution.»
 
----
-
-# 📖 Sobre o projeto
-
-O **Jarvis AI** é um assistente inteligente criado para automatizar tarefas relacionadas ao marketing de afiliados, criação de conteúdo e análise de tendências.
-
-O objetivo do projeto é reduzir ao máximo o trabalho manual na produção de vídeos, pesquisa de produtos, geração de roteiros e publicação de conteúdo.
-
-O sistema utiliza Inteligência Artificial juntamente com diversas APIs e automações para transformar uma ideia em um conteúdo pronto para publicação.
+""Python" (https://img.shields.io/badge/Python-3.x-3776AB?style=for-the-badge&logo=python&logoColor=white)" (https://www.python.org/)
+""AI" (https://img.shields.io/badge/AI-Generative%20AI-8A2BE2?style=for-the-badge)" (#)
+""Automation" (https://img.shields.io/badge/Automation-FF6B35?style=for-the-badge)" (#)
+""FFmpeg" (https://img.shields.io/badge/FFmpeg-007808?style=for-the-badge&logo=ffmpeg&logoColor=white)" (https://ffmpeg.org/)
+""Git" (https://img.shields.io/badge/Git-F05032?style=for-the-badge&logo=git&logoColor=white)" (https://git-scm.com/)
 
 ---
 
-# 🚀 Funcionalidades
+🧠 Overview
 
-## 📈 Radar de Tendências
+JARVIS is a modular software system built around Artificial Intelligence, automation and specialized components.
 
-* Monitora grupos de ofertas
-* Analisa produtos em alta
-* Detecta tendências automaticamente
-* Classifica produtos por relevância
+The project was originally created to automate digital content workflows, but evolved into a broader engineering laboratory for exploring:
 
----
+- AI orchestration
+- Agent-based architectures
+- Automated decision making
+- Content pipelines
+- Multimedia processing
+- API integrations
+- Data analysis
+- State management
+- Quality control
+- Automated publishing
+- System monitoring
 
-## 🎬 Gerador de Vídeos
+The core idea is simple:
 
-* Cria roteiros automaticamente
-* Divide cenas
-* Gera prompts para IA
-* Integração com modelos de geração de vídeo
-* Narração automática
-* Legendas
-* Música de fundo
-
----
-
-## 🛍 Produtos
-
-* Busca produtos
-* Organiza catálogo
-* Gera links de afiliado
-* Analisa potencial de venda
+«Turn a complex multi-step workflow into an orchestrated software pipeline capable of making decisions, executing tasks and recovering from failures.»
 
 ---
 
-## 🧠 Inteligência Artificial
+🏗️ System Architecture
 
-* Geração automática de textos
-* Criação de títulos
-* Geração de descrições
-* Copywriting
-* CTA automáticos
+At a high level, JARVIS is organized around orchestration, specialized agents, processing engines, integrations and state.
 
----
-
-## 📱 Redes Sociais
-
-Preparado para integração com:
-
-* TikTok
-* Instagram
-* YouTube Shorts
-* Facebook Reels
-* Kwai
-
----
-
-## 🤖 Agentes Inteligentes
-
-O projeto foi dividido em agentes especializados.
-
-Exemplo:
-
-```
-Jarvis
-
-├── Radar
-├── Copywriter
-├── Editor
-├── Video Generator
-├── Narrator
-├── Product Analyzer
-├── Trend Analyzer
-├── Scheduler
-└── Publisher
-```
-
-Cada agente possui uma responsabilidade específica, tornando o sistema modular e escalável.
+                         ┌──────────────────────┐
+                         │      JARVIS CORE     │
+                         │     ORCHESTRATION    │
+                         └──────────┬───────────┘
+                                    │
+             ┌──────────────────────┼──────────────────────┐
+             │                      │                      │
+             ▼                      ▼                      ▼
+      ┌─────────────┐       ┌─────────────┐       ┌─────────────┐
+      │ Intelligence│       │ Production  │       │ Operations  │
+      ├─────────────┤       ├─────────────┤       ├─────────────┤
+      │ Decision    │       │ Content     │       │ Health      │
+      │ Context     │       │ Audio       │       │ Publishing  │
+      │ Memory      │       │ Video       │       │ Monitoring  │
+      │ Strategy    │       │ Quality     │       │ State       │
+      └─────────────┘       └─────────────┘       └─────────────┘
+             │                      │                      │
+             └──────────────────────┼──────────────────────┘
+                                    │
+                                    ▼
+                         ┌──────────────────────┐
+                         │ External Services &  │
+                         │       APIs           │
+                         └──────────────────────┘
 
 ---
 
-# 📂 Estrutura do Projeto
+🤖 Agent-Based Architecture
 
-```
-Jarvis/
+One of the main characteristics of JARVIS is the separation of responsibilities into specialized components.
+
+🧠 Intelligence
+
+- "decision_engine.py"
+- "context_engine.py"
+- "memory_agent.py"
+- "strategy.py"
+- "scoring.py"
+
+Responsible for context, decisions, strategy, memory and evaluation.
+
+📦 Product Intelligence
+
+- "product_agent.py"
+- "product_hunter.py"
+- "product_classifier.py"
+- "product_cleaner.py"
+
+Responsible for product discovery, organization and analysis.
+
+🎬 Content & Creative Production
+
+- "content_planner.py"
+- "hook_builder.py"
+- "scene_prompt_builder.py"
+- "creative_asset_generator_agent.py"
+- "narration_script_builder.py"
+
+Responsible for transforming ideas and products into structured content.
+
+🎧 Audio & Narration
+
+- "audio_collector_agent.py"
+- "audio_selector_agent.py"
+- "audio_autopilot_agent.py"
+- "narrated_video_agent.py"
+- "tts_edge.py"
+
+Responsible for audio selection, narration and voice generation.
+
+🎞️ Video Processing
+
+- "editing_brain.py"
+- "product_video_editor.py"
+- "product_video_renderer.py"
+- "local_video_renderer.py"
+- "ia_scene_generator.py"
+
+Responsible for video composition, rendering and multimedia processing.
+
+🛡️ Quality & Supervision
+
+- "auditor.py"
+- "quality_gate.py"
+- "supervisor.py"
+- "supervisor_agent.py"
+- "health_check.py"
+- "health_check_agent.py"
+
+Responsible for validation, quality control, supervision and system health.
+
+📊 Performance & Analytics
+
+- "performance_agent.py"
+- "analytics" components
+- scoring and state management modules
+
+Designed to support data-driven decisions and continuous optimization.
+
+---
+
+🔄 End-to-End Pipeline
+
+A simplified representation of the production workflow:
+
+┌───────────────────┐
+│ Trend / Discovery │
+└─────────┬─────────┘
+          ↓
+┌───────────────────┐
+│ Product Analysis  │
+└─────────┬─────────┘
+          ↓
+┌───────────────────┐
+│ Content Planning  │
+└─────────┬─────────┘
+          ↓
+┌───────────────────┐
+│ Script / Copy     │
+└─────────┬─────────┘
+          ↓
+┌───────────────────┐
+│ Scene Generation  │
+└─────────┬─────────┘
+          ↓
+┌───────────────────┐
+│ Audio / Narration │
+└─────────┬─────────┘
+          ↓
+┌───────────────────┐
+│ Video Editing     │
+└─────────┬─────────┘
+          ↓
+┌───────────────────┐
+│ Quality Gate      │
+└─────────┬─────────┘
+          ↓
+┌───────────────────┐
+│ Publishing        │
+└─────────┬─────────┘
+          ↓
+┌───────────────────┐
+│ Metrics / Feedback│
+└───────────────────┘
+
+The feedback layer can then be used to improve future decisions and production strategies.
+
+---
+
+⚙️ Core Capabilities
+
+📡 Discovery & Radar
+
+The system contains components for discovering products, trends and content opportunities.
+
+Capabilities include:
+
+- Product discovery
+- Trend monitoring
+- Product classification
+- Product scoring
+- Catalog organization
+- Telegram-based radar workflows
+
+---
+
+🧠 AI & Content Generation
+
+JARVIS integrates AI-powered components for:
+
+- Text generation
+- Copywriting
+- Titles
+- Descriptions
+- Calls to action
+- Scene prompts
+- Content planning
+- Creative asset generation
+
+---
+
+🎬 Automated Video Production
+
+The production pipeline contains components for:
+
+- Script generation
+- Scene planning
+- Audio selection
+- Text-to-speech
+- Video generation
+- Editing
+- Rendering
+- Subtitle generation
+- Quality validation
+
+---
+
+📱 Distribution & Publishing
+
+The project contains integrations and workflows targeting multiple digital platforms, including:
+
+- TikTok
+- Instagram
+- YouTube
+- Facebook
+- Telegram
+- Affiliate platforms
+
+Platform integrations are designed around the APIs and automation mechanisms available for each service.
+
+---
+
+🔌 Integrations
+
+The repository contains providers and integrations for multiple external services, including AI, video, social and communication platforms.
+
+Examples include:
+
+- OpenAI
+- Telegram
+- TikTok
+- Instagram / Meta
+- YouTube
+- Shopee
+- Amazon
+- Mercado Livre
+- AI voice services
+- AI video services
+
+«Availability and behavior of individual integrations depend on the respective platform APIs, credentials and policies.»
+
+---
+
+🛠️ Technology Stack
+
+Area| Technologies
+Language| Python
+AI| Generative AI / LLMs
+APIs| REST APIs
+Video| FFmpeg / OpenCV
+Data| SQLite / PostgreSQL
+Automation| Playwright
+Infrastructure| Docker
+Messaging| Telegram
+Version Control| Git / GitHub
+Voice| TTS providers
+Media| Audio / Video processing
+
+---
+
+📁 Project Structure
+
+The project is intentionally modular.
+
+projeto-jarvis-completo/
 │
-├── agents/
-├── integrations/
-├── prompts/
-├── workflows/
-├── services/
-├── database/
-├── utils/
-├── configs/
-├── assets/
-├── logs/
-├── tests/
+├── Agents & Intelligence
+│   ├── decision_engine.py
+│   ├── context_engine.py
+│   ├── memory_agent.py
+│   ├── supervisor_agent.py
+│   └── performance_agent.py
 │
-├── app.py
-├── config.py
-├── requirements.txt
-└── README.md
-```
+├── Content & Production
+│   ├── content_planner.py
+│   ├── editing_brain.py
+│   ├── narration_script_builder.py
+│   ├── product_video_editor.py
+│   └── product_video_renderer.py
+│
+├── Assets & Media
+│   ├── asset_agent.py
+│   ├── asset_collector_agent.py
+│   ├── asset_hunter_agent.py
+│   └── creative_asset_generator_agent.py
+│
+├── Products
+│   ├── product_agent.py
+│   ├── product_hunter.py
+│   ├── product_classifier.py
+│   └── product_cleaner.py
+│
+├── Providers
+│   ├── base_provider.py
+│   ├── fal_provider.py
+│   ├── grok_provider.py
+│   ├── heygen_provider.py
+│   └── pixverse_provider.py
+│
+├── Publishing
+│   ├── meta_uploader.py
+│   ├── telegram_poster.py
+│   ├── telegram_radar.py
+│   └── publish_guard.py
+│
+├── Quality & Monitoring
+│   ├── auditor.py
+│   ├── quality_gate.py
+│   ├── health_check.py
+│   └── health_check_agent.py
+│
+├── Orchestration
+│   ├── orchestrator.py
+│   ├── autonomous_orchestrator.py
+│   ├── daemon_maestro.py
+│   └── executor_main.py
+│
+└── Configuration & State
+    ├── providers_config.json
+    ├── production_state.py
+    ├── state_manager.py
+    └── requirements.txt
 
 ---
 
-# ⚙ Tecnologias
+🧩 Engineering Highlights
 
-* Python
-* IA Generativa
-* APIs REST
-* FFmpeg
-* OpenCV
-* SQLite
-* PostgreSQL (opcional)
-* Docker
-* Git
+This project serves as a practical laboratory for applying software engineering concepts such as:
 
----
+- Modular architecture
+- Separation of responsibilities
+- Agent-based system design
+- Workflow orchestration
+- API integration
+- State management
+- Error handling
+- Quality gates
+- Automated pipelines
+- Multimedia processing
+- AI integration
+- Data-driven decision making
+- System monitoring
+- Process automation
 
-# 🔌 Integrações
-
-O Jarvis pode trabalhar com diversas plataformas:
-
-* OpenAI
-* Telegram
-* TikTok
-* YouTube
-* Instagram
-* Shopee
-* Amazon
-* Mercado Livre
-* APIs de Voz
-* APIs de Vídeo
+The project is continuously evolving as new architectural ideas and technologies are tested.
 
 ---
 
-# 🔄 Fluxo de Funcionamento
+🚀 Installation
 
-```
-Radar de Tendências
-        │
-        ▼
-Análise de Produto
-        │
-        ▼
-Criação do Roteiro
-        │
-        ▼
-Geração das Cenas
-        │
-        ▼
-Narração
-        │
-        ▼
-Legendas
-        │
-        ▼
-Renderização
-        │
-        ▼
-Publicação
-```
+«Development status: JARVIS is an actively evolving personal project. Configuration and dependencies may change as the architecture evolves.»
 
----
+Clone the repository:
 
-# 🛠 Instalação
+git clone https://github.com/z-scriptz/projeto-jarvis-completo.git
+cd projeto-jarvis-completo
 
-Clone o projeto
+Create a virtual environment:
 
-```bash
-git clone https://github.com/SEU_USUARIO/Jarvis.git
-```
-
-Entre na pasta
-
-```bash
-cd Jarvis
-```
-
-Crie um ambiente virtual
-
-```bash
-python -m venv venv
-```
-
-Ative o ambiente
+python -m venv .venv
 
 Windows
 
-```bash
-venv\Scripts\activate
-```
+.venv\Scripts\activate
 
-Linux/Mac
+Linux / macOS
 
-```bash
-source venv/bin/activate
-```
+source .venv/bin/activate
 
-Instale as dependências
+Install dependencies:
 
-```bash
 pip install -r requirements.txt
-```
 
-Execute
-
-```bash
-python app.py
-```
+Configure the required environment variables and API credentials according to the providers being used.
 
 ---
 
-# 📌 Objetivos
+🔐 Security
 
-* Automatizar criação de vídeos
-* Encontrar produtos em alta
-* Criar conteúdo automaticamente
-* Economizar tempo
-* Escalar produção de conteúdo
-* Auxiliar afiliados digitais
+Never commit:
 
----
+- API keys
+- Passwords
+- Access tokens
+- Session cookies
+- Private credentials
+- Production secrets
 
-# 📈 Roadmap
+Use environment variables or a local ".env" configuration.
 
-* [ ] Dashboard Web
-* [ ] Banco de memória
-* [ ] Multi-agentes
-* [ ] Agendamento de publicações
-* [ ] IA para análise de concorrência
-* [ ] Painel administrativo
-* [ ] Monitoramento em tempo real
-* [ ] Sistema de métricas
-* [ ] API pública
-* [ ] Aplicativo Mobile
+Example:
+
+OPENAI_API_KEY=your_key_here
+TELEGRAM_BOT_TOKEN=your_token_here
+
+«Never commit the real values to Git.»
 
 ---
 
-# 🤝 Contribuição
+🗺️ Roadmap
 
-Contribuições são bem-vindas.
+The architecture is continuously evolving.
 
-Caso queira colaborar:
+Potential future directions include:
 
-1. Faça um Fork
-2. Crie uma Branch
-3. Faça suas alterações
-4. Envie um Pull Request
+- [ ] Web dashboard
+- [ ] Centralized memory system
+- [ ] Expanded multi-agent orchestration
+- [ ] Advanced analytics
+- [ ] Real-time monitoring
+- [ ] Improved autonomous decision making
+- [ ] Public API
+- [ ] Improved observability
+- [ ] Automated testing
+- [ ] More robust deployment infrastructure
 
 ---
 
-# 📄 Licença
+⚠️ Project Status
 
-Este projeto está sob a licença MIT.
+Active Development
+
+JARVIS is primarily a personal engineering and experimentation project.
+
+Some components may be experimental, incomplete or tightly coupled to specific environments and services.
+
+The architecture is continuously refactored as new capabilities are developed and tested.
 
 ---
 
-# 👨‍💻 Autor
+⚖️ Responsible Use
 
-Desenvolvido por **Lucas**.
+This project is intended for educational, experimental and software engineering purposes.
 
-Projeto criado com foco em automação inteligente para Marketing Digital, Inteligência Artificial e criação de conteúdo automatizado.
+External platform integrations must be used according to the respective platform's Terms of Service, API policies and applicable laws.
+
+---
+
+👨‍💻 Author
+
+André Felipe de Aquino Oliveira
+
+Software Engineering Student · Developer · AI & Automation
+
+📍 Goiânia, Brazil
+
+- GitHub: https://github.com/z-scriptz
+- LinkedIn: https://www.linkedin.com/in/andré-felipe
+
+---
+
+⭐ If you find the project interesting, feel free to explore the code and follow its development.
