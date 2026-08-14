@@ -4,11 +4,11 @@ Autonomous AI-Powered Content Production & Automation System
 
 «A modular AI-driven system designed to orchestrate content discovery, planning, generation, multimedia production, quality control, analytics and automated distribution.»
 
-""Python" (https://img.shields.io/badge/Python-3.x-3776AB?style=for-the-badge&logo=python&logoColor=white)" (https://www.python.org/)
-""AI" (https://img.shields.io/badge/AI-Generative%20AI-8A2BE2?style=for-the-badge)" (#)
-""Automation" (https://img.shields.io/badge/Automation-FF6B35?style=for-the-badge)" (#)
-""FFmpeg" (https://img.shields.io/badge/FFmpeg-007808?style=for-the-badge&logo=ffmpeg&logoColor=white)" (https://ffmpeg.org/)
-""Git" (https://img.shields.io/badge/Git-F05032?style=for-the-badge&logo=git&logoColor=white)" (https://git-scm.com/)
+[![Python](https://img.shields.io/badge/Python-3.x-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![AI](https://img.shields.io/badge/AI-Generative%20AI-8A2BE2?style=for-the-badge)](#)
+[![Automation](https://img.shields.io/badge/Automation-FF6B35?style=for-the-badge)](#)
+[![FFmpeg](https://img.shields.io/badge/FFmpeg-007808?style=for-the-badge&logo=ffmpeg&logoColor=white)](https://ffmpeg.org/)
+[![Git](https://img.shields.io/badge/Git-F05032?style=for-the-badge&logo=git&logoColor=white)](https://git-scm.com/)
 
 ---
 
