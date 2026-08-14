@@ -1,14 +1,3 @@
-Bora! 🔥 Agora eu conferi o estado atual do repositório no GitHub, inclusive a árvore real de arquivos e o README publicado. E vou te passar a versão certinha, sem inventar estrutura que não existe. O repositório realmente tem os módulos de orquestração, agentes, produção, providers, publicação, qualidade e estado que estamos documentando. 
-
-E tem uma mudança importante: em vez de criar uma imagem externa para o diagrama, vamos usar Mermaid. O GitHub renderiza Mermaid nativamente, então o diagrama fica dentro do README, bonito e fácil de manter.
-
-
----
-
-🚀 README FINAL — JARVIS
-
-Apaga o README inteiro atual e cola exatamente este conteúdo:
-
 # 🤖 JARVIS AI
 
 ### Autonomous AI-Powered Content Production & Automation System
