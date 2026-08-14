@@ -1,14 +1,8 @@
 # 🤖 JARVIS AI
 
-### Autonomous AI-Powered Content Production & Automation System
+### Modular AI-powered automation and content production system
 
-> A modular AI-driven system designed to orchestrate content discovery, planning, generation, multimedia production, quality control, analytics and automated distribution.
-
-[![Python](https://img.shields.io/badge/Python-3.x-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
-[![AI](https://img.shields.io/badge/AI-Generative%20AI-8A2BE2?style=for-the-badge)](#)
-[![Automation](https://img.shields.io/badge/Automation-FF6B35?style=for-the-badge)](#)
-[![FFmpeg](https://img.shields.io/badge/FFmpeg-007808?style=for-the-badge&logo=ffmpeg&logoColor=white)](https://ffmpeg.org/)
-[![Git](https://img.shields.io/badge/Git-F05032?style=for-the-badge&logo=git&logoColor=white)](https://git-scm.com/)
+> A software system designed to orchestrate intelligent decision-making, content workflows, multimedia production, quality control, state management and automated distribution.
 
 ---
 
@@ -16,29 +10,67 @@
 
 **JARVIS** is a modular software system built around Artificial Intelligence, automation and specialized components.
 
-The project was originally created to automate digital content workflows, but evolved into a broader engineering laboratory for exploring:
+The project started as an attempt to automate digital content workflows and gradually evolved into a broader engineering laboratory for exploring:
 
-- AI orchestration
-- Agent-based architectures
-- Automated decision making
-- Content pipelines
-- Multimedia processing
-- API integrations
-- Data analysis
-- State management
-- Quality control
-- Automated publishing
-- System monitoring
+- Artificial Intelligence and LLM integrations
+- Agent-based software architecture
+- Workflow orchestration
+- Automated decision-making
+- Context and state management
+- Product intelligence
+- Content planning and generation
+- Audio and video processing
+- Automated quality control
+- Platform integrations
+- Data-driven optimization
+- System supervision and health checks
+- Process automation
 
-The core idea is simple:
+The central idea is:
 
-> **Turn a complex multi-step workflow into an orchestrated software pipeline capable of making decisions, executing tasks and recovering from failures.**
+> **Transform complex multi-step workflows into an orchestrated software system capable of making decisions, executing specialized tasks, validating results and recovering from failures.**
+
+JARVIS is an actively evolving personal engineering project. Its architecture changes as new components, workflows and experiments are developed.
 
 ---
 
-## 🏗️ System Architecture
+## 🎯 Project Goals
 
-JARVIS is organized around a central orchestration layer that coordinates specialized components for intelligence, production and operations.
+JARVIS is designed around a few fundamental goals:
+
+### 1. Orchestration
+
+Coordinate multiple specialized components through a central execution flow.
+
+### 2. Intelligence
+
+Use AI-powered components to analyze context, products, content and possible actions.
+
+### 3. Automation
+
+Reduce repetitive manual work by connecting independent stages into automated pipelines.
+
+### 4. Production
+
+Transform structured information into finished multimedia content.
+
+### 5. Quality
+
+Validate generated outputs before they move to later stages of the pipeline.
+
+### 6. State
+
+Maintain information about execution state, production workflows and system operations.
+
+### 7. Optimization
+
+Use metrics, scoring and feedback to improve future decisions and workflows.
+
+---
+
+# 🏗️ System Architecture
+
+At a high level, JARVIS is organized around a central orchestration layer.
 
 ```mermaid
 flowchart TD
@@ -51,164 +83,221 @@ flowchart TD
 
     OPS["Operations<br/>Health · Publishing · Monitoring · State"]
 
-    API["External Services & APIs"]
+    EXT["External Services<br/>APIs · AI · Platforms"]
 
     CORE --> INT
     CORE --> PROD
     CORE --> OPS
 
-    INT --> API
-    PROD --> API
-    OPS --> API
+    INT --> EXT
+    PROD --> EXT
+    OPS --> EXT
 ```
+
+The architecture separates responsibilities into specialized domains instead of concentrating the entire workflow inside a single monolithic component.
 
 ---
 
-🤖 Agent-Based Architecture
+# 🤖 Agent & Component Architecture
 
-One of the main characteristics of JARVIS is the separation of responsibilities into specialized components.
+JARVIS contains multiple specialized agents and services.
 
-🧠 Intelligence
+The repository currently includes components dedicated to intelligence, products, assets, content, audio, video, supervision, publishing, providers and system state.
 
-Core decision and reasoning components:
+---
 
-decision_engine.py
-
-context_engine.py
-
-memory_agent.py
-
-strategy.py
-
-scoring.py
-
+## 🧠 Intelligence & Decision Layer
 
 Responsible for context, decisions, strategy, memory and evaluation.
 
+Representative components:
+
+- `decision_engine.py`
+- `context_engine.py`
+- `memory_agent.py`
+- `strategy.py`
+- `scoring.py`
+- `commander.py`
+
+This layer provides the reasoning and decision-oriented foundation used by other parts of the system.
 
 ---
 
-📦 Product Intelligence
+## 📦 Product Intelligence
 
-Product discovery and analysis:
+Responsible for discovering, classifying, cleaning and analyzing products.
 
-product_agent.py
+Representative components:
 
-product_hunter.py
+- `product_agent.py`
+- `product_hunter.py`
+- `product_classifier.py`
+- `product_cleaner.py`
+- `shopee_affiliate.py`
 
-product_classifier.py
+Typical responsibilities include:
 
-product_cleaner.py
-
-
-Responsible for product discovery, organization, classification and analysis.
-
-
----
-
-🎬 Content & Creative Production
-
-Content planning and creative generation:
-
-content_planner.py
-
-hook_builder.py
-
-scene_prompt_builder.py
-
-creative_asset_generator_agent.py
-
-narration_script_builder.py
-
-
-Responsible for transforming ideas and products into structured content.
-
+- Product discovery
+- Product classification
+- Data normalization
+- Product scoring
+- Catalog organization
+- Affiliate workflow integration
 
 ---
 
-🎧 Audio & Narration
+## 📡 Discovery & Radar
 
-Audio and voice processing:
+JARVIS contains components designed to monitor information sources and identify content opportunities.
 
-audio_collector_agent.py
+Examples include:
 
-audio_selector_agent.py
+- `telegram_radar.py`
+- `telegram_repurpose_hunter.py`
+- `product_hunter.py`
 
-audio_autopilot_agent.py
-
-narrated_video_agent.py
-
-tts_edge.py
-
-
-Responsible for audio selection, narration and voice generation.
-
+These components can feed information into later decision and production stages.
 
 ---
 
-🎞️ Video Processing
+# ✍️ Content Intelligence
 
-Video composition and rendering:
+The content layer transforms structured information into content plans and creative instructions.
 
-editing_brain.py
+Representative components:
 
-product_video_editor.py
+- `content_planner.py`
+- `hook_builder.py`
+- `descricao_builder.py`
+- `copy_adapter.py`
+- `narration_script_builder.py`
+- `scene_prompt_builder.py`
 
-product_video_renderer.py
+Responsibilities include:
 
-local_video_renderer.py
-
-ia_scene_generator.py
-
-
-Responsible for video composition, rendering and multimedia processing.
-
-
----
-
-🛡️ Quality & Supervision
-
-Validation and system health:
-
-auditor.py
-
-quality_gate.py
-
-supervisor.py
-
-supervisor_agent.py
-
-health_check.py
-
-health_check_agent.py
-
-
-Responsible for validation, quality control, supervision and system health.
-
+- Content planning
+- Hooks
+- Copy generation
+- Descriptions
+- Calls to action
+- Narration scripts
+- Scene planning
+- Creative prompts
 
 ---
 
-📊 Performance & Analytics
+# 🎨 Asset Intelligence
 
-Performance-oriented components include:
+The asset layer handles the discovery, collection, routing and generation of visual resources.
 
-performance_agent.py
+Representative components:
 
-scoring.py
+- `asset_agent.py`
+- `asset_collector_agent.py`
+- `asset_hunter_agent.py`
+- `asset_autopilot_agent.py`
+- `asset_router.py`
+- `creative_asset_generator_agent.py`
+- `image_provider.py`
 
-state management components
-
-analytics workflows
-
-
-Designed to support data-driven decisions and continuous optimization.
-
+The goal is to make assets available to downstream production stages without requiring every workflow to manually handle them.
 
 ---
 
-🔄 End-to-End Production Pipeline
+# 🎧 Audio & Narration
 
-A simplified representation of the production workflow:
+JARVIS contains dedicated components for audio selection, narration and voice generation.
+
+Representative components:
+
+- `audio_collector_agent.py`
+- `audio_selector_agent.py`
+- `audio_autopilot_agent.py`
+- `narrated_video_agent.py`
+- `tts_edge.py`
+
+The audio pipeline can handle tasks such as:
+
+- Audio discovery
+- Audio selection
+- Text-to-speech
+- Narration generation
+- Audio integration into production workflows
+
+---
+
+# 🎬 Video Production
+
+The video production layer is responsible for transforming scripts, assets and audio into finished multimedia outputs.
+
+Representative components:
+
+- `editing_brain.py`
+- `product_video_editor.py`
+- `product_video_renderer.py`
+- `local_video_renderer.py`
+- `ia_scene_generator.py`
+- `produzir_video.py`
+
+The production workflow can involve:
+
+- Scene planning
+- Asset selection
+- Narration
+- Audio integration
+- Editing decisions
+- Video composition
+- Rendering
+- Subtitle/caption processing
+- Output validation
+
+---
+
+# 🛡️ Quality Control & Supervision
+
+Quality is treated as a dedicated stage rather than an afterthought.
+
+Representative components:
+
+- `auditor.py`
+- `quality_gate.py`
+- `supervisor.py`
+- `supervisor_agent.py`
+- `health_check.py`
+- `health_check_agent.py`
+
+These components support:
+
+- Output validation
+- Quality gates
+- Health checks
+- Workflow supervision
+- Error detection
+- Execution monitoring
+
+The goal is to prevent invalid or low-quality outputs from automatically progressing through the pipeline.
+
+---
+
+# 📊 Performance, Scoring & Feedback
+
+JARVIS includes components designed to support evaluation and continuous optimization.
+
+Examples:
+
+- `performance_agent.py`
+- `scoring.py`
+- State management components
+- Production state
+- Analytics-related workflows
+
+This layer allows the system to use execution information and performance data as inputs for future decisions.
+
+---
+
+# 🔄 End-to-End Production Pipeline
+
+A simplified representation of the workflow:
 
 ```mermaid
 flowchart LR
@@ -216,13 +305,13 @@ flowchart LR
     A["Discovery"]
     B["Product Analysis"]
     C["Content Planning"]
-    D["Script / Copy"]
+    D["Script and Copy"]
     E["Scene Generation"]
-    F["Audio / Narration"]
+    F["Audio and Narration"]
     G["Video Editing"]
     H["Quality Gate"]
     I["Publishing"]
-    J["Metrics / Feedback"]
+    J["Metrics and Feedback"]
 
     A --> B
     B --> C
@@ -238,187 +327,274 @@ flowchart LR
     J -.-> B
 ```
 
----
+The pipeline is intentionally modular.
 
-⚙️ Core Capabilities
-
-📡 Discovery & Radar
-
-The system contains components for discovering products, trends and content opportunities.
-
-Capabilities include:
-
-Product discovery
-
-Trend monitoring
-
-Product classification
-
-Product scoring
-
-Catalog organization
-
-Telegram-based radar workflows
-
-
+A stage can be replaced, improved or expanded without requiring the entire system to be rewritten.
 
 ---
 
-🧠 AI & Content Generation
+# ⚙️ Core Capabilities
 
-JARVIS integrates AI-powered components for:
+## 📡 Discovery
 
-Text generation
+Components for identifying products, content opportunities and external information.
 
-Copywriting
+Includes:
 
-Titles
-
-Descriptions
-
-Calls to action
-
-Scene prompts
-
-Content planning
-
-Creative asset generation
-
-
+- Product discovery
+- Product hunting
+- Telegram radar workflows
+- Content opportunity discovery
+- Product classification
+- Product scoring
 
 ---
 
-🎬 Automated Video Production
+## 🧠 AI-Powered Content
 
-The production pipeline contains components for:
+JARVIS can integrate AI components into multiple stages of the workflow.
 
-Script generation
+Examples include:
 
-Scene planning
-
-Audio selection
-
-Text-to-speech
-
-Video generation
-
-Editing
-
-Rendering
-
-Subtitle generation
-
-Quality validation
-
-
+- Text generation
+- Copywriting
+- Content planning
+- Hooks
+- Descriptions
+- Calls to action
+- Narration scripts
+- Scene prompts
+- Creative asset generation
 
 ---
 
-📱 Distribution & Publishing
+## 🎬 Multimedia Production
 
-The project contains workflows and integrations targeting multiple digital platforms.
+The system contains dedicated components for automated multimedia workflows.
 
-Current repository components include integrations for services such as:
+Examples:
 
-TikTok
-
-Instagram / Meta
-
-YouTube
-
-Telegram
-
-Affiliate platforms
-
-
-Platform behavior depends on the APIs, credentials and policies of each service.
-
+- Audio processing
+- Text-to-speech
+- Narration
+- Scene generation
+- Video editing
+- Video rendering
+- Subtitle/caption processing
+- Quality validation
 
 ---
 
-🔌 Integrations & Providers
+## 🔌 External Integrations
 
-The repository contains provider modules for external AI, media and platform services.
+JARVIS is designed around provider-based integrations.
 
-Examples represented in the codebase include:
+The repository contains components for external services and platforms including:
 
-OpenAI
+- OpenAI
+- Telegram
+- Meta
+- TikTok
+- YouTube
+- Shopee
+- Amazon
+- Mercado Livre
+- AI voice providers
+- AI video providers
 
-Telegram
-
-Meta
-
-TikTok
-
-YouTube
-
-Shopee
-
-Amazon
-
-Mercado Livre
-
-AI voice services
-
-AI video services
-
-
-Provider availability depends on credentials, API access and the current implementation.
-
+Provider availability depends on credentials, API access, platform policies and the current implementation.
 
 ---
 
-🛠️ Technology Stack
+# 🧩 Provider Architecture
 
-Area	Technologies
+External services are isolated through provider-oriented components.
 
-Language	Python
-AI	Generative AI / LLMs
-APIs	REST APIs
-Video	FFmpeg / OpenCV
-Data	SQLite / PostgreSQL
-Automation	Playwright
-Infrastructure	Docker
-Messaging	Telegram
-Version Control	Git / GitHub
-Voice	TTS providers
-Media	Audio / Video processing
+Examples currently present in the repository include:
 
+- `base_provider.py`
+- `fal_provider.py`
+- `grok_provider.py`
+- `heygen_provider.py`
+- `pixverse_provider.py`
+- `manual_provider.py`
 
+This approach makes it possible to introduce or replace external providers without tightly coupling the entire system to a single service.
 
 ---
 
-📁 Project Structure
+# 📤 Publishing & Distribution
 
-The repository follows a modular architecture.
+JARVIS contains components for automated distribution workflows.
 
+Examples include:
+
+- `meta_uploader.py`
+- `telegram_poster.py`
+- `telegram_radar.py`
+- `publish_guard.py`
+- `publish_pack_builder.py`
+
+Platform-specific automation is intentionally isolated from the core production pipeline.
+
+External platform behavior depends on:
+
+- API availability
+- Authentication
+- Account permissions
+- Platform policies
+- Rate limits
+- Current implementation
+
+---
+
+# 🧠 State Management
+
+State is an important part of the architecture.
+
+Representative components include:
+
+- `production_state.py`
+- `state_manager.py`
+- `state.json`
+- `supervisor_state.json`
+
+State management allows workflows to preserve information between execution stages and helps the system coordinate long-running or multi-step processes.
+
+---
+
+# 🎛️ Orchestration
+
+The orchestration layer coordinates execution across the different components.
+
+Representative components include:
+
+- `orchestrator.py`
+- `autonomous_orchestrator.py`
+- `daemon_maestro.py`
+- `executor_main.py`
+- `engine.py`
+- `main.py`
+
+The architecture is designed so that orchestration is separated from individual capabilities.
+
+This allows specialized components to focus on their own responsibilities while the orchestration layer coordinates the overall workflow.
+
+---
+
+# 🏥 Monitoring & Recovery
+
+Reliability is an important part of the project.
+
+JARVIS includes components for:
+
+- Health checks
+- Supervision
+- State tracking
+- Quality gates
+- Error handling
+- Workflow validation
+- Execution monitoring
+
+Representative modules:
+
+```text
+health_check.py
+health_check_agent.py
+supervisor.py
+supervisor_agent.py
+quality_gate.py
+auditor.py
+state_manager.py
+```
+
+The long-term goal is to make workflows increasingly capable of detecting failures and recovering without unnecessary manual intervention.
+
+---
+
+# 🛠️ Technology Stack
+
+| Area | Technologies |
+|---|---|
+| Primary Language | Python |
+| Artificial Intelligence | LLMs, Generative AI, AI APIs |
+| APIs | REST APIs, External Service APIs |
+| Automation | Playwright, Custom Automation |
+| Multimedia | FFmpeg, Video/Audio Processing |
+| Voice | Text-to-Speech Providers |
+| Data | SQLite, State Files, Structured Data |
+| Infrastructure | Linux, Docker |
+| Messaging | Telegram |
+| Version Control | Git, GitHub |
+| Web Automation | Playwright |
+| External Providers | AI, Media and Platform APIs |
+
+The technology stack evolves together with the architecture.
+
+---
+
+# 📁 Project Structure
+
+The repository is organized around functional domains.
+
+A simplified view:
+
+```text
 projeto-jarvis-completo/
 │
-├── Agents & Intelligence
+├── Intelligence
 │   ├── decision_engine.py
 │   ├── context_engine.py
 │   ├── memory_agent.py
-│   ├── supervisor_agent.py
-│   └── performance_agent.py
-│
-├── Content & Production
-│   ├── content_planner.py
-│   ├── editing_brain.py
-│   ├── narration_script_builder.py
-│   ├── product_video_editor.py
-│   └── product_video_renderer.py
-│
-├── Assets & Media
-│   ├── asset_agent.py
-│   ├── asset_collector_agent.py
-│   ├── asset_hunter_agent.py
-│   └── creative_asset_generator_agent.py
+│   ├── strategy.py
+│   └── scoring.py
 │
 ├── Products
 │   ├── product_agent.py
 │   ├── product_hunter.py
 │   ├── product_classifier.py
 │   └── product_cleaner.py
+│
+├── Assets
+│   ├── asset_agent.py
+│   ├── asset_collector_agent.py
+│   ├── asset_hunter_agent.py
+│   ├── asset_router.py
+│   └── creative_asset_generator_agent.py
+│
+├── Content
+│   ├── content_planner.py
+│   ├── hook_builder.py
+│   ├── copy_adapter.py
+│   ├── descricao_builder.py
+│   ├── narration_script_builder.py
+│   └── scene_prompt_builder.py
+│
+├── Audio
+│   ├── audio_collector_agent.py
+│   ├── audio_selector_agent.py
+│   ├── audio_autopilot_agent.py
+│   ├── narrated_video_agent.py
+│   └── tts_edge.py
+│
+├── Video
+│   ├── editing_brain.py
+│   ├── product_video_editor.py
+│   ├── product_video_renderer.py
+│   ├── local_video_renderer.py
+│   └── ia_scene_generator.py
+│
+├── Quality
+│   ├── auditor.py
+│   ├── quality_gate.py
+│   ├── supervisor.py
+│   └── health_check.py
+│
+├── Orchestration
+│   ├── orchestrator.py
+│   ├── autonomous_orchestrator.py
+│   ├── daemon_maestro.py
+│   └── executor_main.py
 │
 ├── Providers
 │   ├── base_provider.py
@@ -430,199 +606,319 @@ projeto-jarvis-completo/
 ├── Publishing
 │   ├── meta_uploader.py
 │   ├── telegram_poster.py
-│   ├── telegram_radar.py
-│   └── publish_guard.py
+│   ├── publish_guard.py
+│   └── publish_pack_builder.py
 │
-├── Quality & Monitoring
-│   ├── auditor.py
-│   ├── quality_gate.py
-│   ├── health_check.py
-│   └── health_check_agent.py
+├── State
+│   ├── production_state.py
+│   └── state_manager.py
 │
-├── Orchestration
-│   ├── orchestrator.py
-│   ├── autonomous_orchestrator.py
-│   ├── daemon_maestro.py
-│   └── executor_main.py
+├── Configuration
+│   └── providers_config.json
 │
-└── Configuration & State
-    ├── providers_config.json
-    ├── production_state.py
-    ├── state_manager.py
-    └── requirements.txt
+├── main.py
+├── requirements.txt
+└── README.md
+```
 
+This is a conceptual representation of the architecture, not a complete listing of every file in the repository.
 
 ---
 
-🧩 Engineering Highlights
+# 🧪 Engineering Concepts
 
-This project serves as a practical engineering laboratory for applying concepts such as:
+JARVIS is primarily an engineering laboratory.
 
-Modular architecture
+The project provides practical experience with:
 
-Separation of responsibilities
+- Modular architecture
+- Separation of responsibilities
+- Agent-based design
+- Workflow orchestration
+- API integration
+- Provider abstraction
+- State management
+- Error handling
+- Quality gates
+- Process automation
+- Multimedia processing
+- AI integration
+- Data-driven decision making
+- System supervision
+- External service integration
 
-Agent-based system design
-
-Workflow orchestration
-
-API integration
-
-State management
-
-Error handling
-
-Quality gates
-
-Automated pipelines
-
-Multimedia processing
-
-AI integration
-
-Data-driven decision making
-
-System monitoring
-
-Process automation
-
-
-The architecture is continuously evolving as new ideas, technologies and workflows are tested.
-
+The architecture is continuously refactored as new capabilities are developed.
 
 ---
 
-🚀 Installation
+# 🚀 Getting Started
 
-> Development status: JARVIS is an actively evolving personal project. Configuration and dependencies may change as the architecture evolves.
+> **Development status:** JARVIS is an actively evolving personal project. Dependencies, configuration and execution flows may change.
 
+## 1. Clone the repository
 
-
-Clone
-
+```bash
 git clone https://github.com/z-scriptz/projeto-jarvis-completo.git
 cd projeto-jarvis-completo
+```
 
-Create a virtual environment
+## 2. Create a virtual environment
 
+### Windows
+
+```bash
 python -m venv .venv
-
-Windows
-
 .venv\Scripts\activate
+```
 
-Linux / macOS
+### Linux / macOS
 
+```bash
+python3 -m venv .venv
 source .venv/bin/activate
+```
 
-Install dependencies
+## 3. Install dependencies
 
+```bash
 pip install -r requirements.txt
+```
 
-Configure the required environment variables and API credentials according to the providers being used.
+## 4. Configure external services
 
+Configure the credentials and environment variables required by the providers and workflows you intend to use.
+
+Do not commit real credentials.
+
+## 5. Run the appropriate entry point
+
+Because JARVIS contains multiple workflows and execution paths, the correct entry point depends on the component or pipeline being tested.
+
+The repository contains several execution-oriented modules, including:
+
+```text
+main.py
+engine.py
+executor_main.py
+orchestrator.py
+autonomous_orchestrator.py
+```
+
+Refer to the source code and configuration associated with the workflow you want to execute.
 
 ---
 
-🔐 Security
+# 🔐 Security
 
-Never commit:
+Never commit sensitive credentials to the repository.
 
-API keys
+This includes:
 
-Passwords
+- API keys
+- Access tokens
+- Passwords
+- Session cookies
+- Private credentials
+- Bot tokens
+- Production secrets
 
-Access tokens
-
-Session cookies
-
-Private credentials
-
-Production secrets
-
-
-Use environment variables or a local .env configuration.
+Use environment variables or local configuration.
 
 Example:
 
+```env
 OPENAI_API_KEY=your_key_here
 TELEGRAM_BOT_TOKEN=your_token_here
+```
 
-> Never commit real credentials to Git.
-
-
-
+> **Never commit real credentials to Git.**
 
 ---
 
-🗺️ Roadmap
+# ⚠️ External Services
 
-JARVIS is under continuous development.
+JARVIS integrates with external services whose behavior is outside the control of this project.
 
-Potential future directions include:
+External integrations may be affected by:
 
-[ ] Web dashboard
+- API changes
+- Authentication requirements
+- Rate limits
+- Service availability
+- Account permissions
+- Terms of Service
+- Platform policies
 
-[ ] Centralized memory system
-
-[ ] Expanded multi-agent orchestration
-
-[ ] Advanced analytics
-
-[ ] Real-time monitoring
-
-[ ] Improved autonomous decision making
-
-[ ] Public API
-
-[ ] Improved observability
-
-[ ] Automated testing
-
-[ ] More robust deployment infrastructure
-
-
+Users are responsible for using external services in accordance with their respective policies.
 
 ---
 
-⚠️ Project Status
+# 🧭 Design Principles
 
-Active Development
+The project follows several principles.
 
-JARVIS is primarily a personal engineering and experimentation project.
+### Modularity
 
-Some components may be experimental, incomplete or tightly coupled to specific environments and external services.
+Components should have clear responsibilities and remain replaceable whenever practical.
 
-The architecture is continuously refactored as new capabilities are developed and tested.
+### Separation of Concerns
 
+Decision-making, production, publishing, monitoring and state should not be unnecessarily coupled.
+
+### Provider Abstraction
+
+External services should be isolated behind provider-oriented interfaces whenever possible.
+
+### Validation Before Distribution
+
+Generated outputs should pass appropriate validation before reaching publishing stages.
+
+### State Awareness
+
+Long-running workflows need explicit state rather than relying exclusively on in-memory execution.
+
+### Continuous Improvement
+
+The architecture is expected to change as new requirements, failures and experiments reveal better solutions.
 
 ---
 
-⚖️ Responsible Use
+# 🗺️ Roadmap
 
-This project is intended for educational, experimental and software engineering purposes.
+JARVIS is continuously evolving.
 
-External platform integrations must be used according to the respective platform's Terms of Service, API policies and applicable laws.
+Possible future directions include:
 
+- [ ] More advanced multi-agent orchestration
+- [ ] Centralized memory architecture
+- [ ] More sophisticated decision systems
+- [ ] Advanced analytics
+- [ ] Expanded observability
+- [ ] Real-time monitoring
+- [ ] More robust automated testing
+- [ ] Improved deployment infrastructure
+- [ ] Public-facing API
+- [ ] Web-based management interface
+- [ ] Greater workflow autonomy
+- [ ] Improved recovery and fault tolerance
+
+The roadmap is intentionally flexible because JARVIS is an active research and engineering project rather than a finished commercial product.
 
 ---
 
-👨‍💻 Author
+# 📌 Project Status
 
-André Felipe de Aquino Oliveira
+### 🟢 Active Development
+
+JARVIS is a personal software engineering project under continuous development.
+
+The public repository represents a development snapshot of the system. The architecture may evolve significantly as new components, experiments and workflows are introduced.
+
+Some modules may be:
+
+- Experimental
+- Environment-specific
+- Incomplete
+- Under refactoring
+- Dependent on external services
+
+This is intentional.
+
+JARVIS is being developed as a practical laboratory for building increasingly complex software systems.
+
+---
+
+# 🧠 What JARVIS Represents
+
+JARVIS is more than an automation script.
+
+The project is an exploration of how multiple software components can work together to form a coordinated intelligent workflow.
+
+The long-term architectural direction is:
+
+```text
+Information
+     ↓
+Context
+     ↓
+Decision
+     ↓
+Planning
+     ↓
+Execution
+     ↓
+Validation
+     ↓
+Distribution
+     ↓
+Feedback
+     ↓
+Improved Decision
+```
+
+The objective is to continuously reduce the amount of manual coordination required between these stages while maintaining control, observability and quality.
+
+---
+
+# 🎓 Why I Built JARVIS
+
+JARVIS is also my main practical software engineering laboratory.
+
+Through the project, I have been able to study and apply concepts involving:
+
+- Backend development
+- Python
+- APIs
+- Databases
+- AI integrations
+- Automation
+- System architecture
+- Multimedia processing
+- State management
+- Error handling
+- Software modularity
+- Infrastructure
+- External service integration
+
+Instead of learning these concepts only through isolated exercises, I use JARVIS to connect them inside a real evolving system.
+
+> **Building systems is how I learn. JARVIS is where I put that into practice.**
+
+---
+
+# ⚖️ Responsible Use
+
+JARVIS is intended for educational, experimental and software engineering purposes.
+
+Automated interaction with external platforms must comply with:
+
+- The platform's Terms of Service
+- API policies
+- Authentication requirements
+- Rate limits
+- Applicable laws and regulations
+
+The project does not guarantee compatibility with third-party platforms as their APIs and policies may change.
+
+---
+
+# 👨‍💻 Author
+
+**André Felipe de Aquino Oliveira**
 
 Software Engineering Student · Developer · AI & Automation
 
 📍 Goiânia, Brazil
 
-GitHub: https://github.com/z-scriptz
+### Links
 
-LinkedIn: https://www.linkedin.com/in/andré-felipe
-
-
-
----
-
-⭐ If you find the project interesting, feel free to explore the code and follow its development.
+- GitHub: https://github.com/z-scriptz
+- LinkedIn: https://www.linkedin.com/in/andré-felipe
 
 ---
+
+## ⭐ Project
+
+If you find the architecture or implementation interesting, feel free to explore the repository and follow its development.
+
+JARVIS is an ongoing project, and its architecture will continue to evolve as new engineering problems are solved.
