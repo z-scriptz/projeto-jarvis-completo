@@ -43,27 +43,24 @@ JARVIS is organized around a central orchestration layer that coordinates specia
 ```mermaid
 flowchart TD
 
-    CORE["🤖 JARVIS CORE<br/>Orchestration"]
+    CORE["JARVIS CORE<br/>Orchestration"]
 
-    INT["🧠 Intelligence<br/><br/>Decision Engine<br/>Context<br/>Memory<br/>Strategy<br/>Scoring"]
+    INT["Intelligence<br/>Decision · Context · Memory · Strategy"]
 
-    PROD["🎬 Production<br/><br/>Content<br/>Audio<br/>Video<br/>Quality"]
+    PROD["Production<br/>Content · Audio · Video · Quality"]
 
-    OPS["⚙️ Operations<br/><br/>Health<br/>Publishing<br/>Monitoring<br/>State"]
+    OPS["Operations<br/>Health · Publishing · Monitoring · State"]
 
-    EXT["🔌 External Services & APIs"]
+    API["External Services & APIs"]
 
     CORE --> INT
     CORE --> PROD
     CORE --> OPS
 
-    INT --> EXT
-    PROD --> EXT
-    OPS --> EXT
-
-    EXT -. Feedback .-> INT
-    EXT -. Metrics .-> OPS
-
+    INT --> API
+    PROD --> API
+    OPS --> API
+```
 
 ---
 
