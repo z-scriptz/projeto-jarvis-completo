@@ -27,6 +27,7 @@
 #   r = postar_instagram(video_path, legenda)
 
 import os
+import json
 import time
 from pathlib import Path
 from typing import Optional
@@ -54,18 +55,87 @@ IG_POLL_MAX = 60           # máx ~6min (60 x 6s) — vídeo grande demora
 
 
 # ══════════════════════════════════════════════════════════════════════════
+# SESSÃO HTTP — pooling de conexões + retry SÓ em GET (idempotente).
+#
+# IMPORTANTE: retry automático NÃO cobre POST de propósito. Reenviar um POST
+# de publicação (criar vídeo no FB / media_publish no IG) que já chegou ao
+# servidor mas cuja resposta se perdeu geraria POST DUPLICADO — dois vídeos.
+# Então só GET (buscar token da página, poll de status, permalink) tem retry;
+# os uploads/publish ficam com uma única tentativa, evitando duplicata.
+# ══════════════════════════════════════════════════════════════════════════
+def _build_session():
+    """requests.Session com retry/backoff restrito a GET (nunca POST)."""
+    if not _REQUESTS_OK:
+        return None
+    s = requests.Session()
+    try:
+        from requests.adapters import HTTPAdapter
+        from urllib3.util.retry import Retry
+        retry = Retry(
+            total=3,
+            connect=3,
+            backoff_factor=1.5,
+            status_forcelist=(429, 500, 502, 503, 504),
+            allowed_methods=frozenset(["GET"]),   # POST fora do retry: evita duplicar post
+            raise_on_status=False,
+        )
+        adapter = HTTPAdapter(max_retries=retry)
+        s.mount("https://", adapter)
+        s.mount("http://", adapter)
+    except Exception:
+        log.debug("Retry adapter indisponível; usando Session simples.")
+    return s
+
+
+_HTTP = _build_session()
+
+
+def _req():
+    """Retorna a Session compartilhada, ou o módulo requests como fallback."""
+    return _HTTP if _HTTP is not None else requests
+
+
+# ══════════════════════════════════════════════════════════════════════════
 # CREDENCIAIS
 # ══════════════════════════════════════════════════════════════════════════
+# Conta ativa por vídeo (multi-conta): setada por postar_* a partir de um
+# conta.json ao lado do video.mp4. Vazio => usa as vars globais do .env.
+_CTX: dict = {}
+
+
+def _ativar_conta(video_path) -> None:
+    """Lê conta.json ao lado do vídeo e ativa a conta daquele nicho (ig_id,
+    page_id, token). Sem conta.json, limpa o contexto (usa o .env global)."""
+    _CTX.clear()
+    try:
+        cj = Path(video_path).parent / "conta.json"
+        if not cj.exists():
+            return
+        c = json.loads(cj.read_text(encoding="utf-8"))
+        env = c.get("page_token_env", "")
+        tok = os.environ.get(env, "") if env else ""
+        _CTX.update({
+            "facebook_page_id":  str(c.get("facebook_page_id", "")).strip(),
+            "instagram_user_id": str(c.get("instagram_user_id", "")).strip(),
+            "token":             (tok or "").strip(),
+            "handle":            c.get("handle", ""),
+        })
+        if _CTX.get("handle"):
+            log.info(f"   🎯 conta ativa: {_CTX['handle']} (nicho {c.get('nicho', '?')})")
+    except Exception:
+        _CTX.clear()
+
+
 def _token() -> str:
-    return os.environ.get("META_ACCESS_TOKEN", "").strip()
+    return (_CTX.get("token") or os.environ.get("META_ACCESS_TOKEN", "")).strip()
 
 
 def _page_id() -> str:
-    return os.environ.get("FACEBOOK_PAGE_ID", "").strip()
+    return (_CTX.get("facebook_page_id") or os.environ.get("FACEBOOK_PAGE_ID", "")).strip()
 
 
 def _ig_user_id() -> str:
-    return os.environ.get("INSTAGRAM_USER_ID", "").strip()
+    return (_CTX.get("instagram_user_id") or os.environ.get("INSTAGRAM_USER_ID", "")).strip()
 
 
 def _checar_base() -> Optional[str]:
@@ -78,6 +148,33 @@ def _checar_base() -> Optional[str]:
 
 
 # ══════════════════════════════════════════════════════════════════════════
+# PERMALINK — resolve a URL pública REAL de um objeto publicado
+# ══════════════════════════════════════════════════════════════════════════
+def _buscar_permalink(obj_id: str, campo: str, token: str, fallback: str) -> str:
+    """
+    Busca a URL pública REAL de um objeto publicado via Graph API.
+
+    O id numérico que o publish retorna NÃO forma a URL pública: o Instagram
+    usa um shortcode (ex: /reel/CxYz.../), não o media-id. Então consultamos
+    o campo de permalink do objeto ('permalink' no IG, 'permalink_url' no FB).
+    Se a consulta falhar por qualquer motivo, devolve o fallback informado.
+    """
+    try:
+        r = _req().get(
+            f"{GRAPH}/{obj_id}",
+            params={"fields": campo, "access_token": token},
+            timeout=30,
+        )
+        val = ((r.json() or {}).get(campo) or "").strip()
+        if val:
+            # FB às vezes devolve caminho relativo (/pagina/videos/123/)
+            return val if val.startswith("http") else f"https://www.facebook.com{val}"
+    except Exception as e:
+        log.debug(f"   permalink ({campo}) indisponível: {e}")
+    return fallback
+
+
+# ══════════════════════════════════════════════════════════════════════════
 # FACEBOOK — upload de arquivo local direto (simples)
 # ══════════════════════════════════════════════════════════════════════════
 def _page_access_token() -> Optional[str]:
@@ -87,6 +184,9 @@ def _page_access_token() -> Optional[str]:
     mesmo com pages_manage_posts. Este token é derivado via /me/accounts.
     Retorna o token da página, ou None se não achar.
     """
+    # 0) conta ativa (multi-conta) tem prioridade — token da página do nicho
+    if _CTX.get("token"):
+        return _CTX["token"]
     # 1) Se o usuário setou um token de página direto, usa ele
     direto = os.environ.get("FACEBOOK_PAGE_TOKEN", "").strip()
     if direto:
@@ -94,7 +194,7 @@ def _page_access_token() -> Optional[str]:
 
     # 2) Deriva do token de usuário via /me/accounts
     try:
-        r = requests.get(
+        r = _req().get(
             f"{GRAPH}/me/accounts",
             params={"access_token": _token(), "fields": "id,name,access_token"},
             timeout=30,
@@ -125,12 +225,80 @@ def _page_access_token() -> Optional[str]:
     return tok
 
 
+# ══════════════════════════════════════════════════════════════════════════
+# ENGAJAMENTO — primeiro comentário automático (o "1º comentário" clássico)
+#
+# Logo após publicar, a máquina dropa o 1º comentário. Estratégia POR PLATAFORMA:
+#   FACEBOOK  → link do produto (no FB o link em comentário é CLICÁVEL → venda)
+#   INSTAGRAM → isca de engajamento (no IG link não clica; então "link na bio" +
+#               pede comentário → gera sinal forte pro algoritmo)
+# Gated por ENGAJAR_COMENTARIO=1. Best-effort: se falhar (ex: falta permissão),
+# loga e segue — o post em si continua valendo.
+# ══════════════════════════════════════════════════════════════════════════
+_TMPL_IG = ("🛒 O link tá na BIO, corre pegar o seu! 😍\n"
+            "💬 comenta \"EU QUERO\" que eu te ajudo a achar 👇")
+_TMPL_FB = ("🛒 Compra aqui ó: {link}\n"
+            "😍 aproveita que a oferta some rápido!")
+
+
+def _engajar_ligado() -> bool:
+    return os.environ.get("ENGAJAR_COMENTARIO", "0").strip().lower() in ("1", "true", "sim")
+
+
+def _dados_engajamento(video_path) -> dict:
+    """Lê engajamento.json ao lado do vídeo (link/produto/handle). {} se não houver."""
+    try:
+        ej = Path(video_path).parent / "engajamento.json"
+        if ej.exists():
+            return json.loads(ej.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return {}
+
+
+def _montar_comentario(plataforma: str, video_path) -> str:
+    d = _dados_engajamento(video_path)
+    ctx = {
+        "link":    (d.get("link") or "").strip(),
+        "handle":  (_CTX.get("handle") or d.get("handle") or "").strip(),
+        "produto": (d.get("produto") or "").strip(),
+    }
+    tmpl = (os.environ.get("ENGAJAR_IG_TMPL", _TMPL_IG) if plataforma == "instagram"
+            else os.environ.get("ENGAJAR_FB_TMPL", _TMPL_FB))
+    # se o template precisa do {link} mas não temos, não comenta (evita "Compra aqui: ")
+    if "{link}" in tmpl and not ctx["link"]:
+        return ""
+    try:
+        return tmpl.format(**ctx).strip()
+    except Exception:
+        return ""
+
+
+def _comentar(obj_id: str, texto: str, token: str) -> bool:
+    """Posta o 1º comentário no objeto recém-publicado. Best-effort (nunca quebra)."""
+    if not texto:
+        return False
+    try:
+        r = _req().post(f"{GRAPH}/{obj_id}/comments",
+                        data={"message": texto, "access_token": token}, timeout=30)
+        d = r.json()
+        if d.get("id"):
+            log.info(f"   💬 1º comentário postado ({obj_id})")
+            return True
+        err = (d.get("error") or {}).get("message") or str(d)[:160]
+        log.warning(f"   ⚠️  1º comentário não postou: {err}")
+    except Exception as e:
+        log.warning(f"   ⚠️  exceção no 1º comentário: {e}")
+    return False
+
+
 def postar_facebook(video_path: str, legenda: str = "") -> dict:
     """
     Posta um vídeo na Página do Facebook (upload de arquivo local).
     Usa o TOKEN DA PÁGINA (derivado do token de usuário automaticamente).
     Retorna {"sucesso", "url"|"erro"}.
     """
+    _ativar_conta(video_path)
     erro_base = _checar_base()
     if erro_base:
         return {"sucesso": False, "erro": erro_base}
@@ -155,7 +323,7 @@ def postar_facebook(video_path: str, legenda: str = "") -> dict:
         with open(video, "rb") as f:
             files = {"source": f}
             data = {"description": legenda, "access_token": page_token}
-            r = requests.post(url, data=data, files=files, timeout=300)
+            r = _req().post(url, data=data, files=files, timeout=300)
         dados = r.json()
     except Exception as e:
         return {"sucesso": False, "erro": f"exceção no upload: {e}"}
@@ -163,7 +331,13 @@ def postar_facebook(video_path: str, legenda: str = "") -> dict:
     # Sucesso = veio um id de vídeo
     video_id = dados.get("id")
     if video_id:
-        link = f"https://www.facebook.com/{video_id}"
+        # 1º comentário automático (FB: link clicável) — best-effort
+        if _engajar_ligado():
+            _comentar(video_id, _montar_comentario("facebook", video_path), page_token)
+        # a URL pública real vem da permalink_url; fallback = watch?v= (válido
+        # pra vídeo de feed, ao contrário do id solto que nem sempre resolve)
+        link = _buscar_permalink(video_id, "permalink_url", page_token,
+                                 f"https://www.facebook.com/watch/?v={video_id}")
         return {"sucesso": True, "url": link}
     # erro estruturado da Graph API
     err = (dados.get("error") or {}).get("message") or str(dados)[:200]
@@ -182,6 +356,7 @@ def postar_instagram(video_path: str, legenda: str = "") -> dict:
       4. publica o container
     Retorna {"sucesso", "url"|"erro"}.
     """
+    _ativar_conta(video_path)
     erro_base = _checar_base()
     if erro_base:
         return {"sucesso": False, "erro": erro_base}
@@ -197,7 +372,7 @@ def postar_instagram(video_path: str, legenda: str = "") -> dict:
 
     # ── 1. Cria o container resumable ────────────────────────────────────
     try:
-        r1 = requests.post(
+        r1 = _req().post(
             f"{GRAPH}/{ig}/media",
             data={
                 "media_type": "REELS",
@@ -222,7 +397,7 @@ def postar_instagram(video_path: str, legenda: str = "") -> dict:
     try:
         tam = video.stat().st_size
         with open(video, "rb") as f:
-            r2 = requests.post(
+            r2 = _req().post(
                 f"{RUPLOAD}/{container_id}",
                 headers={
                     "Authorization": f"OAuth {tok}",
@@ -247,7 +422,7 @@ def postar_instagram(video_path: str, legenda: str = "") -> dict:
     for tentativa in range(IG_POLL_MAX):
         time.sleep(IG_POLL_INTERVALO)
         try:
-            rs = requests.get(
+            rs = _req().get(
                 f"{GRAPH}/{container_id}",
                 params={"fields": "status_code", "access_token": tok},
                 timeout=30,
@@ -267,7 +442,7 @@ def postar_instagram(video_path: str, legenda: str = "") -> dict:
 
     # ── 4. Publica o container ───────────────────────────────────────────
     try:
-        r4 = requests.post(
+        r4 = _req().post(
             f"{GRAPH}/{ig}/media_publish",
             data={"creation_id": container_id, "access_token": tok},
             timeout=60,
@@ -278,7 +453,14 @@ def postar_instagram(video_path: str, legenda: str = "") -> dict:
 
     media_id = d4.get("id")
     if media_id:
-        return {"sucesso": True, "url": f"https://www.instagram.com/reel/{media_id}"}
+        # 1º comentário automático (IG: isca de engajamento) — best-effort
+        if _engajar_ligado():
+            _comentar(media_id, _montar_comentario("instagram", video_path), tok)
+        # o media-id numérico NÃO forma a URL do Reel (IG usa shortcode) —
+        # busca a permalink real; fallback guarda ao menos o id de referência
+        link = _buscar_permalink(media_id, "permalink", tok,
+                                 f"https://www.instagram.com/reel/{media_id}")
+        return {"sucesso": True, "url": link}
     err = (d4.get("error") or {}).get("message") or str(d4)[:200]
     return {"sucesso": False, "erro": f"publish recusado: {err}"}
 
@@ -295,6 +477,7 @@ def diagnostico() -> dict:
         "INSTAGRAM_USER_ID":  "✅ ok" if _ig_user_id() else "❌ faltando",
         "facebook_pronto":    bool(_token() and _page_id()),
         "instagram_pronto":   bool(_token() and _ig_user_id()),
+        "ENGAJAR_COMENTARIO": "✅ ligado" if _engajar_ligado() else "⚪ desligado",
     }
 
 

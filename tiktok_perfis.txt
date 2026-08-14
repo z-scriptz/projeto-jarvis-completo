@@ -1,0 +1,27 @@
+# Perfis-FONTE do TikTok (1 por linha) — o coletor puxa os virais DELES.
+# Aceita com @, sem @, ou URL completa. Linhas com # sao ignoradas.
+# Mais perfis = mais variedade, menos repeticao. Adicione a vontade.
+
+# --- casa / cozinha / utilidades ---
+home_appliances513
+homekitchgadgets1
+
+# --- beleza / perfume ---
+miniluxury.perfume
+
+# --- gadgets / achados gerais ---
+anya.bumag
+goodstuffdiary
+airlandolists
+warneoaec57
+elnazhamai
+user2880017386250
+asr_store_
+acefastglobal
+
+# ── amazon finds / casa (04/08) ────────────────────────────────────────
+upgradeyour.home
+dannikafaith
+seyis.shop
+bestfindhomeitems
+tkjusticebuy

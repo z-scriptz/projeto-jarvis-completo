@@ -1,0 +1,27 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# patch_categoria_pet.py -- adiciona categoria "Pet" (antes de Tech) e limpa pet
+# de Utilidades. Conserta "Tablete"(comprimido)->"tablet"(Tech). Alvo: bio_page_builder.py.
+import base64, py_compile, shutil, sys, time
+from pathlib import Path
+RAIZ=Path(__file__).resolve().parent
+CANDS=[RAIZ/"creative_engine/bio_page_builder.py", RAIZ/"bio_page_builder.py"]
+PARES=[('IyBPcmRlbSBGSVhBIGRhcyBjYXRlZ29yaWFzIG5vIGZpbHRybyBkYSB2aXRyaW5lIChzZW1wcmUgYXBhcmVjZW0sIG1lc21vIHNlbQojIHByb2R1dG8gbm8gbW9tZW50byDigJQgYXNzaW0gYSBsb2phIGZpY2Egb3JnYW5pemFkYSBlIGEgY2F0ZWdvcmlhIG7Do28gInNvbWUiKS4KIyAiVHVkbyIgZSAiT3V0cm9zIiBzw6NvIGFkaWNpb25hZG9zIGF1dG9tYXRpY2FtZW50ZSBwZWxvIF9maWx0cm9zX2h0bWwuCl9DQVRFR09SSUFTX0ZJWEFTID0gWyJDb3ppbmhhIiwgIkJlbGV6YSIsICJUZWNoIiwgIkZpdG5lc3MiLCAiVXRpbGlkYWRlcyIsICJDYXNhIl0KCiMgUGFsYXZyYXMtY2hhdmUgcG9yIGNhdGVnb3JpYSAobyBwcm9kdXRvIGNhaSBuYSAxwqogcXVlIGNhc2FyIOKAlCBvcmRlbSBpbXBvcnRhKS4KX0NBVEVHT1JJQVNfRklMVFJPID0gWwogICAgKCJDb3ppbmhhIiwgICAgKCJjb3J0YWRvciIsICJsZWd1bWVzIiwgImxpcXVpZGlmaWNhZG9yIiwgImJhbGFuY2EiLCAiYmFsYW7Dp2EiLAogICAgICAgICAgICAgICAgICAgICJnYXJyYWZhIiwgImNhbmVjYSIsICJ0ZXJtaWNhIiwgInTDqXJtaWNhIiwgImRlc2Nhc2NhZG9yIiwKICAgICAgICAgICAgICAgICAgICAicHJvY2Vzc2Fkb3IiLCAiZmF0aWFkb3IiLCAiZXNwcmVtZWRvciIsICLDoWd1YSIsICJhZ3VhIiw=', 'IyBPcmRlbSBGSVhBIGRhcyBjYXRlZ29yaWFzIG5vIGZpbHRybyBkYSB2aXRyaW5lIChzZW1wcmUgYXBhcmVjZW0sIG1lc21vIHNlbQojIHByb2R1dG8gbm8gbW9tZW50byDigJQgYXNzaW0gYSBsb2phIGZpY2Egb3JnYW5pemFkYSBlIGEgY2F0ZWdvcmlhIG7Do28gInNvbWUiKS4KIyAiVHVkbyIgZSAiT3V0cm9zIiBzw6NvIGFkaWNpb25hZG9zIGF1dG9tYXRpY2FtZW50ZSBwZWxvIF9maWx0cm9zX2h0bWwuCl9DQVRFR09SSUFTX0ZJWEFTID0gWyJDb3ppbmhhIiwgIkJlbGV6YSIsICJUZWNoIiwgIkZpdG5lc3MiLCAiUGV0IiwgIlV0aWxpZGFkZXMiLCAiQ2FzYSJdCgojIFBhbGF2cmFzLWNoYXZlIHBvciBjYXRlZ29yaWEgKG8gcHJvZHV0byBjYWkgbmEgMcKqIHF1ZSBjYXNhciDigJQgb3JkZW0gaW1wb3J0YSkuCl9DQVRFR09SSUFTX0ZJTFRSTyA9IFsKICAgICMgUGV0IFBSSU1FSVJPOiBldml0YSBxdWUgIlRhYmxldGUiIChjb21wcmltaWRvKSBjYXNlIGNvbSAidGFibGV0IiAoVGVjaCkgZQogICAgIyBkw6EgbmljaG8gcHLDs3ByaW8gcHJvIHF1ZSDDqSBkZSBiaWNobyAoYW50ZXMgc8OzIGNhw61hIGVtIFV0aWxpZGFkZXMvVGVjaCkuCiAgICAoIlBldCIsICAgICAgICAoImFudGlwdWxnYXMiLCAiY2FycmFwYXRvIiwgInZlcm1pZnVnbyIsICJ2ZXJtw61mdWdvIiwgInJhw6fDo28iLAogICAgICAgICAgICAgICAgICAgICJyYWNhbyIsICJjb2xlaXJhIiwgImNvbWVkb3VybyIsICJiZWJlZG91cm8iLCAiY2FjaG9ycm8iLAogICAgICAgICAgICAgICAgICAgICJjw6NvIiwgImPDo2VzIiwgImdhdG8iLCAiZ2F0b3MiLCAiZmlsaG90ZSIsICJwZXRpc2NvIiwKICAgICAgICAgICAgICAgICAgICAiYXJyYW5oYWRvciIsICJhcXXDoXJpbyIsICJhcXVhcmlvIiwgImNhbmlubyIsICJmZWxpbm8iKSksCiAgICAoIkNvemluaGEiLCAgICAoImNvcnRhZG9yIiwgImxlZ3VtZXMiLCAibGlxdWlkaWZpY2Fkb3IiLCAiYmFsYW5jYSIsICJiYWxhbsOnYSIsCiAgICAgICAgICAgICAgICAgICAgImdhcnJhZmEiLCAiY2FuZWNhIiwgInRlcm1pY2EiLCAidMOpcm1pY2EiLCAiZGVzY2FzY2Fkb3IiLAogICAgICAgICAgICAgICAgICAgICJwcm9jZXNzYWRvciIsICJmYXRpYWRvciIsICJlc3ByZW1lZG9yIiwgIsOhZ3VhIiwgImFndWEiLA=='), ('ICAgICgiVXRpbGlkYWRlcyIsICgib3JnYW5pemFkb3IiLCAiZ2FuY2hvIiwgImNhYmlkZSIsICJzYWNvbGEiLCAiY2VzdG8iLAogICAgICAgICAgICAgICAgICAgICJiYWxkZSIsICJsaXhlaXJhIiwgInBlZGFsIiwgImxpdHJvIiwgImNhaXhhIiwgIm1hbGEiLAogICAgICAgICAgICAgICAgICAgICJndWFyZGEtY2h1dmEiLCAiZmVycmFtZW50YSIsICJjaGF2ZSIsICJtYW5ndWVpcmEiLCAidmFyYWwiLAogICAgICAgICAgICAgICAgICAgICJwaW7Dp2EiLCAicGluY2EiLCAiZml0YSIsICJhZGVzaXZvIiwgInBldCIsICJjYWNob3JybyIsCiAgICAgICAgICAgICAgICAgICAgImdhdG8iLCAiY8OjbyIsICJjb2xlaXJhIiwgInJhw6fDo28iLCAicmFjYW8iLCAiY29tZWRvdXJvIiwKICAgICAgICAgICAgICAgICAgICAiYmViw6oiLCAiYmViZSIsICJjcmlhbsOnYSIsICJjcmlhbmNhIiwgImluZmFudGlsIiwKICAgICAgICAgICAgICAgICAgICAiYnJpbnF1ZWRvIiwgImZyYWxkYSIsICJhdXRvbW90aXZvIiwgInZlaWN1bGFyIiwgImNhcnJvIiwKICAgICAgICAgICAgICAgICAgICAibW90byIsICJwbmV1IikpLA==', 'ICAgICgiVXRpbGlkYWRlcyIsICgib3JnYW5pemFkb3IiLCAiZ2FuY2hvIiwgImNhYmlkZSIsICJzYWNvbGEiLCAiY2VzdG8iLAogICAgICAgICAgICAgICAgICAgICJiYWxkZSIsICJsaXhlaXJhIiwgInBlZGFsIiwgImxpdHJvIiwgImNhaXhhIiwgIm1hbGEiLAogICAgICAgICAgICAgICAgICAgICJndWFyZGEtY2h1dmEiLCAiZmVycmFtZW50YSIsICJjaGF2ZSIsICJtYW5ndWVpcmEiLCAidmFyYWwiLAogICAgICAgICAgICAgICAgICAgICJwaW7Dp2EiLCAicGluY2EiLCAiZml0YSIsICJhZGVzaXZvIiwKICAgICAgICAgICAgICAgICAgICAiYmViw6oiLCAiYmViZSIsICJjcmlhbsOnYSIsICJjcmlhbmNhIiwgImluZmFudGlsIiwKICAgICAgICAgICAgICAgICAgICAiYnJpbnF1ZWRvIiwgImZyYWxkYSIsICJhdXRvbW90aXZvIiwgInZlaWN1bGFyIiwgImNhcnJvIiwKICAgICAgICAgICAgICAgICAgICAibW90byIsICJwbmV1IikpLA==')]
+def main():
+    alvo=next((c for c in CANDS if c.exists()), None)
+    if not alvo: print("nao achei bio_page_builder.py em", [str(c) for c in CANDS]); return 1
+    txt=alvo.read_text(encoding="utf-8").replace("\r\n","\n")
+    pares=[(base64.b64decode(o).decode(),base64.b64decode(n).decode()) for o,n in PARES]
+    if all(n in txt for _,n in pares): print("JA APLICADO em",alvo); return 0
+    novo=txt
+    for old,new in pares:
+        if new in novo: continue
+        if old not in novo: print("ABORTADO: nao achou:"); print("  "+old.strip().splitlines()[0][:80]); return 2
+        if novo.count(old)!=1: print("ABORTADO: ambiguo"); return 2
+        novo=novo.replace(old,new)
+    bak=alvo.with_suffix(alvo.suffix+".bak_"+time.strftime("%Y%m%d_%H%M%S"))
+    shutil.copy2(alvo,bak); alvo.write_text(novo,encoding="utf-8")
+    try: py_compile.compile(str(alvo),doraise=True)
+    except Exception as e: shutil.copy2(bak,alvo); print("py_compile falhou, RESTAUREI:",e); return 3
+    print("APLICADO em",alvo,"(backup",bak.name,")"); return 0
+if __name__=="__main__": sys.exit(main())

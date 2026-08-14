@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
 # integrations/telegram_repurpose_hunter.py
-# PEÇA-CHAVE JARVIS — rev 5 "Máquina de Comissões"
+# PEÇA-CHAVE JARVIS — rev 6 "Máquina de Comissões"
+# Correções sobre a rev 5 (alinhamento com o resto do projeto):
+#   [FIX-9]  Plano gravado agora usa as chaves CANÔNICAS "narracao" e "duracao"
+#            (lidas por autonomous_orchestrator / publicadores / finalizar_plano).
+#            Aliases "narracao_propria"/"duracao_video" mantidos por compat.
+#   [FIX-10] Varredura do Telegram passa a aceitar vídeo enviado como
+#            documento/arquivo (mime video/*), não só msg.video.
+#
 # Correções sobre a rev 4:
 #   [FIX-1] SyntaxError em _crop_clip (keyword `y1` repetido -> `y2`).
 #   [FIX-2] Efeitos de diferenciação (mirror/zoom/grade/vinheta/velocidade) agora
@@ -164,15 +171,16 @@ SESSION_PATH  = BASE_DIR / "shared" / "jarvis_hunter_session"
 INBOX_VIDEOS  = BASE_DIR / "assets" / "inbox" / "videos"
 SHARED_PLANS  = BASE_DIR / "shared" / "content_plans"
 SEEN_DB       = BASE_DIR / "shared" / "hunter_seen.sqlite"   # sqlite (msg_id TEXT)
-VIDEO_TIMEOUT = 420   # narração + IA podem demorar mais que a rev 3
+SITE_FILA     = BASE_DIR / "shared" / "produtos_fila.json"   # vitrine do site (bio)
+VIDEO_TIMEOUT = 1200  # VPS de CPU fraco renderiza devagar; margem generosa
 
 # Facebook token (opcional) para Ad Library API
 FACEBOOK_ACCESS_TOKEN = os.environ.get("FACEBOOK_ACCESS_TOKEN", "")
 
 # ──────────────────────────────────────────────────────────────────────────
 # Configurações do pipeline de diferenciação
-CFG_NARRACAO_NOVA      = True
-CFG_AUDIO_ORIGINAL_VOL = 0.0
+CFG_NARRACAO_NOVA      = False   # repost mantém o áudio original (sem narração própria)
+CFG_AUDIO_ORIGINAL_VOL = 1.0     # áudio original do vídeo no volume cheio
 CFG_MUSICA_FUNDO_VOL   = 0.12
 CFG_LEGENDAS           = True
 CFG_HOOK_OVERLAY       = True
@@ -185,7 +193,16 @@ CFG_GRANULADO          = 3
 CFG_LIMPAR_META        = True
 CFG_VELOCIDADE         = 1.01
 CFG_ZOOM_DIGITAL       = 0.01
-CFG_MIRROR_X           = True
+CFG_MIRROR_X           = False   # override manual: True = espelha SEMPRE (cuidado)
+# Espelha só vídeo SEM texto (OCR). Desligue com MIRROR_AUTO=0 no .env — sem
+# editar código — se aparecer texto invertido de novo.
+#
+# O CUSTO É ASSIMÉTRICO, e é isso que decide os limiares lá embaixo: espelhar
+# só ajuda a diferenciar do vídeo original. Não espelhar não custa quase nada.
+# Texto de trás pra frente custa o espectador, que fecha o vídeo e não volta.
+# Então, na dúvida, NÃO espelha.
+CFG_MIRROR_AUTO        = os.environ.get("MIRROR_AUTO", "1").strip().lower() \
+                         not in ("0", "false", "nao", "não")
 CFG_VINHETA            = True
 
 CFG_INTRO_IA           = False
@@ -332,6 +349,40 @@ _PALAVRAS_RUIDO = {"promo", "promoção", "oferta", "desconto", "cupom", "frete"
                    "grátis", "gratis", "link", "bio", "shopee", "achadinho",
                    "achadinhos", "compre", "corre", "imperdível", "imperdivel"}
 
+# Prova social: "2 mil vendidos", "4.9 (3 mil avaliações)". Linha feita SÓ disso
+# não é nome de produto — é o selo em cima dele. Era daqui que saíam os nomes
+# bizarros na vitrine: o score antigo era a contagem de palavras, então
+# "2 mil vendidos" (3 palavras) ganhava de "Suporte celular" (2).
+_PROVA_SOCIAL = {"vendido", "vendidos", "venda", "vendas", "avaliação",
+                 "avaliações", "avaliacao", "avaliacoes", "estrela", "estrelas",
+                 "pedido", "pedidos", "curtida", "curtidas", "mil", "unidades",
+                 "vendendo", "esgotando", "estoque", "restam", "últimas",
+                 "ultimas", "sobrando"}
+
+# Papo de vendedor. Nenhuma dessas aparece em título de anúncio da Shopee —
+# título de anúncio é sintagma nominal, sem pronome e sem verbo conjugado.
+# Inclui espanhol porque parte das fontes é de perfil hispano repostado.
+_PALAVRAS_PITCH = {
+    # pronomes e tratamento (PT)
+    "você", "voce", "vc", "seu", "sua", "seus", "suas", "meu", "minha", "eu",
+    "te", "tu", "teu", "tua", "nós", "nos", "a gente",
+    # verbos de gancho (PT)
+    "olha", "olhe", "veja", "vejam", "sabia", "descobri", "comprei", "testei",
+    "precisa", "precisava", "deve", "deveria", "devia", "vai", "fazer", "faça",
+    "ficar", "fica", "aproveite", "garanta", "aprenda", "pare", "evite",
+    # gancho (ES) — "cosas que deberías hacer para mejorar tu apariencia"
+    "cosas", "que", "deberías", "deberias", "debes", "hacer", "mejorar",
+    "tus", "esto", "esta", "estos", "el", "la", "los", "las", "dia", "día",
+    "tips", "trucos", "cómo", "como",
+}
+
+# Sinais de que a linha É um anúncio: medida, quantidade, formato de kit.
+_MEDIDA_RE = re.compile(
+    r"\b\d+\s?(?:ml|l|g|kg|mg|cm|mm|m|w|v|mah|gb|tb|pol|polegadas|"
+    r"peças|pecas|pçs|un|und|unidades|gavetas|lâminas|laminas|níveis|niveis)\b"
+    r"|\b\d+\s?em\s?\d+\b|\bkit\b",
+    re.IGNORECASE)
+
 
 def _limpar_linha(linha: str) -> str:
     linha = re.sub(r"https?://\S+", "", linha)
@@ -346,6 +397,38 @@ def _parece_preco(linha: str) -> bool:
         len(re.sub(r"[^\w]", "", linha)) <= 8
 
 
+def _so_prova_social(palavras: list) -> bool:
+    """A linha é só o selo ('2 mil vendidos', '12 mil avaliações')?
+    Números e prova social não contam como substância."""
+    substancia = [p for p in palavras
+                  if p.lower() not in _PROVA_SOCIAL
+                  and not re.fullmatch(r"[\d.,]+", p)]
+    return not substancia
+
+
+def _pontuar_linha(c: str) -> int:
+    """Quanto essa linha parece o NOME de um produto.
+
+    O score antigo era a contagem de palavras, o que premiava exatamente a
+    linha errada: gancho de venda é sempre mais comprido que nome de produto.
+    Aqui o comprimento só desempata, e no fim ainda perde da substância.
+    """
+    palavras = c.split()
+    baixo = [p.lower().strip(".,") for p in palavras]
+    score = 0
+    score -= 3 * sum(1 for p in baixo if p in _PALAVRAS_PITCH)
+    score -= 2 * sum(1 for p in baixo if p in _PALAVRAS_RUIDO)
+    score -= 1 * sum(1 for p in baixo if p in _PROVA_SOCIAL)
+    if _MEDIDA_RE.search(c):
+        score += 3                      # "500ml", "4 em 1", "Kit", "7 gavetas"
+    # anúncio vem em Caixa De Título; gancho vem em frase normal
+    maiusculas = sum(1 for p in palavras if p[:1].isupper())
+    if len(palavras) >= 3 and maiusculas >= len(palavras) - 1:
+        score += 2
+    score += min(len(palavras), 6)      # comprimento pesa, mas com teto
+    return score
+
+
 def extrair_termo_produto(texto: str) -> str:
     """Escolhe a linha que mais parece NOME DE PRODUTO (não a 1ª cegamente)."""
     if not texto:
@@ -357,17 +440,22 @@ def extrair_termo_produto(texto: str) -> str:
         if not c or _parece_preco(c):
             continue
         palavras = c.split()
-        if len(palavras) < 2 or len(palavras) > 9:
+        if len(palavras) < 2 or len(palavras) > 12:
             continue
-        ruido = sum(1 for p in palavras if p.lower() in _PALAVRAS_RUIDO)
-        score = len(palavras) - 2 * ruido
-        cands.append((score, c[:60]))
+        if _so_prova_social(palavras):
+            continue                    # é o selo do produto, não o produto
+        cands.append((_pontuar_linha(c), c[:60]))
     if cands:
         cands.sort(key=lambda x: x[0], reverse=True)
+        # o texto do post não é guardado em lugar nenhum — sem isso aqui, um
+        # nome errado na vitrine não tem como ser rastreado depois
+        if len(cands) > 1:
+            log.debug("Termo escolhido entre: "
+                      + " | ".join(f"{s}:{t[:34]}" for s, t in cands[:3]))
         return cands[0][1]
     for l in brutas:
         c = _limpar_linha(l)
-        if c:
+        if c and not _so_prova_social(c.split()):
             return c[:60]
     return ""
 
@@ -395,44 +483,161 @@ def _slugify(texto: str) -> str:
 
 
 # ── Legendas / hashtags dinâmicas ----------------------------------------
-_HASHTAGS_BASE = ["#achadinhos", "#shopee", "#achadinhosshopee", "#ofertas"]
+# ESCADA DE HASHTAGS (reach): a máquina não pode só jogar tudo em #shopee (milhões
+# de posts → conta nova afunda em segundos). Misturamos 3 degraus:
+#   GRANDES  → teto de alcance (saturadas, poucas)
+#   MÉDIAS   → por categoria; dá pra rankear de verdade
+#   PRODUTO  → extraída do NOME (nicho, traz não-seguidor COM intenção de compra)
+_HASHTAGS_GRANDES = ["#achadinhos", "#achadinhosshopee", "#shopee"]
 _HASHTAGS_CAT = {
-    "cozinha": ["#cozinha", "#casa", "#utilidades", "#organizacao"],
-    "beleza":  ["#beleza", "#skincare", "#autocuidado", "#makeup"],
-    "casa":    ["#casa", "#decor", "#organizacao", "#donadecasa"],
-    "tech":    ["#gadgets", "#tecnologia", "#achadostech"],
-    "fitness": ["#fitness", "#treino", "#saude"],
-    "pet":     ["#pet", "#cachorro", "#gato", "#petlovers"],
+    "cozinha":  ["#cozinha", "#utilidadesdomesticas", "#organizacaodacozinha",
+                 "#cozinhacriativa", "#donadecasa", "#achadinhosdecozinha"],
+    "beleza":   ["#beleza", "#skincare", "#autocuidado", "#makeup",
+                 "#dicasdebeleza", "#achadinhosdebeleza"],
+    "casa":     ["#casa", "#decor", "#organizacao", "#donadecasa",
+                 "#casaorganizada", "#achadinhosdecoracao"],
+    "tech":     ["#gadgets", "#tecnologia", "#eletronicos", "#achadostech",
+                 "#gadgetsuteis", "#tecnologiadodia"],
+    "fitness":  ["#fitness", "#treino", "#vidasaudavel", "#academia",
+                 "#foconotreino", "#projetoverao"],
+    "academia": ["#academia", "#treino", "#fitness", "#foconotreino",
+                 "#projetoverao", "#suplementos"],
+    "pet":      ["#pet", "#cachorro", "#gato", "#petlovers",
+                 "#maedepet", "#achadinhosparapet"],
+    "moda":     ["#moda", "#look", "#lookdodia", "#modafeminina",
+                 "#tendencia", "#achadinhosdemoda"],
+    "infantil": ["#maternidade", "#bebe", "#maedemenino", "#maedemenina",
+                 "#enxoval", "#achadinhosinfantis"],
+    "geral":    ["#ofertas", "#promocao", "#compras", "#desejo",
+                 "#queroquero", "#dicadecompra"],
 }
-_LEGENDA_TEMPLATES = [
-    "{hook} Esse {nome} virou meu queridinho 😍",
-    "Precisava te mostrar esse {nome}! {hook}",
-    "Para de procurar — achei o {nome} ideal. {hook}",
-    "{hook} O {nome} que tá viralizando 🔥",
-    "Não acredito no preço desse {nome}! {hook}",
+# Ruído de listagem da Shopee que NÃO vira hashtag de produto (adjetivos/medidas).
+_STOP_PROD = {
+    "kit", "com", "para", "pra", "de", "da", "do", "dos", "das", "e", "o", "a",
+    "os", "as", "em", "un", "und", "unidade", "unidades", "pcs", "pcas", "pecas",
+    "peca", "novo", "nova", "original", "portatil", "eletrico", "eletrica",
+    "recarregavel", "automatico", "profissional", "premium", "luxo", "cor",
+    "cores", "tamanho", "conjunto", "super", "mega", "top", "promocao", "frete",
+    "gratis", "barato", "barata", "achadinho", "produto", "led", "usb", "inox",
+    "bivolt", "para", "the",
+}
+
+
+def _tag_produto(nome: str) -> list:
+    """Extrai 1-2 hashtags do PRÓPRIO nome do produto (ex.: 'Cafeteira Elétrica'
+    → #cafeteira). É a tag que faz quem procura o produto ACHAR o vídeo."""
+    if not nome:
+        return []
+    limpo = unicodedata.normalize("NFKD", nome.lower())
+    limpo = limpo.encode("ascii", "ignore").decode("ascii")
+    palavras = [re.sub(r"[^a-z0-9]", "", w) for w in limpo.split()]
+    palavras = [w for w in palavras if len(w) >= 4 and w not in _STOP_PROD]
+    out = []
+    if palavras:
+        out.append("#" + palavras[0])                       # #cafeteira
+        # combo só com 2ª palavra alfabética (evita #cafeteira220v, medidas etc.)
+        if len(palavras) >= 2 and palavras[1].isalpha():
+            out.append("#" + palavras[0] + palavras[1])      # #organizadorgaveta
+    return out[:2]
+
+
+# Frases que DESENVOLVEM o hook na legenda (2ª linha), com o nome do produto.
+# A legenda começa com o MESMO hook do vídeo e depois desenvolve — aumenta a
+# retenção no feed (a pessoa lê e continua assistindo) E indexa o NOME (SEO do
+# Instagram lê o texto da legenda, não só a hashtag).
+_LEGENDA_DESENVOLVIMENTO = [
+    "Achei esse achadinho e me surpreendi: {nome} 👇",
+    "Precisava te mostrar esse achado — {nome} 👇",
+    "Tá dando o que falar e não é à toa: {nome} 👇",
+    "Testei e virou queridinho: {nome} 😍👇",
+    "Se você ainda não conhece, presta atenção: {nome} 👇",
+    "Resolve de verdade e ainda é baratinho: {nome} 👇",
+    "Corre ver antes que acabe: {nome} 👇",
 ]
 
 
-def _hashtags_para(categoria: str) -> str:
+def _hashtags_para(categoria: str, nome: str = "") -> str:
     cat = (categoria or "").lower()
     extra = []
     for chave, tags in _HASHTAGS_CAT.items():
         if chave in cat:
             extra = tags
             break
-    tags = _HASHTAGS_BASE + extra
+    if not extra:
+        extra = _HASHTAGS_CAT["geral"]
+    # Ordem = prioridade na deduplicação: produto (nicho) → categoria → grandes.
+    tags = _tag_produto(nome) + extra + _HASHTAGS_GRANDES
     vistos, out = set(), []
     for t in tags:
-        if t not in vistos:
-            vistos.add(t)
+        tl = t.lower()
+        if tl not in vistos:
+            vistos.add(tl)
             out.append(t)
-    return " ".join(out[:8])
+    return " ".join(out[:14])
 
 
-def _legenda_dinamica(nome: str, hook: str) -> str:
-    nome_curto = " ".join((nome or "produto").split()[:4])
-    tmpl = random.choice(_LEGENDA_TEMPLATES)
-    return tmpl.format(hook=hook or "Olha isso!", nome=nome_curto).strip()
+_IDS_AFILIADO = BASE_DIR / "shared" / "ids_afiliado.json"  # {item_id|slug: "ABE-XNB-CFF"}
+
+
+def _id_afiliado(item_id: str = "", nome: str = "") -> str:
+    """Devolve o ID de AFILIADO (ex.: 'ABE-XNB-CFF') que a Shopee gera no
+    'Copiar ID' do app — é o que credita comissão na busca. A API NÃO gera esse
+    código (só link), então ele vem de um banco manual: shared/ids_afiliado.json,
+    chaveado por item_id (ou pelo nome do produto). Sem entrada → não injeta nada
+    (a legenda fica só com o link da bio, que já é rastreado). É esse o desenho
+    que preserva a autonomia: você cadastra o ID uma vez por produto e todo post
+    daquele produto passa a carregar o ID sozinho. ATENÇÃO: o item_id numérico
+    NÃO é o código que credita — por isso nunca usamos ele como ID."""
+    if os.getenv("LEGENDA_ID_AFILIADO", "1").strip().lower() in ("0", "false", "nao"):
+        return ""
+    try:
+        bank = json.loads(_IDS_AFILIADO.read_text(encoding="utf-8"))
+        assert isinstance(bank, dict)
+    except Exception:
+        return ""
+    k = str(item_id or "").strip()
+    if k and k in bank:
+        return str(bank[k]).strip()
+    slug = re.sub(r"[^a-z0-9]+", "", (nome or "").lower())[:40]
+    if slug:
+        for kk, vv in bank.items():
+            if re.sub(r"[^a-z0-9]+", "", str(kk).lower())[:40] == slug:
+                return str(vv).strip()
+    return ""
+
+
+def _legenda_dinamica(nome: str, hook: str, descricao: str = "",
+                      nicho: str = "", item_id: str = "") -> str:
+    """Legenda no padrão que MAIS ALCANÇA (visto no campo — vai pro Explorar mais
+    rápido quando o texto é informativo):
+       ABRE  = CURIOSIDADE informativa ('Pouca gente sabe que…', 2 parágrafos) →
+               faz LER/SALVAR/COMPARTILHAR (alcance). Constante em todo vídeo.
+       CTA   = LINK DA BIO (sempre rastreado) + ID de afiliado (se cadastrado)
+       FIM   = 'Publi' (transparência de publicidade + padrão dos que vendem)
+    O 'hook' NÃO entra mais na legenda (ele já está na TELA do vídeo; aqui o que
+    ganha alcance é começar pela curiosidade). O ID entra só quando existe no
+    banco shared/ids_afiliado.json (o 'Copiar ID' do app)."""
+    curiosidade = ""
+    try:
+        from hook_alana import gerar_legenda_curiosidade
+        curiosidade = (gerar_legenda_curiosidade(nome, descricao, nicho) or "").strip()
+    except Exception:
+        curiosidade = ""
+    if not curiosidade:      # fallback duro, mas AINDA no estilo informativo
+        curiosidade = ("Pouca gente sabe, mas pequenos detalhes do dia a dia "
+                       "mudam mais coisa do que parece — e quase ninguém repara "
+                       "nisso até testar de verdade.")
+    cta = "👉 Garanta o seu no LINK DA BIO!"
+    idaf = _id_afiliado(item_id, nome)
+    if idaf:
+        cta += f"\n🔥 Ou procure pelo ID do produto: {idaf}"
+    # 'Publi' no fim: transparência de publicidade E o padrão dos perfis que
+    # vendem. Sempre presente (configurável via LEGENDA_PUBLI; "" desliga).
+    publi = os.getenv("LEGENDA_PUBLI", "#Publi").strip()
+    partes = [curiosidade, cta]
+    if publi:
+        partes.append(publi)
+    return "\n\n".join(partes)
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -618,25 +823,127 @@ def _aplicar_zoom_digital(clip, fator=0.01):
     return _image_transform(clip, lambda f: _zoom_frame(f))
 
 
+def _instantes_ocr(dur: float, espalhados: int = 6) -> list:
+    """QUANDO olhar o vídeo procurando texto.
+
+    O DEFEITO QUE ISTO CONSERTA (04/08/2026): a amostragem antiga era
+    `dur * (i+1) / 7`, ou seja 14%, 29%, 43%, 57%, 71% e 86% da duração. Ela
+    **nunca olhava os primeiros 14%** — e é exatamente ali que mora o hook.
+    Num vídeo de 30s o primeiro olhar caía aos 4,3s, com o texto já fora da
+    tela há tempo. O OCR concluía "vídeo sem texto", o clip era espelhado, e o
+    hook do autor original saía de trás pra frente pro cliente ver.
+
+    Agora o começo é olhado de perto (0,2s a 3s), porque hook viral vive nos
+    primeiros segundos, e o resto do vídeo continua sendo varrido pro caso de
+    legenda que entra no meio.
+    """
+    if dur <= 0:
+        return []
+    cedo = [t for t in (0.2, 0.6, 1.2, 2.0, 3.0) if t < dur]
+    espalhado = [dur * (i + 1) / (espalhados + 1) for i in range(espalhados)]
+    fim = [dur - 0.3] if dur > 0.6 else []      # selo/CTA costuma ficar no fim
+    return sorted(set(round(t, 2) for t in cedo + espalhado + fim if 0 < t < dur))
+
+
+def _clip_tem_texto(clip, amostras: int = 6, min_conf: int = 45,
+                    min_chars: int = 3) -> bool:
+    """True se o vídeo tem texto na tela (aí NÃO pode espelhar, senão o texto
+    fica de trás pra frente). Amostra alguns frames e roda OCR (Tesseract).
+
+    Precisa do Tesseract instalado (apt install tesseract-ocr + pip pytesseract).
+    SEM ele, retorna True (= não espelha) — mantém o comportamento seguro atual.
+
+    Os limiares são frouxos DE PROPÓSITO (conf 45, 3 caracteres). Achar texto
+    que não existe custa uma diferenciação a menos; não achar texto que existe
+    custa um vídeo com a escrita invertida na cara do cliente. Erro barato de
+    um lado, caro do outro — então erro pro lado barato.
+    """
+    try:
+        import pytesseract
+    except Exception:
+        return True   # sem OCR não dá pra saber se tem texto → não arrisca
+    try:
+        import numpy as _np
+        from PIL import Image
+        dur = float(getattr(clip, "duration", 0) or 0)
+        if dur <= 0:
+            return True
+        for t in _instantes_ocr(dur, amostras):
+            try:
+                frame = _np.asarray(clip.get_frame(t)).astype("uint8")
+            except Exception:
+                continue
+            img = Image.fromarray(frame)
+            # 960 e não 640: encolher demais apaga justamente o texto pequeno
+            # que a gente está procurando. O ganho de velocidade não vale um
+            # vídeo espelhado com a escrita ao contrário.
+            img.thumbnail((960, 960))
+            data = pytesseract.image_to_data(
+                img, output_type=pytesseract.Output.DICT)
+            chars = 0
+            for txt, conf in zip(data.get("text", []), data.get("conf", [])):
+                try:
+                    c = float(conf)
+                except (TypeError, ValueError):
+                    c = -1.0
+                palavra = (txt or "").strip()
+                if c >= min_conf and len(palavra) >= 2 and any(
+                        ch.isalnum() for ch in palavra):
+                    chars += len(palavra)
+            if chars >= min_chars:
+                log.info("Espelhamento: texto detectado no vídeo — NÃO espelha.")
+                return True
+        log.info("Espelhamento: vídeo sem texto — vai espelhar. 🪞")
+        return False
+    except Exception:
+        log.debug("Detecção de texto falhou; por segurança não espelha.")
+        return True
+
+
+def _aplicar_rotacao(clip, graus: float):
+    """Rotaciona o clip alguns graus (sem expandir a moldura). Combinado com o
+    zoom, as bordas pretas da rotação ficam escondidas."""
+    if not graus:
+        return clip
+    try:
+        from moviepy.video import fx as vfx
+        return clip.with_effects([vfx.Rotate(graus, expand=False)])
+    except Exception:
+        try:
+            return clip.rotated(graus)          # algumas versões do moviepy
+        except Exception:
+            return clip
+
+
 def _aplicar_efeitos_diferenciacao(clip):
-    """[FIX-2] Aplica de fato mirror + zoom digital + grade/grão/vinheta."""
-    if CFG_MIRROR_X:
+    """DIFERENCIAÇÃO ALEATÓRIA por vídeo: mirror (inteligente) + rotação leve
+    alternada + zoom variável 3–7% + cor variável (brilho/saturação/grão). Cada
+    post sai único — o algoritmo tende a ler como conteúdo novo, não repost."""
+    import random as _rnd
+    fazer_mirror = CFG_MIRROR_X or (CFG_MIRROR_AUTO and not _clip_tem_texto(clip))
+    if fazer_mirror:
         clip = _aplicar_mirror_x(clip)
         log.debug("VFX-1: Mirror X")
-    if CFG_ZOOM_DIGITAL and CFG_ZOOM_DIGITAL > 0:
-        clip = _aplicar_zoom_digital(clip, fator=CFG_ZOOM_DIGITAL)
-        log.debug(f"VFX-3: Zoom {CFG_ZOOM_DIGITAL * 100:.0f}%")
 
-    brilho = CFG_BRILHO if CFG_GRADE else 1.0
-    sat = CFG_SATURACAO if CFG_GRADE else 1.0
-    grain = CFG_GRANULADO if CFG_GRADE else 0
-    if brilho != 1.0 or sat != 1.0 or grain > 0 or CFG_VINHETA:
-        clip = _image_transform(
-            clip,
-            lambda f, _b=brilho, _s=sat, _g=grain, _v=CFG_VINHETA:
-                _processar_frame(f, _b, _s, _g, _v),
-        )
-        log.debug(f"VFX-2,4,5: brilho={brilho} sat={sat} grain={grain} vignette={CFG_VINHETA}")
+    # rotação leve ±(0.8–1.4)° — quebra o alinhamento geométrico original
+    ang = round(_rnd.uniform(0.8, 1.4), 2) * _rnd.choice((-1, 1))
+    clip = _aplicar_rotacao(clip, ang)
+
+    # zoom digital VARIÁVEL 3–7% (também esconde as bordas da rotação)
+    zoom = round(_rnd.uniform(0.03, 0.07), 3)
+    clip = _aplicar_zoom_digital(clip, fator=zoom)
+
+    # cor VARIÁVEL por vídeo — desfaz os "blocos cromáticos" do original
+    brilho = round(_rnd.uniform(0.98, 1.06), 3)
+    sat = round(_rnd.uniform(0.96, 1.10), 3)
+    grain = _rnd.choice((2, 3, 4))
+    clip = _image_transform(
+        clip,
+        lambda f, _b=brilho, _s=sat, _g=grain, _v=CFG_VINHETA:
+            _processar_frame(f, _b, _s, _g, _v),
+    )
+    log.info(f"🎲 VFX aleatório: rot={ang}° zoom={zoom*100:.1f}% "
+             f"brilho={brilho} sat={sat} grão={grain}")
     return clip
 
 
@@ -821,16 +1128,10 @@ def _reproduzir_video_sync(src: Path, dst: Path, produto: str,
             except Exception:
                 log.exception("Mixagem de áudio falhou; mantendo original.")
 
-        # 5) OVERLAYS: hook + legendas + cta ──────────────────────────────
+        # 5) OVERLAYS: legendas + TEMPLATE DE MARCA TopShop ────────────────
         overlays = []
+        # 5a) Legendas da fala (mantém — sincronizadas com a narração)
         try:
-            if CFG_HOOK_OVERLAY:
-                hook_txt = (_HOOK[0](nome_produto, plano=plano)
-                            if _HOOK_OK else "Olha isso!")
-                overlay_item = _overlay(ImageClip, _txt_png(hook_txt, "hook"), 0.0, min(CFG_HOOK_SEG, alvo))
-                if overlay_item:
-                    overlays.append(overlay_item)
-
             if CFG_LEGENDAS and frases and _TTS_OK:
                 _g, boundaries_para_blocos, _e = _TTS
                 blocos = boundaries_para_blocos(frases, wbounds, narr_dur or alvo)
@@ -844,17 +1145,91 @@ def _reproduzir_video_sync(src: Path, dst: Path, produto: str,
                     overlay_item = _overlay(ImageClip, _txt_png(txt, "caption"), ini, max(0.4, fim - ini))
                     if overlay_item:
                         overlays.append(overlay_item)
-
-            if CFG_CTA_FINAL:
-                cta_txt = _HOOK[1](nome_produto) if _HOOK_OK else "Link na Bio! 🛒"
-                ini_cta = max(0.0, alvo - CFG_CTA_SEG)
-                overlay_item = _overlay(ImageClip, _txt_png(cta_txt, "cta"), ini_cta, alvo - ini_cta)
-                if overlay_item:
-                    overlays.append(overlay_item)
         except Exception:
-            log.exception("Overlays parcialmente ignorados")
+            log.exception("Legendas parcialmente ignoradas")
 
-        clip_final = CompositeVideoClip([base, *overlays]) if overlays else base
+        # 5b) TEMPLATE DE MARCA TopShop — reusa as camadas prontas do
+        # narrated_video_agent (logo TS + nome + @handle + selo + hook + CTA
+        # com emojis), pra o hunter ter a MESMA identidade fixa.
+        _marca_ok = False
+        try:
+            from agents.narrated_video_agent import (
+                _criar_camadas_topo, _criar_cta_fixo,
+                _import_moviepy as _brand_mp_import)
+            _mp_brand = _brand_mp_import()   # 7-tuple (inclui ColorClip, TextClip)
+            # usa o hook JÁ definido no plano (Alana, 2 linhas) — só recalcula se vazio
+            hook_txt = (plano.get("hook")
+                        or (_HOOK[0](nome_produto, plano=plano) if _HOOK_OK else "OLHA ISSO"))
+            for camada in _criar_camadas_topo(alvo, hook_txt, _mp_brand, produto=nome_produto):
+                if camada is not None:
+                    overlays.append(camada)
+            for camada in _criar_cta_fixo(alvo, _mp_brand):
+                if camada is not None:
+                    overlays.append(camada)
+            _marca_ok = True
+            log.info("🏷️  Template de marca TopShop aplicado no hunter")
+        except Exception:
+            log.exception("Template de marca falhou; caindo pro hook/CTA simples")
+
+        # 5c) Fallback: se a marca falhou, usa o hook/CTA simples (antigo)
+        if not _marca_ok:
+            try:
+                if CFG_HOOK_OVERLAY:
+                    _hk = (plano.get("hook")
+                           or (_HOOK[0](nome_produto, plano=plano) if _HOOK_OK else "Olha isso!"))
+                    _oi = _overlay(ImageClip, _txt_png(_hk, "hook"), 0.0, min(CFG_HOOK_SEG, alvo))
+                    if _oi:
+                        overlays.append(_oi)
+                if CFG_CTA_FINAL:
+                    _ct = _HOOK[1](nome_produto) if _HOOK_OK else "Link na Bio! 🛒"
+                    _ini = max(0.0, alvo - CFG_CTA_SEG)
+                    _oi = _overlay(ImageClip, _txt_png(_ct, "cta"), _ini, alvo - _ini)
+                    if _oi:
+                        overlays.append(_oi)
+            except Exception:
+                log.exception("Overlays de fallback também falharam")
+
+        # 5.5) LAYOUT TopShop: reduz o vídeo pra 3:4 e centraliza num canvas
+        # 9:16 (fundo da marca), deixando faixa preta em cima (marca+hook) e
+        # embaixo (CTA) — igual aos vídeos do narrated_video_agent.
+        _narr_audio = base.audio
+        try:
+            from agents.narrated_video_agent import (
+                _import_moviepy as _brand_mp_import, _brand_asset)
+            _ColorClip = _brand_mp_import()[5]
+
+            # FUNDO por nicho: geral=preto, contas novas=branco (estilo Alana).
+            # O produtor seta TOPSHOP_BG (preto/branco) por vídeo antes de renderizar.
+            _bgm = os.environ.get("TOPSHOP_BG", "preto").strip().lower()
+            if _bgm in ("branco", "white"):
+                _cor_bg = (255, 255, 255)
+            elif _bgm in ("bege", "claro"):
+                _cor_bg = (232, 224, 210)
+            else:
+                _cor_bg = (0, 0, 0)
+            _fundo_bg = _ColorClip(size=(LARGURA_ALVO, ALTURA_ALVO), color=_cor_bg)
+            _fundo_bg = _clip_timing(_fundo_bg, dur=alvo, start=0.0, pos=("center", "center"))
+            abertos.append(_fundo_bg)
+
+            # VÍDEO reduzido (3:4), posicionado deixando espaço p/ header+hook em cima
+            # e CTA embaixo. Largura e Y do topo tunáveis por .env.
+            _fracw = float(os.environ.get("VIDEO_W_FRAC", "0.82"))
+            _larg_v = int(LARGURA_ALVO * _fracw)
+            _alt_full = int(_larg_v * ALTURA_ALVO / LARGURA_ALVO)    # 9:16 escalado
+            _alt_v = int(_larg_v * 4 / 3)                            # 3:4
+            _vid = _resize_clip(base, (_larg_v, _alt_full))
+            _yc = max(0, (_alt_full - _alt_v) // 2)
+            _vid = _crop_clip(_vid, x1=0, x2=_larg_v, y1=_yc, y2=_yc + _alt_v)
+            _video_y = int(os.environ.get("VIDEO_Y", "470"))
+            _vid = _clip_timing(_vid, pos=("center", _video_y))
+            abertos.append(_vid)
+
+            clip_final = CompositeVideoClip([_fundo_bg, _vid, *overlays],
+                                            size=(LARGURA_ALVO, ALTURA_ALVO))
+            clip_final = _set_audio(clip_final, _narr_audio)   # preserva a narração
+        except Exception:
+            log.exception("Layout 3:4 falhou; usando vídeo em tela cheia")
+            clip_final = CompositeVideoClip([base, *overlays]) if overlays else base
         abertos.append(clip_final)
 
         # 6) INTRO de IA opcional (prefixa) ────────────────────────────────
@@ -879,7 +1254,7 @@ def _reproduzir_video_sync(src: Path, dst: Path, produto: str,
         kwargs = dict(codec="libx264", audio_codec="aac", fps=30,
                       logger=None, ffmpeg_params=ffmpeg_params)
         try:
-            clip_final.write_videofile(str(dst), threads=4, preset="medium", **kwargs)
+            clip_final.write_videofile(str(dst), threads=4, preset="ultrafast", **kwargs)
         except TypeError:
             clip_final.write_videofile(str(dst), **kwargs)
 
@@ -930,40 +1305,214 @@ def _limpar_links_terceiros(texto: str) -> str:
     return re.sub(r' +', ' ', texto_limpo).strip()
 
 
+# Link da Shopee que costuma vir na própria mensagem (curto ou normal, com ou
+# sem http:// na frente).
+_SHOPEE_LINK_RE = re.compile(
+    r'(?:https?://)?(?:s\.shopee\.com\.br|shope\.ee|shopee\.com\.br)/\S+', re.I)
+
+
+def _extrair_link_shopee(texto: str):
+    """Acha o 1º link da Shopee na mensagem (curto s.shopee/shope.ee ou normal).
+    É mais confiável do que re-buscar o produto pelo nome (que às vezes falha)."""
+    if not texto:
+        return None
+    m = _SHOPEE_LINK_RE.search(texto)
+    if not m:
+        return None
+    url = m.group(0).rstrip('.,);]}"\'')
+    if not url.lower().startswith("http"):
+        url = "https://" + url
+    return url
+
+
+def _resolver_link_shopee(url: str):
+    """Segue o redirect do link curto -> URL limpa do produto (sem query de
+    tracking de terceiro). Best-effort: se não resolver, retorna None."""
+    try:
+        import requests
+        r = requests.get(url, allow_redirects=True, timeout=12,
+                         headers={"User-Agent": "Mozilla/5.0 (Linux; Android 10)"})
+        final = (r.url or "").split("?")[0]
+        if "shopee.com.br" in final and final.rstrip("/") != url.rstrip("/"):
+            return final
+    except Exception:
+        log.debug("Não consegui resolver o link curto da Shopee (usa fallback).")
+    return None
+
+
+# Termos que são PROPAGANDA do próprio canal (não produto) — hunter ignora.
+_TERMOS_SPAM = (
+    "comiss", "ebook", "e-book", "achaflix", "mentoria", "cupom", "assinatura",
+    "sorteio", "grupo vip", "acesso vip", "canal ", "pagamento", "10 pins",
+    "entrar no grupo", "link na bio", "clique aqui", "afiliad",
+)
+
+
+def _termo_eh_spam(termo: str) -> bool:
+    """True se o termo é promo/spam do canal (comissão, ebook, grupo vip...)
+    em vez de um produto real."""
+    if not termo:
+        return True
+    t = termo.lower()
+    return any(s in t for s in _TERMOS_SPAM)
+
+
+def _anotar_preco(link: str, preco, nome: str = ""):
+    """Primeira leitura de preço do produto, no dia em que ele entra na vitrine.
+    Daí em diante quem alimenta é o deploy_site, a cada health-check. Nunca
+    derruba o registro do produto: sem histórico o site só fica sem preço."""
+    if not preco:
+        return
+    try:
+        try:
+            import historico_precos as _H
+        except Exception:
+            from creative_engine import historico_precos as _H
+        _H.registrar(link, preco, nome=nome)
+    except Exception:
+        log.debug("Histórico de preços não anotado (segue sem).")
+
+
+def _dados_oficiais_do_link(link: str) -> dict:
+    """Dados REAIS do produto pela API de afiliado da Shopee. A Shopee bloqueia
+    raspar a página (não tem og:image) e a API interna (403), mas a API OFICIAL
+    de afiliado devolve tudo: segue o link -> pega o itemId -> productOfferV2.
+    Best-effort: se falhar, devolve {} e a vitrine usa o placeholder.
+
+    Devolve o dicionário inteiro (imagem, preço, título...) porque a resposta
+    já vinha com tudo isso e a gente só aproveitava a foto — o preço daqui é a
+    primeira leitura do histórico, sem custar chamada nenhuma."""
+    if not link:
+        return {}
+    try:
+        import re as _re
+        import requests as _rq
+        r = _rq.get(link, allow_redirects=True, timeout=12,
+                    headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+        final = r.url or ""
+        m = _re.search(r"i\.(\d+)\.(\d+)", final)
+        if m:
+            shop_id, item_id = m.group(1), m.group(2)
+        else:
+            pares = _re.findall(r"/(\d+)/(\d+)", final.split("?")[0])
+            shop_id, item_id = pares[-1] if pares else (None, None)
+        if not item_id:
+            return {}
+        from integrations.shopee_affiliate import obter_dados_produto
+        d = obter_dados_produto(str(item_id), shop_id=int(shop_id))
+        if d.get("ok"):
+            return d
+    except Exception:
+        log.debug("Não consegui os dados oficiais do produto (segue sem foto).")
+    return {}
+
+
+def _foto_oficial_do_link(link: str) -> str:
+    """Só a foto — mantido porque outros pontos do projeto chamam por este nome."""
+    return _dados_oficiais_do_link(link).get("imagem") or ""
+
+
+def _registrar_no_site(nome: str, link: str, imagem: str = "", max_itens: int = 80,
+                       plataforma: str = "shopee", origem: str = "",
+                       preco: float = 0.0):
+    """Grava o produto + link de afiliado no produtos_fila.json que o SITE
+    (bio_page_builder) lê. É a PONTE que faz a bio (topshopoficial) mostrar
+    EXATAMENTE o produto do vídeo — sem isso, o post e o site ficam descasados
+    e a comissão vaza. Mais recente primeiro, sem duplicar link, cap em max_itens."""
+    if not link:
+        return
+    # Mesma condição de antes: só bate na API quando falta a foto. Assim esta
+    # mudança não acrescenta NENHUMA chamada nova — o preço vem de carona na
+    # resposta que já era buscada. Produto que chega com foto entra sem preço e
+    # ganha o dele no primeiro health-check do deploy_site, poucas horas depois.
+    if not imagem and plataforma == "shopee":
+        d = _dados_oficiais_do_link(link)      # API de afiliado Shopee
+        imagem = d.get("imagem") or ""
+        preco = preco or d.get("preco") or 0.0
+    try:
+        import json as _json
+        fila = []
+        if SITE_FILA.exists():
+            try:
+                fila = _json.loads(SITE_FILA.read_text(encoding="utf-8")) or []
+            except Exception:
+                fila = []
+        if not isinstance(fila, list):
+            fila = []
+        fila = [i for i in fila if isinstance(i, dict) and i.get("link") != link]
+        fila.insert(0, {
+            "produto": nome, "campeao": nome, "link": link,
+            "imagem": imagem or "", "classe": "", "plataforma": plataforma,
+            "origem": origem or "",   # URL Shopee p/ reetiquetar o link (canal Telegram)
+            "preco": float(preco or 0.0),   # 1ª leitura; vira média com o tempo
+            "ts": int(time.time()),
+        })
+        _anotar_preco(link, preco, nome)
+        fila = fila[:max_itens]
+        SITE_FILA.parent.mkdir(parents=True, exist_ok=True)
+        _salvar_json_atomico(SITE_FILA, fila)
+        log.info(f"   🌐 Vitrine do site atualizada: '{nome}' (produtos_fila)")
+    except Exception:
+        log.exception("Falha ao registrar produto no site")
+
+
 async def processar_mensagem_telegram(msg, sub_id: str = "hunter_radar"):
     if not getattr(msg, "text", None):
         return None
 
-    # limpeza preliminar de links/menções
+    # NOVO: o link da Shopee normalmente JÁ vem na mensagem. Usar ele é bem
+    # mais confiável do que re-buscar o produto pelo NOME (que falha quando o
+    # nome não bate na busca) — era por isso que muitos produtos eram perdidos.
+    link_na_msg = _extrair_link_shopee(msg.text)
+
+    # limpeza preliminar de links/menções (só pra extrair o NOME do produto)
     texto_para_extracao = _limpar_links_terceiros(msg.text)
     termo = extrair_termo_produto(texto_para_extracao)
     if not termo:
         log.warning("Nenhum termo de produto extraído. Ignorando.")
         return None
+    if _termo_eh_spam(termo):
+        log.info(f"Termo ignorado (promo/spam do canal, não produto): {termo!r}")
+        return None
     log.info(f"Termo do produto: {termo!r}")
     atualizar_produto(termo, status="processando", origem="telegram_hunter")
 
-    # 1) Mineração Shopee + link
-    try:
-        mineracao = minerar_oportunidades(termo)
-    except Exception:
-        log.exception("Erro na mineração Shopee")
-        atualizar_produto(termo, status="erro", erro="falha mineração")
-        return None
+    url_shopee = None
+    mineracao = {}
+    campeao = {}     # default: no caminho do link não há "campeão" da mineração
 
-    if not mineracao.get("ok") or not mineracao.get("campeao"):
-        log.warning(f"{termo!r} não localizado na Shopee.")
-        atualizar_produto(termo, status="erro", erro="não localizado na Shopee")
-        return None
-    campeao = mineracao["campeao"]
-    url_shopee = campeao.get("product_link") or campeao.get("offer_link")
+    # 1a) PREFERIDO: link que veio na própria mensagem (resolve curto -> produto)
+    if link_na_msg:
+        url_shopee = _resolver_link_shopee(link_na_msg) or link_na_msg
+        log.info(f"Link da mensagem -> {url_shopee}")
+
+    # 1b) FALLBACK: minera por nome (só se a mensagem não trouxe link)
     if not url_shopee:
-        atualizar_produto(termo, status="erro", erro="sem URL no campeão Shopee")
+        try:
+            mineracao = minerar_oportunidades(termo)
+        except Exception:
+            log.exception("Erro na mineração Shopee")
+            atualizar_produto(termo, status="erro", erro="falha mineração")
+            return None
+        if not mineracao.get("ok") or not mineracao.get("campeao"):
+            log.warning(f"{termo!r} não localizado na Shopee (e sem link na msg).")
+            atualizar_produto(termo, status="erro", erro="não localizado na Shopee")
+            return None
+        campeao = mineracao["campeao"]
+        url_shopee = campeao.get("product_link") or campeao.get("offer_link")
+
+    if not url_shopee:
+        atualizar_produto(termo, status="erro", erro="sem URL Shopee")
         return None
 
     # gerar link de afiliado
+    # A Shopee REJEITA sub_id com caractere especial (erro 11001 "invalid sub
+    # id"). Limpa pra só alfanumérico (igual o radar faz), senão o link vem
+    # vazio e o produto é descartado antes de virar vídeo.
+    _subs = [re.sub(r"[^A-Za-z0-9]", "", s)[:16] for s in (sub_id, "telegramrepurpose") if s]
+    _subs = [s for s in _subs if s] or ["hunter"]
     try:
-        res_link = gerar_link_afiliado(url_shopee, sub_ids=[sub_id, "telegram_repurpose"])
+        res_link = gerar_link_afiliado(url_shopee, sub_ids=_subs)
         if isinstance(res_link, dict):
             meu_link = res_link.get("link") or res_link.get("short_link") or ""
         else:
@@ -1005,10 +1554,58 @@ async def processar_mensagem_telegram(msg, sub_id: str = "hunter_radar"):
         atualizar_produto(termo, status="erro", erro="falha no download")
         return None
 
-    # 3) Monta plano parcial (pra hook/roteiro/legenda usarem contexto)
+    # 3) Monta plano parcial — ALINHADO ao produzir_tiktok (template congelado):
+    #    categoria → nicho → conta → fundo/logo/@handle → hook Alana (2 linhas).
     nome_produto = campeao.get("nome", termo)
     preco = tratar_preco(campeao.get("preco", 0))
+
+    # categoria + nicho decidem a CONTA antes de renderizar (grid consistente).
+    categoria = ""
+    try:
+        from creative_engine.narration_script_builder import _categoria_do_produto
+        categoria = _categoria_do_produto(nome_produto) or ""
+    except Exception:
+        pass
+    conta = None
+    if os.getenv("MULTI_CONTA", "0").strip().lower() in ("1", "true", "sim"):
+        try:
+            import roteador_contas as _RC
+            conta = _RC.conta_do_produto(nome_produto, categoria)
+            if conta.get("handle"):
+                os.environ["TOPSHOP_HANDLE"] = conta["handle"]
+        except Exception:
+            conta = None
+    nicho = (conta.get("nicho") if conta else "") or ""
+    if not nicho:
+        try:
+            import roteador_contas as _RC
+            nicho = _RC.nicho_do_produto(nome_produto, categoria)
+        except Exception:
+            nicho = "geral"
+    # FUNDO + LOGO por nicho (idêntico ao produzir_tiktok → feed uniforme)
+    _bg_padrao = "preto" if nicho in ("geral", "") else "branco"
+    os.environ["TOPSHOP_BG"] = (os.environ.get("FORCE_BG")
+                                or os.environ.get("BG_" + nicho.upper(), _bg_padrao))
+    # mesma regra do produzir_tiktok, IMPORTADA e não copiada: o dicionário
+    # duplicado nestes dois arquivos foi o que deixou "casa" de fora e pôs a
+    # logo do @topshop.__ num vídeo do @topshopcasa_.
+    try:
+        from shared.marca import logo_escolhida
+        os.environ["TOPSHOP_LOGO"] = logo_escolhida(nicho, log=log)
+    except Exception:
+        os.environ["TOPSHOP_LOGO"] = os.environ.get("FORCE_LOGO") or "logo_ts.png"
+
+    # HOOK estilo Alana (2 linhas, variado, anti-repetição) — MESMO gerador do
+    # produzir_tiktok. Cai no hook_builder só se o Alana falhar.
     hook_preview = (_HOOK[0](nome_produto, plano={}) if _HOOK_OK else "Olha isso!")
+    if os.getenv("HOOK_ALANA", "1").strip().lower() in ("1", "true", "sim"):
+        try:
+            from hook_alana import gerar_hook_alana
+            _ha = gerar_hook_alana(nome_produto, campeao.get("descricao", ""), nicho)
+            if _ha:
+                hook_preview = _ha
+        except Exception:
+            pass
 
     plano = {
         "produto":        nome_produto,
@@ -1038,16 +1635,11 @@ async def processar_mensagem_telegram(msg, sub_id: str = "hunter_radar"):
         return None
 
     # 5) Legenda + hashtags dinâmicas + descrições por plataforma
-    categoria = ""
-    if _NARR_OK:
-        try:
-            from creative_engine.narration_script_builder import _categoria_do_produto
-            categoria = _categoria_do_produto(nome_produto) or ""
-        except Exception:
-            log.debug("Não foi possível determinar categoria via narration_script_builder")
-
-    legenda = _legenda_dinamica(nome_produto, hook_preview)
-    hashtags = _hashtags_para(categoria)
+    #    (categoria/nicho já calculados na etapa 3, antes de renderizar)
+    legenda = _legenda_dinamica(nome_produto, hook_preview,
+                                descricao=campeao.get("descricao", ""),
+                                nicho=nicho, item_id=str(campeao.get("item_id", "")))
+    hashtags = _hashtags_para(categoria, nome_produto)
 
     plano.update({
         "video_path_sugerido": str(video_final),
@@ -1055,9 +1647,16 @@ async def processar_mensagem_telegram(msg, sub_id: str = "hunter_radar"):
         "legenda":             legenda,
         "hashtags":            hashtags,
         "cta":                 (_HOOK[1](nome_produto) if _HOOK_OK else "Link na Bio!"),
+        # [FIX-9] chaves canônicas que o resto do projeto lê
+        # (autonomous_orchestrator, publicadores, finalizar_plano):
+        "narracao":            resultado.get("narracao", False),
+        "duracao":             resultado.get("duracao"),
+        # aliases descritivos mantidos por compatibilidade retroativa
         "narracao_propria":    resultado.get("narracao", False),
         "duracao_video":       resultado.get("duracao"),
         "categoria":           categoria,
+        "nicho":               nicho,
+        "nicho_fonte":         nicho,
         "status_producao":     "video_gerado",
     })
 
@@ -1082,6 +1681,53 @@ async def processar_mensagem_telegram(msg, sub_id: str = "hunter_radar"):
         log.info("Plano gravado e produto registrado na esteira.")
     except Exception:
         log.exception("Falha ao persistir plano")
+
+    # 7) PONTE PRA ESTEIRA — copia o vídeo re-produzido pra
+    # pronto_para_postar/<slug>/ (mesmo slug do plano_<slug>.json), que é de
+    # onde o daemon posta. Sem isso o vídeo do hunter ficava só em
+    # assets/inbox e nunca era postado.
+    try:
+        import shutil
+        pp_dir = BASE_DIR / "pronto_para_postar" / slug
+        pp_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(str(video_final), str(pp_dir / "video.mp4"))
+        # conta.json ao lado do vídeo → o daemon posta na conta certa (mata o "?"
+        # do roteamento; sem isso o hunter caía sempre na conta padrão).
+        if conta:
+            try:
+                import roteador_contas as _RC
+                (pp_dir / "conta.json").write_text(
+                    json.dumps(_RC.conta_para_json(conta), ensure_ascii=False, indent=2),
+                    encoding="utf-8")
+            except Exception:
+                log.debug("conta.json não gravado (segue sem)")
+        # IG/FB usam a legenda do plano; o YouTube lê estes .txt daqui:
+        _hashtags_txt = plano.get("hashtags", "") or ""
+        (pp_dir / "titulo_youtube.txt").write_text(
+            (f"{nome_produto} #shorts")[:100], encoding="utf-8")
+        (pp_dir / "descricao_youtube.txt").write_text(
+            ((plano.get("legenda", "") or "") + "\n\n" + _hashtags_txt).strip(),
+            encoding="utf-8")
+        (pp_dir / "hashtags.txt").write_text(_hashtags_txt, encoding="utf-8")
+        log.info(f"🚚 Esteira abastecida: {pp_dir / 'video.mp4'}")
+    except Exception:
+        log.exception("Falha ao abastecer pronto_para_postar")
+
+    # 8) PONTE PRO SITE — grava o produto + link de afiliado na vitrine que o
+    # site lê, pra a bio mostrar o mesmo produto do vídeo (fecha o funil $).
+    _registrar_no_site(nome_produto, meu_link, origem=url_shopee or "")
+
+    # 9) LEDGER — loga o post (produto, hook, categoria, item_id, sub_id) no
+    # diário. É a fundação do aprendizado: depois cruza com a comissão (por
+    # item_id) e descobre qual hook/categoria/horário converte. Best-effort.
+    try:
+        from posts_ledger import registrar as _reg_post
+        _reg_post(produto=nome_produto, link=meu_link, url_shopee=url_shopee,
+                  categoria=categoria or nicho, hook=hook_preview, legenda=legenda,
+                  slug=slug, sub_ids=_subs,
+                  extra={"fonte": "telegram", "nicho": nicho})
+    except Exception:
+        log.debug("posts_ledger indisponível (segue sem logar)")
 
     return plano
 
@@ -1304,7 +1950,11 @@ async def varrer_canal_por_criativos(canal_username: str, limite: int = 50):
 
             count = 0
             async for msg in client.iter_messages(entidade, limit=limite):
-                if not msg.video:
+                # [FIX-10] aceita vídeo nativo E vídeo enviado como documento/arquivo
+                # (canais de achadinhos às vezes mandam o .mp4 "como arquivo",
+                # que não vem em msg.video mas tem mime_type video/*).
+                _mime = getattr(getattr(msg, "file", None), "mime_type", "") or ""
+                if not (msg.video or _mime.startswith("video/")):
                     continue
 
                 texto_analise = msg.text or ""

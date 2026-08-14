@@ -1,0 +1,1471 @@
+{
+  "_leia": [
+    "Biblioteca de MÚSICAS do Instagram que o Dre confirmou disponíveis na conta",
+    "(a biblioteca completa abriu depois de marcar a profissão como 'empresário').",
+    "Mantida à mão de propósito: o Instagram não expõe API pra isso, e listar",
+    "faixa que a conta não pode usar geraria vídeo que não posta.",
+    "",
+    "NÃO USAR 'Áudio original' de terceiros. O Dre olhou a biblioteca e a",
+    "conclusão foi direta: são áudios estourados e esquisitos, sem condição de",
+    "uso. Música com NOME e artista é o caminho. Por isso as dezenas de linhas",
+    "'Áudio original' dos prints de 12/08 ficaram DE FORA.",
+    "",
+    "'reels' é quantos vídeos já usam a faixa — o sinal que a plataforma premia",
+    "na distribuição, e por isso a ordem de preferência do edl._musica().",
+    "",
+    "⚠️ ESTE ARQUIVO É PARA O CAMINHO MANUAL / METRICOOL. A faixa vive DENTRO do",
+    "app: ela não entra por Graph API. Para o vídeo que o daemon posta sozinho, o",
+    "som precisa estar no ARQUIVO — isso é assets/musicas/ e render._musica_local.",
+    "",
+    "⚠️ 'explicito': true marca faixa com letra explícita (selo E no app). O",
+    "seletor PULA essas por padrão: conta comercial vendendo utilidade doméstica",
+    "não combina, e o custo de um deslize de marca é maior que o de trocar de",
+    "faixa. EDL_PERMITIR_EXPLICITO=1 libera.",
+    "",
+    "⚠️ nome/artista/reels/duração foram LIDOS dos prints de 12/08.",
+    "'instrumental', 'energia' e 'nichos' são JULGAMENTO MEU, não leitura — se",
+    "alguma faixa cair no nicho errado, é aqui que se corrige."
+  ],
+  "faixas": [
+    {
+      "nome": "I Know What You Want x Madison Calley",
+      "artista": "madisoncalley",
+      "reels": 11000000,
+      "instrumental": false,
+      "energia": "media",
+      "nichos": [
+        "geral",
+        "beleza",
+        "moda"
+      ],
+      "duracao": 57
+    },
+    {
+      "nome": "MONACO",
+      "artista": "Bad Bunny",
+      "reels": 4800000,
+      "instrumental": false,
+      "energia": "alta",
+      "nichos": [
+        "geral",
+        "moda"
+      ],
+      "duracao": 267,
+      "explicito": true
+    },
+    {
+      "nome": "Flowers",
+      "artista": "Miley Cyrus",
+      "reels": 4099999,
+      "instrumental": false,
+      "energia": "media",
+      "nichos": [
+        "geral",
+        "beleza",
+        "moda"
+      ],
+      "duracao": 200
+    },
+    {
+      "nome": "Vivaldi Winter Drill #2",
+      "artista": "veneris",
+      "reels": 3700000,
+      "instrumental": true,
+      "energia": "alta",
+      "nichos": [
+        "tech",
+        "moda"
+      ],
+      "duracao": 116
+    },
+    {
+      "nome": "Viva La Vida",
+      "artista": "Coldplay",
+      "reels": 3000000,
+      "instrumental": false,
+      "energia": "media",
+      "nichos": [
+        "geral",
+        "casa"
+      ],
+      "duracao": 242
+    },
+    {
+      "nome": "Gifts to your future self",
+      "artista": "adam.dodson",
+      "reels": 2600000,
+      "instrumental": false,
+      "energia": "baixa",
+      "nichos": [
+        "geral",
+        "casa"
+      ],
+      "duracao": 39
+    },
+    {
+      "nome": "Vengeance",
+      "artista": "iwilldiehere",
+      "reels": 2400000,
+      "instrumental": true,
+      "energia": "alta",
+      "nichos": [
+        "tech",
+        "moda"
+      ],
+      "duracao": 134
+    },
+    {
+      "nome": "Natural",
+      "artista": "Florian Christl",
+      "reels": 2200000,
+      "instrumental": true,
+      "energia": "baixa",
+      "nichos": [
+        "casa",
+        "beleza"
+      ],
+      "duracao": 151
+    },
+    {
+      "nome": "AURA",
+      "artista": "Ogryzek",
+      "reels": 2100000,
+      "instrumental": true,
+      "energia": "alta",
+      "nichos": [
+        "tech",
+        "moda"
+      ],
+      "duracao": 115
+    },
+    {
+      "nome": "So Easy (To Fall In Love)",
+      "artista": "Olivia Dean",
+      "reels": 2100000,
+      "instrumental": false,
+      "energia": "baixa",
+      "nichos": [
+        "casa",
+        "beleza"
+      ],
+      "duracao": 169
+    },
+    {
+      "nome": "Babel",
+      "artista": "Gustavo Bravetti",
+      "reels": 1800000,
+      "instrumental": true,
+      "energia": "alta",
+      "nichos": [
+        "tech",
+        "moda"
+      ],
+      "duracao": 172
+    },
+    {
+      "nome": "Paradise",
+      "artista": "Coldplay",
+      "reels": 1800000,
+      "instrumental": false,
+      "energia": "media",
+      "nichos": [
+        "geral",
+        "casa"
+      ],
+      "duracao": 278
+    },
+    {
+      "nome": "Intro",
+      "artista": "The xx",
+      "reels": 1700000,
+      "instrumental": true,
+      "energia": "baixa",
+      "nichos": [
+        "casa",
+        "tech",
+        "moda"
+      ],
+      "duracao": 127
+    },
+    {
+      "nome": "Alive (It Feels Like)",
+      "artista": "Alok",
+      "reels": 1600000,
+      "instrumental": false,
+      "energia": "alta",
+      "nichos": [
+        "geral",
+        "tech"
+      ],
+      "duracao": 142
+    },
+    {
+      "nome": "Vida Loca",
+      "artista": "Ramzuto",
+      "reels": 1600000,
+      "instrumental": false,
+      "energia": "alta",
+      "nichos": [
+        "geral",
+        "pet"
+      ],
+      "duracao": 171
+    },
+    {
+      "nome": "DONT STOP",
+      "artista": "Vitreo",
+      "reels": 1500000,
+      "instrumental": false,
+      "energia": "alta",
+      "nichos": [
+        "tech",
+        "moda"
+      ],
+      "duracao": 179
+    },
+    {
+      "nome": "Raindance",
+      "artista": "Dave, Tems",
+      "reels": 1500000,
+      "instrumental": false,
+      "energia": "media",
+      "nichos": [
+        "geral",
+        "moda"
+      ],
+      "duracao": 219
+    },
+    {
+      "nome": "TOO SWEET X RIVERS - ALTEGO MIX",
+      "artista": "altego_music",
+      "reels": 1300000,
+      "instrumental": false,
+      "energia": "alta",
+      "nichos": [
+        "geral",
+        "moda",
+        "tech"
+      ],
+      "duracao": 37
+    },
+    {
+      "nome": "Interstellar (Main Theme Piano)",
+      "artista": "Gacabe & Jecabe",
+      "reels": 1200000,
+      "instrumental": true,
+      "energia": "baixa",
+      "nichos": [
+        "casa",
+        "tech",
+        "geral"
+      ],
+      "duracao": 241
+    },
+    {
+      "nome": "Vintage",
+      "artista": "Cort",
+      "reels": 1100000,
+      "instrumental": true,
+      "energia": "media",
+      "nichos": [
+        "casa",
+        "moda",
+        "beleza"
+      ],
+      "duracao": 118
+    },
+    {
+      "nome": "LET ME BE",
+      "artista": "The Second Voice",
+      "reels": 1100000,
+      "instrumental": false,
+      "energia": "media",
+      "nichos": [
+        "geral",
+        "casa"
+      ],
+      "duracao": 189
+    },
+    {
+      "nome": "Sparks by Evan Jacobson",
+      "artista": "evanjacobson",
+      "reels": 1100000,
+      "instrumental": false,
+      "energia": "baixa",
+      "nichos": [
+        "casa",
+        "beleza"
+      ],
+      "duracao": 31
+    },
+    {
+      "nome": "Yellow",
+      "artista": "Coldplay",
+      "reels": 1100000,
+      "instrumental": false,
+      "energia": "baixa",
+      "nichos": [
+        "casa",
+        "beleza"
+      ],
+      "duracao": 266,
+      "explicito": true
+    },
+    {
+      "nome": "Memory Reboot (Slowed)",
+      "artista": "VØJ, Narvent",
+      "reels": 1000000,
+      "instrumental": true,
+      "energia": "alta",
+      "nichos": [
+        "tech"
+      ],
+      "duracao": 236
+    },
+    {
+      "nome": "LUNA BALA (Super Slowed)",
+      "artista": "Yb Wasg'ood, Ariis, MC PR",
+      "reels": 890000,
+      "instrumental": false,
+      "energia": "alta",
+      "nichos": [
+        "geral",
+        "tech"
+      ]
+    },
+    {
+      "nome": "Runaway (feat. Pusha T)",
+      "artista": "Kanye West",
+      "reels": 877000,
+      "instrumental": false,
+      "energia": "media",
+      "nichos": [
+        "geral"
+      ],
+      "duracao": 547,
+      "explicito": true
+    },
+    {
+      "nome": "SLAY!",
+      "artista": "Eternxlkz",
+      "reels": 845000,
+      "instrumental": false,
+      "energia": "alta",
+      "nichos": [
+        "tech",
+        "moda"
+      ],
+      "duracao": 107,
+      "explicito": true
+    },
+    {
+      "nome": "ICARUS",
+      "artista": "Tony Ann",
+      "reels": 833000,
+      "instrumental": true,
+      "energia": "alta",
+      "nichos": [
+        "tech",
+        "geral"
+      ],
+      "duracao": 199
+    },
+    {
+      "nome": "Bitter Sweet Symphony",
+      "artista": "David Garrett",
+      "reels": 794000,
+      "instrumental": true,
+      "energia": "media",
+      "nichos": [
+        "geral",
+        "casa",
+        "moda"
+      ],
+      "duracao": 221
+    },
+    {
+      "nome": "God's Plan",
+      "artista": "Drake",
+      "reels": 786000,
+      "instrumental": false,
+      "energia": "media",
+      "nichos": [
+        "geral",
+        "tech"
+      ],
+      "duracao": 198,
+      "explicito": true
+    },
+    {
+      "nome": "REVENGE (Super Slowed)",
+      "artista": "1HXSX, wnorg17",
+      "reels": 777000,
+      "instrumental": false,
+      "energia": "alta",
+      "nichos": [
+        "tech",
+        "moda"
+      ],
+      "duracao": 121
+    },
+    {
+      "nome": "Fall Back",
+      "artista": "Lithe",
+      "reels": 721000,
+      "instrumental": false,
+      "energia": "media",
+      "nichos": [
+        "geral",
+        "moda"
+      ],
+      "duracao": 129
+    },
+    {
+      "nome": "GOAT",
+      "artista": "WUYS",
+      "reels": 688000,
+      "instrumental": true,
+      "energia": "alta",
+      "nichos": [
+        "tech",
+        "moda"
+      ],
+      "duracao": 149
+    },
+    {
+      "nome": "Vogue",
+      "artista": "Madonna",
+      "reels": 589000,
+      "instrumental": false,
+      "energia": "media",
+      "nichos": [
+        "moda",
+        "beleza"
+      ],
+      "duracao": 317
+    },
+    {
+      "nome": "Halo",
+      "artista": "Beyoncé",
+      "reels": 567000,
+      "instrumental": false,
+      "energia": "media",
+      "nichos": [
+        "geral",
+        "beleza"
+      ],
+      "duracao": 261
+    },
+    {
+      "nome": "Unstoppable",
+      "artista": "Sia",
+      "reels": 506000,
+      "instrumental": false,
+      "energia": "alta",
+      "nichos": [
+        "geral",
+        "tech",
+        "pet"
+      ],
+      "duracao": 217
+    },
+    {
+      "nome": "Titanium (Instrumental)",
+      "artista": "The Muses",
+      "reels": 472000,
+      "instrumental": true,
+      "energia": "media",
+      "nichos": [
+        "geral",
+        "beleza",
+        "moda"
+      ],
+      "duracao": 234
+    },
+    {
+      "nome": "Vibe",
+      "artista": "Slomow, himood",
+      "reels": 466000,
+      "instrumental": false,
+      "energia": "media",
+      "nichos": [
+        "geral",
+        "casa",
+        "beleza",
+        "moda"
+      ],
+      "duracao": 148
+    },
+    {
+      "nome": "Timeless (Instrumental) (feat. Playboi Carti)",
+      "artista": "The Weeknd",
+      "reels": 452000,
+      "instrumental": true,
+      "energia": "media",
+      "nichos": [
+        "geral",
+        "moda",
+        "tech"
+      ],
+      "duracao": 256
+    },
+    {
+      "nome": "Venus and Flower",
+      "artista": "Austin Farwell",
+      "reels": 445000,
+      "instrumental": true,
+      "energia": "baixa",
+      "nichos": [
+        "casa",
+        "beleza",
+        "moda"
+      ],
+      "duracao": 221
+    },
+    {
+      "nome": "Hear Me Now",
+      "artista": "Alok, Zeeba, Bruno Martini",
+      "reels": 435000,
+      "instrumental": false,
+      "energia": "media",
+      "nichos": [
+        "geral",
+        "casa"
+      ]
+    },
+    {
+      "nome": "Bloody Mary",
+      "artista": "Marvin Matyka",
+      "reels": 434000,
+      "instrumental": true,
+      "energia": "media",
+      "nichos": [
+        "moda",
+        "tech"
+      ],
+      "duracao": 145
+    },
+    {
+      "nome": "Old Vibes",
+      "artista": "DROPLIKEAI",
+      "reels": 414000,
+      "instrumental": true,
+      "energia": "media",
+      "nichos": [
+        "geral",
+        "moda"
+      ],
+      "duracao": 180
+    },
+    {
+      "nome": "Rise Up",
+      "artista": "Beast Inside Beats",
+      "reels": 403000,
+      "instrumental": false,
+      "energia": "alta",
+      "nichos": [
+        "geral",
+        "tech",
+        "pet"
+      ],
+      "duracao": 175
+    },
+    {
+      "nome": "Sign of the Times",
+      "artista": "Harry Styles",
+      "reels": 388000,
+      "instrumental": false,
+      "energia": "media",
+      "nichos": [
+        "geral",
+        "moda"
+      ],
+      "duracao": 340
+    },
+    {
+      "nome": "Golden Hour",
+      "artista": "Daniela Mlčúchová",
+      "reels": 362000,
+      "instrumental": false,
+      "energia": "baixa",
+      "nichos": [
+        "casa",
+        "beleza",
+        "moda"
+      ],
+      "duracao": 185
+    },
+    {
+      "nome": "Sugar",
+      "artista": "Maroon 5",
+      "reels": 349000,
+      "instrumental": false,
+      "energia": "media",
+      "nichos": [
+        "geral",
+        "beleza"
+      ],
+      "duracao": 237,
+      "explicito": true
+    },
+    {
+      "nome": "INDUSTRY BABY",
+      "artista": "Lil Nas X, Jack Harlow",
+      "reels": 339000,
+      "instrumental": false,
+      "energia": "alta",
+      "nichos": [
+        "tech",
+        "moda"
+      ],
+      "explicito": true
+    },
+    {
+      "nome": "Am I Wrong",
+      "artista": "Nico & Vinz",
+      "reels": 302000,
+      "instrumental": false,
+      "energia": "media",
+      "nichos": [
+        "geral"
+      ],
+      "duracao": 245,
+      "explicito": true
+    },
+    {
+      "nome": "Mask Off",
+      "artista": "Elliot Norlander, A3R0",
+      "reels": 302000,
+      "instrumental": true,
+      "energia": "alta",
+      "nichos": [
+        "tech",
+        "moda"
+      ]
+    },
+    {
+      "nome": "BEAUTY AND A BEAT X COLA (ALTÉGO MIX)",
+      "artista": "altego_music",
+      "reels": 301000,
+      "instrumental": false,
+      "energia": "alta",
+      "nichos": [
+        "geral",
+        "beleza",
+        "moda"
+      ],
+      "duracao": 33
+    },
+    {
+      "nome": "I Will Find",
+      "artista": "Vintage Culture, Rooftime",
+      "reels": 281000,
+      "instrumental": false,
+      "energia": "alta",
+      "nichos": [
+        "geral",
+        "tech"
+      ]
+    },
+    {
+      "nome": "Fly",
+      "artista": "Dennis Korn",
+      "reels": 275000,
+      "instrumental": true,
+      "energia": "media",
+      "nichos": [
+        "geral",
+        "casa"
+      ],
+      "duracao": 105
+    },
+    {
+      "nome": "nisso daqui eu sou bom",
+      "artista": "dailyfariaz",
+      "reels": 274000,
+      "instrumental": false,
+      "energia": "media",
+      "nichos": [
+        "geral",
+        "tech"
+      ],
+      "duracao": 14
+    },
+    {
+      "nome": "Cheri Cheri Lady",
+      "artista": "Mentol, ADEN",
+      "reels": 273000,
+      "instrumental": false,
+      "energia": "alta",
+      "nichos": [
+        "moda",
+        "beleza"
+      ],
+      "duracao": 127
+    },
+    {
+      "nome": "Ibiza Aura",
+      "artista": "slap house mafia",
+      "reels": 264000,
+      "instrumental": true,
+      "energia": "alta",
+      "nichos": [
+        "tech",
+        "moda"
+      ],
+      "duracao": 163
+    },
+    {
+      "nome": "I Like It",
+      "artista": "Cardi B, Bad Bunny, J Balvin",
+      "reels": 255000,
+      "instrumental": false,
+      "energia": "alta",
+      "nichos": [
+        "moda",
+        "beleza"
+      ],
+      "explicito": true
+    },
+    {
+      "nome": "River Flows in You (Piano Arrangement)",
+      "artista": "Alexandre Pachabezian",
+      "reels": 248000,
+      "instrumental": true,
+      "energia": "baixa",
+      "nichos": [
+        "casa",
+        "beleza",
+        "moda"
+      ]
+    },
+    {
+      "nome": "Unstoppable",
+      "artista": "Petar Mark",
+      "reels": 238000,
+      "instrumental": true,
+      "energia": "alta",
+      "nichos": [
+        "geral",
+        "tech"
+      ],
+      "duracao": 169
+    },
+    {
+      "nome": "Turned Away",
+      "artista": "siggerr",
+      "reels": 224000,
+      "instrumental": false,
+      "energia": "media",
+      "nichos": [
+        "geral",
+        "beleza"
+      ],
+      "duracao": 143
+    },
+    {
+      "nome": "Kings & Queens",
+      "artista": "Ava Max",
+      "reels": 215000,
+      "instrumental": false,
+      "energia": "alta",
+      "nichos": [
+        "moda",
+        "beleza"
+      ],
+      "duracao": 162
+    },
+    {
+      "nome": "GLORY (Slowed)",
+      "artista": "Ogryzek",
+      "reels": 201000,
+      "instrumental": true,
+      "energia": "media",
+      "nichos": [
+        "tech",
+        "moda"
+      ],
+      "duracao": 170
+    },
+    {
+      "nome": "Let Him Cook",
+      "artista": "XNIMXS",
+      "reels": 185000,
+      "instrumental": false,
+      "energia": "alta",
+      "nichos": [
+        "tech",
+        "pet"
+      ],
+      "duracao": 78
+    },
+    {
+      "nome": "Legacy",
+      "artista": "SEVER",
+      "reels": 181000,
+      "instrumental": true,
+      "energia": "media",
+      "nichos": [
+        "geral",
+        "tech",
+        "moda"
+      ],
+      "duracao": 111
+    },
+    {
+      "nome": "Adore You",
+      "artista": "Harry Styles",
+      "reels": 181000,
+      "instrumental": false,
+      "energia": "media",
+      "nichos": [
+        "beleza",
+        "moda"
+      ],
+      "duracao": 207
+    },
+    {
+      "nome": "Comptine d'un autre été, l'après-midi",
+      "artista": "Yann Tiersen",
+      "reels": 173000,
+      "instrumental": true,
+      "energia": "baixa",
+      "nichos": [
+        "casa",
+        "beleza"
+      ],
+      "duracao": 140
+    },
+    {
+      "nome": "Viva La Vida",
+      "artista": "Vitamin String Quartet",
+      "reels": 171000,
+      "instrumental": true,
+      "energia": "media",
+      "nichos": [
+        "geral",
+        "casa",
+        "beleza"
+      ]
+    },
+    {
+      "nome": "Mask Off",
+      "artista": "Future",
+      "reels": 166000,
+      "instrumental": false,
+      "energia": "alta",
+      "nichos": [
+        "tech",
+        "moda"
+      ],
+      "duracao": 204,
+      "explicito": true
+    },
+    {
+      "nome": "Wonderful (Instrumental) (feat. R. Kelly)",
+      "artista": "Ja Rule",
+      "reels": 163000,
+      "instrumental": true,
+      "energia": "media",
+      "nichos": [
+        "geral",
+        "beleza",
+        "moda",
+        "casa"
+      ],
+      "duracao": 271
+    },
+    {
+      "nome": "chamomile waltz",
+      "artista": "Enzo Corne",
+      "reels": 145000,
+      "instrumental": true,
+      "energia": "baixa",
+      "nichos": [
+        "casa",
+        "beleza",
+        "pet"
+      ],
+      "duracao": 78
+    },
+    {
+      "nome": "Golden Embers",
+      "artista": "Oldies Playing",
+      "reels": 134000,
+      "instrumental": true,
+      "energia": "baixa",
+      "nichos": [
+        "casa",
+        "beleza"
+      ],
+      "duracao": 509
+    },
+    {
+      "nome": "Turn the Lights Off",
+      "artista": "Dj Quba, Sandra K, ISHNLV",
+      "reels": 130000,
+      "instrumental": false,
+      "energia": "alta",
+      "nichos": [
+        "tech",
+        "moda"
+      ]
+    },
+    {
+      "nome": "Sunshine",
+      "artista": "Cat Dealers, LOthief, Santti",
+      "reels": 129000,
+      "instrumental": false,
+      "energia": "alta",
+      "nichos": [
+        "geral",
+        "casa"
+      ]
+    },
+    {
+      "nome": "Clocks - Coldplay",
+      "artista": "leveviolao",
+      "reels": 128000,
+      "instrumental": true,
+      "energia": "media",
+      "nichos": [
+        "geral",
+        "casa"
+      ],
+      "duracao": 14
+    },
+    {
+      "nome": "Impact (Instrumental)",
+      "artista": "Akhan",
+      "reels": 112000,
+      "instrumental": true,
+      "energia": "alta",
+      "nichos": [
+        "geral",
+        "tech",
+        "pet"
+      ],
+      "duracao": 195
+    },
+    {
+      "nome": "Only Girl (In The World)",
+      "artista": "Rihanna",
+      "reels": 111000,
+      "instrumental": false,
+      "energia": "alta",
+      "nichos": [
+        "beleza",
+        "moda"
+      ],
+      "duracao": 235
+    },
+    {
+      "nome": "Solto (Instrumental)",
+      "artista": "Coyote Beatz, Djonga",
+      "reels": 104000,
+      "instrumental": true,
+      "energia": "media",
+      "nichos": [
+        "geral",
+        "moda",
+        "tech"
+      ]
+    },
+    {
+      "nome": "Espresso (Espressooooo Version)",
+      "artista": "Sabrina Carpenter",
+      "reels": 101000,
+      "instrumental": false,
+      "energia": "media",
+      "nichos": [
+        "beleza",
+        "moda"
+      ],
+      "duracao": 295,
+      "explicito": true
+    },
+    {
+      "nome": "Einaudi: Una Mattina",
+      "artista": "Ludovico Einaudi",
+      "reels": 98000,
+      "instrumental": true,
+      "energia": "baixa",
+      "nichos": [
+        "casa",
+        "beleza"
+      ],
+      "duracao": 205
+    },
+    {
+      "nome": "Titanium (feat. Sia) [Extended]",
+      "artista": "David Guetta",
+      "reels": 97000,
+      "instrumental": false,
+      "energia": "alta",
+      "nichos": [
+        "geral",
+        "tech"
+      ],
+      "duracao": 312
+    },
+    {
+      "nome": "Gratidão",
+      "artista": "Mateus Reis",
+      "reels": 94000,
+      "instrumental": true,
+      "energia": "baixa",
+      "nichos": [
+        "casa",
+        "geral"
+      ],
+      "duracao": 69
+    },
+    {
+      "nome": "Spider-Man 3 Main Title",
+      "artista": "Cinematic Legacy",
+      "reels": 89000,
+      "instrumental": true,
+      "energia": "alta",
+      "nichos": [
+        "tech",
+        "geral"
+      ],
+      "duracao": 189
+    },
+    {
+      "nome": "My Heart",
+      "artista": "DJ Sonicko",
+      "reels": 83000,
+      "instrumental": true,
+      "energia": "media",
+      "nichos": [
+        "geral",
+        "beleza"
+      ],
+      "duracao": 194
+    },
+    {
+      "nome": "Yellow",
+      "artista": "Le Sun",
+      "reels": 74000,
+      "instrumental": false,
+      "energia": "baixa",
+      "nichos": [
+        "casa",
+        "beleza"
+      ],
+      "duracao": 223
+    },
+    {
+      "nome": "Where Have You Been (Album Version)",
+      "artista": "Rihanna",
+      "reels": 72000,
+      "instrumental": false,
+      "energia": "alta",
+      "nichos": [
+        "beleza",
+        "moda"
+      ],
+      "duracao": 242
+    },
+    {
+      "nome": "AURA (Super Slowed)",
+      "artista": "Ogryzek",
+      "reels": 66000,
+      "instrumental": true,
+      "energia": "media",
+      "nichos": [
+        "tech",
+        "moda"
+      ],
+      "duracao": 157
+    },
+    {
+      "nome": "My Jewelry",
+      "artista": "Fewtile",
+      "reels": 64000,
+      "instrumental": true,
+      "energia": "media",
+      "nichos": [
+        "moda",
+        "beleza"
+      ],
+      "duracao": 153
+    },
+    {
+      "nome": "Umbrella (feat. JAY-Z)",
+      "artista": "Rihanna",
+      "reels": 59000,
+      "instrumental": false,
+      "energia": "media",
+      "nichos": [
+        "beleza",
+        "moda"
+      ],
+      "duracao": 275
+    },
+    {
+      "nome": "Trap Concerto X (Violin Hip Hop)",
+      "artista": "Lofi Mozart",
+      "reels": 52000,
+      "instrumental": true,
+      "energia": "alta",
+      "nichos": [
+        "tech",
+        "moda"
+      ],
+      "duracao": 163
+    },
+    {
+      "nome": "Pimpin",
+      "artista": "S.L.A.B.",
+      "reels": 51000,
+      "instrumental": false,
+      "energia": "alta",
+      "nichos": [
+        "tech"
+      ],
+      "duracao": 256,
+      "explicito": true
+    },
+    {
+      "nome": "Say It Right (Instrumental Version)",
+      "artista": "Begench Begenjov",
+      "reels": 47000,
+      "instrumental": true,
+      "energia": "media",
+      "nichos": [
+        "geral",
+        "beleza",
+        "moda"
+      ]
+    },
+    {
+      "nome": "SUNSET",
+      "artista": "LeCler Beats",
+      "reels": 47000,
+      "instrumental": true,
+      "energia": "baixa",
+      "nichos": [
+        "casa",
+        "moda"
+      ],
+      "duracao": 184
+    },
+    {
+      "nome": "Respected",
+      "artista": "MaskiBeats",
+      "reels": 45000,
+      "instrumental": true,
+      "energia": "media",
+      "nichos": [
+        "geral",
+        "tech",
+        "moda"
+      ],
+      "duracao": 199
+    },
+    {
+      "nome": "FINAL BOSS",
+      "artista": "SHX4",
+      "reels": 42000,
+      "instrumental": true,
+      "energia": "alta",
+      "nichos": [
+        "tech",
+        "pet"
+      ],
+      "duracao": 130
+    },
+    {
+      "nome": "Luxury",
+      "artista": "Courten",
+      "reels": 41000,
+      "instrumental": true,
+      "energia": "media",
+      "nichos": [
+        "moda",
+        "beleza"
+      ],
+      "duracao": 134
+    },
+    {
+      "nome": "Write This Down (Instrumental)",
+      "artista": "SoulChef",
+      "reels": 38000,
+      "instrumental": true,
+      "energia": "media",
+      "nichos": [
+        "geral",
+        "casa",
+        "beleza"
+      ],
+      "duracao": 188
+    },
+    {
+      "nome": "float",
+      "artista": "Thiago Sub",
+      "reels": 37000,
+      "instrumental": true,
+      "energia": "baixa",
+      "nichos": [
+        "casa",
+        "beleza"
+      ],
+      "duracao": 120
+    },
+    {
+      "nome": "Universe (Slowed and Reverb)",
+      "artista": "Adrian",
+      "reels": 34000,
+      "instrumental": true,
+      "energia": "baixa",
+      "nichos": [
+        "casa",
+        "tech"
+      ],
+      "duracao": 152
+    },
+    {
+      "nome": "That Vibe",
+      "artista": "Josh Vietti",
+      "reels": 30000,
+      "instrumental": true,
+      "energia": "media",
+      "nichos": [
+        "geral",
+        "moda"
+      ],
+      "duracao": 184
+    },
+    {
+      "nome": "Ladyfingers",
+      "artista": "Mariachi Nueva Luna",
+      "reels": 30000,
+      "instrumental": true,
+      "energia": "alta",
+      "nichos": [
+        "geral",
+        "casa"
+      ]
+    },
+    {
+      "nome": "I'm Good (Blue)",
+      "artista": "Nevertown",
+      "reels": 26000,
+      "instrumental": false,
+      "energia": "alta",
+      "nichos": [
+        "geral",
+        "tech"
+      ],
+      "duracao": 134,
+      "explicito": true
+    },
+    {
+      "nome": "Glory (Ultra Slowed + Reverb)",
+      "artista": "Ogryzek",
+      "reels": 24000,
+      "instrumental": true,
+      "energia": "media",
+      "nichos": [
+        "tech",
+        "moda"
+      ],
+      "duracao": 241
+    },
+    {
+      "nome": "Prime Aura 9999+",
+      "artista": "Luckee Ln",
+      "reels": 23000,
+      "instrumental": true,
+      "energia": "alta",
+      "nichos": [
+        "tech",
+        "moda"
+      ],
+      "duracao": 120
+    },
+    {
+      "nome": "The One",
+      "artista": "Luciano",
+      "reels": 23000,
+      "instrumental": false,
+      "energia": "media",
+      "nichos": [
+        "geral",
+        "moda"
+      ],
+      "duracao": 160
+    },
+    {
+      "nome": "Industry Baby (Instrumental)",
+      "artista": "MADAX",
+      "reels": 20000,
+      "instrumental": true,
+      "energia": "alta",
+      "nichos": [
+        "tech",
+        "pet",
+        "geral"
+      ],
+      "duracao": 97
+    },
+    {
+      "nome": "GTA",
+      "artista": "DJ Sonicko",
+      "reels": 19000,
+      "instrumental": true,
+      "energia": "alta",
+      "nichos": [
+        "tech",
+        "pet"
+      ],
+      "duracao": 201
+    },
+    {
+      "nome": "Another Love (Clean Version)",
+      "artista": "Piano Glow",
+      "reels": 16000,
+      "instrumental": true,
+      "energia": "baixa",
+      "nichos": [
+        "casa",
+        "beleza",
+        "moda"
+      ],
+      "duracao": 121
+    },
+    {
+      "nome": "MONACO (Guitar)",
+      "artista": "Jason Masoud",
+      "reels": 13000,
+      "instrumental": true,
+      "energia": "media",
+      "nichos": [
+        "geral",
+        "moda"
+      ],
+      "duracao": 48
+    },
+    {
+      "nome": "Life is Good",
+      "artista": "MiddieBeats",
+      "reels": 12000,
+      "instrumental": true,
+      "energia": "media",
+      "nichos": [
+        "geral",
+        "casa"
+      ],
+      "duracao": 151
+    },
+    {
+      "nome": "Interstellar (Main Theme)",
+      "artista": "Piano Glow",
+      "reels": 10000,
+      "instrumental": true,
+      "energia": "baixa",
+      "nichos": [
+        "casa",
+        "tech",
+        "geral"
+      ],
+      "duracao": 106
+    },
+    {
+      "nome": "Casino",
+      "artista": "Crime Melody",
+      "reels": 10000,
+      "instrumental": true,
+      "energia": "media",
+      "nichos": [
+        "tech",
+        "moda"
+      ],
+      "duracao": 146
+    },
+    {
+      "nome": "Memory Reboot (Reforço de graves)",
+      "artista": "VØJ, Narvent",
+      "reels": 4800,
+      "instrumental": true,
+      "energia": "alta",
+      "nichos": [
+        "tech"
+      ],
+      "duracao": 209
+    },
+    {
+      "nome": "Vision Gold",
+      "artista": "SEVER",
+      "reels": 3300,
+      "instrumental": true,
+      "energia": "media",
+      "nichos": [
+        "geral",
+        "moda"
+      ],
+      "duracao": 111
+    },
+    {
+      "nome": "Big Poppa (Instrumental)",
+      "artista": "Foudfh Beats",
+      "reels": 2600,
+      "instrumental": true,
+      "energia": "media",
+      "nichos": [
+        "geral",
+        "tech",
+        "moda"
+      ],
+      "duracao": 268
+    },
+    {
+      "nome": "Titanium",
+      "artista": "Covers Unplugged",
+      "reels": 1600,
+      "instrumental": true,
+      "energia": "media",
+      "nichos": [
+        "geral",
+        "beleza"
+      ],
+      "duracao": 81
+    },
+    {
+      "nome": "Mafia Boss",
+      "artista": "Zaytoven",
+      "reels": 1600,
+      "instrumental": true,
+      "energia": "alta",
+      "nichos": [
+        "tech",
+        "moda"
+      ],
+      "duracao": 181
+    },
+    {
+      "nome": "Amour plastique",
+      "artista": "Videoclub, Adèle Castillon",
+      "reels": 0,
+      "instrumental": false,
+      "energia": "baixa",
+      "nichos": [
+        "casa",
+        "beleza"
+      ]
+    },
+    {
+      "nome": "Extraordinary Moment",
+      "artista": "Chillout, Soul Frequency",
+      "reels": 0,
+      "instrumental": true,
+      "energia": "baixa",
+      "nichos": [
+        "casa",
+        "beleza"
+      ]
+    }
+  ]
+}

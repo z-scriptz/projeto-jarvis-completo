@@ -46,6 +46,11 @@ except Exception:
 SHOPEE_GRAPHQL_URL = "https://open-api.affiliate.shopee.com.br/graphql"
 TIMEOUT_SEG = 30
 
+# priceDiscountRate existe na API hoje (conferido em produção). Se um dia sumir,
+# obter_dados_produto derruba esta chave sozinho e segue sem o campo, em vez de
+# quebrar a query inteira e junto o health-check do site.
+_TEM_DESCONTO = True
+
 
 def _credenciais() -> tuple:
     """Lê App ID e App Secret das env vars. Retorna (app_id, secret) ou (None, None)."""
@@ -179,6 +184,71 @@ def _relevancia(keyword: str, titulo_produto: str) -> float:
     return len(casadas) / len(kw_palavras)
 
 
+# ── APRENDIZADO: boost pras categorias que os VÍDEOS já venderam ──────────
+# O metricas_agent escreve shared/nichos_quentes.json com o que converteu. Aqui
+# a gente relê os PRODUTOS que venderam, re-infere a categoria pela MESMA função
+# do site (consistência) e dá nota extra pros produtos de categoria campeã.
+# Fecha o loop: caça → posta → mede → caça mais do que dá dinheiro. 🔁
+_NICHOS_CACHE = {"mtime": -1.0, "pesos": {}}
+
+
+def _caminho_nichos():
+    from pathlib import Path
+    base = Path(__file__).resolve().parent
+    for c in (base.parent / "shared" / "nichos_quentes.json",
+              base / "shared" / "nichos_quentes.json",
+              Path("shared/nichos_quentes.json")):
+        if c.exists():
+            return c
+    return None
+
+
+def _infcat_nome(nome: str) -> str:
+    try:
+        try:
+            from creative_engine.bio_page_builder import _inferir_categoria
+        except Exception:
+            from bio_page_builder import _inferir_categoria
+        return _inferir_categoria({"nome": nome or "", "titulo": nome or ""})
+    except Exception:
+        return "Outros"
+
+
+def _pesos_nicho() -> dict:
+    """{categoria: peso 0..1} a partir do que os vídeos venderam (cache por mtime)."""
+    p = _caminho_nichos()
+    if not p:
+        return {}
+    try:
+        mt = p.stat().st_mtime
+        if mt == _NICHOS_CACHE["mtime"]:
+            return _NICHOS_CACHE["pesos"]
+        dados = json.loads(p.read_text(encoding="utf-8"))
+        acc = {}
+        for prod in dados.get("top_produtos", []):
+            cat = _infcat_nome(prod.get("nome", ""))
+            if cat and cat != "Outros":
+                acc[cat] = acc.get(cat, 0.0) + float(prod.get("comissao", 0) or 0)
+        if not acc:   # fallback: usa o ranking de categorias já salvo
+            for i, cat in enumerate(dados.get("ranking_categorias", [])):
+                if cat and cat != "Outros":
+                    acc[cat] = acc.get(cat, 0.0) + max(1.0, 5.0 - i)
+        maxv = max(acc.values()) if acc else 0.0
+        pesos = {c: v / maxv for c, v in acc.items()} if maxv > 0 else {}
+        _NICHOS_CACHE.update(mtime=mt, pesos=pesos)
+        return pesos
+    except Exception:
+        return {}
+
+
+def _fator_nicho(nome: str) -> float:
+    """1.0 (neutro) a 1.5 (categoria que mais converteu nos vídeos)."""
+    pesos = _pesos_nicho()
+    if not pesos:
+        return 1.0
+    return 1.0 + 0.5 * pesos.get(_infcat_nome(nome), 0.0)
+
+
 def _score_lucro(produto: dict, keyword: str = "") -> float:
     """
     Calcula o score de LUCRO de um produto. Filosofia: priorizar quanto você
@@ -220,7 +290,8 @@ def _score_lucro(produto: dict, keyword: str = "") -> float:
     else:
         fator_rel = 1.0
 
-    return round(base * fator_nota * fator_vendas * fator_rel, 3)
+    return round(base * fator_nota * fator_vendas * fator_rel *
+                 _fator_nicho(produto.get("nome", "")), 3)
 
 
 def minerar_oportunidades(keyword: str, limite_busca: int = 30,
@@ -429,14 +500,27 @@ def obter_dados_produto(url_ou_item: str,
         shop_id, item_id = ids["shop_id"], ids["item_id"]
 
     # productOfferV2 aceita filtrar por itemId. Pedimos os campos que importam.
-    query = (
-        "query { productOfferV2(itemId: " + str(item_id) + ") { nodes { "
-        "itemId productName priceMin priceMax imageUrl "
-        "commissionRate commission offerLink productLink ratingStar sales "
-        "} } }"
-    )
+    # priceDiscountRate é o % de desconto da PRÓPRIA loja (inteiro: 41 = 41%
+    # off). É o que permite mostrar "de R$ 299,98 por R$ 176,99" no site com um
+    # número real, em vez de deduzir desconto do histórico.
+    def _query(com_desconto: bool) -> str:
+        extra = "priceDiscountRate " if com_desconto else ""
+        return (
+            "query { productOfferV2(itemId: " + str(item_id) + ") { nodes { "
+            "itemId productName priceMin priceMax imageUrl " + extra +
+            "commissionRate commission offerLink productLink ratingStar sales "
+            "} } }"
+        )
 
-    resp = _executar_graphql(query)
+    # GraphQL rejeita a query INTEIRA quando um campo não existe. Se a Shopee
+    # tirar priceDiscountRate um dia, isso derrubaria o health-check do site
+    # junto — daí a tentativa única de refazer sem o campo, lembrada no módulo
+    # pra não pagar a query dobrada em toda chamada seguinte.
+    global _TEM_DESCONTO
+    resp = _executar_graphql(_query(_TEM_DESCONTO))
+    if _TEM_DESCONTO and resp.get("errors") and "priceDiscountRate" in str(resp["errors"]):
+        _TEM_DESCONTO = False
+        resp = _executar_graphql(_query(False))
     if resp.get("_erro"):
         return {"ok": False, "erro": resp["_erro"]}
 
@@ -458,11 +542,21 @@ def obter_dados_produto(url_ou_item: str,
         except (TypeError, ValueError):
             return 0.0
 
+    # preço "de": o desconto vem como inteiro, então o valor reconstruído é
+    # aproximado (rate 41 pode ser 41,4% de verdade). Serve pro riscado, que é
+    # número de vitrine — não serve pra conta de comissão.
+    desconto = _num(p.get("priceDiscountRate"))
+    preco_agora = _num(p.get("priceMin"))
+    preco_de = round(preco_agora / (1 - desconto / 100), 2) \
+        if 0 < desconto < 100 and preco_agora > 0 else 0.0
+
     return {
         "ok": True,
         "titulo": p.get("productName", ""),
-        "preco": _num(p.get("priceMin")),
+        "preco": preco_agora,
         "preco_max": _num(p.get("priceMax")),
+        "desconto": int(desconto),      # % da própria loja (0 = sem desconto)
+        "preco_de": preco_de,           # preço antes do desconto (aproximado)
         "imagem": p.get("imageUrl", ""),
         "comissao_rate": _num(p.get("commissionRate")),   # 0.38 = 38%
         "comissao_valor": _num(p.get("commission")),       # em BRL

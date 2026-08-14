@@ -33,10 +33,13 @@ import os
 import sys
 import json
 import time
+import random
+import hashlib
+import shutil
 import signal
 import argparse
 from pathlib import Path
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 
 try:
     from shared.logger import get_logger
@@ -68,8 +71,21 @@ DEFAULTS = {
     "radar_grupos_arquivo":       "grupos.txt",
     "radar_limite":               30,
 
+    # ── Descoberta de grupos (auto-alimenta radar + hunter, manhã/noite) ──
+    "grupos_descoberta_ativa":    True,
+    "grupos_descoberta_horarios": ["08:30", "20:30"],      # manhã e noite
+    "grupos_descoberta_max":      2,                        # novos grupos por vez
+    "grupos_descoberta_auto_add": True,   # False = só sugere (grupos_descobertos.json)
+
     # ── Produção (teto de gasto Fal) ──
-    "producao_max_videos_dia":    20,
+    # TETO, não meta. O dia mais pesado da pirâmide é segunda: 3 posts × 3
+    # contas = 9 vídeos. Um teto de 9 permite repor um dia de pico inteiro numa
+    # rodada, e não faz sentido passar disso — a demanda da semana é 36 vídeos
+    # (12 por conta), média de ~5/dia.
+    # Quem decide se produz de verdade é o estoque_alvo_dias, POR CONTA: com a
+    # esteira cheia isto aqui nunca é alcançado, porque a produção nem começa.
+    "producao_max_videos_dia":    9,
+    "producao_max_downloads":     10,        # assets baixados por produto (autopilot)
     "producao_premium_campeoes":  True,
     "producao_premium_comissao_min": 15.0,   # R$ — acima disso vira premium
     "auto_repor":                 True,
@@ -79,8 +95,86 @@ DEFAULTS = {
     # ── Postagem ──
     "horarios":                   ["09:00", "14:00", "17:00", "21:00"],
     "plataformas":                ["youtube"],
+    # ── YouTube Shorts: 3x por semana, não todo dia ─────────────────────
+    # O Shorts entrega diferente do Reels: volume alto divide a mesma janela
+    # de recomendação e derruba o engajamento por vídeo em vez de somar. Então
+    # o YouTube sai da pirâmide e vai a segunda/quarta/sexta, 1 por conta.
+    # Índice = dia da semana (0=segunda ... 6=domingo), igual à pirâmide.
+    # Lista vazia/ausente = sem restrição (comportamento antigo).
+    # Vale pra TODAS as contas; o Instagram e o Facebook seguem a pirâmide.
+    "youtube_dias_semana":        [0, 2, 4],
+    "youtube_max_por_conta_dia":  1,
     "publico":                    True,
+    # 1 vídeo de CADA conta por slot (balanceado), com teto diário por conta.
+    # OFF por padrão = comportamento antigo (1 vídeo/slot, total). Ligue e ajuste
+    # o teto pra abrir a torneira em rampa (2 → 3 → 4-5/conta/dia).
+    "post_por_conta":             False,
+    "max_posts_por_conta_dia":    4,
+    # ── Pirâmide semanal ────────────────────────────────────────────────
+    # Volume igual todo dia faz os Reels da MESMA conta competirem entre si:
+    # eles disputam a mesma janela de entrega, e conta em crescimento não tem
+    # público pra sustentar 3-4/dia. A pirâmide concentra nos dias de pico e
+    # dá respiro no meio da semana, mantendo a média semanal.
+    # Índice = dia da semana (0=segunda ... 6=domingo). Vale POR CONTA.
+    # Lista vazia/ausente = desliga e volta a usar max_posts_por_conta_dia.
+    "posts_por_dia_semana":       [3, 2, 1, 3, 2, 1, 0],
+    # Os horários NÃO são um subconjunto de uma lista fixa: eles mudam com o
+    # volume do dia. Em dia de 2 posts o intervalo precisa ser grande o
+    # bastante pra entrega do primeiro esgotar antes do segundo entrar (~9h),
+    # senão um canibaliza o outro. Em dia de 3, o do meio vai pro almoço.
+    #   1 post  → manhã
+    #   2 posts → manhã + fim de tarde (9h de intervalo)
+    #   3 posts → manhã + almoço + fim de tarde
+    # Chave = quantos posts o dia tem. Ausente = cai na lista "horarios".
+    "horarios_por_volume": {
+        "1": ["09:00"],
+        "2": ["09:00", "18:00"],
+        "3": ["09:00", "13:00", "18:30"],
+    },
+    # Só vale quando horarios_por_volume não cobre o volume do dia: os
+    # primeiros da lista são escolhidos primeiro. Vazio = ordem cronológica.
+    "prioridade_horarios":        [],
+    # Validade da esteira, em dias. O que passar disso sai da fila (vai pra
+    # fila_vencida/, não é apagado). 0 = desliga a validade.
+    # Eram 7 dias, herdados da ideia de que o pacote envelhece. Não envelhece:
+    # o vídeo não tem preço nem link dentro dele, só a legenda tem — quem
+    # envelhece é o PRODUTO. E com a pirâmide (12 posts/conta/semana) a esteira
+    # leva ~23 dias pra drenar, então 7 jogava fora vídeo bom por idade.
+    "fila_validade_dias":         27,
+    # ORDEM DA FILA. 'auto' troca sozinha conforme a saúde dela: fila funda
+    # (mais antigo além de limiar_drenagem × validade) sai por IDADE, fila rasa
+    # volta a priorizar o FRESCO. Medido em 11/08: com 152 pacotes a 6,3/dia,
+    # novo-primeiro faz o mais antigo sair no dia 24 com 39 dias — vencido.
+    # Antigo-primeiro drena o mesmo estoque com o último saindo aos 24 dias.
+    # 'mais_antigo' / 'mais_novo' forçam, pra poder testar sem adivinhar.
+    "ordem_da_fila":              "auto",
+    "limiar_drenagem":            0.4,
+    # Segunda chance pro que venceu: confere se o produto ainda está vivo e,
+    # se morreu, procura o MESMO produto em outro vendedor antes de desistir.
+    # Roda junto do expurgo, no ciclo de postagem. 0 desliga.
+    "repescagem_por_ciclo":       5,
+    # Colchão de segurança POR CONTA, em dias de postagem. A produção corre pra
+    # conta que está abaixo disso e ignora a que já passou — assim nenhuma seca
+    # e nenhuma transborda. 0 = desliga (volta a produzir cego, só por comissão).
+    "estoque_alvo_dias":          3,
+    # Piso diário POR CONTA, mesmo com a esteira cheia. Sem ele a produção fica
+    # semanas parada, a esteira envelhece inteira junto, e quando a conta seca a
+    # máquina volta do zero. Com 1/conta/dia: entram 3, saem ~5 — a esteira
+    # encolhe e ao mesmo tempo sempre tem material novo. 0 desliga.
+    "producao_minima_por_conta":  1,
+    # TikTok via API oficial (Content Posting API). OFF até o app ser aprovado —
+    # ligue depois da aprovação (+ conta pública + credenciais de produção no .env).
+    "postar_tiktok":              False,
     "tolerancia_min":             10,
+    # ── Horário com cara de gente ──────────────────────────────────────
+    # Postar 09:00 cravado todo dia, e as contas todas no mesmo minuto, é
+    # padrão de robô. Duas medidas:
+    #   desvio_max_min      move o slot alguns minutos POR DIA (hoje 09:03,
+    #                       amanhã 08:57). 0 desliga.
+    #   intervalo_contas_min espera entre uma conta e outra dentro do mesmo
+    #                       slot, pra as 3 não dispararem juntas. [0,0] desliga.
+    "desvio_max_min":             8,
+    "intervalo_contas_min":       [2, 7],
     "janela_inicio":              "08:00",   # não posta antes
     "janela_fim":                 "23:00",   # não posta depois
 
@@ -222,11 +316,20 @@ def _liberar_lock():
 # =====================================================================
 
 def _hora_para_min(hhmm: str) -> int:
+    """'09:30' → 570. -1 se não for hora de verdade.
+
+    Confere a faixa, não só se são números: '99:99' virava 6039, que o relógio
+    nunca alcança — o slot ficava configurado e nunca disparava, sem erro
+    nenhum no log. 24:00 passa de propósito, serve de fim de janela.
+    """
     try:
         h, m = hhmm.split(":")
-        return int(h) * 60 + int(m)
+        h, m = int(h), int(m)
     except Exception:
         return -1
+    if not (0 <= h <= 24 and 0 <= m <= 59) or h * 60 + m > 24 * 60:
+        return -1
+    return h * 60 + m
 
 
 def _agora_min() -> int:
@@ -241,6 +344,99 @@ def _dentro_da_janela(cfg: dict) -> bool:
     return ini <= agora <= fim
 
 
+def _desvio_do_horario(hhmm: str, cfg: dict, quando: date = None) -> int:
+    """Minutos de variação do slot HOJE (pode ser negativo).
+
+    Determinístico a partir de (data + horário), de propósito: o loop confere a
+    cada 60s, então um sorteio novo a cada checagem faria a janela pular e o
+    post poderia escapar do dia. Assim o desvio é o mesmo o dia inteiro e muda
+    sozinho amanhã."""
+    faixa = int(cfg.get("desvio_max_min", 0) or 0)
+    if faixa <= 0:
+        return 0
+    semente = f"{(quando or date.today()).isoformat()}|{hhmm}"
+    n = int.from_bytes(hashlib.sha256(semente.encode("utf-8")).digest()[:4], "big")
+    return n % (2 * faixa + 1) - faixa
+
+
+def _teto_do_dia(cfg: dict, quando: date = None) -> int:
+    """Quantos posts CADA conta faz no dia informado (pirâmide semanal).
+
+    Volume chapado todo dia faz os Reels da mesma conta brigarem entre si pela
+    mesma janela de entrega. A pirâmide mantém a média semanal mas concentra
+    nos dias de pico. Domingo em 0 = descanso.
+    """
+    piramide = cfg.get("posts_por_dia_semana")
+    padrao = int(cfg.get("max_posts_por_conta_dia", 3))
+    if not piramide:
+        return padrao                       # pirâmide desligada
+    try:
+        return max(0, int(piramide[(quando or date.today()).weekday()]))
+    except (TypeError, ValueError, IndexError, KeyError):
+        log.warning("   ⚠️  posts_por_dia_semana inválido (precisa de 7 números, "
+                    f"segunda→domingo): {piramide!r} — usando {padrao}/dia")
+        return padrao
+
+
+def _posts_previstos(cfg: dict, dias: int, quando: date = None) -> int:
+    """Quantos posts cada conta vai fazer nos próximos `dias` dias.
+
+    Serve pro colchão de estoque. Com a pirâmide, multiplicar pelo teto do dia
+    erraria feio: sábado (1) pediria estoque pra 3 sábados, e a segunda
+    seguinte (3) chegaria seca. Somar o que vem de verdade acerta sempre.
+    """
+    base = quando or date.today()
+    return sum(_teto_do_dia(cfg, base + timedelta(days=i)) for i in range(max(0, dias)))
+
+
+def _slots_de_hoje(cfg: dict, quando: date = None) -> list:
+    """Os horários que valem hoje, dado o volume da pirâmide.
+
+    O horário não é escolha do relógio, é de estratégia: em dia de 2 posts eles
+    precisam ficar longe um do outro pra entrega do primeiro esgotar antes do
+    segundo entrar. Por isso o horário depende de QUANTOS posts o dia tem, e
+    não de cortar uma lista fixa.
+    """
+    n = _teto_do_dia(cfg, quando)
+    if n <= 0:
+        return []                          # dia de descanso
+
+    por_volume = cfg.get("horarios_por_volume") or {}
+    try:                                   # JSON só tem chave string; aceito as duas
+        lista = por_volume.get(str(n)) or por_volume.get(n)
+    except (TypeError, AttributeError):
+        lista = None
+    if lista:
+        validos = [h for h in lista if 0 <= _hora_para_min(h) < 24 * 60]
+        if validos:
+            return sorted(set(validos), key=_hora_para_min)
+        log.warning(f"   ⚠️  horarios_por_volume[{n}] não tem horário válido "
+                    f"({lista!r}) — caindo na lista 'horarios'")
+
+    # sem receita pra esse volume: corta a lista fixa, preferindo o que o
+    # prioridade_horarios mandar
+    horarios = list(cfg.get("horarios") or [])
+    if n >= len(horarios):
+        return horarios
+    pref = [h for h in (cfg.get("prioridade_horarios") or []) if h in horarios]
+    escolhidos = (pref + [h for h in horarios if h not in pref])[:n]
+    return sorted(escolhidos, key=_hora_para_min)
+
+
+def _horario_real(hhmm: str, cfg: dict, quando: date = None) -> int:
+    """Minuto do dia em que o slot vai REALMENTE sair hoje (já com desvio).
+    Nunca antes da janela — o desvio negativo não fura o 'não posta cedo'."""
+    alvo = _hora_para_min(hhmm)
+    if alvo < 0:
+        return -1
+    return max(_hora_para_min(cfg["janela_inicio"]),
+               alvo + _desvio_do_horario(hhmm, cfg, quando))
+
+
+def _min_para_hora(minutos: int) -> str:
+    return f"{minutos // 60:02d}:{minutos % 60:02d}"
+
+
 def _horario_devido(cfg: dict, hist: dict) -> str | None:
     """
     Retorna o horário que está 'na hora' agora (dentro da tolerância) e que
@@ -251,8 +447,10 @@ def _horario_devido(cfg: dict, hist: dict) -> str | None:
     hoje = str(date.today())
     postados_hoje = hist["por_dia"].get(hoje, {})
 
-    for hhmm in cfg["horarios"]:
-        alvo = _hora_para_min(hhmm)
+    # só os slots que a pirâmide deixou de pé hoje (domingo = nenhum)
+    for hhmm in _slots_de_hoje(cfg):
+        # o desvio pode puxar o slot pra antes da janela — aí vale a janela
+        alvo = _horario_real(hhmm, cfg)
         if alvo < 0:
             continue
         # 'na hora' = entre alvo e alvo+tolerância
@@ -339,6 +537,75 @@ def ciclo_descoberta(cfg: dict, estado: dict, dry_run: bool) -> dict:
 
 
 # =====================================================================
+# CICLO 1.5 — DESCOBERTA DE GRUPOS (auto-alimenta radar + hunter)
+# =====================================================================
+
+def _horario_devido_grupos(cfg: dict, estado: dict) -> "str | None":
+    """Horário de descoberta de grupos 'na hora' e ainda não feito hoje."""
+    if not cfg.get("grupos_descoberta_ativa", True):
+        return None
+    horarios = cfg.get("grupos_descoberta_horarios") or []
+    if not horarios:
+        return None
+    hoje = str(date.today())
+    reg = estado.get("grupos_desc_feitos") or {}
+    if reg.get("data") != hoje:
+        reg = {"data": hoje, "horarios": []}
+        estado["grupos_desc_feitos"] = reg
+    agora = _agora_min()
+    tol = cfg.get("tolerancia_min", 10)
+    for hhmm in horarios:
+        alvo = _hora_para_min(hhmm)
+        if alvo >= 0 and alvo <= agora <= alvo + tol and hhmm not in reg["horarios"]:
+            return hhmm
+    return None
+
+
+def ciclo_descoberta_grupos(cfg: dict, estado: dict, dry_run: bool,
+                            forcar: bool = False) -> dict:
+    """
+    Nos horários definidos (manhã/noite), acha novos canais de achadinhos e os
+    adiciona ao radar (grupos.txt) e ao hunter (hunter_canais). `forcar` ignora
+    o horário (uso manual via --so-grupos).
+    """
+    resultado = {"rodou": False}
+
+    horario = "manual" if forcar else _horario_devido_grupos(cfg, estado)
+    if not horario:
+        return resultado  # não é a hora ainda (silencioso)
+
+    log.info("─" * 60)
+    log.info(f"🛰️  CICLO DESCOBERTA DE GRUPOS — {horario}")
+
+    try:
+        from integrations.descobridor_grupos import descobrir_grupos
+    except Exception as e:
+        log.error(f"   ❌ descobridor indisponível: {e}")
+        resultado["erro"] = str(e)
+        return resultado
+
+    max_novos = int(cfg.get("grupos_descoberta_max", 2))
+    auto_add = bool(cfg.get("grupos_descoberta_auto_add", True))
+    try:
+        r = descobrir_grupos(max_novos=max_novos, auto_add=auto_add, dry_run=dry_run)
+        resultado.update(rodou=True, detalhe=r)
+    except Exception as e:
+        log.error(f"   ❌ descoberta de grupos falhou: {e}")
+        resultado["erro"] = str(e)
+
+    # marca o horário como feito hoje (mesmo sem achar nada) pra não repetir
+    if not forcar:
+        reg = estado.get("grupos_desc_feitos") or {"data": str(date.today()),
+                                                    "horarios": []}
+        if horario not in reg["horarios"]:
+            reg["horarios"].append(horario)
+        estado["grupos_desc_feitos"] = reg
+        _salvar_estado(estado)
+
+    return resultado
+
+
+# =====================================================================
 # CICLO 2 — PRODUÇÃO (sob teto de gasto Fal)
 # =====================================================================
 
@@ -374,12 +641,21 @@ def ciclo_producao(cfg: dict, estado: dict, dry_run: bool) -> dict:
     if cfg["auto_repor"]:
         prontos = _contar_prontos()
         if prontos > cfg["repor_quando_sobrar"]:
-            log.info(f"   ℹ️  {prontos} vídeo(s) prontos (> {cfg['repor_quando_sobrar']}) "
-                     f"— não precisa repor agora")
-            resultado["pulou"] = True
-            resultado["motivo"] = "fila_cheia"
-            return resultado
-        log.info(f"   📉 Só {prontos} prontos — repondo a esteira")
+            # O piso diário tem que furar este portão. Ele dispara com 3 pacotes
+            # na esteira, muito antes de qualquer lógica por conta — então sem
+            # esta saída o piso vira código morto justamente no caso pra que
+            # ele foi feito: esteira cheia e produção parada há semanas.
+            falta = _falta_do_piso(cfg)
+            if falta <= 0:
+                log.info(f"   ℹ️  {prontos} vídeo(s) prontos "
+                         f"(> {cfg['repor_quando_sobrar']}) — não precisa repor agora")
+                resultado["pulou"] = True
+                resultado["motivo"] = "fila_cheia"
+                return resultado
+            log.info(f"   🔁 {prontos} prontos, mas faltam {falta} pro piso de "
+                     f"{cfg.get('producao_minima_por_conta')}/conta/dia")
+        else:
+            log.info(f"   📉 Só {prontos} prontos — repondo a esteira")
 
     # Quantos produzir: respeita o teto diário restante
     restante_dia = cfg["producao_max_videos_dia"] - estado["videos_hoje"]
@@ -411,16 +687,25 @@ def ciclo_producao(cfg: dict, estado: dict, dry_run: bool) -> dict:
 
 def _produzir_lote(cfg: dict, estado: dict, quantidade: int) -> int:
     """
-    Produz `quantidade` vídeos a partir dos produtos da fila.
-    Campeões (comissão >= limite) usam modo premium.
+    Produz `quantidade` vídeos a partir dos produtos da fila usando o pipeline
+    COMPLETO do production_runner: produz + arquiva + EMPACOTA em
+    pronto_para_postar/ (a esteira que o ciclo de postagem lê). O produzir()
+    cru gravava só em videos/ e não abastecia a esteira → o daemon nunca
+    postava. Campeões (comissão >= limite) usam premium (Kling 2.1).
     Retorna quantos foram produzidos com sucesso.
     """
-    from creative_engine.produzir_video import produzir
+    import os
+    from agents.production_runner_agent import (processar_produto,
+                                                _dir_saida_rodada)
 
-    produtos = _carregar_produtos_para_produzir(quantidade)
+    produtos = _carregar_produtos_para_produzir(quantidade, cfg)
     if not produtos:
         log.warning("   ⚠️  Nenhum produto disponível pra produzir")
         return 0
+
+    # Uma pasta de rodada por lote (mesma convenção do production_runner.main)
+    dir_rodada = _dir_saida_rodada()
+    max_downloads = int(cfg.get("producao_max_downloads", 10))
 
     produzidos = 0
     for p in produtos:
@@ -436,23 +721,191 @@ def _produzir_lote(cfg: dict, estado: dict, quantidade: int) -> int:
 
         tag = "💎 PREMIUM" if premium else "📹 standard"
         log.info(f"   {tag}: '{nome}' (comissão R$ {comissao:.2f})")
+
+        # PREMIUM via env: o production_runner roda as etapas como subprocess,
+        # que HERDA o os.environ — então setar FAL_MODEL aqui propaga o modelo
+        # premium pro gerador de cenas. Restauramos depois pra não vazar.
+        _fal_anterior = os.environ.get("FAL_MODEL")
+        if premium:
+            os.environ["FAL_MODEL"] = "fal-ai/kling-video/v2.1/master/text-to-video"
         try:
-            res = produzir(nome, premium=premium)
-            if res.get("ok"):
+            res = processar_produto(nome, max_downloads, dir_rodada)
+            status = (res or {}).get("status", "")
+            if status in ("video_gerado", "recuperado"):
                 produzidos += 1
+                log.info(f"      ✅ '{nome}': {status} → esteira: "
+                         f"{res.get('pronto_para_postar') or '?'}")
             else:
-                log.warning(f"      ⚠️  vídeo de '{nome}' não confirmou")
+                log.warning(f"      ⚠️  '{nome}': {status or 'sem status'} "
+                            f"(não entrou na esteira)")
         except Exception as e:
             log.error(f"      ❌ erro produzindo '{nome}': {e}")
+        finally:
+            if _fal_anterior is None:
+                os.environ.pop("FAL_MODEL", None)
+            else:
+                os.environ["FAL_MODEL"] = _fal_anterior
 
     return produzidos
 
 
-def _carregar_produtos_para_produzir(quantidade: int) -> list:
+def _estoque_por_conta() -> dict:
+    """{nicho da conta: nº de pacotes prontos, não postados e dentro da validade}."""
+    hist = _carregar_historico()
+    cont = {}
+    for slug in _prontos_nao_postados(hist):
+        n = _nicho_do_slug(slug) or "geral"
+        cont[n] = cont.get(n, 0) + 1
+    return cont
+
+
+def _produzidos_hoje_por_conta() -> dict:
+    """{nicho: pacotes que entraram na esteira HOJE}.
+
+    Contado pela data da pasta, não por um contador novo: o pacote é o próprio
+    registro, então reiniciar o daemon no meio do dia não zera a conta.
+
+    Efeito colateral consciente: pacote repescado também ganha data de hoje e
+    entra nesta conta. É o comportamento certo — o objetivo do piso é ter
+    material fresco na esteira, e um repescado teve a oferta revalidada agora.
+    """
+    if not PRONTO_DIR.exists():
+        return {}
+    hoje = date.today()
+    cont = {}
+    for p in PRONTO_DIR.iterdir():
+        if not (p.is_dir() and (p / "video.mp4").exists()):
+            continue
+        try:
+            if date.fromtimestamp(p.stat().st_mtime) != hoje:
+                continue
+        except (OSError, ValueError, OverflowError):
+            continue
+        n = _nicho_do_slug(p.name) or "geral"
+        cont[n] = cont.get(n, 0) + 1
+    return cont
+
+
+def _nichos_das_contas() -> set:
+    """Os nichos ATIVOS hoje ({'beleza','tech','geral'}).
+
+    No contas.json o nicho é a CHAVE; só o "_default" traz o campo "nicho"
+    dentro. Ler o campo em todas colapsaria tudo em "geral".
+
+    ⚠️ CONTA COM `"ativa": false` FICA DE FORA, e isso não é detalhe (11/08).
+    A produção escolhe por DÉFICIT: `falta = alvo - estoque`. Uma conta recém
+    cadastrada tem estoque 0, então ela tem o MAIOR déficit e fura a fila de
+    todas as outras. Quando o Dre zerou `producao_minima_por_conta` pra drenar
+    a esteira, `moda` e `pet` (cadastradas no dia anterior, sem postar ainda,
+    estoque 0/6) viraram as ÚNICAS contas com `falta > 0` — a produção inteira
+    passaria a servir duas contas que não publicam, enchendo a fila de pacotes
+    que venceriam sem sair. Cadastrar a conta e ligar a produção dela são duas
+    decisões diferentes, e agora o arquivo consegue dizer isso.
+    """
+    try:
+        import roteador_contas as _RC
+        nichos = set()
+        for chave, conta in _RC.carregar_contas().items():
+            if isinstance(conta, dict) and conta.get("ativa") is False:
+                continue
+            nichos.add((conta.get("nicho") or "geral") if chave == "_default" else chave)
+        return nichos or {"geral"}
+    except Exception:
+        return {"geral"}
+
+
+def _falta_do_piso(cfg: dict) -> int:
+    """Quantos vídeos faltam HOJE pra cumprir o piso, somando as contas."""
+    piso = max(0, int(cfg.get("producao_minima_por_conta", 0) or 0))
+    if piso <= 0:
+        return 0
+    ja = _produzidos_hoje_por_conta()
+    return sum(max(0, piso - ja.get(n, 0)) for n in _nichos_das_contas())
+
+
+def _priorizar_por_estoque(candidatos: list, quantidade: int, cfg: dict) -> list:
+    """Escolhe o que produzir olhando o estoque de CADA conta.
+
+    A seleção era cega à conta: pegava os N produtos de maior comissão e
+    produzia. Como a maioria dos achadinhos classifica como 'geral', o geral
+    empilhava semanas de estoque enquanto beleza secava e perdia slot de
+    postagem. Aqui a produção corre pra quem está abaixo do colchão e ignora
+    quem já passou dele — mantendo o estoque de segurança, mas do tamanho certo
+    em cada conta.
+
+    A ordem de comissão é preservada dentro de cada conta: continua produzindo
+    os melhores produtos, só que distribuídos pelo destino.
+    """
+    dias = int(cfg.get("estoque_alvo_dias", 3))
+    if dias <= 0:
+        return candidatos[:quantidade]
+
+    try:
+        import roteador_contas as _RC
+    except Exception as erro:
+        log.warning(f"   ⚠️  roteador indisponível ({str(erro)[:80]}) — "
+                    "produzindo só por comissão")
+        return candidatos[:quantidade]
+
+    alvo = max(1, _posts_previstos(cfg, dias))
+    estoque = _estoque_por_conta()
+
+    # No contas.json o nicho é a CHAVE ("beleza", "tech"); só o "_default" traz o
+    # campo "nicho" dentro. Ler o campo em todas colapsaria tudo em "geral".
+    nichos = _nichos_das_contas()
+    # Piso: mesmo com a conta cheia, produz um pouco todo dia. Sem isso a
+    # produção fica semanas parada e a esteira envelhece inteira junto — e
+    # quando a conta enfim seca, ela volta do zero. Com o piso, a esteira
+    # encolhe (produz 3/dia contra ~5/dia postados) mas sempre com material
+    # fresco entrando.
+    piso = max(0, int(cfg.get("producao_minima_por_conta", 0) or 0))
+    ja_hoje = _produzidos_hoje_por_conta()
+    falta = {n: max(0, alvo - estoque.get(n, 0)) for n in nichos}
+    if piso:
+        for n in nichos:
+            falta[n] = max(falta[n], piso - ja_hoje.get(n, 0))
+
+    resumo = ", ".join(f"{n}={estoque.get(n, 0)}/{alvo}" for n in sorted(nichos))
+    log.info(f"   📦 estoque por conta: {resumo}"
+             + (f"  (piso de {piso}/dia)" if piso else ""))
+
+    if not any(falta.values()):
+        log.info(f"   ✋ todas as contas no colchão de {alvo} pacotes"
+                 + (f" e já com {piso}/dia produzido" if piso else "")
+                 + " — nada a produzir neste ciclo")
+        return []
+
+    escolhidos, adiados = [], 0
+    for p in candidatos:
+        if len(escolhidos) >= quantidade:
+            break
+        try:
+            nicho = _RC.conta_do_produto(p.get("nome", ""))["nicho"]
+        except Exception:
+            nicho = "geral"
+        if falta.get(nicho, 0) > 0:
+            escolhidos.append(p)
+            falta[nicho] -= 1
+        else:
+            adiados += 1
+
+    faltando = ", ".join(f"{n}:{q}" for n, q in sorted(falta.items()) if q > 0)
+    if faltando:
+        log.info(f"   🔎 ainda faltam pacotes ({faltando}) mas não há produto "
+                 "desses nichos na fila — produzindo o que dá")
+    if adiados:
+        log.info(f"   ⏭️  {adiados} produto(s) adiado(s): a conta deles já está no alvo")
+    return escolhidos
+
+
+def _carregar_produtos_para_produzir(quantidade: int, cfg: dict | None = None) -> list:
     """
     Carrega produtos pra produzir, priorizando o relatório validado
     (validacao_fila.json — campeões primeiro). Fallback: produtos_fila.json.
+
+    A lista sai filtrada pelo estoque de cada conta (ver _priorizar_por_estoque).
     """
+    cfg = cfg or {}
     # 1) Relatório validado (tem comissão real, ordena por potencial)
     relatorio = PLANS_DIR / "validacao_fila.json"
     if relatorio.exists():
@@ -467,7 +920,7 @@ def _carregar_produtos_para_produzir(quantidade: int) -> list:
                     })
             if produtos:
                 # mina_ouro já vem primeiro no relatório ordenado
-                return produtos[:quantidade]
+                return _priorizar_por_estoque(produtos, quantidade, cfg)
         except Exception as e:
             log.warning(f"   ⚠️  erro lendo validacao_fila ({e})")
 
@@ -481,7 +934,7 @@ def _carregar_produtos_para_produzir(quantidade: int) -> list:
                 nome = item.get("produto") if isinstance(item, dict) else item
                 if nome:
                     produtos.append({"nome": nome, "comissao_valor": 0})
-            return produtos[:quantidade]
+            return _priorizar_por_estoque(produtos, quantidade, cfg)
         except Exception as e:
             log.warning(f"   ⚠️  erro lendo produtos_fila ({e})")
 
@@ -506,9 +959,54 @@ def ciclo_postagem(cfg: dict, hist: dict, dry_run: bool) -> dict:
         return resultado  # nenhum horário devido agora
 
     log.info("─" * 60)
-    log.info(f"📤 CICLO POSTAGEM — horário devido: {horario}")
+    desvio = _desvio_do_horario(horario, cfg)
+    log.info(f"📤 CICLO POSTAGEM — slot {horario} "
+             f"(saindo {datetime.now():%H:%M}, desvio de hoje: {desvio:+d} min)")
 
-    # Escolhe um produto pronto que ainda não foi postado
+    if not dry_run:
+        _expurgar_vencidos()
+        _repescar(cfg)      # o que venceu tenta voltar antes de virar prejuízo
+
+    # MODO BALANCEADO (opt-in): posta 1 vídeo de CADA conta neste slot, respeitando
+    # o teto diário por conta. Assim beauty/tech/geral saem no mesmo ritmo.
+    if cfg.get("post_por_conta"):
+        teto = _teto_do_dia(cfg)
+        alvos = _um_por_conta_sob_teto(hist, teto)
+        if not alvos:
+            log.warning("   ⚠️  Nada pra postar (esteira vazia ou todas as contas "
+                        f"já no teto de {teto}/dia)")
+            resultado["motivo"] = "vazio_ou_teto"
+            return resultado
+        log.info(f"   🎯 {len(alvos)} conta(s) neste slot (teto {teto}/dia): "
+                 + ", ".join(f"{c}" for _s, c in alvos))
+        # Espalha as contas dentro do slot. Sem isso as 3 postam no mesmo
+        # minuto, todo dia — três contas "diferentes" disparando juntas é
+        # padrão mais evidente que o horário cravado. A espera é sorteada a
+        # cada rodada porque aqui não tem o problema do loop: é uma passagem só.
+        faixa = cfg.get("intervalo_contas_min") or [0, 0]
+        try:
+            esp_min, esp_max = float(faixa[0]), float(faixa[1])
+        except (TypeError, ValueError, IndexError):
+            esp_min = esp_max = 0.0
+
+        ok_slugs = []
+        for i, (slug, conta) in enumerate(alvos):
+            if i and esp_max > 0 and not dry_run:
+                espera = random.uniform(esp_min, esp_max)
+                log.info(f"   ⏳ {espera:.1f} min até a próxima conta "
+                         f"(pra não postarem no mesmo minuto)")
+                time.sleep(espera * 60)
+            log.info(f"   🎬 [{datetime.now():%H:%M}] Postando '{slug}' → {conta}")
+            if dry_run or _postar_produto(slug, cfg, hist):
+                ok_slugs.append(slug)
+        if ok_slugs:
+            _registrar_postagem(hist, horario, ok_slugs)
+            resultado.update(postou=True, produtos=ok_slugs, dry_run=dry_run)
+        else:
+            resultado["motivo"] = "todas_plataformas_falharam"
+        return resultado
+
+    # MODO CLÁSSICO: 1 vídeo por slot (o "próximo da fila").
     produto = _proximo_para_postar(hist)
     if not produto:
         log.warning("   ⚠️  Nenhum vídeo pronto pra postar (esteira vazia)")
@@ -523,30 +1021,7 @@ def ciclo_postagem(cfg: dict, hist: dict, dry_run: bool) -> dict:
         resultado.update(postou=True, produto=produto, dry_run=True)
         return resultado
 
-    # Posta em cada plataforma configurada — agora com retry + verificação +
-    # guard + alerta Telegram (Frente C). Importa aqui pra não acoplar o
-    # daemon ao publish_guard quando só se roda --status, etc.
-    try:
-        from agents.publish_guard import publicar_com_garantia
-    except Exception as e:
-        log.error(f"   ❌ Não consegui importar publish_guard: {e}")
-        resultado["motivo"] = "publish_guard_indisponivel"
-        return resultado
-
-    sucesso_algum = False
-    detalhes = {}
-    for plataforma in cfg["plataformas"]:
-        r = publicar_com_garantia(plataforma, produto, plano=None,
-                                  publico=cfg["publico"])
-        detalhes[plataforma] = r
-        if r.get("sucesso"):
-            sucesso_algum = True
-        elif r.get("pulado"):
-            log.info(f"   ⏭️  {plataforma} pulado (sem uploader ainda)")
-        # falha real já gerou alerta dentro do publish_guard
-
-    resultado["detalhes"] = detalhes
-    if sucesso_algum:
+    if _postar_produto(produto, cfg, hist):
         _registrar_postagem(hist, horario, produto)
         resultado.update(postou=True, produto=produto)
     else:
@@ -555,30 +1030,280 @@ def ciclo_postagem(cfg: dict, hist: dict, dry_run: bool) -> dict:
     return resultado
 
 
+def _validade_dias() -> int:
+    try:
+        return int(carregar_config().get("fila_validade_dias", 7))
+    except Exception:
+        return 7
+
+
+def _vencido(pasta: Path, dias: int) -> bool:
+    if dias <= 0:
+        return False
+    idade = time.time() - pasta.stat().st_mtime
+    return idade > dias * 86400
+
+
+def _prontos_nao_postados(hist: dict) -> list:
+    """Slugs prontos (com video.mp4) que ainda não foram postados.
+
+    A ORDEM DEPENDE DA SAÚDE DA FILA, e isso foi medido (11/08).
+
+    Era MAIS NOVO PRIMEIRO, sempre — antes disso era alfabética, que matava de
+    fome o fim do alfabeto. Novo-primeiro resolvia aquilo e tinha razão própria:
+    achadinho é oferta perecível, o mais fresco converte melhor. Isso vale com
+    fila rasa.
+
+    ⚠️ COM FILA FUNDA ELA SE INVERTE, e a auditoria mostrou o número: 152
+    pacotes, ritmo real de 6,3/dia, mais antigo com 15,3 dias, validade 27.
+    Novo-primeiro faz o mais antigo ser o ÚLTIMO a sair — dia 24, com 39 dias
+    de idade, 12 além da validade. Ele vence sem nunca ser postado. Parar a
+    produção NÃO resolve isso: só muda quantos entram, não quem sai primeiro.
+    Com mais-antigo-primeiro, o mesmo estoque drena em 24 dias e o pacote mais
+    NOVO é o último, saindo com 24 dias — cabe nos 27.
+
+    Por isso "auto": fila funda drena por idade; fila rasa volta a priorizar o
+    fresco. FIFO não é política permanente, é modo de drenagem — sem isso a
+    esteira ficaria pra sempre postando material velho depois que o estoque
+    normalizasse.
+
+    Pacote vencido não entra na lista (o expurgo tira ele da pasta no ciclo).
+    """
+    if not PRONTO_DIR.exists():
+        return []
+    postados = set(hist.get("postados", []))
+    dias = _validade_dias()
+
+    candidatos = []
+    for pasta in PRONTO_DIR.iterdir():
+        if not (pasta.is_dir() and (pasta / "video.mp4").exists()):
+            continue
+        if pasta.name in postados or _vencido(pasta, dias):
+            continue
+        candidatos.append((pasta.stat().st_mtime, pasta.name))
+    if not candidatos:
+        return []
+
+    if _drenar_por_idade(candidatos, dias):
+        # mais ANTIGO primeiro; nome como desempate, pra ordem ser estável
+        candidatos.sort(key=lambda p: (p[0], p[1]))
+    else:
+        candidatos.sort(key=lambda p: (-p[0], p[1]))
+    return [nome for _mtime, nome in candidatos]
+
+
+def _drenar_por_idade(candidatos: list, validade: int) -> bool:
+    """A fila está funda o bastante pra ordenar por idade?
+
+    Critério: o pacote mais antigo já passou de `limiar_drenagem` da validade.
+    Isso responde à única pergunta que importa — "tem gente na fila em risco de
+    vencer?" — sem precisar saber a cadência de postagem aqui dentro.
+
+    Config:
+      ordem_da_fila       'auto' (padrão) | 'mais_antigo' | 'mais_novo'
+      limiar_drenagem     fração da validade (padrão 0.4 → 10,8d em 27d)
+    """
+    cfg = carregar_config()
+    modo = str(cfg.get("ordem_da_fila", "auto")).strip().lower()
+    if modo == "mais_antigo":
+        return True
+    if modo == "mais_novo":
+        return False
+    if validade <= 0:
+        return False        # sem validade não há o que vencer
+
+    try:
+        fracao = float(cfg.get("limiar_drenagem", 0.4))
+    except (TypeError, ValueError):
+        fracao = 0.4
+    limiar = validade * max(0.0, min(1.0, fracao))
+    mais_velho = (time.time() - min(m for m, _ in candidatos)) / 86400
+    drenar = mais_velho > limiar
+    log.info(f"   📋 fila: {len(candidatos)} pacote(s), mais antigo "
+             f"{mais_velho:.1f}d (limiar {limiar:.1f}d) → ordem "
+             + ("MAIS ANTIGO primeiro (drenagem)" if drenar
+                else "mais novo primeiro (fila saudável)"))
+    return drenar
+
+
+def _expurgar_vencidos() -> int:
+    """Tira da esteira o que passou da validade. Move pra fila_vencida/ em vez de
+    apagar — assim dá pra conferir o que saiu antes de descartar de vez."""
+    dias = _validade_dias()
+    if dias <= 0 or not PRONTO_DIR.exists():
+        return 0
+
+    destino = PRONTO_DIR.parent / "fila_vencida"
+    movidos = 0
+    for pasta in list(PRONTO_DIR.iterdir()):
+        if not (pasta.is_dir() and _vencido(pasta, dias)):
+            continue
+        try:
+            destino.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(pasta), str(destino / pasta.name))
+            movidos += 1
+        except Exception as erro:
+            log.warning(f"   ⚠️  não consegui mover '{pasta.name}': {str(erro)[:100]}")
+
+    if movidos:
+        log.info(f"   🗑️  {movidos} pacote(s) além de {dias} dias → fila_vencida/")
+    return movidos
+
+
+def _repescar(cfg: dict) -> int:
+    """Segunda chance pro que acabou de vencer. Nunca obrigatório: se o módulo
+    ou a API não estiverem lá, o ciclo de postagem segue igual."""
+    quantos = int(cfg.get("repescagem_por_ciclo", 0) or 0)
+    if quantos <= 0:
+        return 0
+    try:
+        try:
+            import repescagem as _R
+        except Exception:
+            from agents import repescagem as _R
+        return sum(_R.repescar(limite=quantos).values())
+    except Exception as erro:
+        log.debug(f"   repescagem não rodou ({str(erro)[:80]}) — segue sem")
+        return 0
+
+
 def _proximo_para_postar(hist: dict) -> str | None:
     """Retorna o slug de um vídeo pronto que ainda não foi postado."""
-    if not PRONTO_DIR.exists():
-        return None
-    postados = set(hist.get("postados", []))
-    for pasta in sorted(PRONTO_DIR.iterdir()):
-        if not pasta.is_dir():
-            continue
-        if not (pasta / "video.mp4").exists():
-            continue
-        if pasta.name in postados:
-            continue
-        return pasta.name
-    return None
+    prontos = _prontos_nao_postados(hist)
+    return prontos[0] if prontos else None
 
 
-def _registrar_postagem(hist: dict, horario: str, produto: str):
-    """Marca no histórico que postou (nunca repete)."""
+def _conta_do_slug(slug: str) -> str:
+    """Handle/nicho da conta de um vídeo pronto (lê conta.json ao lado)."""
+    try:
+        d = json.loads((PRONTO_DIR / slug / "conta.json").read_text(encoding="utf-8"))
+        return d.get("handle") or d.get("nicho") or "?"
+    except Exception:
+        return "?"
+
+
+def _nicho_do_slug(slug: str) -> str:
+    """Nicho da conta de um vídeo pronto (p/ mapear a conta TikTok certa)."""
+    try:
+        d = json.loads((PRONTO_DIR / slug / "conta.json").read_text(encoding="utf-8"))
+        return (d.get("nicho") or "").strip().lower()
+    except Exception:
+        return ""
+
+
+def _postados_hoje_por_conta(hist: dict) -> dict:
+    """{conta: nº postado HOJE} — derivado do histórico do dia (aceita formato
+    antigo string e o novo lista)."""
     hoje = str(date.today())
-    hist["por_dia"].setdefault(hoje, {})[horario] = produto
-    if produto not in hist["postados"]:
-        hist["postados"].append(produto)
+    cont = {}
+    for v in hist.get("por_dia", {}).get(hoje, {}).values():
+        for slug in (v if isinstance(v, list) else [v]):
+            c = _conta_do_slug(slug)
+            cont[c] = cont.get(c, 0) + 1
+    return cont
+
+
+def _um_por_conta_sob_teto(hist: dict, teto: int) -> list:
+    """1 vídeo pronto de CADA conta que ainda não bateu o teto diário. Ordem estável."""
+    hoje_cont = _postados_hoje_por_conta(hist)
+    escolhidos, vistas = [], set()
+    for slug in _prontos_nao_postados(hist):
+        c = _conta_do_slug(slug)
+        if c in vistas:                       # já peguei 1 dessa conta neste slot
+            continue
+        if hoje_cont.get(c, 0) >= teto:       # conta já bateu o teto de hoje
+            continue
+        escolhidos.append((slug, c))
+        vistas.add(c)
+    return escolhidos
+
+
+_DIA_NOME = ("segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo")
+
+
+def _youtube_liberado(hist: dict, cfg: dict, conta: str):
+    """(pode_subir, motivo_se_nao). O Shorts tem regra própria, separada da
+    pirâmide do Instagram/Facebook.
+
+    Duas travas, e as duas precisam passar:
+      dia    — só nos dias configurados (padrão segunda/quarta/sexta)
+      teto   — no máximo N por conta por dia (padrão 1)
+
+    O teto é POR CONTA e não global: as 4 contas são canais diferentes no
+    YouTube, então um short da tech não gasta a vaga da casa.
+    """
+    dias = cfg.get("youtube_dias_semana")
+    if not dias:
+        return True, ""                     # sem restrição = comportamento antigo
+    hoje_dow = date.today().weekday()
+    if hoje_dow not in dias:
+        quais = "/".join(_DIA_NOME[d] for d in sorted(dias) if 0 <= d <= 6)
+        return False, f"hoje é {_DIA_NOME[hoje_dow]} — Shorts só {quais}"
+    teto = int(cfg.get("youtube_max_por_conta_dia", 1) or 1)
+    ja = hist.get("youtube_por_dia", {}).get(str(date.today()), {}).get(conta, 0)
+    if ja >= teto:
+        return False, f"{conta} já subiu {ja} short hoje (teto {teto})"
+    return True, ""
+
+
+def _registrar_youtube(hist: dict, conta: str):
+    """Conta o short do dia. Chave nova no mesmo histórico — o _carregar_historico
+    usa setdefault, então arquivo antigo continua sendo lido sem migração."""
+    hoje = str(date.today())
+    d = hist.setdefault("youtube_por_dia", {}).setdefault(hoje, {})
+    d[conta] = d.get(conta, 0) + 1
+
+
+def _postar_produto(produto: str, cfg: dict, hist: dict = None) -> bool:
+    """Posta 1 vídeo em todas as plataformas configuradas. True se alguma deu certo."""
+    try:
+        from agents.publish_guard import publicar_com_garantia
+    except Exception as e:
+        log.error(f"   ❌ Não consegui importar publish_guard: {e}")
+        return False
+    ok = False
+    conta = _conta_do_slug(produto) or "geral"
+    for plataforma in cfg["plataformas"]:
+        if plataforma == "youtube" and hist is not None:
+            libera, motivo = _youtube_liberado(hist, cfg, conta)
+            if not libera:
+                log.info(f"   ⏭️  YouTube pulado: {motivo}")
+                continue
+        r = publicar_com_garantia(plataforma, produto, plano=None, publico=cfg["publico"])
+        if r.get("sucesso"):
+            ok = True
+            if plataforma == "youtube" and hist is not None:
+                _registrar_youtube(hist, conta)
+        elif r.get("pulado"):
+            log.info(f"   ⏭️  {plataforma} pulado (sem uploader ainda)")
+    # TikTok via API oficial (Content Posting API) — gated até o app ser aprovado.
+    # Liga com "postar_tiktok": true no config (+ conta pública + creds de produção).
+    if cfg.get("postar_tiktok"):
+        try:
+            import tiktok_poster
+            tr = tiktok_poster.postar_video(produto, nicho=_nicho_do_slug(produto))
+            if tr.get("ok"):
+                ok = True
+                log.info(f"   🎵 TikTok: {tr.get('publish_id')} ({tr.get('privacidade')})")
+            else:
+                log.warning(f"   ⚠️  TikTok falhou: {tr.get('erro')}")
+        except Exception as e:
+            log.warning(f"   ⚠️  TikTok poster indisponível: {str(e)[:80]}")
+    return ok
+
+
+def _registrar_postagem(hist: dict, horario: str, produto):
+    """Marca no histórico que postou (nunca repete). 'produto' pode ser 1 slug
+    (str) ou vários (list) quando o slot posta 1 por conta."""
+    hoje = str(date.today())
+    slugs = produto if isinstance(produto, list) else [produto]
+    hist["por_dia"].setdefault(hoje, {})[horario] = (
+        list(slugs) if isinstance(produto, list) else produto)
+    for s in slugs:
+        if s not in hist["postados"]:
+            hist["postados"].append(s)
     _salvar_historico(hist)
-    log.info(f"   📝 Registrado: {hoje} {horario} → {produto}")
+    log.info(f"   📝 Registrado: {hoje} {horario} → {', '.join(slugs)}")
 
 
 # =====================================================================
@@ -592,6 +1317,11 @@ def rodar_um_ciclo(cfg: dict, estado: dict, hist: dict, dry_run: bool,
     `so` restringe a uma frente só ('descoberta'|'producao'|'postar').
     """
     resumo = {}
+
+    # 0) DESCOBERTA DE GRUPOS (manhã/noite) — auto-alimenta radar + hunter
+    if so in ("", "grupos"):
+        resumo["grupos"] = ciclo_descoberta_grupos(cfg, estado, dry_run,
+                                                   forcar=(so == "grupos"))
 
     # 1) DESCOBERTA (só se passou o intervalo)
     if so in ("", "descoberta"):
@@ -646,6 +1376,10 @@ def rodar_daemon(dry_run: bool = False):
              f"(premium ≥ R$ {cfg['producao_premium_comissao_min']})")
     log.info(f"   Postagem: {cfg['horarios']} ({cfg['plataformas']}, "
              f"{'público' if cfg['publico'] else 'privado'})")
+    if cfg.get("grupos_descoberta_ativa", True):
+        log.info(f"   Descoberta de grupos: {cfg.get('grupos_descoberta_horarios')} "
+                 f"(até {cfg.get('grupos_descoberta_max', 2)}/vez, "
+                 f"{'auto' if cfg.get('grupos_descoberta_auto_add', True) else 'só sugere'})")
     log.info(f"   Check a cada {cfg['intervalo_check_seg']}s")
     log.info("█" * 60)
 
@@ -709,6 +1443,18 @@ def mostrar_status():
     # Postagem hoje
     hoje = str(date.today())
     postados_hoje = hist["por_dia"].get(hoje, {})
+    if cfg.get("posts_por_dia_semana"):
+        DIAS = ["segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"]
+        teto_hoje = _teto_do_dia(cfg)
+        semana = cfg["posts_por_dia_semana"]
+        print(f"\n  🔺 Pirâmide: {DIAS[date.today().weekday()]} = "
+              f"{teto_hoje} post(s) por conta"
+              + ("  (dia de descanso)" if teto_hoje == 0 else ""))
+        try:
+            print(f"     semana: {'/'.join(str(int(n)) for n in semana)}"
+                  f"  =  {sum(int(n) for n in semana)} por conta")
+        except (TypeError, ValueError):
+            print(f"     semana: {semana!r}  (inválido — usando o teto fixo)")
     print(f"\n  📤 Postados hoje ({hoje}):")
     if postados_hoje:
         for horario, produto in sorted(postados_hoje.items()):
@@ -718,10 +1464,16 @@ def mostrar_status():
 
     # Próximos horários
     agora = _agora_min()
-    pendentes = [h for h in cfg["horarios"]
-                 if _hora_para_min(h) > agora and h not in postados_hoje]
+    # mostra a hora de VERDADE (com o desvio de hoje), não a do config —
+    # senão o status promete 09:00 e o post sai 09:06.
+    pendentes = []
+    for h in _slots_de_hoje(cfg):
+        real = _horario_real(h, cfg)
+        if real > agora and h not in postados_hoje:
+            marca = _min_para_hora(real)
+            pendentes.append(marca if marca == h else f"{marca} (slot {h})")
     if pendentes:
-        print(f"  ⏰ Próximos horários hoje: {pendentes}")
+        print(f"  ⏰ Próximos horários hoje: {', '.join(pendentes)}")
 
     print(f"\n  📊 Total histórico: {len(hist['postados'])} vídeos postados")
     print("═" * 56 + "\n")
@@ -746,6 +1498,8 @@ def main():
                         help="roda só o ciclo de descoberta")
     parser.add_argument("--so-producao", action="store_true", dest="so_producao",
                         help="roda só o ciclo de produção")
+    parser.add_argument("--so-grupos", action="store_true", dest="so_grupos",
+                        help="roda só a descoberta de grupos (manual, ignora horário)")
     args = parser.parse_args()
 
     if args.status:
@@ -760,6 +1514,8 @@ def main():
         so = "descoberta"
     elif args.so_producao:
         so = "producao"
+    elif args.so_grupos:
+        so = "grupos"
 
     if args.once or so:
         cfg = carregar_config()

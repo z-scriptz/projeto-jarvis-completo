@@ -75,6 +75,11 @@ def _filtrar_aprovados(relatorio: dict, classes_manter: set) -> list:
             "vendas":         p.get("vendas", 0),
             "rating":         p.get("rating", 0),
             "score":          p.get("score", 0),
+            # foto/link/preço vêm do relatório do validador (que os copia do
+            # campeão). Sem eles o produto entra na vitrine invisível.
+            "imagem":         p.get("imagem", ""),
+            "link":           p.get("link", ""),
+            "preco":          p.get("preco", 0),
         })
     return aprovados
 
@@ -86,10 +91,57 @@ def _salvar_json(aprovados: list, simular: bool) -> bool:
         return True
     try:
         JSON_FILA.parent.mkdir(parents=True, exist_ok=True)
+        # Esta função apaga tudo que não está em `aprovados`. Se o relatório
+        # veio de uma rodada que falhou (credencial fora do ar reprova TODO
+        # mundo por "deserto"), o certo é não escrever nada — uma fila zerada
+        # tira o site do ar e não tem de onde voltar.
+        antes = 0
+        if JSON_FILA.exists():
+            try:
+                antes = len(json.load(open(JSON_FILA, encoding="utf-8")))
+            except Exception:
+                antes = 0
+        if antes and len(aprovados) < max(1, antes // 4):
+            log.error(f"   ❌ a curadoria aprovou {len(aprovados)} de {antes} "
+                      f"que estavam na fila — corte grande demais pra ser real.")
+            log.error("      fila PRESERVADA. rode o validador de novo e "
+                      "confira se a busca está respondendo.")
+            return False
+
+        # O que já está gravado, indexado pelo nome genérico. Esta função
+        # REESCREVE o arquivo inteiro — antes ela montava cada entrada do zero
+        # com 3 campos, e isso apagava a foto, o link e o preço de TODOS os
+        # produtos a cada curadoria. Quem repunha era o preencher_fotos, na
+        # mão. Agora o que já estava lá sobrevive à reescrita.
+        antigo = {}
+        if JSON_FILA.exists():
+            try:
+                with open(JSON_FILA, encoding="utf-8") as f:
+                    for item in json.load(f):
+                        if isinstance(item, dict) and item.get("produto"):
+                            antigo[item["produto"]] = item
+            except Exception as e:
+                log.warning(f"   fila atual ilegível ({e}) — regravando do zero")
+
         # Salva no formato rico (dicts com busca + campeao), que o validador
         # e o pipeline conseguem ler (ambos aceitam dict com 'produto'/'busca').
-        saida = [{"produto": a["busca"], "campeao": a["campeao"],
-                  "classe": a["classe"]} for a in aprovados]
+        saida = []
+        for a in aprovados:
+            entrada = dict(antigo.get(a["busca"], {}))
+            entrada.update({"produto": a["busca"], "campeao": a["campeao"],
+                            "classe": a["classe"]})
+            # o valor novo só entra se existir: curadoria sem foto não pode
+            # zerar a foto que já estava boa na fila
+            for campo in ("imagem", "link", "preco"):
+                if a.get(campo):
+                    entrada[campo] = a[campo]
+                entrada.setdefault(campo, "" if campo != "preco" else 0)
+            saida.append(entrada)
+
+        sem_foto = sum(1 for e in saida if not e.get("imagem"))
+        if sem_foto:
+            log.info(f"   ⚠️  {sem_foto} de {len(saida)} ainda sem foto "
+                     f"(a vitrine esconde quem não tem)")
         with open(JSON_FILA, "w", encoding="utf-8") as f:
             json.dump(saida, f, ensure_ascii=False, indent=2)
         log.info(f"   ✅ {len(aprovados)} produtos salvos em {JSON_FILA}")

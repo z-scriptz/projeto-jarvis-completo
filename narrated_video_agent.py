@@ -28,6 +28,7 @@
 import argparse
 import json
 import sys
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -44,8 +45,11 @@ from creative_engine.tts_edge import (
 )
 
 # Memória (best-effort)
+# [FIX] memory_agent NÃO expõe 'registrar_aprendizado' (só existe
+# 'registrar_memoria' / 'registrar_aprendizado_execucao'). O import antigo
+# falhava sempre → _MEM_OK=False → memória NUNCA era registrada em silêncio.
 try:
-    from agents.memory_agent import registrar_aprendizado
+    from agents.memory_agent import registrar_memoria
     _MEM_OK = True
 except Exception:
     _MEM_OK = False
@@ -62,7 +66,7 @@ LARGURA, ALTURA = 1080, 1920   # canvas 9:16 (vídeo 3:4 reduzido fica centraliz
 # Template de marca topshop — liga/desliga e textos. Carimba identidade no vídeo.
 TEMPLATE_MARCA = True
 MARCA_NOME = "TopShop"
-MARCA_HANDLE = "@topshop._"
+MARCA_HANDLE = os.environ.get("TOPSHOP_HANDLE", "@topshop._")
 # Pasta com os assets de marca (logo, fundo, selo, fontes)
 BRAND_DIR = PROJETO_ROOT / "assets" / "brand"
 EXT_VIDEO = {".mp4", ".mov", ".webm", ".m4v"}
@@ -137,7 +141,7 @@ def _logo_circular(logo_path: Path, tam: int = 110) -> Optional[Path]:
         draw = ImageDraw.Draw(mask)
         draw.ellipse((0, 0, tam, tam), fill=255)
         img.putalpha(mask)
-        out = TMP_DIR / "logo_ts_circular.png"
+        out = TMP_DIR / f"logo_circ_{logo_path.stem}.png"
         out.parent.mkdir(parents=True, exist_ok=True)
         img.save(str(out))
         return out
@@ -316,37 +320,6 @@ def _cena_do_arquivo(caminho: Path) -> str:
         if nome.startswith(f"{cena}_") or f"_{cena}_" in nome:
             return cena
     return ""
-
-
-def selecionar_broll_por_cena(broll: list, cena: str, usados: set) -> Optional[Path]:
-    """
-    Escolhe o melhor B-roll pra uma cena.
-
-    Prioridade:
-      1. arquivo da cena ({cena}_*) ainda NÃO usado
-      2. qualquer arquivo da cena (mesmo já usado)
-      3. qualquer arquivo ainda não usado (fallback)
-      4. qualquer arquivo (repete — loga warning no caller)
-
-    Returns: Path escolhido ou None se broll vazio.
-    """
-    if not broll:
-        return None
-
-    # 1) da cena, não usado
-    da_cena = [b for b in broll if _cena_do_arquivo(b) == cena]
-    da_cena_livres = [b for b in da_cena if b not in usados]
-    if da_cena_livres:
-        return da_cena_livres[0]
-    # 2) da cena, mesmo usado
-    if da_cena:
-        return da_cena[0]
-    # 3) qualquer não usado
-    livres = [b for b in broll if b not in usados]
-    if livres:
-        return livres[0]
-    # 4) repete qualquer
-    return broll[0]
 
 
 # =================================================================
@@ -566,45 +539,6 @@ def _resolver_fonte_textclip(TextClip):
     return None
 
 
-# Fontes de emoji por SO (renderizam letra normal E emoji).
-# Usadas no hook/CTA, que podem ter emoji. A legenda da fala fica no Arial.
-_FONTES_EMOJI_CANDIDATAS = [
-    "C:/Windows/Fonts/seguiemj.ttf",   # Segoe UI Emoji (Windows) — colorido
-    "C:/Windows/Fonts/segoeui.ttf",    # Segoe UI (tem muitos símbolos)
-    "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",  # Linux
-    "Segoe-UI-Emoji",                  # nome lógico
-]
-
-_FONTE_EMOJI_OK = "__nao_resolvida__"
-
-
-def _resolver_fonte_emoji(TextClip):
-    """
-    Descobre a fonte de EMOJI deste ambiente (Segoe UI Emoji no Windows).
-    Se nenhuma funcionar, retorna a fonte normal (Arial) como fallback —
-    o texto sai sem emoji, mas não quebra.
-    """
-    global _FONTE_EMOJI_OK
-    if _FONTE_EMOJI_OK != "__nao_resolvida__":
-        return _FONTE_EMOJI_OK
-    from pathlib import Path as _P
-    for fonte in _FONTES_EMOJI_CANDIDATAS:
-        if fonte and ("/" in fonte or "\\" in fonte) and not _P(fonte).exists():
-            continue
-        try:
-            kw = {"text": "Aa", "font_size": 40, "color": "white", "font": fonte}
-            _ = TextClip(**kw)
-            _FONTE_EMOJI_OK = fonte
-            log.info(f"   😊 Fonte de emoji (hook/CTA): {fonte}")
-            return _FONTE_EMOJI_OK
-        except Exception:
-            continue
-    # fallback: usa a fonte normal (sem emoji, mas funciona)
-    log.info("   ℹ️  Fonte de emoji não encontrada — hook/CTA sem emoji")
-    _FONTE_EMOJI_OK = _resolver_fonte_textclip(TextClip)
-    return _FONTE_EMOJI_OK
-
-
 def _textclip_robusto(TextClip, texto, font_size, color, stroke_width,
                        largura_frac, fonte, stroke_color="black", text_align=None):
     """
@@ -781,45 +715,6 @@ def _emoji_aparado(nome: str, tam: int) -> Optional[Path]:
         return p
 
 
-def _emoji_do_hook(hook_txt: str) -> Optional[Path]:
-    """
-    O Jarvis DECIDE qual emoji combina com o hook, por palavra-chave + tom.
-    Lê o texto e escolhe entre olhos/choque/assustado (PNGs na pasta brand).
-
-    Lógica de decisão (contextual, como o Copy Adapter faz com categorias):
-      - pergunta / curiosidade (?, COMO, POR QUE, SERÁ)  → choque (espanto)
-      - alerta / urgência (CHEGA, PARE, NUNCA, CUIDADO)  → assustado
-      - chamada de atenção (OLHA, VEJA, ISSO, OLHA SÓ)   → olhos
-      - nenhuma palavra-chave → alterna determinístico pelo tamanho do texto
-        (espalha os 3 ao longo dos vídeos sem precisar de estado global)
-
-    Retorna o Path do PNG, ou None se nenhum existir na pasta.
-    """
-    t = (hook_txt or "").upper()
-
-    # mapa palavra-chave → arquivo
-    if any(p in t for p in ("?", "COMO", "POR QUE", "PORQUE", "SERÁ", "SERA", "QUAL")):
-        escolha = "choque.png"
-    elif any(p in t for p in ("CHEGA", "PARE", "NUNCA", "CUIDADO", "PARA DE", "ERRO")):
-        escolha = "assustado.png"
-    elif any(p in t for p in ("OLHA", "VEJA", "ISSO", "OLHA SÓ", "VEM VER")):
-        escolha = "olhos.png"
-    else:
-        # alterna determinístico: usa o comprimento do texto pra variar
-        alternativas = ["olhos.png", "choque.png", "assustado.png"]
-        escolha = alternativas[len(t) % 3]
-
-    p = _brand_asset(escolha)
-    if p is not None:
-        return p
-    # se o escolhido não existe, tenta qualquer um dos 3 que exista
-    for alt in ("olhos.png", "choque.png", "assustado.png"):
-        p = _brand_asset(alt)
-        if p is not None:
-            return p
-    return None
-
-
 def _textclip_justo(TextClip, texto, font_size, fonte):
     """
     Cria um TextClip com caixa JUSTA ao texto (method='label', sem size fixo),
@@ -842,7 +737,231 @@ def _textclip_justo(TextClip, texto, font_size, fonte):
     return None
 
 
-def _criar_camadas_topo(dur_total: float, hook_txt: str, mp) -> list:
+def _textclip_esq(TextClip, texto, font_size, color, stroke_width, stroke_color, fonte):
+    """TextClip JUSTO (method='label') COM cor+contorno — alinhamento à ESQUERDA
+    de verdade (a caixa 'caption' centraliza; o label não tem caixa, então o
+    canto esquerdo do clip = começo do texto). Fallback pro caption se falhar.
+    Usa margem transparente (TXT_MARGEM) p/ não CORTAR descendentes (p, g) e
+    acentos — a caixa 'label' é justa e come as pontas sem essa folga."""
+    _m = int(os.environ.get("TXT_MARGEM", 8))
+    for com_margem in (True, False):          # tenta COM margem; se a versão não
+        for novo in (True, False):            # aceitar, cai p/ label puro (não corta o texto)
+            try:
+                kw = dict(color=color, method="label")
+                if fonte:
+                    kw["font"] = fonte
+                if stroke_width:
+                    kw["stroke_color"] = stroke_color
+                    kw["stroke_width"] = stroke_width
+                if com_margem and _m:
+                    kw["margin"] = (_m, _m)
+                if novo:
+                    kw["font_size"] = font_size
+                    return TextClip(text=texto, **kw)
+                kw["fontsize"] = font_size
+                return TextClip(texto, **kw)
+            except Exception:
+                continue
+    # não deu label → cai no caption (pode centralizar, mas não quebra)
+    return _textclip_robusto(TextClip, texto, font_size, color, stroke_width,
+                             0.92, fonte, stroke_color=stroke_color, text_align="West")
+
+
+# ── EMOJI COLORIDO NO HOOK (Noto Color Emoji) ─────────────────────
+_NOTO_EMOJI = "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf"
+
+# emojis coloridos SEGUROS (1 codepoint) por palavra-chave do hook/produto
+_HOOK_EMOJI_MAPA = [
+    (("cozinha", "panela", "fog", "utensil", "copo", "garrafa", "talher",
+      "fatiad", "ralad", "descasc"), "🍳"),
+    (("beleza", "skincare", "makeup", "maquia", "batom", "perfume", "cabelo",
+      "unha", "pele", "hidrat"), "💄"),
+    (("pet", "cachorro", "gato", "aquari", "raç", "coleira"), "🐶"),
+    (("fone", "carregad", "cabo", "gadget", "led", "lumin", "eletron", "usb",
+      "bluetooth", "teclado"), "🔌"),
+    (("fitness", "treino", "academ", "yoga", "muscula", "corrida", "emagrec"),
+     "💪"),
+    (("organiz", "decor", "closet", "guarda", "banheiro", "quarto", "suporte",
+      "prateleira"), "🏠"),
+    (("bebe", "bebê", "infantil", "criança", "banheira", "fralda",
+      "mamadeira"), "🍼"),
+    (("roupa", "jaqueta", "camisa", "moda", "vestido", "calça", "tenis",
+      "tênis", "bota", "meia"), "👕"),
+    (("moto", "capacete", "carro", "automot", "bike", "bicicleta", "scooter"),
+     "🛵"),
+    (("limpeza", "limpa", "esponja", "vassoura", "mancha"), "🧽"),
+]
+
+
+def _char_eh_emoji(ch: str) -> bool:
+    o = ord(ch)
+    return (0x1F300 <= o <= 0x1FAFF or 0x2600 <= o <= 0x27BF
+            or 0x1F1E6 <= o <= 0x1F1FF or 0x2B00 <= o <= 0x2BFF
+            or o in (0x2705, 0x2714, 0x2764) or 0xFE00 <= o <= 0xFE0F
+            or o == 0x200D)
+
+
+def _separar_emoji_hook(hook_txt: str):
+    """Tira emojis do texto do hook (evita 'tofu' na fonte) e escolhe 1 emoji
+    colorido: o que já vinha no hook, ou por palavra-chave, ou fogo."""
+    achado = None
+    limpo = []
+    for ch in (hook_txt or ""):
+        if _char_eh_emoji(ch):
+            if achado is None and not (0xFE00 <= ord(ch) <= 0xFE0F) and ord(ch) != 0x200D:
+                achado = ch
+        else:
+            limpo.append(ch)
+    texto = "".join(limpo).strip()
+    while "  " in texto:
+        texto = texto.replace("  ", " ")
+    if achado is None:
+        t = texto.lower()
+        for chaves, emo in _HOOK_EMOJI_MAPA:
+            if any(k in t for k in chaves):
+                achado = emo
+                break
+        if achado is None:
+            achado = "🔥"
+    return achado, (texto or (hook_txt or ""))
+
+
+def _emoji_colorido_png(emoji_char: str, tam: int):
+    """Renderiza 1 emoji COLORIDO (Noto) num PNG aparado no tamanho pedido.
+    A Noto Color Emoji só carrega no tamanho 109 -> renderiza nele e reescala."""
+    try:
+        import os
+        from PIL import Image, ImageDraw, ImageFont
+        if not os.path.exists(_NOTO_EMOJI):
+            return None
+        fnt = ImageFont.truetype(_NOTO_EMOJI, 109)
+        img = Image.new("RGBA", (160, 160), (0, 0, 0, 0))
+        ImageDraw.Draw(img).text((8, 8), emoji_char, font=fnt, embedded_color=True)
+        bbox = img.getbbox()
+        if bbox:
+            img = img.crop(bbox)
+        w, h = img.size
+        escala = tam / max(w, h)
+        img = img.resize((max(1, int(w * escala)), max(1, int(h * escala))),
+                         Image.LANCZOS)
+        nome = "_".join(str(ord(c)) for c in emoji_char)
+        out = TMP_DIR / f"hookemoji_{nome}_{tam}.png"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        img.save(str(out))
+        return out
+    except Exception as e:
+        log.warning(f"   ⚠️  Emoji colorido '{emoji_char}' falhou: {e}")
+        return None
+
+
+def _quebrar_hook_2linhas(texto: str):
+    """Divide o hook em 2 linhas equilibradas (corte na palavra mais perto do
+    meio). Retorna [linha] se tiver 1 palavra só. Base do layout 2-linhas."""
+    palavras = (texto or "").split()
+    if len(palavras) < 2:
+        return [texto]
+    total = len(texto)
+    acc, corte = 0, 1
+    for i, w in enumerate(palavras):
+        acc += len(w) + 1
+        if acc >= total / 2:
+            corte = i + 1
+            break
+    corte = max(1, min(corte, len(palavras) - 1))
+    l1 = " ".join(palavras[:corte])
+    l2 = " ".join(palavras[corte:])
+    return [l1, l2] if l2 else [l1]
+
+
+# Emoji colorido por NICHO do produto (1 codepoint = renderiza no Noto).
+# Emoji por produto — duas listas, e a diferença entre elas é QUEM GANHA do
+# emoji que o hook já trouxe.
+#
+# O hook vem com emoji escolhido pela fórmula ou pela frase de reserva, e esse
+# costuma ser bom porque foi escrito junto com a frase. Até 03/08 o palpite por
+# palavra-chave ganhava dele SEMPRE (linha `_emoji_do_produto(produto) or
+# _emoji_do_txt`), e o resultado apareceu nos posts: luminária de urso com 🔌,
+# separador de ovos com 🔌, suporte de celular com 🛵.
+#
+# ALTA CONFIANÇA vence o hook: aqui o emoji É o produto, e é pra isto que a
+# regra foi criada (o ROADMAP cita câmera 📷 e óculos 😎 nominalmente).
+_EMOJI_ALTA = [
+    (("camera", "câmera", "filmadora", "gravador", "gravaç", "espiã", "espião",
+      "gopro", "webcam", "dvr", "vigilância", "vigilancia"), "📷"),
+    (("óculos de sol", "oculos de sol", "óculos", "oculos"), "😎"),
+    (("cafeteira", "café", "cafe", "dolce gusto", "nespresso", "espresso",
+      "expresso", "cappuccino", "capuccino", "moedor de café", "prensa francesa",
+      "chaleira elétrica", "chaleira eletrica"), "☕"),
+    # luminária saiu do grupo do carregador. Uma luminária de urso na mesa de
+    # cabeceira com emoji de tomada foi o post mais fora de tom da semana.
+    (("luminária", "luminaria", "abajur", "lampada", "lâmpada", "candeeiro",
+      "led 3d", "luminária 3d"), "💡"),
+    (("pet", "cachorro", "gato", "aquari", "coleira", "comedouro", "arranhador"),
+     "🐶"),
+    (("bebê", "bebe ", "infantil", "mamadeira", "fralda", "pelúcia", "pelucia",
+      "urso ", "brinquedo"), "🧸"),
+]
+
+# BAIXA CONFIANÇA só entra se o hook NÃO trouxe emoji. São categorias largas,
+# onde o acerto é aproximado e o emoji do hook quase sempre é melhor.
+_EMOJI_BAIXA = [
+    (("cozinha", "panela", "fritad", "air fryer", "utensil", "copo", "caneca",
+      "garrafa", "talher", "fatiad", "ralad", "liquidif", "descasc", "prato",
+      "tigela", "faca", "ovo", "ovos", "espremedor", "batedor"), "🍳"),
+    (("skincare", "beleza", "maquia", "batom", "perfume", "cabelo", "cabelud",
+      "unha", "pele", "hidrat", "serum", "sérum", "gloss", "labial", "blush",
+      "sombra", "pó compacto"), "💄"),
+    (("fone", "carregad", "cabo usb", "power bank", "gadget", "eletron",
+      "bluetooth", "teclado", "mouse", "notebook", "smartwatch", "celular"),
+     "🔌"),
+    (("fitness", "treino", "academ", "yoga", "muscula", "corrida", "emagrec"),
+     "💪"),
+    (("organiz", "closet", "guarda-roupa", "prateleira", "cabide", "gaveta",
+      "cesto", "necessaire", "nécessaire"), "🧺"),
+    (("manta", "fronha", "lençol", "lencol", "cobertor", "edredom", "toalha",
+      "almofada", "tapete", "cortina", "sofá", "sofa"), "🏠"),
+    (("roupa", "jaqueta", "casaco", "moletom", "blusa", "camisa", "vestido",
+      "calça", "short", "biquíni", "pijama", "tênis", "tamanco", "chinelo",
+      "bota", "sandália", "sandalia", "scarpin", "bolsa", "mochila"), "👕"),
+    # 'moto' sozinho pegava "suporte magnético moto" (um suporte de celular).
+    # Agora exige contexto de veículo de verdade.
+    (("motocicleta", "capacete", "automot", "bicicleta", "para-brisa",
+      "parabrisa", "painel do carro", "porta-malas"), "🛵"),
+    (("limpeza", "esponja", "vassoura", "rodo", "mop", "aspirador"), "🧽"),
+]
+
+
+def _pontuar(texto: str, lista) -> tuple:
+    """(emoji, pontos) da categoria que mais casa. Pontuação em vez de
+    'primeira que casa vence': 'Escova Massageadora para Couro Cabeludo' casava
+    com 'massage' (fitness 💪) porque fitness vinha antes, mesmo tendo duas
+    palavras de beleza. Contando, beleza ganha 2 a 1."""
+    melhor, pontos = None, 0
+    for chaves, emo in lista:
+        n = sum(1 for k in chaves if k in texto)
+        if n > pontos:
+            melhor, pontos = emo, n
+    return melhor, pontos
+
+
+def _emoji_do_produto(produto: str, so_alta: bool = False):
+    """Emoji que combina com o produto, ou None.
+
+    so_alta=True devolve só as categorias que valem a pena sobrepor ao emoji
+    que o hook já trouxe.
+    """
+    if not produto:
+        return None
+    p = str(produto).lower()
+    emo, _ = _pontuar(p, _EMOJI_ALTA)
+    if emo or so_alta:
+        return emo
+    emo, _ = _pontuar(p, _EMOJI_BAIXA)
+    return emo
+
+
+def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
+                        produto: str = "") -> list:
     """
     Monta a ZONA SUPERIOR do template topshop, fiel ao @topshop._:
       - logo TS REDONDO no canto superior esquerdo
@@ -854,10 +973,39 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp) -> list:
     camadas = []
     fonte_bold = _fonte_montserrat("Bold") or _resolver_fonte_textclip(TextClip)
 
-    logo_x, logo_y, logo_tam = 65, 90, 120
+    # ── ESTILO POR FUNDO: geral=preto (texto branco), demais=branco (texto preto,
+    # estilo Alana). O produtor seta TOPSHOP_BG por vídeo (preto/branco). ──
+    _bg = os.environ.get("TOPSHOP_BG", "preto").strip().lower()
+    _claro = _bg in ("branco", "white", "bege", "claro")
+    if _claro:      # fundo BRANCO (estilo Alana): texto preto, @ cinza, sem contorno
+        C_NOME, SC_NOME, SW_NOME = "black", "black", 0
+        C_HANDLE = "#7a7a7a"
+        C_HOOK, SC_HOOK, SW_HOOK = "black", "black", 0
+    else:           # fundo PRETO: texto branco com contorno preto (legível)
+        C_NOME, SC_NOME, SW_NOME = "white", "black", 3
+        C_HANDLE = "white"
+        C_HOOK, SC_HOOK = "white", "black"
+        SW_HOOK = int(os.environ.get("HK_STROKE_PRETO", 4))  # contorno + grosso no preto
+    # fonte do HOOK: fundo BRANCO usa Regular (fino, elegante, estilo Alana);
+    # fundo PRETO usa BOLD pra as letras brancas DESTACAREM sobre o vídeo.
+    _LIB = "/usr/share/fonts/truetype/liberation/"
+    if _claro:
+        _hk_fonte = os.environ.get("HOOK_FONTE", _LIB + "LiberationSans-Regular.ttf")
+    else:
+        _hk_fonte = os.environ.get("HOOK_FONTE_PRETO", _LIB + "LiberationSans-Bold.ttf")
+    if not (_hk_fonte and Path(_hk_fonte).exists()):
+        _hk_fonte = fonte_bold
+
+    logo_x = int(os.environ.get("LOGO_X", 100))    # + à direita (era 65)
+    logo_y = int(os.environ.get("LOGO_Y", 112))    # + pra baixo (era 90)
+    logo_tam = int(os.environ.get("LOGO_TAM", 120))
 
     # ── Logo TS REDONDO (canto superior esquerdo) ──
-    logo_path = _brand_asset("logo_ts.png")
+    # logo POR CONTA/NICHO: a produção seta TOPSHOP_LOGO (ex.: logo_ts_tech.png,
+    # logo_ts_beauty.png) antes de renderizar; cai na logo_ts.png padrão.
+    logo_path = _brand_asset(os.environ.get("TOPSHOP_LOGO", "logo_ts.png"))
+    if logo_path is None:
+        logo_path = _brand_asset("logo_ts.png")
     if logo_path is not None:
         circular = _logo_circular(logo_path, tam=logo_tam) or logo_path
         try:
@@ -870,12 +1018,11 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp) -> list:
         except Exception as e:
             log.warning(f"   ⚠️  Logo TS falhou: {e}")
 
-    texto_x = logo_x + logo_tam - 32
+    texto_x = logo_x + logo_tam + int(os.environ.get("TEXTO_DX", 16))  # DEPOIS do logo
+    _nome_font = int(os.environ.get("NOME_FONT", 56))   # tamanho do "TopShop"
 
     # ── 'TopShop' PRETO (Bold) com contorno BRANCO ──
-    nome = _textclip_robusto(TextClip, MARCA_NOME, font_size=56,
-                             color="black", stroke_width=4, stroke_color="white",
-                             largura_frac=0.32, fonte=fonte_bold, text_align="West")
+    nome = _textclip_esq(TextClip, MARCA_NOME, _nome_font, C_NOME, SW_NOME, SC_NOME, fonte_bold)
     fim_topshop_x = texto_x + 235  # fallback se não der pra medir
     if nome is not None:
         nome = _with_duration(nome, dur_total)
@@ -892,7 +1039,7 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp) -> list:
             # mede a largura real do "TopShop" com um TextClip justo (sem caixa)
             larg_real = None
             try:
-                medidor = _textclip_justo(TextClip, MARCA_NOME, 56, fonte_bold)
+                medidor = _textclip_justo(TextClip, MARCA_NOME, _nome_font, fonte_bold)
                 if medidor is not None:
                     larg_real = medidor.w
                     try: medidor.close()
@@ -900,11 +1047,10 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp) -> list:
             except Exception:
                 pass
             if larg_real:
-                # +50 extra: compensa a caixa do TextClip que pode centralizar
-                # o texto (text_align nem sempre é suportado pela versão)
-                selo_x = texto_x + larg_real + 64
+                # texto agora é JUSTO (label) → cola o selo logo após o nome
+                selo_x = texto_x + larg_real + int(os.environ.get("SELO_DX", 12))
             else:
-                selo_x = texto_x + 290  # fallback estimado
+                selo_x = texto_x + 200  # fallback estimado (nome justo ~180px)
             selo = ImageClip(str(selo_aparado))
             selo = _with_duration(selo, dur_total)
             selo = _with_start(selo, 0.0)
@@ -917,95 +1063,173 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp) -> list:
         log.warning("   ⚠️  verificado.png NÃO encontrado na pasta brand!")
 
     # ── '@topshop._' BRANCO (Bold) com contorno PRETO ──
-    handle = _textclip_robusto(TextClip, MARCA_HANDLE, font_size=46,
-                               color="white", stroke_width=3, stroke_color="black",
-                               largura_frac=0.34, fonte=fonte_bold, text_align="West")
+    # lê o handle em tempo de render (multi-conta): a produção seta TOPSHOP_HANDLE
+    # por vídeo antes de renderizar; cai no MARCA_HANDLE default se não setado.
+    _handle_txt = os.environ.get("TOPSHOP_HANDLE", MARCA_HANDLE) or MARCA_HANDLE
+    handle = _textclip_esq(TextClip, _handle_txt, int(os.environ.get("HANDLE_FONT", 46)),
+                           C_HANDLE, (0 if _claro else 3), "black", fonte_bold)
     if handle is not None:
         handle = _with_duration(handle, dur_total)
         handle = _with_start(handle, 0.0)
         handle = _with_position(handle, (texto_x, logo_y + 42))
         camadas.append(handle)
 
-    # ── Hook com SOMBRA + texto branco — na faixa preta acima do vídeo ──
-    hook_y = 198   # faixa preta de cima, abaixo da marca
-    sombra = _textclip_robusto(TextClip, hook_txt, font_size=38,
-                               color="black", stroke_width=0, stroke_color="black",
-                               largura_frac=0.9, fonte=fonte_bold)
-    if sombra is not None:
-        sombra = _with_opacity(sombra, 0.55)
-        sombra = _with_duration(sombra, dur_total)
-        sombra = _with_start(sombra, 0.0)
-        sombra = _with_position(sombra, ("center", hook_y + 4))
-        camadas.append(sombra)
-    hook = _textclip_robusto(TextClip, hook_txt, font_size=38,
-                             color="white", stroke_width=3, stroke_color="black",
-                             largura_frac=0.9, fonte=fonte_bold)
-    if hook is not None:
-        hook = _with_duration(hook, dur_total)
-        hook = _with_start(hook, 0.0)
-        hook = _with_position(hook, ("center", hook_y))
-        camadas.append(hook)
-        log.info(f"   📌 Hook: \"{hook_txt}\"")
-        # (Emoji do hook removido — hook fica limpo, só o texto com sombra.)
+    # ── HOOK à ESQUERDA, 1 OU 2 linhas, cor por fundo (estilo Alana) ──────────
+    # >>> tudo tunável por .env (ajuste fino olhando 1 render de teste) <<<
+    HK_FONT_MAX = int(os.environ.get("HK_FONT", 48))
+    HK_FONT_MIN = int(os.environ.get("HK_FONT_MIN", 34))
+    HK_MARGEM   = int(os.environ.get("HK_MARGEM", 55))   # margem ESQUERDA (hook + header)
+    HK_ALTURA_LINHA = int(os.environ.get("HK_ALT_LINHA", 62))
+    HK_MAX_LARG = LARGURA - HK_MARGEM - int(os.environ.get("HK_MARGEM_DIR", 45))
+    HK_EMOJI_TAM = int(os.environ.get("HK_EMOJI", 40))
+
+    _emoji_do_txt, hook_txt_limpo = _separar_emoji_hook(hook_txt)
+    # O emoji que veio NO HOOK ganha, porque foi escrito junto com a frase.
+    # Só as categorias de alta confiança (câmera, óculos, café, luminária, pet,
+    # bebê) sobrepõem — ali o emoji É o produto. Antes o palpite por
+    # palavra-chave ganhava sempre, e foi assim que a luminária de urso saiu
+    # com 🔌 e o suporte de celular com 🛵.
+    _emoji_hook = (_emoji_do_produto(produto, so_alta=True)
+                   or _emoji_do_txt
+                   or _emoji_do_produto(produto))
+
+    def _larg(txt, fnt):
+        _m = _textclip_justo(TextClip, txt, fnt, _hk_fonte)
+        w = getattr(_m, "w", 0) if _m is not None else 0
+        if _m is not None:
+            try: _m.close()
+            except Exception: pass
+        return w
+
+    # LINHAS do hook:
+    #   • quebra EXPLÍCITA "\n" (formato Alana: 'frase 😩' / 'A Shopee:') → respeita;
+    #     o emoji fica no fim da 1ª linha (a frase relatable).
+    #   • senão 1 linha (cabe na fonte cheia) ou auto-quebra em 2 (emoji na última).
+    HK_FONT = HK_FONT_MAX
+
+    def _wrap(txt, fnt):
+        """Quebra GULOSA por largura: enche cada linha até HK_MAX_LARG (não vaza
+        pela direita). Retorna a lista de linhas."""
+        out, cur = [], []
+        for w in (txt or "").split():
+            if cur and _larg(" ".join(cur + [w]), fnt) > HK_MAX_LARG:
+                out.append(" ".join(cur)); cur = [w]
+            else:
+                cur.append(w)
+        if cur:
+            out.append(" ".join(cur))
+        return out or [txt]
+
+    # parágrafos = quebra EXPLÍCITA "\n" (formato Alana: frase / A Shopee:); senão 1.
+    _paras = [l.strip() for l in hook_txt_limpo.split("\n") if l.strip()] or [hook_txt_limpo]
+    # encolhe a fonte só até a MAIOR palavra caber (piso de segurança); a quebra
+    # por largura cuida do resto — assim frase longa VIRA 2 linhas em vez de vazar.
+    while HK_FONT > HK_FONT_MIN and max(
+            (_larg(w, HK_FONT) for p in _paras for w in p.split()), default=0) > HK_MAX_LARG:
+        HK_FONT -= 2
+    _linhas, _emoji_linha = [], 0
+    for _pi, _p in enumerate(_paras):
+        _wl = _wrap(_p, HK_FONT)
+        if _pi == 0:
+            _emoji_linha = len(_wl) - 1   # emoji no fim da 1ª frase (sua última linha)
+        _linhas += _wl
+    _n = len(_linhas)
+
+    # POSIÇÃO VERTICAL: ancora o RODAPÉ do hook logo acima do topo do vídeo
+    # (VIDEO_Y no hunter). Assim 1 OU 2 linhas ficam sempre "coladas" em cima do
+    # vídeo, estilo Alana — sem precisar calibrar HK_Y por fora. HK_Y absoluto
+    # ainda funciona como override (debug).
+    _video_top = int(os.environ.get("VIDEO_Y", 470))
+    _gap = int(os.environ.get("HK_GAP_VIDEO", 16))
+    if os.environ.get("HK_Y"):
+        HK_Y = int(os.environ["HK_Y"])
+    else:
+        HK_Y = max(logo_y + logo_tam + 20, _video_top - _gap - _n * HK_ALTURA_LINHA)
+
+    _hk_por_linha = []
+    for _i, _linha in enumerate(_linhas):
+        _y = HK_Y + _i * HK_ALTURA_LINHA
+        _hk = _textclip_esq(TextClip, _linha, HK_FONT, C_HOOK, SW_HOOK, SC_HOOK, _hk_fonte)
+        _hk_por_linha.append(_hk)
+        if _hk is not None:
+            _hk = _with_duration(_hk, dur_total)
+            _hk = _with_start(_hk, 0.0)
+            _hk = _with_position(_hk, (HK_MARGEM, _y))
+            camadas.append(_hk)
+    log.info(f"   📌 Hook ({_n}L, {'claro' if _claro else 'escuro'}): "
+             f"\"{hook_txt_limpo.replace(chr(10), ' / ')}\"")
+
+    # emoji COLORIDO no fim da linha certa (1ª no formato Alana; última no auto)
+    if _emoji_hook and 0 <= _emoji_linha < _n:
+        try:
+            _epath = _emoji_colorido_png(_emoji_hook, HK_EMOJI_TAM)
+            if _epath is not None:
+                _y_emo = HK_Y + _emoji_linha * HK_ALTURA_LINHA
+                _lw = _larg(_linhas[_emoji_linha], HK_FONT)
+                _txm = int(os.environ.get("TXT_MARGEM", 8))
+                # x: depois do fim REAL do texto (margem + largura) + folga tunável
+                _ex = max(10, min(HK_MARGEM + _txm + (_lw or int(LARGURA * 0.5))
+                                  + int(os.environ.get("HK_EMOJI_DX", 18)),
+                                  LARGURA - HK_EMOJI_TAM - 10))
+                # y: centra pela ALTURA DA FONTE (consistente entre claro/escuro; o
+                # _alt do clip varia com o contorno) + nudge fino HK_EMOJI_DY.
+                _ey = int(_y_emo + _txm + (HK_FONT - HK_EMOJI_TAM) / 2
+                          + int(os.environ.get("HK_EMOJI_DY", 0)))
+                _emo = ImageClip(str(_epath))
+                _emo = _with_duration(_emo, dur_total)
+                _emo = _with_start(_emo, 0.0)
+                _emo = _with_position(_emo, (_ex, _ey))
+                camadas.append(_emo)
+        except Exception as e:
+            log.warning(f"   ⚠️  Emoji do hook falhou (segue sem ele): {e}")
 
     return camadas
 
 
 def _criar_cta_fixo(dur_total: float, mp) -> list:
     """
-    CTA fixo abaixo do vídeo: 'LINK NA BIO!' em Montserrat Bold PARRUDO
-    (texto branco com contorno preto grosso), com emojis 🛒 e 🔥 como PNGs
-    coloridos ao lado (carrinho.png e fogo.png na pasta brand).
-    Retorna lista de camadas.
+    CTA fixo abaixo do vídeo: COMENTE "QUERO" 👇 (texto + emoji colorido).
+    Cor por fundo (branco→preto / preto→branco). Texto/posição via .env.
     """
     (_, _, ImageClip, _, _, _, TextClip) = mp
     camadas = []
     fonte_bold = _fonte_montserrat("Bold") or _resolver_fonte_textclip(TextClip)
-    cta_y = 1645   # quase encostando no rodapé do vídeo (termina ~1644)
+    _bg = os.environ.get("TOPSHOP_BG", "preto").strip().lower()
+    _claro = _bg in ("branco", "white", "bege", "claro")
+    C_CTA = "black" if _claro else "white"
+    SW_CTA = 0 if _claro else 4
 
-    # texto central, parrudo (stroke grosso pra destacar)
-    txt = _textclip_robusto(TextClip, "LINK NA BIO!", font_size=54,
-                            color="white", stroke_width=4, stroke_color="black",
-                            largura_frac=0.55, fonte=fonte_bold)
-    larg_texto = int(LARGURA * 0.55)
+    CTA_TXT  = os.environ.get("CTA_TEXTO", 'COMENTE "QUERO"')
+    CTA_FONT = int(os.environ.get("CTA_FONT", 52))
+    cta_y    = int(os.environ.get("CTA_Y", 1672))
+
+    txt = _textclip_robusto(TextClip, CTA_TXT, font_size=CTA_FONT,
+                            color=C_CTA, stroke_width=SW_CTA, stroke_color="black",
+                            largura_frac=0.72, fonte=fonte_bold)
     if txt is not None:
         txt = _with_duration(txt, dur_total)
         txt = _with_start(txt, 0.0)
         txt = _with_position(txt, ("center", cta_y))
         camadas.append(txt)
 
-    # Posiciona os emojis com base na largura REAL estimada do texto
-    # "LINK NA BIO!" (não na caixa, que é maior). Texto centralizado.
-    larg_texto_real = int(len("LINK NA BIO!") * 54 * 0.52)  # ~337px
-    centro = LARGURA // 2
-    fim_texto = centro + larg_texto_real // 2
-    inicio_texto = centro - larg_texto_real // 2
-
-    # carrinho (🛒) à ESQUERDA do texto — autocrop, mais pra baixo
-    carrinho = _emoji_aparado("carrinho.png", 56)
-    if carrinho is not None:
-        try:
-            c = ImageClip(str(carrinho))
-            c = _with_duration(c, dur_total); c = _with_start(c, 0.0)
-            c = _with_position(c, (inicio_texto - 56 - 18, cta_y + 22))
-            camadas.append(c)
-        except Exception as e:
-            log.warning(f"   ⚠️  Emoji carrinho falhou: {e}")
-    else:
-        log.warning("   ⚠️  carrinho.png NÃO encontrado na pasta brand!")
-
-    # fogo (🔥) à DIREITA do texto — autocrop, tamanho aprovado, mais pra baixo
-    fogo = _emoji_aparado("fogo.png", 85)
-    if fogo is not None:
-        try:
-            f = ImageClip(str(fogo))
-            f = _with_duration(f, dur_total); f = _with_start(f, 0.0)
-            f = _with_position(f, (fim_texto + 18, cta_y + 20))
-            camadas.append(f)
-        except Exception as e:
-            log.warning(f"   ⚠️  Emoji fogo falhou: {e}")
-    else:
-        log.warning("   ⚠️  fogo.png NÃO encontrado na pasta brand!")
+    # emoji 👇 colorido à direita do texto (mede a largura real p/ posicionar)
+    try:
+        _m = _textclip_justo(TextClip, CTA_TXT, CTA_FONT, fonte_bold)
+        _lw = getattr(_m, "w", 0) if _m is not None else 0
+        if _m is not None:
+            try: _m.close()
+            except Exception: pass
+        _fim = LARGURA // 2 + (_lw or int(LARGURA * 0.45)) // 2
+        _et = int(os.environ.get("CTA_EMOJI", 50))
+        _ep = _emoji_colorido_png("👇", _et)
+        if _ep is not None:
+            e = ImageClip(str(_ep))
+            e = _with_duration(e, dur_total); e = _with_start(e, 0.0)
+            _edy = int(os.environ.get("CTA_EMOJI_DY", 22))   # desce o 👇 p/ alinhar
+            e = _with_position(e, (min(_fim + 14, LARGURA - _et - 8), cta_y + _edy))
+            camadas.append(e)
+    except Exception as e:
+        log.warning(f"   ⚠️  Emoji do CTA falhou (segue sem): {e}")
 
     return camadas
 
@@ -1143,7 +1367,7 @@ def montar_video(produto: str, roteiro: dict, narracao_mp3: Path,
                     camadas.append(leg); abertos.append(leg); legendas_ok += 1
 
             # 4) Camadas do topo: logo + TopShop + selo + @ + hook
-            for camada in _criar_camadas_topo(dur_total, hook_txt, mp):
+            for camada in _criar_camadas_topo(dur_total, hook_txt, mp, produto=produto):
                 camadas.append(camada); abertos.append(camada)
 
             # 5) CTA fixo no rodapé
@@ -1443,7 +1667,8 @@ def gerar_video_narrado(produto: str, voz: str = VOZ_PADRAO,
     # 6) Memória
     if _MEM_OK:
         try:
-            registrar_aprendizado(
+            registrar_memoria(
+                "aprendizado",
                 f"Vídeo narrado gerado pra '{produto}' (voz {voz}, "
                 f"{len(broll)} B-roll, {mont['duracao']}s)",
                 tags=["narrated", "video", slug, roteiro["categoria"]])

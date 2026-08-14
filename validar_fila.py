@@ -30,6 +30,48 @@ except Exception:
     logging.basicConfig(level=logging.INFO)
     log = logging.getLogger("validar_fila")
 
+BASE = Path(__file__).resolve().parent
+if not (BASE / ".env").exists() and (BASE.parent / ".env").exists():
+    BASE = BASE.parent
+
+try:
+    from shared.termos import termo_de_busca as _termo_de_busca
+except Exception:
+    # sem o módulo compartilhado o validador volta a se virar com o nome cheio,
+    # que é exatamente o comportamento de antes. Não pode derrubar o import.
+    def _termo_de_busca(bruto: str) -> str:
+        return ""
+
+
+def _carregar_env():
+    """Rodar do terminal não carrega o .env — só o systemd carrega. Sem
+    SHOPEE_APP_ID/SECRET a mineração falha em TODOS os produtos e o relatório
+    sai com 80 desertos, que é mentira: o produto está bom, quem não subiu foi
+    a credencial. Mesmo carregador do deploy_site e da repescagem. Não
+    sobrescreve o que já veio do ambiente, e .env ilegível não derruba o
+    import."""
+    for cand in (BASE / ".env", Path(".env")):
+        if not cand.exists():
+            continue
+        try:
+            linhas = cand.read_text(encoding="utf-8").splitlines()
+        except Exception:
+            return
+        for linha in linhas:
+            linha = linha.strip()
+            if not linha or linha.startswith("#") or "=" not in linha:
+                continue
+            if linha.lower().startswith("export "):
+                linha = linha[7:]
+            chave, _, valor = linha.partition("=")
+            chave = chave.strip()
+            if chave and chave not in os.environ:
+                os.environ[chave] = valor.strip().strip('"').strip("'")
+        return
+
+
+_carregar_env()
+
 # Import defensivo da Shopee (o coração do validador)
 try:
     from integrations.shopee_affiliate import minerar_oportunidades, NOTA_MINIMA, VENDAS_MINIMAS
@@ -131,6 +173,25 @@ def validar_fila(produtos: list, vendas_minimas: int = None,
             log.warning(f"      ⚠️  erro: {str(e)[:60]}")
             m = {"ok": False, "erro": str(e)[:100]}
 
+        # Busca que voltou VAZIA não é veredito sobre o produto — é o termo
+        # comprido demais. Só neste caso vale insistir com o nome curto: se a
+        # Shopee DEVOLVEU produtos e o corte de qualidade reprovou todos, ela
+        # trouxe um 'diagnostico' junto, e aí o veredito é real. Encurtar ali
+        # só ia trocar o produto curado por um genérico que passa no corte.
+        termo_usado = nome
+        if not m.get("ok") and "diagnostico" not in m:
+            curto = _termo_de_busca(nome)
+            if curto and curto.lower() != nome.strip().lower():
+                log.info(f"      ↻ busca vazia — tentando '{curto}'")
+                if pausa > 0:
+                    time.sleep(pausa)
+                try:
+                    m2 = minerar_oportunidades(curto, **kwargs)
+                except Exception as e:
+                    m2 = {"ok": False, "erro": str(e)[:100]}
+                if m2.get("ok"):
+                    m, termo_usado = m2, curto
+
         classe = _classificar(m)
         if m.get("ok"):
             c = m["campeao"]
@@ -144,6 +205,16 @@ def validar_fila(produtos: list, vendas_minimas: int = None,
                 "rating": c.get("rating", 0),
                 "score": c.get("score", 0),
                 "relevancia": c.get("relevancia", 0),
+                # a busca já devolve a foto e o link no campeão. Descartar aqui
+                # obrigava um preencher_fotos depois, porque daqui pra frente
+                # (curar_fila → produtos_fila → vitrine) ninguém mais tem de
+                # onde tirar: o card sem imagem não aparece na vitrine.
+                "imagem": c.get("imagem", ""),
+                "link": c.get("offer_link") or c.get("product_link") or "",
+                "preco": c.get("preco", 0),
+                # só aparece quando o nome cheio não achou nada e o termo curto
+                # achou. Serve pra saber de onde veio o campeão sem adivinhar.
+                **({"termo_busca": termo_usado} if termo_usado != nome else {}),
             })
         else:
             resultados.append({
@@ -244,6 +315,22 @@ def main():
     rel = validar_fila(produtos, vendas_minimas=args.vendas_min, pausa=args.pausa)
 
     _imprimir_relatorio(rel)
+
+    # Deserto em 100% da fila não é diagnóstico, é pane. Quando a credencial
+    # não sobe, TODO produto "falha" — e gravar isso por cima apaga um
+    # relatório bom e diz ao daemon que não existe campeão nenhum. Pior: o
+    # curar_fila leria zero aprovados e zeraria a fila inteira.
+    desertos = sum(1 for p in rel["produtos"] if p.get("classe") == "deserto")
+    if desertos == len(rel["produtos"]) and len(rel["produtos"]) > 2:
+        motivos = {p.get("motivo", "")[:60] for p in rel["produtos"]}
+        log.error(f"❌ os {desertos} produtos falharam — isso é pane, não fila ruim.")
+        for m in sorted(motivos)[:3]:
+            log.error(f"   motivo: {m}")
+        log.error("   relatório NÃO gravado (o anterior continua valendo).")
+        if any("SHOPEE_APP_ID" in m for m in motivos):
+            log.error("   as credenciais não subiram: confira o .env em "
+                      f"{BASE / '.env'}")
+        return 1
 
     # Salva o relatório
     try:

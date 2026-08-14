@@ -1,0 +1,16 @@
+# systemd: mantém o mini-painel do TikTok no ar (localhost:8770; o Caddy põe HTTPS).
+# Copie pra /etc/systemd/system/tiktok_painel.service e:
+#   systemctl daemon-reload && systemctl enable --now tiktok_painel
+[Unit]
+Description=TopShop TikTok Painel (Flask)
+After=network.target
+
+[Service]
+WorkingDirectory=/root/jarvis
+ExecStart=/root/jarvis/.venv/bin/python /root/jarvis/tiktok_painel.py
+Restart=always
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,85 @@
+{
+  "_comentario": "Config do Daemon Maestro Jarvis. Edite e o daemon recarrega sozinho a cada ciclo — nao precisa reiniciar.",
+
+  "_secao_1": "=========== DESCOBERTA (radar/hunter) ===========",
+
+  "descoberta_intervalo_horas": 3,
+  "_descoberta_intervalo_ajuda": "De quantas em quantas horas o Jarvis varre o Telegram pra achar produtos novos. 3 = de 3 em 3h. Nao baixe muito (risco de ban).",
+
+  "descoberta_fontes": ["radar", "hunter"],
+  "_descoberta_fontes_ajuda": "Fontes de descoberta. O daemon ALTERNA entre elas a cada ciclo (radar num ciclo, hunter no proximo). Pode deixar so ['radar'] se quiser.",
+
+  "descoberta_lote": 3,
+  "_descoberta_lote_ajuda": "Quantos produtos processar por ciclo de descoberta.",
+
+  "hunter_canais": ["https://t.me/videosdashopeegratis", "https://t.me/videosbugsepromoshopee", "https://t.me/videos_shopee_achadinhoss", "https://t.me/achadapromo", "https://t.me/achadosshopebrasil", "https://t.me/achadinhos1linha", "https://t.me/achadosdotb", "https://t.me/achadostailandesas"],
+  "_hunter_canais_ajuda": "Canais do Telegram pro hunter capturar criativos LICENCIADOS. Ex: ['@canal1', '@canal2']. Vazio = hunter pulado, so radar. A descoberta de grupos acrescenta @canais aqui sozinha.",
+
+  "radar_grupos_arquivo": "grupos.txt",
+  "_radar_grupos_ajuda": "Arquivo .txt com 1 grupo do Telegram por linha (pro radar varrer).",
+
+  "radar_limite": 30,
+  "_radar_limite_ajuda": "Mensagens por grupo que o radar le.",
+
+  "_secao_grupos": "=========== DESCOBERTA DE GRUPOS (auto-alimenta radar+hunter) ===========",
+
+  "grupos_descoberta_ativa": true,
+  "_grupos_ativa_ajuda": "true = de manha/noite o Jarvis acha canais novos de achadinhos sozinho e adiciona no grupos.txt (radar) e no hunter_canais (hunter).",
+
+  "grupos_descoberta_horarios": ["08:30", "20:30"],
+  "_grupos_horarios_ajuda": "Horarios (24h) em que roda a descoberta de grupos. Default: manha e noite.",
+
+  "grupos_descoberta_max": 2,
+  "_grupos_max_ajuda": "Quantos grupos novos adicionar por vez (2 x 2 horarios = ~4/dia).",
+
+  "grupos_descoberta_auto_add": true,
+  "_grupos_auto_ajuda": "true = adiciona sozinho. false = so sugere em grupos_descobertos.json pra voce aprovar na mao.",
+
+  "_secao_2": "=========== PRODUCAO (teto de gasto Fal) ===========",
+
+  "producao_max_videos_dia": 20,
+  "_producao_max_ajuda": "TETO DIARIO de videos gerados pelo Fal. Protege seu credito. Para sozinho ao atingir, retoma amanha.",
+
+  "producao_max_downloads": 10,
+  "_producao_max_downloads_ajuda": "Assets (imagens/videos) baixados por produto no autopilot. Mais = mais variedade, mais lento.",
+
+  "producao_premium_campeoes": true,
+  "_producao_premium_ajuda": "true = produtos campeoes (comissao alta) usam Kling 2.1 master (qualidade melhor, ~5-10x mais caro). Resto usa modelo standard barato.",
+
+  "producao_premium_comissao_min": 15.0,
+  "_producao_premium_comissao_ajuda": "Comissao em R$ acima da qual o produto vira PREMIUM. Ex: 15.0 = produtos com comissao >= R$15 ganham o modelo top.",
+
+  "auto_repor": true,
+  "_auto_repor_ajuda": "true = produz mais sozinho quando a fila de prontos baixa. A esteira nunca esvazia.",
+
+  "repor_quando_sobrar": 2,
+  "_repor_quando_ajuda": "Produz mais quando a fila de prontos cai pra esse numero ou menos.",
+
+  "repor_quantidade": 4,
+  "_repor_quantidade_ajuda": "Quantos produzir de cada vez que repoe (respeitando o teto diario).",
+
+  "_secao_3": "=========== POSTAGEM ===========",
+
+  "horarios": ["09:00", "14:00", "17:00", "21:00"],
+  "_horarios_ajuda": "Horarios (24h) em que o Jarvis posta 1 video. Adicione/remova quantos quiser.",
+
+  "plataformas": ["instagram", "facebook"],
+  "_plataformas_ajuda": "Onde postar. 'instagram' e 'facebook' via Graph API (Meta). 'youtube' via API. 'tiktok' usa PyAutoGUI (so no PC, nao na VPS). Adicione 'youtube' aqui quando configurar o client_secret dele.",
+
+  "publico": true,
+  "_publico_ajuda": "false = sobe PRIVADO (voce revisa e torna publico). true = publico direto.",
+
+  "tolerancia_min": 10,
+  "_tolerancia_ajuda": "Janela (min) pra considerar que esta na hora. Checou 09:05 e o horario era 09:00? Ainda posta.",
+
+  "janela_inicio": "08:00",
+  "_janela_inicio_ajuda": "Nao posta antes deste horario (evita postar de madrugada).",
+
+  "janela_fim": "23:00",
+  "_janela_fim_ajuda": "Nao posta depois deste horario.",
+
+  "_secao_4": "=========== LOOP ===========",
+
+  "intervalo_check_seg": 60,
+  "_intervalo_check_ajuda": "De quanto em quanto tempo (seg) o daemon olha o relogio. 60 = a cada minuto."
+}

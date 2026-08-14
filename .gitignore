@@ -1,0 +1,62 @@
+# ===== SEGREDOS / CREDENCIAIS (NUNCA vão pro Git) =====
+.env
+*.env
+shared/credentials/
+*.session
+*.session-journal
+
+# ===== ESTADO / RUNTIME (gerado na máquina, não versionar) =====
+shared/content_plans/daemon_estado.json
+shared/content_plans/agendador_historico.json
+shared/content_plans/daemon.lock
+shared/content_plans/radar_tendencias.json
+shared/content_plans/grupos_descobertos.json
+shared/hunter_seen.sqlite
+shared/hunter_seen.sqlite-*
+state.json
+supervisor_state.json
+production_state.json
+
+# ===== MÍDIA GERADA (pesado, não versionar) =====
+videos/
+pronto_para_postar/
+outputs/
+assets/inbox/
+assets/produtos/
+*.mp4
+*.mov
+*.webm
+
+# ===== CONFIG LOCAL (contém seus canais; copie manual pra VPS) =====
+shared/content_plans/agendador_config.json
+
+# ===== PYTHON =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# ===== LOGS / TEMP =====
+*.log
+logs/
+.DS_Store
+Thumbs.db
+hooks_alana_recentes.json
+shared/tiktok_tokens.json
+
+# travas de instância única (shared/trava.py) — estado local, nunca versionado
+.trava_*
+**/.trava_*
+
+# saída gerada pela esteira de conteúdo original (roteiro -> linha do tempo -> vídeo)
+shared/storyboards/
+shared/edl/
+shared/renders/
+
+# cache do Gemini Vision (texto queimado) — custo de API, nao conteudo
+shared/cache_texto_queimado.json
+
+# musicas locais: arquivos de audio (licenca + tamanho) ficam fora do git
+assets/musicas/

@@ -16,6 +16,7 @@
 # Entrada: o dict do plano (ultimo_plano.json), que já traz legenda, hashtags,
 #          link_afiliado, titulo_real, links_espelho.
 
+import os
 import re
 from typing import Optional
 
@@ -69,11 +70,17 @@ def _limpar_cta_link(legenda: str) -> str:
         r"clica?\s+no?\s+link[^.!]*[!.]*",
         r"link\s+(t[áa]|est[áa])\s+na\s+bio[!.]*",
     ]
+    removeu_cta = False
     for p in padroes:
-        txt = re.sub(p, "", txt, flags=re.IGNORECASE)
-    # limpa emojis órfãos e espaços/pontuação que sobraram no fim
+        txt, n = re.subn(p, "", txt, flags=re.IGNORECASE)
+        removeu_cta = removeu_cta or bool(n)
+
     txt = re.sub(r"\s+", " ", txt).strip()
-    txt = txt.rstrip(" !.,👉🔥✨🛒➡️👇")  # tira pontuação/emoji de CTA solto no fim
+    # A limpeza de pontuação/emoji órfão só faz sentido quando um CTA foi mesmo
+    # retirado. Rodando sempre, ela comia o ponto final da última frase — e toda
+    # legenda saía terminando sem pontuação.
+    if removeu_cta:
+        txt = txt.rstrip(" !.,👉🔥✨🛒➡️👇")
     return txt.strip()
 
 
@@ -123,7 +130,14 @@ def montar_descricao(plano: dict, plataforma: Optional[str] = None) -> dict:
 
     legenda = (plano.get("legenda") or "").strip()
     titulo = _titulo_curto(plano.get("titulo_real") or plano.get("produto") or "")
-    hashtags = _limpar_hashtags(plano.get("hashtags"))
+
+    # A legenda vai SEM hashtags: a única marcação no fim é o aviso de publicidade.
+    # É o padrão das contas que vendem — parede de hashtag polui e não é o que traz
+    # alcance aqui (o que traz é a curiosidade informativa na abertura).
+    # Pra voltar a incluir o bloco: LEGENDA_HASHTAGS=1.
+    usar_hashtags = os.getenv("LEGENDA_HASHTAGS", "0").strip().lower() in (
+        "1", "true", "sim")
+    hashtags = _limpar_hashtags(plano.get("hashtags")) if usar_hashtags else ""
 
     # Link principal + reservas
     links_espelho = plano.get("links_espelho") or {}
@@ -131,6 +145,14 @@ def montar_descricao(plano: dict, plataforma: Optional[str] = None) -> dict:
                       or links_espelho.get("principal")
                       or "")
     reservas = {k: v for k, v in links_espelho.items() if k != "principal"}
+
+    # O aviso de publicidade ("#Publi") começa com # e por isso era varrido junto
+    # com as hashtags logo abaixo — a legenda saía sem ele, terminando na parede
+    # de hashtags. Ele não é hashtag de alcance: é transparência de publicidade,
+    # e tem que fechar a legenda. Guardamos aqui e reanexamos no fim de tudo.
+    publi = os.getenv("LEGENDA_PUBLI", "#Publi").strip()
+    tinha_publi = bool(publi) and re.search(
+        rf"(?<!\w){re.escape(publi)}(?!\w)", legenda, flags=re.IGNORECASE)
 
     # Remove hashtags da legenda (pra não duplicar — elas vão no fim)
     legenda_sem_tags = re.sub(r"#\S+", "", legenda).strip()
@@ -160,6 +182,10 @@ def montar_descricao(plano: dict, plataforma: Optional[str] = None) -> dict:
     if hashtags:
         linhas.append("")
         linhas.append(hashtags)
+
+    if tinha_publi:
+        linhas.append("")
+        linhas.append(publi)
 
     descricao = "\n".join(linhas).strip()
 
