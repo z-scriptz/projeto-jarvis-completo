@@ -210,24 +210,33 @@ Designed to support data-driven decisions and continuous optimization.
 
 A simplified representation of the production workflow:
 
+```mermaid
 flowchart LR
 
-    A["📡 Discovery"] -->
-    B["🛍 Product Analysis"] -->
-    C["🧠 Content Planning"] -->
-    D["✍️ Script / Copy"] -->
-    E["🎨 Scene Generation"] -->
-    F["🎧 Audio / Narration"] -->
-    G["🎬 Video Editing"] -->
-    H["🛡️ Quality Gate"] -->
-    I["📤 Publishing"] -->
-    J["📊 Metrics / Feedback"]
+    A["Discovery"]
+    B["Product Analysis"]
+    C["Content Planning"]
+    D["Script / Copy"]
+    E["Scene Generation"]
+    F["Audio / Narration"]
+    G["Video Editing"]
+    H["Quality Gate"]
+    I["Publishing"]
+    J["Metrics / Feedback"]
 
-    J -. Optimization .-> C
-    J -. Performance .-> B
+    A --> B
+    B --> C
+    C --> D
+    D --> E
+    E --> F
+    F --> G
+    G --> H
+    H --> I
+    I --> J
 
-The feedback layer is designed to support continuous improvement of future decisions and production strategies.
-
+    J -.-> C
+    J -.-> B
+```
 
 ---
 
