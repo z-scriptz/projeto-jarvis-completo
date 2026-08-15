@@ -47,7 +47,10 @@ CACHE = BASE_DIR / "shared" / "fila_qualidade.json"
 # `texto` do texto_queimado — os dois já existem e já foram calibrados; aqui
 # não se inventa métrica nova, só se ordena o que eles dizem.
 PESO_NIVEL = {"A": 0, "B": 1, "C": 2, "D": 9}
-PESO_TEXTO = {"aprovado": 0, "ressalva": 1, "nao_avaliado": 2, "reprovado": 9}
+# ⚠️ `nao_avaliado` NÃO é um degrau entre ressalva e reprovado — é ausência de
+# medição. Fica no fim junto com o que foi reprovado, pra nunca subir no
+# ranking por não ter sido medido.
+PESO_TEXTO = {"aprovado": 0, "ressalva": 1, "reprovado": 9, "nao_avaliado": 8}
 
 
 def _log(m):
@@ -133,9 +136,20 @@ def julgar(item: dict, pasta: Path) -> dict:
         return {"avaliado": False, "motivo": f"asset_ranker falhou: "
                                              f"{str(e)[:70]}", "n_fotos": len(fotos)}
 
+    # ⚠️ A CHAVE É `texto_queimado` E O CAMPO É `pior` — lidos do
+    # asset_ranker.py:176 e do texto_queimado.avaliar_varias, não chutados.
+    # A 1ª versão escreveu `r.get("texto").get("veredito")`: chave inexistente
+    # → {} → default "nao_avaliado". Os 12 produtos da 1ª rodada na VPS saíram
+    # TODOS "nao_avaliado" por causa disso, e o ranking virou empate geral. O
+    # default transformou "eu li errado" em "o detector não opinou", que é
+    # exatamente o disfarce que o `nao_avaliado` já pregou em 12/08.
+    tq = r.get("texto_queimado") or {}
     return {"avaliado": True, "n_fotos": len(fotos),
             "nivel": r.get("nivel", "?"),
-            "texto": (r.get("texto") or {}).get("veredito", "nao_avaliado"),
+            "texto": tq.get("pior", "nao_avaliado"),
+            "fotos_usaveis": tq.get("usaveis"),
+            "bloqueia": bool(tq.get("bloqueia")),
+            "erro_texto": tq.get("erro", ""),
             "distintas": r.get("distintas"),
             "veredito": r.get("veredito", ""),
             "ts": int(time.time())}
@@ -254,6 +268,34 @@ def main():
               f"(foto que não baixou ou fila sem URL)")
     print()
 
+    # ── a medição de TEXTO aconteceu? ───────────────────────────────────────
+    # Com 1 foto por produto, `nivel` é C pra todo mundo e `distintas` é 1 pra
+    # todo mundo: o ÚNICO critério que separa produto bom de produto ruim é o
+    # texto queimado. Se ele não rodou, não existe ranking — existe uma lista
+    # na ordem em que a fila estava. Dizer isso é obrigatório.
+    dist = {}
+    for reg in avaliados.values():
+        dist[reg.get("texto", "?")] = dist.get(reg.get("texto", "?"), 0) + 1
+    print("  texto queimado: " + " · ".join(
+        f"{k}: {v}" for k, v in sorted(dist.items(), key=lambda x: -x[1])))
+
+    cegos = dist.get("nao_avaliado", 0)
+    if cegos >= max(1, len(avaliados) // 2):
+        print()
+        _log(f"⚠️  MEDIÇÃO DE TEXTO NÃO ACONTECEU em {cegos}/{len(avaliados)}")
+        erros = {r.get("erro_texto") for r in avaliados.values()
+                 if r.get("erro_texto")}
+        for e in list(erros)[:3]:
+            _log(f"     motivo: {e}")
+        if not erros:
+            _log("     sem erro registrado — provável GEMINI_API_KEY ausente "
+                 "ou cota estourada (o detector devolve nao_avaliado nos dois)")
+        _log("   Com 1 foto por produto, o nível é C e a diversidade é 1 pra "
+             "TODOS.")
+        _log("   Sem o texto, o que segue NÃO é ranking de qualidade — é a "
+             "fila na ordem em que estava. Resolva o detector e rode com "
+             "--refazer.")
+
     ordem = sorted(prontos.items(), key=lambda kv: _chave_de_ordem(kv[1]))
     for i, (link, reg) in enumerate(ordem[:args.top], 1):
         print(f"  {i:2}. [{reg.get('nivel')}·{reg.get('texto'):9}] "
@@ -263,7 +305,10 @@ def main():
     if ordem:
         melhor = ordem[0][0]
         print()
-        print("  Para produzir o melhor da fila AGORA:")
+        print("  Para produzir o melhor da fila AGORA:"
+              if not cegos >= max(1, len(avaliados) // 2)
+              else "  O PRIMEIRO da lista (sem medição de texto, é só o "
+                   "primeiro):")
         print(f"    {sys.executable} piloto.py --fila-link '{melhor}'")
         print()
         print("  ⚠️ use --fila-link, não --fila N: o índice muda a cada")

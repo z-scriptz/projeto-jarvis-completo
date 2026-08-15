@@ -2608,6 +2608,42 @@ original.** Só faz sentido automatizar produção original quando ela puder
 escolher entre os 60% com material bom, em vez de pegar o próximo da lista e
 travar no `BLOQUEADO_SEM_LEVER`.
 
+**✅ O TETO DO ACERVO FUNCIONOU.** Primeira rodada na VPS: **84 itens na
+fila.** Estava travada em 80 desde sempre. Acumulando.
+
+⚠️ **E O RANKING NÃO RANQUEOU — erro meu, de novo o mesmo.** Os 12 produtos
+saíram todos `C·nao_avaliado·1 distinta`: empate geral. Causa:
+
+```python
+"texto": (r.get("texto") or {}).get("veredito", "nao_avaliado")
+```
+
+A chave que o `asset_ranker` devolve é **`texto_queimado`** e o campo é
+**`pior`** (asset_ranker.py:176 · `texto_queimado.avaliar_varias`). `r.get
+("texto")` → `None` → `{}` → default `"nao_avaliado"` **em todos**. Não faltou
+cota nem `GEMINI_API_KEY`: eu **chutei o nome do campo em vez de ler**, a mesma
+coisa da assinatura do `buscar()`.
+
+E o default disfarçou: transformou *"eu li errado"* em *"o detector não
+opinou"* — exatamente o truque que o `nao_avaliado` já pregou em 12/08, que
+está descrito neste documento, e que eu reproduzi mesmo assim.
+
+**Duas correções, não uma.** A leitura certa, e o comportamento quando a
+medição não acontece:
+
+- `nao_avaliado` deixou de pesar `2` (entre ressalva e reprovado) e passou a
+  pesar `8` — **ausência de medição não pode SUBIR no ranking por não ter
+  sido medida**
+- com 1 foto por produto, `nivel` é C e `distintas` é 1 para **todos**: o
+  único critério que separa é o texto. Se ele não rodou, o arquivo agora diz
+  em voz alta *"o que segue NÃO é ranking de qualidade — é a fila na ordem em
+  que estava"*, imprime a distribuição dos vereditos e troca o "produza o
+  melhor" por "o primeiro da lista"
+
+Testado nos dois estados: cache todo `nao_avaliado` dispara a recusa; cache
+com medição real ordena A > B > C e, dentro do nível, aprovado antes de
+ressalva, com os reprovados fora.
+
 ⚠️ **E a auditoria se contradisse na própria saída.** O bloco 2 leu
 `push falhou` do log (rodada das 14:00, código antigo) e o bloco 5 leu do git
 que o clone estava em dia — o veredito listou os dois. **Estado vivo ganha de
