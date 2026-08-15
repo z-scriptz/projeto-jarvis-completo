@@ -411,6 +411,14 @@ def main():
             raise SystemExit("\n".join(saida_erro))
 
         avisos_fotos = []
+        # ⚠️ QUANTAS FOTOS DE ORIGEM EXISTEM — medido ANTES de derivar recortes.
+        # Sem este número ninguém no resto da cadeia consegue distinguir "3
+        # fotos do produto" de "1 foto cortada 3 vezes": o asset_ranker recebe
+        # os recortes e responde "3 distintas · nível B", e o `midia_viva` do
+        # crítico aprova porque os pixels se mexem. Foi medido em 15/08 na
+        # Camisa Feminina: laudo PASSOU num vídeo de uma foto só, que é
+        # exatamente o defeito que o Dre reclama desde o começo.
+        fontes_distintas = len(fotos)
         if len(fotos) == 1 and args.variacoes > 1:
             # pergunta ONDE está o texto ANTES de recortar; sem isso o recorte
             # mira justamente nele (texto é o pico de variância da foto)
@@ -488,6 +496,8 @@ def main():
         # ── 3. linha do tempo ───────────────────────────────────────────────
         _log("2/4 linha do tempo")
         linha = EDL.montar(sb, args.audio)
+        # viaja até o relatório do render, e de lá até o crítico
+        linha["fontes_distintas"] = fontes_distintas
         ruins = EDL.validar(linha)
         if ruins:
             for x in ruins:

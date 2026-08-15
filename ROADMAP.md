@@ -2737,6 +2737,64 @@ de autoengenharia". Ele existe porque 83/179 arquivos são espelho parado e o
 deploy ingênuo regredia a VPS em um mês. Não é o começo da autoengenharia — é
 a cicatriz de um problema de identidade ainda aberto.
 
+**Segunda rodada do ChatGPT — ele convergiu e trouxe 3 coisas melhores que as
+minhas. Aceitas:**
+
+1. **`VERIFIED` ≠ `PASS`, e `UNKNOWN` ≠ `SUCCESS`.** `PASS` = o teste passou;
+   `VERIFIED` = existe evidência independente de que a afirmação é verdadeira.
+   Sem evidência, o estado é `UNKNOWN` — **nunca** sucesso. Vocabulário melhor
+   que o meu "afirmação falsificável".
+2. **`midia_viva` em DOIS eixos** em vez de mexer no limiar: `movimento=PASS`
+   + `informação=FAIL` → o gate reprova com "movimento detectado sem aumento
+   de informação visual". Exatamente certo.
+3. **Experimento PAREADO.** Eu propus "10 ricos × 10 simples", que confunde
+   efeito de formato com efeito de produto. O certo é o MESMO produto em duas
+   versões, mesma janela, mesmo CTA. Correção metodológica real.
+
+E a melhor frase da rodada, que vale como norte: **"encontrar o menor nível de
+produção capaz de atingir o objetivo"** — melhor que "fazer vídeos melhores".
+Produto que vende com foto parada não deveria consumir render caro.
+
+⚠️ **MAS O EXPERIMENTO NÃO É ATRIBUÍVEL HOJE — furo na minha própria
+proposta, achado antes de rodar.** `metricas_agent.py:99` define a ordem
+canônica do sub_id: **`[canal, nicho, produto, FONTE]`**. Quatro etiquetas, e
+**nenhuma identifica o vídeo**. Duas versões do mesmo produto gerariam o
+**mesmo sub_id**, e o `conversionReport` não teria como separá-las. Rodaríamos
+20 vídeos para descobrir no fim que o dado não responde a pergunta. A Shopee
+aceita 5 etiquetas e usamos 4 — a 5ª precisa carregar a variante, **antes** do
+experimento.
+
+⚠️ **E FALTA SABER SE HÁ POTÊNCIA ESTATÍSTICA.** Antes de desenhar qualquer
+A/B: quantas vendas por semana existem hoje (`metricas_agent.puxar_conversoes`)?
+Com contagem baixa, diferença de conversão é indetectável e o experimento
+nasce morto — nesse caso a métrica tem que subir no funil (cliques por
+exposição, que tem contagem muito maior). **Medir a potência antes de desenhar
+o experimento é o mesmo princípio aplicado a mim mesmo.**
+
+**Onde discordo da ordem dele:** ele quer uma *camada* de verificação antes de
+consertar o `midia_viva`. Eu faço o inverso — **construir o princípio
+aplicando-o**, um gate por vez, começando pelo que sabidamente mente. Camada
+genérica desenhada antes de 3-4 instâncias reais vira framework que ninguém
+usa. É a mesma razão de não congelar o pipeline.
+
+### ✅ FASE 1 FEITA: `midia_viva` separa movimento de informação (15/08)
+
+O número de fotos de ORIGEM agora viaja: `piloto` mede `fontes_distintas`
+**antes** de derivar recortes → `EDL` → relatório do `render` → crítico.
+
+Estados novos, verificados nos quatro casos:
+
+| difs | fontes | veredito |
+|---|---|---|
+| alto | 1 | **FALHOU** — movimento sem informação nova |
+| alto | 3 | PASSOU (com nota: "3 fotos de origem") |
+| alto | ausente | **NÃO RODOU** — "não dá pra saber", nunca "passou" |
+| baixo | 3 | FALHOU — slideshow parado |
+
+O terceiro estado é o mais importante: relatório sem o campo **não vira
+aprovação**. É o `UNKNOWN ≠ SUCCESS` do ChatGPT implementado no primeiro lugar
+onde ele faz falta.
+
 ⚠️ **E a auditoria se contradisse na própria saída.** O bloco 2 leu
 `push falhou` do log (rodada das 14:00, código antigo) e o bloco 5 leu do git
 que o clone estava em dia — o veredito listou os dois. **Estado vivo ganha de

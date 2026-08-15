@@ -1502,6 +1502,10 @@ def renderizar(edl: dict, origem_imgs: str, saida: Path, mudo=False,
         rel = {"arquivo": str(saida), "produto": edl.get("produto", ""),
                "duracao_arquivo": round(dur, 2),
                "duracao_edl": edl["duracao_total"],
+               # quantas fotos DE ORIGEM viraram este vídeo (não recortes
+               # derivados). O crítico precisa disto pra separar movimento de
+               # informação visual nova — ver conferir_render:midia_viva.
+               "fontes_distintas": edl.get("fontes_distintas"),
                "cortes": len(edl["trilhas"]["visual"]),
                "modo_audio": modo, "mudo": bool(mudo),
                "narracoes": len(narracoes),

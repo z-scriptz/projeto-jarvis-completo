@@ -318,12 +318,45 @@ def conferir(video: Path, n_quadros: int = N_QUADROS, contato: bool = False) -> 
 
         difs = [_diferenca(a[1].crop((0, y0, L, y1)), b[1].crop((0, y0, L, y1)))
                 for a, b in zip(imgs, imgs[1:])]
-        marcar("midia_viva", "passou", round(max(difs), 2) if difs else None)
+        # ── movimento × INFORMAÇÃO: dois eixos, não um ──────────────────────
+        # ⚠️ ESTA CHECAGEM APROVAVA O DEFEITO QUE O DRE RECLAMA (medido 15/08).
+        # Ela mede diferença de pixel entre quadros. Uma foto só, com zoom e
+        # pan, faz os pixels mudarem — e ela dava `passou` com 56.06 num vídeo
+        # que o Dre descreve como "cada vídeo só tem uma imagem".
+        #
+        # A ilusão nasce antes: o `piloto --variacoes 3` deriva 3 recortes de
+        # UMA foto e entrega os próprios recortes ao asset_ranker, que responde
+        # "3 distintas · nível B". O sistema mede o que ele mesmo cortou e
+        # chama de matéria-prima nova.
+        #
+        # Movimento é condição necessária e não suficiente. Sem saber quantas
+        # FONTES existem, esta checagem não pode dizer "passou" — no máximo
+        # "não sei". Métrica que nunca é confrontada com o veredito humano
+        # vira decoração, e esta virou.
+        dif_max = round(max(difs), 2) if difs else None
+        fontes = rel.get("fontes_distintas")
+
         if difs and max(difs) < DIF_MIDIA_MIN:
             achar("midia_viva", "alta",
                   f"a mídia mal se mexe (maior diferença {max(difs):.2f}) — "
                   "zoom/pan não estão saindo, o vídeo é um slideshow parado",
-                  round(max(difs), 2))
+                  dif_max)
+        elif fontes is None:
+            # NÃO É "passou". É ausência de medição, e ela fica visível.
+            marcar("midia_viva", "nao_rodou", dif_max,
+                   "há movimento, mas o relatório não trouxe "
+                   "`fontes_distintas` — não dá pra saber se a imagem MUDA ou "
+                   "se é a mesma foto com zoom")
+        elif int(fontes) <= 1:
+            achar("midia_viva", "alta",
+                  f"movimento SEM informação nova: os pixels mudam "
+                  f"({max(difs):.2f}) porque há zoom/pan, mas o vídeo inteiro "
+                  f"sai de UMA foto. Quem assiste vê a mesma imagem o tempo "
+                  f"todo — é exatamente o defeito de 'cada vídeo só tem uma "
+                  f"imagem'", dif_max)
+        else:
+            marcar("midia_viva", "passou", dif_max,
+                   f"{int(fontes)} fotos de origem e movimento entre quadros")
 
         # ── contraste na faixa da legenda ───────────────────────────────────
         # A legenda mora no rodapé da mídia. Texto branco com contorno preto
