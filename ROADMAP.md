@@ -2644,6 +2644,99 @@ Testado nos dois estados: cache todo `nao_avaliado` dispara a recusa; cache
 com medição real ordena A > B > C e, dentro do nível, aprovado antes de
 ressalva, com os reprovados fora.
 
+**Segunda rodada, com medição de verdade:** `aprovado: 12 · ressalva: 2 ·
+reprovado: 8` em 22 julgados. **Replica os 12/20 (60%) de 12/08 com produtos
+diferentes** — duas medições independentes batendo.
+
+E o bug não era cosmético: o *"Kit Atacado **50 / 100** Porta Jóias"* era o
+**#1** da lista com o campo errado e caiu para **#11** como `ressalva` — é
+exatamente o tipo de foto com "50 UNIDADES" queimado, o defeito do Kit
+Calcinhas. **A ferramenta estava mandando produzir o produto errado.**
+
+### 🔍 O CRÍTICO APROVA O DEFEITO QUE O DRE RECLAMA (15/08)
+
+Produzida a Camisa Feminina (#1 do ranking). O laudo saiu **PASSOU**, com
+`midia_viva 56.06`. E o vídeo é 14,4s de UMA foto, sem som nenhum.
+
+O rastro está na própria saída:
+
+```
+[piloto] assets: nível B · 3 distinta(s) de 3 · diversidade 0.479
+[piloto]    nicho geral · 3 enquadramento(s) (derivados de 1 foto)
+```
+
+`piloto.py --variacoes 3` deriva 3 enquadramentos de UMA foto e **entrega os
+próprios recortes ao `asset_ranker`**, que responde "3 informações visuais
+distintas". O mesmo produto que o `fila_qualidade` julgou honestamente, lendo
+a URL de origem, é **`C · 1 distinta`**.
+
+⚠️ **O sistema mede os próprios recortes e chama de matéria-prima nova.** E o
+`midia_viva` passa porque os pixels realmente mudam — ele mede MOVIMENTO, não
+informação visual. Uma foto com Ken Burns satisfaz esse gate para sempre.
+
+**O gate diz PASSOU exatamente no defeito que o Dre nomeou desde o começo
+("cada vídeo só tem uma imagem"). Métrica que nunca é confrontada com o
+veredito humano vira teatro.**
+
+### 🧭 JARVIS 2.0: a pergunta do Dre, minha resposta e a do ChatGPT (15/08)
+
+Dre: *"criem o Jarvis da maneira mais surreal possível... talvez exista algo
+que eu não esteja vendo"*.
+
+**Minha posição, tirada do que ACONTECEU e não do que seria bonito.** O padrão
+que se repete em toda sessão é um só: **o sistema reporta sucesso enquanto faz
+a coisa errada, em silêncio.** Só em 15/08: site publicando nada por 11 dias,
+fila apagando um produto por produto que entrava, ranking chamando 22 produtos
+de `nao_avaliado`, `midia_viva` aprovando foto parada, `SELO_DX` vindo do
+`.env`. Nenhum é falta de inteligência; todos são falta de **verificabilidade**
+— e cada um custou dinheiro real.
+
+O que eu acrescentaria, nesta ordem:
+
+1. **Toda ação automática deixa uma afirmação falsificável** — não log, mas
+   uma afirmação com observável esperado ("publiquei 132" é checável contra o
+   site no ar) e um verificador que confere uma amostra. Torna impossível
+   repetir os 11 dias.
+2. **Toda métrica que pode ser enganada é calibrada contra o veredito
+   humano.** O `midia_viva` é a prova viva: ele passa e o Dre reprova. A
+   memória para guardar isso já existe.
+3. **O SINAL DE RECOMPENSA REAL — e este é o ponto surreal de verdade.** O
+   `conversionReport` da Shopee diz qual produto deu DINHEIRO. Quase nenhum
+   sistema de conteúdo com IA tem verdade de campo; quase todos aprendem com
+   curtida, que é opinião. **A limitação de uma foto só importa se mudar a
+   conversão — e ninguém mediu.** Experimento que decide os próximos 3 meses:
+   20 vídeos, metade material rico, metade 1 foto, mesma classe de produto,
+   e a comissão decide. Se empatar, economiza meses e nenhuma ferramenta paga.
+
+**Da resposta do ChatGPT — adotar:**
+
+- **Memória negativa.** Amazon 0/6, ML 403, recorte piorou vivem num markdown
+  que só humano lê. Em 3 meses alguém repropõe raspar a Amazon. Tem que ser
+  consultável pelo sistema.
+- **"Quando NÃO fazer conteúdo".** O item mais valioso da lista dele para
+  dinheiro: hoje o pipeline assume produto → vídeo. Para os 45% sem foto
+  limpa, a resposta certa pode ser carrossel, ou nada.
+- **Memória causal / Why-Engine.** Já existe em embrião: o `_knobs` do render
+  grava valor + origem + default, e foi isso que resolveu o `SELO_DX`.
+
+**Da resposta do ChatGPT — recusar, com motivo:**
+
+- ⛔ **"Congelar o pipeline e desenhar o Jarvis 2.0."** Tudo que descobrimos
+  hoje veio de rodar e medir. Nenhum desses achados apareceria numa sessão de
+  arquitetura.
+- ⛔ **"O Jarvis cria as próprias ferramentas."** Hoje o `deploy_seguro`
+  RECUSOU um deploy porque há duas cópias do hunter e não dá pra saber qual
+  roda. Dar geração de código a um sistema que não identifica os próprios
+  arquivos é gasolina. Ordem inversa à dele: identidade e proveniência
+  primeiro.
+- ⛔ **A escada V1→V10** não é falsificável — não dá pra saber se estamos na 5
+  ou na 7, então não decide nada.
+
+⚠️ **Ironia registrada:** ele elogia o `deploy_seguro.py` como "primeira camada
+de autoengenharia". Ele existe porque 83/179 arquivos são espelho parado e o
+deploy ingênuo regredia a VPS em um mês. Não é o começo da autoengenharia — é
+a cicatriz de um problema de identidade ainda aberto.
+
 ⚠️ **E a auditoria se contradisse na própria saída.** O bloco 2 leu
 `push falhou` do log (rodada das 14:00, código antigo) e o bloco 5 leu do git
 que o clone estava em dia — o veredito listou os dois. **Estado vivo ganha de
