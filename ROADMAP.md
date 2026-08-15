@@ -2356,6 +2356,42 @@ index.html) → `NO AR` (commit não empurrado). Cada seta que não bate tem cau
 diferente. Roda `crontab -l` de verdade, não faz rede além do `git remote
 update`, e não escreve nada.
 
+**MEDIDO NA VPS (15/08 13:15) — a causa apareceu, e não era a que eu apostava.**
+O funil inteiro:
+
+```
+134 com link na fila (125 shopee · 9 amazon)
+ -1 morto no health-check      -1 fundido (mesmo itemId)
+ -2 sem foto E sem preço (_vale_mostrar tira da grade)
+───
+130 cards no index.html  ← e o site no ar mostra 130
+```
+
+O deploy **está rodando** (cron `0 */2`, index gerado há 5h, fila atualizada há
+4h, health-cache há 1h). O número está travado por **dois motivos somados**:
+
+1. ❌ **8 commits commitados e NÃO empurrados.** Três de hoje, todos "vitrine:
+   132 produtos (auto)". O `deploy_site` commita e o `push` falha — exatamente o
+   ponto cego descrito acima. Tudo desde então (preço, dedup, produto novo)
+   nunca chegou ao ar.
+2. A fila cresce devagar: 134 com link para 130 cards. Postar vídeo não move
+   esse número; só mineração move.
+
+⚠️ **E o script errou duas leituras na VPS — as duas por olhar a fonte errada.**
+(1) O bloco 2 foi caçar log em `logs/` por conta própria, achou um
+`cron_site.log` de **11 dias atrás** e leu a última linha dele — *"site sem
+mudança — não precisa subir"* — como se fosse o estado de hoje. O log de verdade
+é o `>>` da própria linha do cron, que eu cortei em 100 caracteres na impressão.
+Agora o caminho do log sai **do cron**, e o palpite em `logs/` vem marcado como
+palpite. (2) O `ESPERADO 132 × PUBLICADO 130` saiu como ❌ *"o deploy não
+conseguiu subir"* — mas os 2 são o `_vale_mostrar` do `bio_page_builder`
+tirando da grade quem não tem **nem foto nem preço**. Era uma decisão
+deliberada do builder sendo acusada como falha do deploy. Agora é um degrau
+nomeado do funil.
+
+**A lição das duas:** o script mediu certo e *narrou* errado. Contagem confere e
+frase não confere é pior que erro de contagem — a frase é o que a pessoa lê.
+
 ⚠️ **Errei duas vezes no primeiro run, e é sempre o mesmo erro.** (1) O
 `crontab` não existe no container e o script imprimiu ❌ *"NENHUMA entrada de
 cron"*; (2) `_carregar_produtos()` devolveu `[]` porque os JSONs dele não

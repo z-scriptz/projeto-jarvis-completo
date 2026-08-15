@@ -128,10 +128,22 @@ def bloco_agenda():
     linhas = [l for l in saida.splitlines()
               if "deploy_site" in l and not l.strip().startswith("#")]
 
+    # ⚠️ O REDIRECIONAMENTO É PARTE DA MEDIÇÃO, não enfeite. A primeira versão
+    # imprimia a linha do cron cortada em 100 caracteres — bem em cima do
+    # `>> /root/jarvis/deploy_...` — e o bloco 2 foi procurar log em `logs/`
+    # por conta própria. Achou um `cron_site.log` de 11 dias atrás, de outra
+    # configuração, e leu a ÚLTIMA linha dele ("site sem mudança") como se
+    # fosse o estado de hoje. Quem sabe onde o log está é o cron.
+    destinos = []
+    for l in linhas:
+        m = re.search(r">>?\s*(\S+\.log)", l)
+        if m:
+            destinos.append(Path(m.group(1)))
+
     if linhas:
         _diz(OK, f"{len(linhas)} entrada(s) de cron para o deploy_site")
         for l in linhas:
-            print(f"       {l.strip()[:100]}")
+            print(f"       {l.strip()}")
         if len(linhas) > 1:
             _diz(ALERTA, "MAIS DE UMA entrada — em 04/08 a duplicata rodou o "
                          "dia inteiro em paralelo",
@@ -145,20 +157,34 @@ def bloco_agenda():
     if cod == 0 and "deploy" in saida.lower():
         _diz(INFO, "há também um timer systemd citando 'deploy'",
              "confira se ele e o cron não estão fazendo a mesma coisa")
-    return len(linhas)
+    return len(linhas), destinos
 
 
 # ── 2. o log: ele rodou mesmo? ──────────────────────────────────────────────
-def bloco_log():
+def bloco_log(destinos):
     """Cron agendado e cron executado são coisas diferentes."""
     _titulo("2. ele rodou de fato?")
-    logs = sorted(
-        [p for p in (RAIZ / "logs").glob("*.log")
-         if "site" in p.name or "deploy" in p.name],
-        key=lambda p: p.stat().st_mtime, reverse=True) if (RAIZ / "logs").exists() else []
+    logs = [p for p in (destinos or []) if p.exists()]
+    if logs:
+        _diz(INFO, f"log lido do REDIRECIONAMENTO do cron: {logs[0]}")
+    else:
+        if destinos:
+            _diz(ALERTA, f"o cron escreve em {destinos[0]}, que não existe",
+                 "ou o cron nunca chegou a rodar, ou alguém apagou o log")
+        # último recurso: caçar em logs/. ⚠️ Log achado por palpite pode ser de
+        # outra configuração — por isso a idade dele é dita em voz alta.
+        logs = sorted(
+            [p for p in (RAIZ / "logs").glob("*.log")
+             if "site" in p.name or "deploy" in p.name],
+            key=lambda p: p.stat().st_mtime,
+            reverse=True) if (RAIZ / "logs").exists() else []
+        if logs:
+            _diz(ALERTA, f"caí no palpite: {logs[0].name} em logs/",
+                 "NÃO é o log que o cron alimenta — trate o conteúdo como "
+                 "histórico, não como o estado de agora")
 
     if not logs:
-        _diz(ALERTA, "nenhum log de deploy_site em logs/",
+        _diz(ALERTA, "nenhum log de deploy_site encontrado",
              "sem log, a única prova de execução é o mtime do index.html")
         return None
 
@@ -182,8 +208,11 @@ def bloco_log():
         for l in ultimas:
             print(f"       {l[:110]}")
 
-    # o deploy_site fala em português e diz exatamente onde parou
-    texto = "\n".join(linhas[-400:])
+    # o deploy_site fala em português e diz exatamente onde parou.
+    # ⚠️ SÓ A ÚLTIMA RODADA CONTA. Varrer o arquivo inteiro faz um "site sem
+    # mudança" de duas semanas atrás ser lido como o estado de agora — foi
+    # exatamente o que aconteceu na primeira execução na VPS.
+    texto = "\n".join([l for l in linhas if l.strip()][-25:])
     for marca, estado_m, leitura in (
         ("push falhou", FALHA, "COMMITOU E NÃO SUBIU — credencial/token do "
                                "clone do site. A vitrine no ar fica parada "
@@ -196,7 +225,7 @@ def bloco_log():
         ("não é um repo git", FALHA, "o clone do site sumiu do disco"),
     ):
         if marca in texto:
-            _diz(estado_m, f"o log contém: “{marca}”", leitura)
+            _diz(estado_m, f"na ÚLTIMA rodada registrada: “{marca}”", leitura)
     return h
 
 
@@ -248,12 +277,12 @@ def bloco_fila():
         if not fila:
             _diz(FALHA, "não achei produtos_fila.json",
                  "sem a fila não há vitrine e não há o que auditar")
-            return None
+            return None, B
         try:
             bruto = json.loads(fila.read_text(encoding="utf-8"))
         except Exception as e:
             _diz(FALHA, f"produtos_fila.json ilegível: {str(e)[:80]}")
-            return None
+            return None, B
         produtos = [{"nome": p.get("produto", ""), "link": p.get("link", ""),
                      "plataforma": (p.get("plataforma") or "shopee").lower()}
                     for p in bruto if isinstance(p, dict)]
@@ -286,11 +315,11 @@ def bloco_fila():
              "" if estado == OK else "a fila não recebe nada há 3+ dias — se "
                                      "ela não cresce, a vitrine NÃO TEM como "
                                      "crescer")
-    return com
+    return com, B
 
 
 # ── 4. o funil: quantos sobrariam ───────────────────────────────────────────
-def bloco_funil(com_link):
+def bloco_funil(com_link, B=None):
     """Simulação a partir do cache. NÃO é o health-check: ele bate na API."""
     _titulo("4. o funil (quantos o deploy publicaria agora)")
     if com_link is None:
@@ -332,14 +361,47 @@ def bloco_funil(com_link):
         # conta como identidade própria, que é o que o dedup real faz
         itens.setdefault(item or f"?{link}", []).append(p)
 
-    esperado = len(itens)
+    sobreviventes = [v[0] for v in itens.values()]
     fundidos = sum(len(v) - 1 for v in itens.values() if len(v) > 1)
+
+    # ⚠️ O ÚLTIMO FILTRO É DO BUILDER, NÃO DO DEPLOY, e eu o esqueci na v1: o
+    # `gerar_site` chama `_vale_mostrar`, que tira da grade quem não tem NEM
+    # foto NEM preço (o link segue valendo na legenda). Por isso o commit diz
+    # "vitrine: 132 produtos" e o index tem 130 cards. Sem esta linha, a conta
+    # acusava ❌ "faltam 2 — o deploy não conseguiu subir", que é uma acusação
+    # contra o deploy por uma decisão deliberada do builder.
+    mudos = 0
+    if B is not None and hasattr(B, "_vale_mostrar"):
+        H = None
+        for imp in ("historico_precos", "creative_engine.historico_precos"):
+            try:
+                H = __import__(imp, fromlist=["enriquecer"])
+                break
+            except Exception:
+                continue
+        if H is not None and hasattr(H, "enriquecer"):
+            try:
+                H.enriquecer(sobreviventes)   # leitura local, sem rede
+            except Exception:
+                pass
+        mudos = sum(1 for p in sobreviventes if not B._vale_mostrar(p))
+    else:
+        _diz(INFO, "não consegui aplicar o filtro _vale_mostrar do builder",
+             "o ESPERADO abaixo pode sair MAIOR que os cards, e a diferença "
+             "seriam produtos sem foto e sem preço — não uma falha do deploy")
+
+    esperado = len(sobreviventes) - mudos
 
     print(f"       {len(com_link):>4} com link na fila")
     print(f"       {-mortos:>4} escondidos (health-check disse MORTO)")
     print(f"       {-fundidos:>4} fundidos (mesmo itemId, dois links)")
-    print(f"       {'':>4} " + "─" * 30)
+    print(f"       {-mudos:>4} sem foto E sem preço (_vale_mostrar tira da grade)")
+    print(f"       {'':>4} " + "─" * 34)
     print(f"       {esperado:>4} CARDS ESPERADOS na vitrine")
+    if mudos:
+        _diz(INFO, f"{mudos} produto(s) com link mas sem foto e sem preço",
+             "o commit conta eles (\"vitrine: N produtos\") e a grade não — é "
+             "de propósito, mas explica o commit não bater com os cards")
     if sem_veredito:
         _diz(INFO, f"{sem_veredito} link(s) sem veredito no cache",
              "contei como vivos, que é o que o deploy faz na dúvida — mas o "
@@ -395,6 +457,20 @@ def bloco_publicado(esperado):
     else:
         _diz(ALERTA, "não consegui comparar com o origin",
              (pendentes or "")[:90] + " — sem upstream configurado?")
+
+    # Como o push se autentica muda o conserto — e a URL pode carregar o token
+    # embutido. ⚠️ MASCARAR ANTES DE IMPRIMIR: diagnóstico que vaza credencial
+    # na tela obriga a trocar a credencial.
+    cod, url = _sh(["git", "remote", "get-url", "origin"], cwd=SITE_REPO)
+    if cod == 0 and url:
+        limpo = re.sub(r"//[^@/]*@", "//***@", url.strip())
+        tem_token = "@" in url and url.strip().startswith("http")
+        _diz(INFO, f"origin: {limpo}",
+             "token embutido na URL — se expirou, o push falha calado"
+             if tem_token else
+             ("https sem credencial na URL — depende do credential helper "
+              "ou de um PAT no ambiente" if limpo.startswith("http")
+              else "ssh — depende da chave do root"))
 
     cod, log = _sh(["git", "log", "-3", "--format=%h %ad %s", "--date=short"],
                    cwd=SITE_REPO)
@@ -470,10 +546,11 @@ def main():
     print(f"  {time.strftime('%d/%m/%Y %H:%M')} · clone: {SITE_REPO}")
     print("═" * 68)
 
-    n_cron = bloco_agenda()
-    h_log = bloco_log()
-    com_link = bloco_fila()
-    esperado = bloco_funil(com_link)
+    agenda = bloco_agenda()
+    n_cron, destinos = agenda if agenda else (None, [])
+    h_log = bloco_log(destinos)
+    com_link, B = bloco_fila()
+    esperado = bloco_funil(com_link, B)
     cards = bloco_publicado(esperado)
     cod = veredito(n_cron, h_log, esperado, cards)
 
