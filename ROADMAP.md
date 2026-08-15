@@ -2487,6 +2487,24 @@ vitrine são coisas diferentes:
 Hoje isso não muda nada visível (134 < 200); muda daqui pra frente, que é
 quando o acervo passa a acumular em vez de deslizar.
 
+**E o deploy do hunter esbarrou na trava — corretamente.** O `deploy_seguro`
+recusou com **COLISÃO**: existem duas cópias na VPS
+(`integrations/telegram_repurpose_hunter.py` e a da raiz) e ele não sabe qual
+é a viva. A recusa está certa; **errada estava a pergunta.** Eu não preciso
+subir 1800 linhas para corrigir 2.
+
+Virou o **`patch_teto_fila.py`**: substituição exata de texto, não
+sobrescrita. Ou acha o trecho e troca, ou não acha e não faz nada — não tem
+como regredir o que divergiu fora deste repo. Mexe em **todas** as cópias de
+propósito (o `produzir_tiktok.py:53` importa a do pacote mas cai na da raiz se
+o import falhar; corrigir só uma deixaria o teto voltando sem ninguém
+entender por quê), roda `py_compile` e restaura o backup se quebrar. É seco
+por padrão e idempotente.
+
+Testado com duas cópias na versão antiga: seco lista as duas, `--aplicar`
+grava as duas, a segunda passada diz "já está sem teto", e 200 gravações
+simuladas deixam 200 no acervo (antes: 80).
+
 ⚠️ **E a auditoria se contradisse na própria saída.** O bloco 2 leu
 `push falhou` do log (rodada das 14:00, código antigo) e o bloco 5 leu do git
 que o clone estava em dia — o veredito listou os dois. **Estado vivo ganha de
