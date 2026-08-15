@@ -391,6 +391,88 @@ def avaliar_varias(imagens: list, produto: str = "") -> dict:
             "usaveis": contagem.get("aprovado", 0) + contagem.get("ressalva", 0)}
 
 
+def _triagem(n: int) -> int:
+    """Quantos produtos da fila JÁ têm foto boa?
+
+    POR QUE ISTO EXISTE (12/08). O dia inteiro foi gasto tentando CONSERTAR
+    foto ruim: coletar em outra loja (Amazon 0/6), recortar o produto (piorou,
+    15% → 25% de densidade). Quatro becos medidos.
+    E ninguém tinha perguntado a coisa mais barata: **de 80 produtos na fila,
+    quantos já vêm com foto limpa?** Se for um terço, a saída não é consertar
+    material ruim — é PRODUZIR PRIMEIRO o que já está bom. Isso não custa
+    ferramenta nova: o detector já existe, a fila já existe, e a ordem de
+    produção é decisão, não engenharia.
+
+    Usa o cache por hash, então rodar duas vezes não gasta cota duas vezes.
+    """
+    import tempfile
+    try:
+        import storyboard as SB
+        itens = [x for x in json.loads(SB.FILA.read_text(encoding="utf-8"))
+                 if isinstance(x, dict)]
+    except Exception as e:
+        print(f"[texto] não li a fila: {str(e)[:70]}")
+        return 1
+
+    try:
+        import requests
+    except Exception:
+        print("[texto] requests indisponível")
+        return 1
+
+    tmp = Path(tempfile.mkdtemp(prefix="triagem_"))
+    from collections import Counter
+    placar, linhas = Counter(), []
+    vistos = 0
+    for i, it in enumerate(itens):
+        if vistos >= n:
+            break
+        urls = [u for u in ([it.get("imagem")] + (it.get("imagens") or []))
+                if isinstance(u, str) and u.startswith("http")]
+        if not urls:
+            continue
+        nome = (it.get("campeao") or it.get("produto") or "")[:46]
+        alvo = tmp / f"{i}.jpg"
+        try:
+            r = requests.get(urls[0], timeout=40,
+                             headers={"User-Agent": "Mozilla/5.0"})
+            if r.status_code != 200 or len(r.content) < 2048:
+                continue
+            alvo.write_bytes(r.content)
+        except Exception:
+            continue
+        vistos += 1
+        d = avaliar(alvo, nome)
+        v = d.get("veredito", "nao_avaliado")
+        placar[v] += 1
+        icone = {"aprovado": "✅", "ressalva": "👀",
+                 "reprovado": "❌", "nao_avaliado": "❔"}.get(v, "?")
+        dens = d.get("densidade")
+        linhas.append(f"  [{i:3}] {icone} {v:13} "
+                      f"{('%.0f%%' % (dens*100)) if dens is not None else '  — ':>5}  {nome}")
+
+    print()
+    for l in linhas:
+        print(l)
+    total = sum(placar.values()) or 1
+    limpos = placar["aprovado"]
+    print()
+    print(f"[texto] de {total} produtos com foto: {limpos} aprovado · "
+          f"{placar['ressalva']} ressalva · {placar['reprovado']} reprovado · "
+          f"{placar['nao_avaliado']} não avaliado")
+    print(f"[texto] FOTO JÁ BOA: {limpos}/{total} ({100*limpos/total:.0f}%)")
+    if limpos + placar["ressalva"] >= total * 0.4:
+        print("[texto] → dá pra PRODUZIR SÓ O QUE JÁ PRESTA e parar de tentar")
+        print("        consertar material ruim. Custa zero: o detector já")
+        print("        existe, falta só a fila respeitar a ordem.")
+    else:
+        print("[texto] → a maioria tem foto ruim; selecionar não basta e o")
+        print("        gargalo é mesmo de origem.")
+    import shutil
+    shutil.rmtree(tmp, ignore_errors=True)
+    return 0
+
+
 def main():
     p = argparse.ArgumentParser(
         description="A foto já tem texto queimado que briga com o nosso?")
@@ -401,7 +483,14 @@ def main():
     p.add_argument("--sem-cache", action="store_true")
     p.add_argument("--decidir", help="testa SÓ a decisão com um laudo em JSON "
                                      "(não chama a API)")
+    p.add_argument("--triagem", type=int, metavar="N",
+                   help="avalia a foto dos N primeiros produtos da FILA e diz "
+                        "quantos já têm foto limpa — selecionar em vez de "
+                        "consertar")
     args = p.parse_args()
+
+    if args.triagem:
+        return _triagem(args.triagem)
 
     if args.decidir:
         print(json.dumps(decidir(json.loads(args.decidir)),

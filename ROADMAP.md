@@ -2278,6 +2278,52 @@ o texto promocional para trás**. Uma foto 43% banner vira um recorte limpo do
 produto, e o `midia_viva`/`texto_queimado` saem de `lever: None`. É a conversão
 de BLOQUEADO_SEM_LEVER em CORRIGÍVEL, local e sem custo de API.
 
+### ❌ RECORTE DO PRODUTO: medido, e PIOROU a foto (12/08)
+
+Eu afirmei que "recortar o produto do fundo deixa o texto promocional para
+trás". O ChatGPT cobrou o teste antes de aceitar — e ele estava certo.
+
+Medido no Kit 10 Calcinhas, pelos MESMOS detectores que barraram a foto:
+
+                 ANTES        DEPOIS
+    veredito     ressalva     reprovado    ← piorou
+    densidade    0.15         0.25         ← o texto ficou MAIS denso
+    conflito     medio        alto         ← piorou
+    faixas       meio/topo    meio/topo    ← as mesmas
+
+**O mecanismo:** a tarja "mais vendido" e o selo "10 UNIDADES" estão POR CIMA
+do produto, não no fundo. O recorte levou embora o fundo — que não tinha texto
+— e manteve exatamente o que atrapalha. Sobrou 25% da imagem, e nesse quarto
+restante o texto pesa mais, não menos. É comum na Shopee: o selo é colado sobre
+o produto justamente pra não sumir na miniatura.
+
+⚠️ **`lever` do texto queimado continua `None`.** Recorte NÃO converte
+`BLOQUEADO_SEM_LEVER` em corrigível nesta classe de foto.
+
+**Quatro becos medidos e fechados no mesmo dia:** galeria da Shopee (anti-bot),
+Amazon (0/6 de identidade), Mercado Livre (403) e segmentação (piorou). Cada um
+seria uma semana construindo sobre premissa errada.
+
+💡 **E o que isso deixou visível:** o dia inteiro foi gasto tentando CONSERTAR
+foto ruim, e ninguém perguntou a coisa mais barata — **de 80 produtos na fila,
+quantos JÁ vêm com foto limpa?** Se for um terço, a saída não é consertar
+material ruim: é PRODUZIR PRIMEIRO o que já está bom. Não custa ferramenta
+nova (o detector existe, a fila existe); custa mudar a ORDEM, que é decisão e
+não engenharia. `texto_queimado.py --triagem N` mede isso.
+
+### 🐛 O `nao_avaliado` que quase virou conclusão (12/08)
+
+A primeira medição do recorte saiu `nao_avaliado` nos dois lados e eu supus
+cota do Gemini. Era `GEMINI_API_KEY não definida`: o `texto_queimado` lia a
+variável e nunca carregava o `.env`. Dentro do `piloto.py` funcionava porque
+outro import carregava antes.
+
+⚠️ **O que torna isso pior que um bug comum:** `nao_avaliado` é uma resposta
+LEGÍTIMA daquele arquivo. O modo de erro é indistinguível do modo normal — a
+tabela saiu com `None` dos dois lados e por pouco não foi lida como "o Vision
+não viu diferença". Módulo cujo fracasso se parece com o sucesso precisa gritar,
+e agora grita: o relatório declara MEDIÇÃO INVÁLIDA e mostra os dois motivos.
+
 ### Onde parou (04/08, fim do dia)
 
 **Esperando o chip.** Pedido feito — Claro pré-pago, R$ 20,99, chegada prevista
