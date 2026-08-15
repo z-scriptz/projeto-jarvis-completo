@@ -281,6 +281,30 @@ def _item_da_fila(indice: int) -> dict:
     return dados[indice]
 
 
+def _item_por_link(link: str) -> dict:
+    """O item da fila pelo LINK — identidade que não muda quando a mineração
+    grava. Erra alto se não achar: produzir 'o primeiro parecido' seria pior
+    que não produzir, porque o vídeo sairia com o link de outro produto e a
+    comissão iria pro lugar errado."""
+    import storyboard as SB
+    if not SB.FILA.exists():
+        raise SystemExit(f"[piloto] não achei a fila em {SB.FILA}")
+    dados = [x for x in json.loads(SB.FILA.read_text(encoding="utf-8"))
+             if isinstance(x, dict)]
+    alvo = (link or "").strip()
+    achados = [x for x in dados if (x.get("link") or "").strip() == alvo]
+    if not achados:
+        raise SystemExit(
+            f"[piloto] nenhum produto da fila com este link:\n  {alvo}\n"
+            f"  A fila tem {len(dados)} itens. O produto pode ter saído dela "
+            f"(teto FILA_ACERVO_MAX) — rode fila_qualidade.py de novo pra "
+            f"pegar a lista atual.")
+    if len(achados) > 1:
+        _log(f"   {len(achados)} itens com o mesmo link — uso o primeiro "
+             f"(mais recente)")
+    return achados[0]
+
+
 def _indices_com_foto() -> list:
     """Os índices da fila que têm pelo menos uma URL de foto.
 
@@ -301,7 +325,14 @@ def main():
     p = argparse.ArgumentParser(
         description="Produto -> roteiro -> EDL -> MP4 -> conferência.")
     p.add_argument("--fila", type=int, help="índice do produto em produtos_fila.json")
-    p.add_argument("--nome", help="nome do produto (em vez de --fila)")
+    # ⚠️ O ÍNDICE NÃO É IDENTIDADE. O gravador da mineração insere no topo
+    # (`fila.insert(0, ...)`) ~11x por dia, então `--fila 7` aponta pra um
+    # produto de manhã e pra outro à tarde — sem erro, sem aviso. Quem escolhe
+    # produto por qualidade (fila_qualidade.py) precisa de uma chave estável.
+    p.add_argument("--fila-link", dest="fila_link", default="",
+                   help="link de afiliado do produto na fila (estável; o "
+                        "índice muda a cada gravação da mineração)")
+    p.add_argument("--nome", help="nome do produto (exige --fotos: NÃO lê a fila)")
     p.add_argument("--preco", default="")
     p.add_argument("--nicho", default="")
     p.add_argument("--fotos", help="pasta com fotos locais (pula o download)")
@@ -329,8 +360,9 @@ def main():
     # ── 1. produto ──────────────────────────────────────────────────────────
     tmp = Path(tempfile.mkdtemp(prefix="piloto_"))
     try:
-        if args.fila is not None:
-            item = _item_da_fila(args.fila)
+        if args.fila is not None or args.fila_link:
+            item = (_item_por_link(args.fila_link) if args.fila_link
+                    else _item_da_fila(args.fila))
             nome = (item.get("campeao") or item.get("produto") or "").strip()
             preco, link = item.get("preco", ""), item.get("link", "")
             nicho = args.nicho

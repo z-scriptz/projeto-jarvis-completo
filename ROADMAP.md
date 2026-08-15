@@ -2565,6 +2565,49 @@ medido (~11/dia) — e aí já existe histórico de conversão pra validar.
 
 **Fica registrado como decisão, não como pendência esquecida.**
 
+### 🎯 ORDEM DE PRODUÇÃO: produzir primeiro o que já tem material bom (15/08)
+
+Retomada da triagem de 12/08: **12 de 20 produtos da fila (60%) já têm foto
+limpa.** O esforço todo de coleta estava otimizando a minoria. A saída não é
+consertar material ruim — é escolher o bom primeiro, e isso é ORDEM, não
+engenharia nova: `asset_ranker` e `texto_queimado` já existem e já foram
+calibrados.
+
+Virou o **`fila_qualidade.py`**: lê a fila, julga cada produto pelos
+detectores que já existem, persiste em `shared/fila_qualidade.json` e imprime
+o ranking + o comando pronto. Não produz nada e não escreve na fila —
+produzir continua sendo decisão de quem lê.
+
+⚠️ **CHAVEADO POR LINK, NUNCA POR ÍNDICE — e isto é o coração do arquivo.**
+O gravador insere no topo (`fila.insert(0, ...)`) ~11x por dia. Medido com a
+fila real simulada: o melhor produto estava no índice 6; depois de **3
+gravações** foi pro 9, e `--fila 6` passou a produzir *Produto Campeão 3* —
+produto errado, link de afiliado errado, comissão pro lugar errado. **Sem
+erro, sem aviso, sem uma linha de código quebrada.** Por isso o `piloto.py`
+ganhou `--fila-link`, que resolve pelo link e erra alto quando não acha.
+
+Também limitado por padrão (`--limite 25`): cada produto novo custa download +
+Gemini Vision. Default `0 = todos` é o mesmo erro que o `fila[:80]` escondia
+no `validar_fila`. Cache por link faz a segunda passada custar zero —
+verificado: fila cresce de 31 pra 34 itens e ele só julga os novos.
+
+⚠️ **E O ACHADO QUE MUDA O PLANO: o `piloto.py` não é chamado por NADA.**
+`grep` no projeto inteiro — nenhum cron, nenhum daemon; todas as citações são
+comentário. **Toda a produção automática é `produzir_tiktok.py`**, que monta
+a partir do `inbox_tiktok` — ou seja, **viral do TikTok reciclado**. Os 44
+vídeos em 7 dias são todos desse caminho.
+
+O template, as vozes, a música, o crítico — tudo isso vive no caminho
+ORIGINAL, que só roda quando o Dre digita o comando. É a mesma forma do
+`amazon_playwright` em 03/08 ("existia, funcionava, e ninguém chamava"), com
+uma diferença: aqui provavelmente é deliberado, porque o caminho original
+ainda produz vídeo de 1 foto.
+
+**Então a ordenação não é um fim — é a PRÉ-CONDIÇÃO para ligar o caminho
+original.** Só faz sentido automatizar produção original quando ela puder
+escolher entre os 60% com material bom, em vez de pegar o próximo da lista e
+travar no `BLOQUEADO_SEM_LEVER`.
+
 ⚠️ **E a auditoria se contradisse na própria saída.** O bloco 2 leu
 `push falhou` do log (rodada das 14:00, código antigo) e o bloco 5 leu do git
 que o clone estava em dia — o veredito listou os dois. **Estado vivo ganha de
