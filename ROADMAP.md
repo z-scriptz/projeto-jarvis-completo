@@ -2434,6 +2434,26 @@ no origin em outro arquivo): antes `1 atrás/3 à frente` → depois `0/0`, o
 `index.html` do origin ficou com a versão mais fresca e o `curso.html`, que só
 existia no origin, **sobreviveu**.
 
+**RODADO NA VPS, e funcionou de primeira.** `site sem mudança, mas 9 commit(s)
+nunca subiram — empurrando` → rejeitado → `divergiu do origin — rebase e tento
+uma vez` → `✅ reconciliado e publicado`. `HEAD..@{u}` ficou vazio.
+`topshopoficial.com.br` conferido no ar: **"130 achados ativos"**, com preço e
+média que antes não subiam (130/132 com valor, 108 com média real).
+
+⚠️ **E O NÚMERO CONTINUA 130 — de propósito, não por falha.** O push quebrado
+não segurava PRODUTO, segurava CONTEÚDO: preço, média, dedup, título oficial.
+Tudo isso era gerado a cada 2h e morria na VPS. O site no ar era de 11 dias
+atrás com os mesmos 130 produtos; agora são os mesmos 130 com dados de hoje.
+
+A conta fecha e não deixa espaço pra ilusão: `134 com link −1 morto −1 fundido
+−2 sem foto e sem preço = 130`. **Quem move esse número é MINERAÇÃO**, e ela
+não foi tocada. Dois caminhos, em ordem de custo:
+
+1. os **2 com link mas sem foto e sem preço** — `preencher_fotos.py` existe e
+   termina dizendo "agora rode o deploy_site". É +2 cards por um comando
+2. produto novo minerado com link (`repescagem`, `validar_fila`,
+   `amazon_playwright`) — é o único caminho que faz o número subir de verdade
+
 ⚠️ **Errei duas vezes no primeiro run, e é sempre o mesmo erro.** (1) O
 `crontab` não existe no container e o script imprimiu ❌ *"NENHUMA entrada de
 cron"*; (2) `_carregar_produtos()` devolveu `[]` porque os JSONs dele não
