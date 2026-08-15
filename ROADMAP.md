@@ -2502,8 +2502,33 @@ entender por quê), roda `py_compile` e restaura o backup se quebrar. É seco
 por padrão e idempotente.
 
 Testado com duas cópias na versão antiga: seco lista as duas, `--aplicar`
-grava as duas, a segunda passada diz "já está sem teto", e 200 gravações
-simuladas deixam 200 no acervo (antes: 80).
+grava as duas, a segunda passada não faz nada, e as gravações simuladas
+acumulam em vez de deslizar.
+
+⚠️ **E EU ARMEI UMA BOMBA NO PRÓPRIO CONSERTO.** A primeira versão deixou o
+acervo **ilimitado**. Fui conferir quem mais lê a fila e achei o que tinha
+acabado de desproteger:
+
+- `validar_fila.py:281` — `--limite` default **0 (= todos)**, pausa de 1,5s e
+  **uma chamada de API por produto**
+- `preencher_fotos.py:120` — varre **todos** os produtos sem foto, uma
+  chamada cada
+
+Os dois estavam protegidos pelo `fila[:80]` sem que ninguém tivesse escrito
+isso em lugar nenhum. Tirar o corte sem limitar os consumidores trocaria uma
+janela de 7 dias por **uma rodada que não termina**.
+
+Acervo de verdade ilimitado exigiria travar cada consumidor — em arquivos que
+já deram COLISÃO. Um teto **grande e conhecido** resolve o mesmo com um número
+só: `FILA_ACERVO_MAX`, default **500** (~45 dias no ritmo medido de ~11/dia,
+contra os 7 de antes), e o pior caso continua conhecido. O patcher converge
+os dois estados — o original de 80 e o já-patchado-ilimitado — pro mesmo
+trecho, e segue idempotente.
+
+**A lição:** eu removi uma trava sem procurar quem dependia dela. A trava não
+estava documentada em lugar nenhum — mas isso é motivo pra procurar antes, não
+desculpa depois. `grep` em quem lê o arquivo levou 2 minutos e devia ter vindo
+antes do primeiro commit, não depois de rodar na VPS.
 
 ⚠️ **E a auditoria se contradisse na própria saída.** O bloco 2 leu
 `push falhou` do log (rodada das 14:00, código antigo) e o bloco 5 leu do git

@@ -1462,8 +1462,19 @@ def _registrar_no_site(nome: str, link: str, imagem: str = "",
             "ts": int(time.time()),
         })
         _anotar_preco(link, preco, nome)
-        if max_itens and max_itens > 0:      # 0 = acervo sem teto
-            fila = fila[:max_itens]
+        # ⚠️ TETO GRANDE, NÃO "SEM TETO". A primeira versão deste conserto
+        # deixou o acervo ilimitado, e isso ARMOU uma bomba em quem lê a fila:
+        # o `validar_fila.py` tem `--limite` default 0 (= todos) com pausa de
+        # 1,5s e uma chamada de API por produto, e o `preencher_fotos.py`
+        # varre todos sem foto. Os dois estavam implicitamente protegidos pelo
+        # `fila[:80]` — tirar o corte sem pôr limite neles trocaria uma janela
+        # de 7 dias por uma rodada que não termina.
+        # 500 é ~45 dias de mineração no ritmo medido (~11/dia), contra os 7
+        # de antes, e mantém o pior caso conhecido. Sobe por .env quando os
+        # consumidores tiverem limite próprio.
+        _teto = max_itens or int(os.environ.get("FILA_ACERVO_MAX", "500"))
+        if _teto > 0:
+            fila = fila[:_teto]
         SITE_FILA.parent.mkdir(parents=True, exist_ok=True)
         _salvar_json_atomico(SITE_FILA, fila)
         log.info(f"   🌐 Vitrine do site atualizada: '{nome}' (produtos_fila)")

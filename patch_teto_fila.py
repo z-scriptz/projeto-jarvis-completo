@@ -15,8 +15,8 @@
 #
 # O QUE ELE MUDA
 # ──────────────
-#   max_itens: int = 80   →   max_itens: int = 0      (0 = acervo sem teto)
-#   fila = fila[:max_itens]   →   só corta se max_itens > 0
+#   max_itens: int = 80   →   max_itens: int = 0   (0 = usa o teto do .env)
+#   fila = fila[:max_itens]   →   corta em FILA_ACERVO_MAX (default 500)
 #
 # POR QUÊ: o gravador truncava a fila em 80 a cada gravação, e os dois
 # chamadores usavam o default. Produto novo EXPULSAVA o mais antigo — medido
@@ -24,6 +24,14 @@
 # produto que saía dela sumia do site calado. O teto passa a viver no
 # `deploy_site.py` (`VITRINE_MAX_PRODUTOS`), que é onde os custos reais estão:
 # peso da página e chamada de API do health-check.
+#
+# ⚠️ TETO GRANDE, NÃO "SEM TETO" — e essa correção é de mim mesmo. A primeira
+# versão deixava o acervo ilimitado, o que ARMAVA uma bomba em quem lê a fila:
+# `validar_fila.py` tem `--limite` default 0 (= todos), pausa de 1,5s e uma
+# chamada de API por produto; `preencher_fotos.py` varre todos sem foto. Os
+# dois estavam implicitamente protegidos pelo `fila[:80]`. Tirar o corte sem
+# limitar os consumidores trocaria uma janela de 7 dias por uma rodada que não
+# termina. 500 é ~45 dias no ritmo medido (~11/dia) com pior caso conhecido.
 #
 # ⚠️ MEXE EM TODAS AS CÓPIAS, de propósito. Com duas no disco, corrigir só uma
 # deixa uma bomba: o `produzir_tiktok.py` importa a do pacote mas cai na da
@@ -49,8 +57,16 @@ ALVO = "telegram_repurpose_hunter.py"
 RE_ASSINATURA = re.compile(r"(max_itens\s*:\s*int\s*=\s*)(\d+)")
 RE_CORTE = re.compile(r"^([ \t]*)fila = fila\[:max_itens\]\s*$", re.MULTILINE)
 
-CORTE_NOVO = ("\\1if max_itens and max_itens > 0:      # 0 = acervo sem teto\n"
-              "\\1    fila = fila[:max_itens]")
+CORTE_NOVO = (
+    "\\1_teto = max_itens or int(os.environ.get(\"FILA_ACERVO_MAX\", \"500\"))\n"
+    "\\1if _teto > 0:\n"
+    "\\1    fila = fila[:_teto]")
+
+# a 1a versão deste patcher escreveu ESTE trecho; ele precisa convergir pro de
+# cima, senão quem já rodou fica com o acervo ilimitado pra sempre
+RE_CORTE_V1 = re.compile(
+    r"^([ \t]*)if max_itens and max_itens > 0:.*\n[ \t]*fila = fila\[:max_itens\]\s*$",
+    re.MULTILINE)
 
 
 def _log(m):
@@ -89,21 +105,28 @@ def _patchar(texto: str):
     def _troca_assinatura(m):
         if m.group(2) == "0":
             return m.group(0)
-        mudancas.append(f"teto do gravador: {m.group(2)} → 0 (sem teto)")
+        mudancas.append(f"default do gravador: {m.group(2)} → 0 "
+                        f"(0 = usa FILA_ACERVO_MAX)")
         return m.group(1) + "0"
 
     novo = RE_ASSINATURA.sub(_troca_assinatura, texto)
 
-    if "if max_itens and max_itens > 0:" not in novo:
-        novo, n = RE_CORTE.subn(CORTE_NOVO, novo)
+    if "FILA_ACERVO_MAX" not in novo:
+        # v1 deste patcher (acervo ilimitado) → converge pro teto grande
+        novo, n = RE_CORTE_V1.subn(CORTE_NOVO, novo)
         if n:
-            mudancas.append(f"corte da fila protegido ({n} ocorrência(s))")
+            mudancas.append(f"acervo ILIMITADO → teto FILA_ACERVO_MAX ({n})")
+        else:
+            novo, n = RE_CORTE.subn(CORTE_NOVO, novo)
+            if n:
+                mudancas.append(f"corte da fila em FILA_ACERVO_MAX ({n})")
     return novo, mudancas
 
 
 def main():
     p = argparse.ArgumentParser(
-        description="Tira o teto de 80 do acervo, por substituição exata.")
+        description="Troca o teto de 80 do acervo por FILA_ACERVO_MAX, "
+                    "por substituição exata de texto.")
     p.add_argument("--aplicar", action="store_true",
                    help="escreve (o padrão é só mostrar)")
     args = p.parse_args()
@@ -135,7 +158,8 @@ def main():
 
         novo, mudancas = _patchar(texto)
         if not mudancas:
-            _log(f"·  {c.relative_to(RAIZ)}: já está sem teto (nada a fazer)")
+            _log(f"·  {c.relative_to(RAIZ)}: já está no formato novo "
+                 f"(nada a fazer)")
             continue
 
         _log(f"→  {c.relative_to(RAIZ)}")
@@ -163,8 +187,8 @@ def main():
         _log("nada foi escrito. Rode de novo com --aplicar.")
         return 0
     _log("pronto." if not falhou else f"{falhou} cópia(s) com problema.")
-    _log("O efeito aparece na PRÓXIMA gravação da mineração: a fila para de "
-         "ser truncada e volta a acumular.")
+    _log("O efeito aparece na PRÓXIMA gravação da mineração: o acervo passa "
+         "a acumular até FILA_ACERVO_MAX (500) em vez de 80.")
     return 1 if falhou else 0
 
 
