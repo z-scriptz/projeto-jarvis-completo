@@ -2530,6 +2530,41 @@ estava documentada em lugar nenhum — mas isso é motivo pra procurar antes, n�
 desculpa depois. `grep` em quem lê o arquivo levou 2 minutos e devia ter vindo
 antes do primeiro commit, não depois de rodar na VPS.
 
+**Confirmado qual cópia roda:** `.venv/bin/python3` resolve para
+`/root/jarvis/integrations/telegram_repurpose_hunter.py`, e as duas cópias têm
+o `FILA_ACERVO_MAX`. A do pacote é a viva; a da raiz é o fallback.
+
+### 🔄 ROTAÇÃO DA VITRINE: decidido, e decidido NÃO fazer agora (15/08)
+
+Pergunta do Dre: *"como os sites maiores fazem pra deixar tanto produto
+guardado? Shopee, Amazon, Mercado Livre"* — e a ideia dele: produto que está
+na vitrine há 12 semanas sai e dá lugar a um recente que nunca entrou, uma
+rolagem por dia.
+
+**Como os grandes fazem:** banco de dados + servidor que monta a página sob
+demanda, com paginação. O catálogo tem milhões, mas a PÁGINA tem 40-60 itens.
+Ninguém entrega o catálogo inteiro de uma vez. O `topshopoficial` é GitHub
+Pages: arquivo estático, sem servidor e sem banco — "todos os produtos"
+viraria um HTML gigante.
+
+Dá pra imitar sem servidor (paginação estática: `index.html` + `/p/2.html`…).
+**Não vale.** Quem chega vem da bio de um Reels atrás do produto do vídeo, ou
+pra dar uma olhada. Ninguém pagina até a página 7 de um link de bio.
+
+**A rolagem é a ideia certa, no eixo errado.** Rodar por IDADE tira do ar um
+produto que está VENDENDO só porque é velho. O eixo certo é desempenho — e o
+dado existe: `ceo_agent.py:157` já lê o `conversionReport` da Shopee
+(`{chave: {'vendas': n, 'comissao': R$}}`). Ranquear por **o que ganhou
+dinheiro**, com idade como desempate e uma cota fixa pra produto novo (senão
+o recente nunca entra e nunca prova que vende).
+
+⚠️ **E não agora.** São 134 produtos para um teto de 200: a rotação hoje
+rotacionaria nada, e o ranking nasceria sem dado pra provar que ordena bem.
+Isso vira trabalho quando o acervo encostar nos 200 — ~6 semanas no ritmo
+medido (~11/dia) — e aí já existe histórico de conversão pra validar.
+
+**Fica registrado como decisão, não como pendência esquecida.**
+
 ⚠️ **E a auditoria se contradisse na própria saída.** O bloco 2 leu
 `push falhou` do log (rodada das 14:00, código antigo) e o bloco 5 leu do git
 que o clone estava em dia — o veredito listou os dois. **Estado vivo ganha de
