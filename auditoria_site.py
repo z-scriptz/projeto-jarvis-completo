@@ -318,6 +318,87 @@ def bloco_fila():
     return com, B
 
 
+# ── 3b. o teto: por que o número não cresce ─────────────────────────────────
+def bloco_teto():
+    """A pergunta do Dre: *"mas como o número não cresce? sempre cresceu"*.
+
+    Ele tem razão em duvidar de "a mineração parou" — o `produtos_fila.json` é
+    escrito o tempo todo. O que existe é um TETO no gravador:
+
+        _registrar_no_site(..., max_itens: int = 80)
+            fila = fila[:max_itens]
+
+    Os dois chamadores (produzir_tiktok.py, telegram_repurpose_hunter.py) usam
+    o default. Então cada produto novo EXPULSA o mais antigo, e a fila vira
+    janela deslizante em vez de acervo: minera todo dia e o total não anda.
+
+    Este bloco não acredita nisso — mede. Fila colada no teto + janela de
+    poucos dias é a prova; fila abaixo do teto derruba a hipótese inteira.
+    """
+    _titulo("3b. o teto do gravador (a fila cresce ou desliza?)")
+
+    # o teto sai do CÓDIGO por leitura de texto, sem importar o módulo: o
+    # hunter puxa telethon e o resto do mundo só pra responder um número
+    teto = None
+    fonte = _primeiro(RAIZ / "telegram_repurpose_hunter.py",
+                      RAIZ / "integrations" / "telegram_repurpose_hunter.py")
+    if fonte:
+        m = re.search(r"max_itens\s*:\s*int\s*=\s*(\d+)",
+                      fonte.read_text(encoding="utf-8", errors="replace"))
+        if m:
+            teto = int(m.group(1))
+    if teto is None:
+        _diz(INFO, "não achei o `max_itens` no gravador — pulo este bloco")
+        return None
+
+    fila_f = _primeiro(RAIZ / "shared" / "produtos_fila.json",
+                       RAIZ / "produtos_fila.json")
+    if not fila_f:
+        _diz(INFO, "sem produtos_fila.json para comparar com o teto")
+        return None
+    try:
+        fila = json.loads(fila_f.read_text(encoding="utf-8")) or []
+    except Exception as e:
+        _diz(ALERTA, f"produtos_fila.json ilegível: {str(e)[:60]}")
+        return None
+
+    n = len(fila)
+    no_teto = n >= teto
+    if no_teto:
+        _diz(FALHA, f"a fila tem {n} itens e o teto do gravador é {teto} — "
+                    f"ESTÁ NO TETO",
+             "cada produto novo minerado EXPULSA o mais antigo "
+             "(`fila = fila[:max_itens]`). A mineração funciona; o acervo é "
+             "que não acumula")
+    elif n >= teto * 0.9:
+        _diz(ALERTA, f"a fila tem {n} itens, teto {teto} — encostando",
+             "quando bater no teto, produto novo passa a expulsar produto "
+             "velho e o total congela")
+    else:
+        _diz(OK, f"a fila tem {n} itens, teto {teto} — ainda tem folga",
+             "o teto NÃO explica o número parado; a causa é outra")
+
+    # a janela em DIAS é a prova que dá pra ver: o gravador carimba `ts`
+    marcas = sorted(i.get("ts") for i in fila
+                    if isinstance(i, dict) and isinstance(i.get("ts"), int))
+    if marcas:
+        dias = (marcas[-1] - marcas[0]) / 86400
+        idade = (time.time() - marcas[0]) / 86400
+        # ⚠️ "foi expulso" só vale se a fila ESTIVER no teto. Com folga, o
+        # item mais antigo é simplesmente o mais antigo — dizer que o resto
+        # foi expulso seria inventar uma expulsão que não aconteceu.
+        _diz(INFO, f"os {len(marcas)} itens carimbados cobrem {dias:.0f} dia(s)",
+             (f"o mais antigo que sobrou entrou há {idade:.0f} dia(s) — tudo "
+              f"anterior a isso já foi expulso pelo teto") if no_teto else
+             (f"o mais antigo entrou há {idade:.0f} dia(s), e com folga no "
+              f"teto ninguém foi expulso: a fila simplesmente não recebeu "
+              f"mais que isso"))
+    else:
+        _diz(INFO, "nenhum item tem carimbo `ts`",
+             "sem ele não dá pra medir o tamanho da janela em dias")
+    return {"teto": teto, "itens": n}
+
+
 # ── 4. o funil: quantos sobrariam ───────────────────────────────────────────
 def bloco_funil(com_link, B=None):
     """Simulação a partir do cache. NÃO é o health-check: ele bate na API."""
@@ -582,13 +663,14 @@ def main():
     n_cron, destinos = agenda if agenda else (None, [])
     h_log = bloco_log(destinos)
     com_link, B = bloco_fila()
+    teto = bloco_teto()
     esperado = bloco_funil(com_link, B)
     cards = bloco_publicado(esperado)
     cod = veredito(n_cron, h_log, esperado, cards)
 
     if args.json:
         print("\n" + json.dumps(
-            {"esperado": esperado, "publicado": cards,
+            {"esperado": esperado, "publicado": cards, "teto": teto,
              "com_link_na_fila": len(com_link) if com_link is not None else None,
              "entradas_cron": n_cron, "achados": _achados},
             ensure_ascii=False, indent=2))
