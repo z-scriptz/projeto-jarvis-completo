@@ -443,20 +443,52 @@ def bloco_publicado(esperado):
     # o porcelain fica LIMPO. Se o push falhou, tudo parece em ordem aqui
     # embaixo e a vitrine no ar está congelada mesmo assim.
     _sh(["git", "remote", "update"], cwd=SITE_REPO, timeout=30)
-    cod, pendentes = _sh(["git", "rev-list", "--count", "@{u}..HEAD"],
-                         cwd=SITE_REPO)
-    if cod == 0 and pendentes.isdigit():
-        n = int(pendentes)
-        if n:
-            _diz(FALHA, f"{n} commit(s) COMMITADOS E NÃO EMPURRADOS",
-                 "é exatamente este o caso em que tudo parece certo na VPS e o "
-                 "site no ar está parado. Causa quase sempre: credencial/token "
-                 "do push expirada")
+    # ⚠️ CONTAR SÓ UM LADO DÁ O DIAGNÓSTICO ERRADO. A v1 contava `@{u}..HEAD`,
+    # viu 8 e disse "credencial/token expirada". Era divergência: o `origin`
+    # também tinha commit que o clone não tinha, e o push voltou
+    # `non-fast-forward`. "Preso pra subir" e "as duas pontas andaram" pedem
+    # consertos OPOSTOS — um é autenticação, o outro é reconciliar histórico —
+    # e o segundo tem risco de apagar trabalho alheio. `A...B` mede os dois.
+    cod, contagem = _sh(["git", "rev-list", "--left-right", "--count",
+                         "@{u}...HEAD"], cwd=SITE_REPO)
+    partes = contagem.split() if cod == 0 else []
+    if len(partes) == 2 and all(x.isdigit() for x in partes):
+        atras, frente = int(partes[0]), int(partes[1])
+        if frente and atras:
+            _diz(FALHA, f"HISTÓRICO DIVERGENTE: {frente} commit(s) só aqui × "
+                        f"{atras} só no origin",
+                 "o push volta 'non-fast-forward'. NÃO é credencial, e NÃO "
+                 "resolve com --force antes de olhar: alguém (ou algo) "
+                 "publicou no repo por fora desta VPS")
+            cod2, so_la = _sh(["git", "log", "--format=%h %ad %s",
+                               "--date=short", "-8", "HEAD..@{u}"],
+                              cwd=SITE_REPO)
+            if cod2 == 0 and so_la:
+                print("       ── existe no origin e NÃO existe aqui ──")
+                for l in so_la.splitlines():
+                    print(f"       {l[:100]}")
+            cod2, arquivos = _sh(["git", "diff", "--stat", "HEAD...@{u}"],
+                                 cwd=SITE_REPO)
+            if cod2 == 0 and arquivos:
+                print("       ── o que esses commits mexeram ──")
+                for l in arquivos.splitlines()[-12:]:
+                    print(f"       {l[:100]}")
+                _diz(INFO, "se só mexeram em index.html, é arquivo GERADO e a "
+                           "próxima rodada reescreve",
+                     "se mexeram em QUALQUER outra coisa, aquilo é trabalho "
+                     "que só existe lá — preservar antes de reconciliar")
+        elif frente:
+            _diz(FALHA, f"{frente} commit(s) COMMITADOS E NÃO EMPURRADOS",
+                 "o clone só andou pra frente — aqui a suspeita é mesmo "
+                 "credencial/token do push")
+        elif atras:
+            _diz(ALERTA, f"o clone está {atras} commit(s) ATRÁS do origin",
+                 "alguém publicou por fora; um `git pull` põe em dia")
         else:
             _diz(OK, "clone em dia com o origin (nada preso pra subir)")
     else:
         _diz(ALERTA, "não consegui comparar com o origin",
-             (pendentes or "")[:90] + " — sem upstream configurado?")
+             (contagem or "")[:90] + " — sem upstream configurado?")
 
     # Como o push se autentica muda o conserto — e a URL pode carregar o token
     # embutido. ⚠️ MASCARAR ANTES DE IMPRIMIR: diagnóstico que vaza credencial

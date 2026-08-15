@@ -329,6 +329,16 @@ def main():
     mudou_html = not (idx.exists() and idx.read_text(encoding="utf-8") == html)
 
     if not mudou_html and not mudou_fonte:
+        # ⚠️ "sem mudança" NÃO quer dizer "nada pendente". Se um push anterior
+        # falhou, o commit ficou aqui e a vitrine no ar está velha — e este
+        # return sairia por cima disso sem nunca tentar de novo. Foi assim que
+        # 8 rodadas seguidas ficaram presas em 15/08.
+        atras_frente = _git("rev-list", "--left-right", "--count", "@{u}...HEAD")
+        partes = (atras_frente.stdout or "").split()
+        if len(partes) == 2 and partes[1].isdigit() and int(partes[1]) > 0:
+            _log(f"site sem mudança, mas {partes[1]} commit(s) nunca subiram — "
+                 f"empurrando")
+            return 0 if _empurrar() else 1
         _log("site sem mudança — não precisa subir")
         return 0
     if mudou_html:
@@ -339,12 +349,53 @@ def main():
     if c.returncode not in (0, 1):   # 1 = nada pra commitar (ok)
         _log("commit falhou: " + (c.stderr or c.stdout)[:200])
         return 1
-    p = _git("push")
-    if p.returncode != 0:
-        _log("push falhou: " + (p.stderr or p.stdout)[:200])
+    if not _empurrar():
         return 1
     _log(f"OK! Site publicado com {len(produtos)} produtos -> topshopoficial.com.br")
     return 0
+
+
+def _empurrar() -> bool:
+    """Empurra, e se tiver divergido do origin, reconcilia e tenta de novo."""
+    p = _git("push")
+    if p.returncode != 0:
+        erro = (p.stderr or p.stdout)
+        _log("push falhou: " + erro[:200])
+        # DIVERGÊNCIA: o origin andou por fora (outro clone, edição pelo site do
+        # GitHub, o curso_page_builder de outra máquina). Em 15/08 isso ficou 8
+        # rodadas em pé: o cron commitava a cada 2h, o push voltava
+        # 'non-fast-forward', e o log da falha ia pro fim de um arquivo que
+        # ninguém lia. A vitrine no ar congelou em 130 enquanto a VPS achava
+        # que estava publicando.
+        if "non-fast-forward" in erro or "fetch first" in erro or "rejected" in erro:
+            _log("   divergiu do origin — rebase e tento uma vez")
+            # --rebase põe os commits locais EM CIMA do que veio; --autostash
+            # protege alteração solta no diretório. Se der conflito no
+            # index.html (arquivo gerado), a versão de agora é a certa: ela
+            # saiu da fila atual, e a do origin saiu de uma fila mais velha.
+            _git("fetch", "origin")
+            # ⚠️ `-X theirs`, NÃO `-X ours`. Num REBASE os lados são
+            # invertidos em relação ao merge: "ours" é o upstream (que fica
+            # em cima da mesa) e "theirs" são os SEUS commits sendo
+            # replicados. Escrevi `ours` primeiro e medi: com divergência
+            # 1/1, `-X ours` manteve a versão VELHA do origin. É `theirs`
+            # que preserva o index.html recém-gerado — e ele é o certo
+            # porque saiu da fila de agora, não de uma fila de dias atrás.
+            r = _git("rebase", "-X", "theirs", "@{u}")
+            if r.returncode != 0:
+                _git("rebase", "--abort")
+                _log("   ✗ rebase não resolveu — histórico precisa de mão "
+                     "humana. Rode: python3 auditoria_site.py")
+                return False
+            p = _git("push")
+            if p.returncode != 0:
+                _log("   ✗ push falhou de novo: "
+                     + (p.stderr or p.stdout)[:160])
+                return False
+            _log("   ✅ reconciliado e publicado")
+        else:
+            return False
+    return True
 
 
 if __name__ == "__main__":

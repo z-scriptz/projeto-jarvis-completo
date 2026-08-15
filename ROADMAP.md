@@ -2392,6 +2392,48 @@ nomeado do funil.
 **A lição das duas:** o script mediu certo e *narrou* errado. Contagem confere e
 frase não confere é pior que erro de contagem — a frase é o que a pessoa lê.
 
+**A CAUSA REAL: não era credencial, era DIVERGÊNCIA.** O `git push` respondeu:
+
+```
+ ! [rejected]  main -> main (non-fast-forward)
+```
+
+Alguma coisa publicou no `Topshop-Site` **por fora desta VPS**. O `deploy_site`
+commitava a cada 2h, o push voltava rejeitado, a mensagem ia pro fim de um log
+que ninguém lê, e a vitrine no ar congelou em 130 enquanto a VPS "publicava".
+
+⚠️ **Eu contei só um lado.** `git rev-list --count @{u}..HEAD` deu 8 e eu li
+"8 presos = token expirado". Faltava o outro lado: o `origin` também tinha
+commit que o clone não tinha. **"Preso pra subir" e "as duas pontas andaram"
+pedem consertos OPOSTOS** — um é autenticação, o outro é reconciliar histórico,
+e só o segundo tem risco de apagar trabalho alheio. Agora é
+`--left-right --count @{u}...HEAD`, que mede os dois, lista os commits que só
+existem no origin e mostra **quais arquivos** eles mexeram (se for só
+`index.html`, é gerado e a próxima rodada reescreve; se for outra coisa, é
+trabalho que só existe lá).
+
+**Conserto durável no `deploy_site.py`** — ele não tinha como sair disso
+sozinho:
+
+- push rejeitado por divergência → `fetch` + `rebase -X theirs` + push de novo
+- `"site sem mudança"` deixou de ser saída antecipada: se houver commit nunca
+  empurrado, ele empurra mesmo sem HTML novo. **Esse `return 0` era o que
+  manteria os 8 commits presos pra sempre**, já que o index regenerado sai
+  idêntico
+- rebase que não resolve → `--abort` e manda rodar a auditoria. Nada de
+  `--force` automático
+
+⚠️ **`-X ours` estava errado e só a medição pegou.** Num **rebase** os lados são
+invertidos em relação ao merge: `ours` é o *upstream*, `theirs` são os seus
+commits sendo replicados. Escrevi `ours` por hábito de merge; com divergência
+1/1 medida, `-X ours` **manteve a versão velha do origin**. É `theirs` que
+preserva o index recém-gerado.
+
+Testado ponta a ponta com a forma exata da VPS (3 commits presos + trabalho só
+no origin em outro arquivo): antes `1 atrás/3 à frente` → depois `0/0`, o
+`index.html` do origin ficou com a versão mais fresca e o `curso.html`, que só
+existia no origin, **sobreviveu**.
+
 ⚠️ **Errei duas vezes no primeiro run, e é sempre o mesmo erro.** (1) O
 `crontab` não existe no container e o script imprimiu ❌ *"NENHUMA entrada de
 cron"*; (2) `_carregar_produtos()` devolveu `[]` porque os JSONs dele não
