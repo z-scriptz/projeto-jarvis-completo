@@ -2446,13 +2446,56 @@ Tudo isso era gerado a cada 2h e morria na VPS. O site no ar era de 11 dias
 atrás com os mesmos 130 produtos; agora são os mesmos 130 com dados de hoje.
 
 A conta fecha e não deixa espaço pra ilusão: `134 com link −1 morto −1 fundido
-−2 sem foto e sem preço = 130`. **Quem move esse número é MINERAÇÃO**, e ela
-não foi tocada. Dois caminhos, em ordem de custo:
+−2 sem foto e sem preço = 130`.
 
-1. os **2 com link mas sem foto e sem preço** — `preencher_fotos.py` existe e
-   termina dizendo "agora rode o deploy_site". É +2 cards por um comando
-2. produto novo minerado com link (`repescagem`, `validar_fila`,
-   `amazon_playwright`) — é o único caminho que faz o número subir de verdade
+### 🪟 O TETO DE 80: a fila era janela deslizante, não acervo (15/08)
+
+Eu fechei o item acima com *"quem move esse número é mineração"*. O Dre não
+aceitou: *"mas como o número não cresce? sempre cresceu, sempre usamos as APIs
+e a mineração era automática"*. **Ele estava certo e eu estava repetindo o
+sintoma com outras palavras.** "A mineração parou" não era diagnóstico — o
+`produtos_fila.json` tinha sido escrito havia 1h.
+
+A causa estava no gravador, `telegram_repurpose_hunter.py:1451`:
+
+```python
+def _registrar_no_site(nome, link, imagem="", max_itens: int = 80, ...):
+    ...
+    fila = fila[:max_itens]        # ← corta nos 80 mais recentes
+```
+
+Os **dois** chamadores usavam o default (`produzir_tiktok.py:414`,
+`telegram_repurpose_hunter.py:1718`). A cada gravação a fila era truncada:
+produto 81 entra, o mais antigo sai. **Cresce e encolhe na mesma rodada.**
+
+**Medido na VPS:** `80 itens / teto 80 — ESTÁ NO TETO`, e os 80 cobriam
+**7 dias**. Tudo anterior tinha sido expulso. Efeito colateral que ninguém
+pediu: produto que saía da janela e não estava na curadoria **sumia do site**,
+um a um, calado.
+
+**Conserto — o teto estava no lugar errado, não no valor errado.** Acervo e
+vitrine são coisas diferentes:
+
+- `_registrar_no_site`: `max_itens=0` = **sem teto**. O JSON é o ACERVO, e
+  guardar é barato
+- `deploy_site.py`: teto novo `VITRINE_MAX_PRODUTOS` (default 200), aplicado
+  **antes do `_filtrar_vivos`**. É aí que moram os custos que crescem de
+  verdade — peso do `index.html` na primeira pintura (Reels, 4G) e **chamada
+  de API do health-check por produto**. Cortar antes mantém a conta de API
+  presa ao que vai pro ar, não ao acervo
+
+Hoje isso não muda nada visível (134 < 200); muda daqui pra frente, que é
+quando o acervo passa a acumular em vez de deslizar.
+
+⚠️ **E a auditoria se contradisse na própria saída.** O bloco 2 leu
+`push falhou` do log (rodada das 14:00, código antigo) e o bloco 5 leu do git
+que o clone estava em dia — o veredito listou os dois. **Estado vivo ganha de
+texto de log, sempre:** o log conta o que aconteceu, o git responde o que é.
+Agora achado vindo de log é confrontado com o git e, quando desmentido, sai
+como *"resolvido, não pendente"*.
+
+Ainda em aberto e barato: os **2 com link mas sem foto e sem preço** —
+`preencher_fotos.py` existe e termina dizendo "agora rode o deploy_site".
 
 ⚠️ **Errei duas vezes no primeiro run, e é sempre o mesmo erro.** (1) O
 `crontab` não existe no container e o script imprimiu ❌ *"NENHUMA entrada de

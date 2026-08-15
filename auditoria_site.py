@@ -65,8 +65,9 @@ SIMBOLO = {FALHA: "❌", ALERTA: "⚠️ ", OK: "✅", INFO: "· "}
 _achados = []
 
 
-def _diz(estado, msg, detalhe=""):
-    _achados.append({"estado": estado, "msg": msg, "detalhe": detalhe})
+def _diz(estado, msg, detalhe="", chave=""):
+    _achados.append({"estado": estado, "msg": msg, "detalhe": detalhe,
+                     "chave": chave})
     print(f"  {SIMBOLO[estado]} {msg}")
     if detalhe:
         print(f"       {detalhe}")
@@ -225,7 +226,11 @@ def bloco_log(destinos):
         ("não é um repo git", FALHA, "o clone do site sumiu do disco"),
     ):
         if marca in texto:
-            _diz(estado_m, f"na ÚLTIMA rodada registrada: “{marca}”", leitura)
+            # `chave` marca a origem: isto veio de TEXTO DE LOG, que é sempre
+            # passado. O veredito confronta com o estado VIVO do git antes de
+            # tratar como problema de agora.
+            _diz(estado_m, f"na ÚLTIMA rodada registrada: “{marca}”", leitura,
+                 chave=f"log:{marca}")
     return h
 
 
@@ -566,7 +571,8 @@ def bloco_publicado(esperado):
             _diz(ALERTA, f"o clone está {atras} commit(s) ATRÁS do origin",
                  "alguém publicou por fora; um `git pull` põe em dia")
         else:
-            _diz(OK, "clone em dia com o origin (nada preso pra subir)")
+            _diz(OK, "clone em dia com o origin (nada preso pra subir)",
+                 chave="git:em_dia")
     else:
         _diz(ALERTA, "não consegui comparar com o origin",
              (contagem or "")[:90] + " — sem upstream configurado?")
@@ -606,14 +612,35 @@ def bloco_publicado(esperado):
                  "health-check derrubariam esses na próxima rodada")
         else:
             _diz(OK, f"ESPERADO {esperado} × PUBLICADO {cards} — batem",
-                 "o deploy está fazendo o trabalho dele. O número não cresce "
-                 "porque a FILA não cresce, não porque o site quebrou")
+                 "o deploy está fazendo o trabalho dele. Se o número não "
+                 "cresce, a causa está no bloco 3b, não aqui")
     return cards
 
 
 def veredito(n_cron, h_log, esperado, cards):
     _titulo("veredito")
+
+    # ⚠️ ESTADO VIVO GANHA DE TEXTO DE LOG, SEMPRE. Na VPS o bloco 2 leu
+    # "push falhou" (da rodada das 14:00, com o código antigo) e o bloco 5
+    # leu do git que o clone estava em dia — e o veredito listou os dois,
+    # em contradição aberta. O log conta o que ACONTECEU; o git responde o
+    # que É. Quando discordam, o log virou história.
+    em_dia = any(a.get("chave") == "git:em_dia" for a in _achados)
+    historico = []
+    if em_dia:
+        for a in _achados:
+            if a.get("chave", "").startswith("log:") and a["estado"] == FALHA:
+                a["estado"] = INFO
+                historico.append(a["msg"])
+
     problemas = [a for a in _achados if a["estado"] == FALHA]
+
+    if historico:
+        print("  ℹ️  o log guarda falha(s) que o git já desmente — "
+              "resolvido, não pendente:")
+        for m in historico:
+            print(f"       {m}")
+        print()
 
     # o que NÃO foi medido vem antes do veredito: conclusão apoiada em bloco
     # que não leu nada é chute com formatação bonita
@@ -631,13 +658,12 @@ def veredito(n_cron, h_log, esperado, cards):
         print("      O que segue vale só para o que deu pra ler.\n")
 
     if not problemas:
-        print("  Nenhuma falha. Se o número está parado e nada aqui acusou,")
-        print("  a vitrine está CERTA e o congelamento é da MINERAÇÃO:")
-        print("  produto novo com link de afiliado é o que faz o site crescer,")
-        print("  e postar vídeo dos produtos que já estão lá não faz.")
+        print("  Nenhuma falha: o deploy publica o que a fila tem, e o que")
+        print("  está no ar é o que deveria estar.")
         print()
-        print("  Onde olhar então:  repescagem.py · validar_fila.py ·")
-        print("                     amazon_playwright.py · tiktok_coletor.py")
+        print("  Se mesmo assim o número não cresce, a resposta está no bloco")
+        print("  3b — teto do gravador — e não aqui. Vitrine parada com deploy")
+        print("  saudável é problema de ACERVO, não de publicação.")
         return 0
 
     print(f"  {len(problemas)} problema(s) que explicam a vitrine parada:")

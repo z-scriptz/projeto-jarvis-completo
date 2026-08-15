@@ -1412,13 +1412,27 @@ def _foto_oficial_do_link(link: str) -> str:
     return _dados_oficiais_do_link(link).get("imagem") or ""
 
 
-def _registrar_no_site(nome: str, link: str, imagem: str = "", max_itens: int = 80,
+def _registrar_no_site(nome: str, link: str, imagem: str = "",
+                       max_itens: int = 0,
                        plataforma: str = "shopee", origem: str = "",
                        preco: float = 0.0):
     """Grava o produto + link de afiliado no produtos_fila.json que o SITE
     (bio_page_builder) lê. É a PONTE que faz a bio (topshopoficial) mostrar
     EXATAMENTE o produto do vídeo — sem isso, o post e o site ficam descasados
-    e a comissão vaza. Mais recente primeiro, sem duplicar link, cap em max_itens."""
+    e a comissão vaza. Mais recente primeiro, sem duplicar link.
+
+    ⚠️ O TETO SAIU DAQUI (15/08). Era `max_itens: int = 80`, e os dois
+    chamadores usavam o default — então cada produto novo EXPULSAVA o mais
+    antigo e a fila virava janela deslizante. Medido na VPS: 80/80, cobrindo
+    7 dias. O Dre perguntou "mas como o número não cresce? sempre cresceu" e
+    tinha razão: a mineração nunca parou, o acervo é que era truncado a cada
+    gravação — e produto que saía da janela sumia do site sem avisar.
+
+    Agora `max_itens=0` significa SEM TETO: este arquivo é o ACERVO. Quem
+    limita quantos produtos vão pro ar é o `deploy_site.py`
+    (`VITRINE_MAX_PRODUTOS`), que é onde os custos de verdade moram — peso da
+    página e chamada de API do health-check. Guardar é barato; publicar não.
+    """
     if not link:
         return
     # Mesma condição de antes: só bate na API quando falta a foto. Assim esta
@@ -1448,7 +1462,8 @@ def _registrar_no_site(nome: str, link: str, imagem: str = "", max_itens: int = 
             "ts": int(time.time()),
         })
         _anotar_preco(link, preco, nome)
-        fila = fila[:max_itens]
+        if max_itens and max_itens > 0:      # 0 = acervo sem teto
+            fila = fila[:max_itens]
         SITE_FILA.parent.mkdir(parents=True, exist_ok=True)
         _salvar_json_atomico(SITE_FILA, fila)
         log.info(f"   🌐 Vitrine do site atualizada: '{nome}' (produtos_fila)")

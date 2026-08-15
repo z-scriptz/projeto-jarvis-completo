@@ -300,6 +300,30 @@ def main():
         return 1
     _log(f"{len(produtos)} produtos com link na vitrine")
 
+    # TETO DA VITRINE — e ele fica AQUI, antes do health-check, de propósito.
+    #
+    # Até 15/08 o teto morava no gravador (`_registrar_no_site`, `fila[:80]`):
+    # a fila era cortada em 80 e produto novo EXPULSAVA o mais antigo. O
+    # acervo virou janela deslizante de 7 dias — o Jarvis minerava todo dia e
+    # o total nunca subia, e produto que saía da janela sumia do site calado.
+    #
+    # Acervo e vitrine são coisas diferentes. O acervo pode crescer para
+    # sempre (é um JSON); a VITRINE tem dois custos reais que crescem com ela:
+    #   · peso do index.html na primeira pintura (quem vem do Reels, no 4G)
+    #   · o health-check bate na API de afiliado por produto não-cacheado
+    # Cortar aqui, ANTES do `_filtrar_vivos`, é o que segura os dois: a
+    # chamada de API continua limitada ao que vai pro ar, não ao acervo.
+    #
+    # A ordem já é a certa: `_carregar_produtos` devolve o produtos_fila.json
+    # primeiro (o gravador insere no índice 0, então é mais-recente-primeiro)
+    # e só depois complementa com a curadoria.
+    teto = int(os.environ.get("VITRINE_MAX_PRODUTOS", "200"))
+    if len(produtos) > teto:
+        _log(f"   teto da vitrine: mostro os {teto} mais recentes de "
+             f"{len(produtos)} (VITRINE_MAX_PRODUTOS)")
+        _log("   os demais continuam no acervo — não são apagados")
+        produtos = produtos[:teto]
+
     # blindagem: esconde os que morreram (delistados)
     produtos = _filtrar_vivos(produtos)
     if not produtos:
