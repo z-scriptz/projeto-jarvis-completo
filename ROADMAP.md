@@ -2324,6 +2324,46 @@ tabela saiu com `None` dos dois lados e por pouco não foi lida como "o Vision
 não viu diferença". Módulo cujo fracasso se parece com o sucesso precisa gritar,
 e agora grita: o relatório declara MEDIÇÃO INVÁLIDA e mostra os dois motivos.
 
+### 🏪 A VITRINE PAROU EM 130 — e a pergunta certa não é "o deploy quebrou?" (15/08)
+
+Dre: *"o site tinha 130 produtos deployado, hoje dia 15/08 ainda continua com
+130, será que tá rodando certo?"*
+
+**Antes de investigar, o que a vitrine é.** `deploy_site.py:297` publica
+`[p for p in produtos if p.get("link")]` — produtos da FILA que têm link de
+afiliado. Postar vídeo **não** cria produto novo; quem cria é a MINERAÇÃO. Os 44
+vídeos de 7 dias podem ter sido todos dos mesmos 130 produtos, e nesse caso 130
+é a resposta CERTA. Trocar o deploy não move um número que já está correto.
+
+⚠️ **Quase repeti um erro que já está escrito neste documento (linha 371).**
+Meu primeiro achado foi "nenhum `.py` chama o `deploy_site`" — e o ROADMAP já
+registra que eu concluí isso uma vez e estava errado: ele roda **a cada 2h** por
+entrada própria do crontab, fora do bloco `JARVIS-AUTO`. *Antes de mexer em
+automação, `crontab -l` primeiro.* A lição estava salva e ainda assim eu fui
+pelo mesmo caminho — o que a salvou foi reler o próprio ROADMAP antes de falar.
+
+**Buraco real encontrado no `revisao_geral.py`.** O bloco `[site]` confere
+`mtime` do index e `git status --porcelain`. Depois de um commit bem-sucedido o
+porcelain fica **limpo** — então se o `push` falhou (token expirado), a VPS
+mostra index fresco, porcelain limpo e "site sem pendências", com a vitrine no
+ar congelada. Os três sinais verdes ao mesmo tempo. Faltava contar
+`@{u}..HEAD`.
+
+Virou o **`auditoria_site.py`**: mede os dois lados e compara em vez de
+adivinhar — `MATÉRIA-PRIMA` (quantos com link na fila) → `ESPERADO` (menos
+mortos do health-cache, menos itemId repetido) → `PUBLICADO` (cards no
+index.html) → `NO AR` (commit não empurrado). Cada seta que não bate tem causa
+diferente. Roda `crontab -l` de verdade, não faz rede além do `git remote
+update`, e não escreve nada.
+
+⚠️ **Errei duas vezes no primeiro run, e é sempre o mesmo erro.** (1) O
+`crontab` não existe no container e o script imprimiu ❌ *"NENHUMA entrada de
+cron"*; (2) `_carregar_produtos()` devolveu `[]` porque os JSONs dele não
+existem ali, e eu imprimi ❌ *"0 produtos com link"*. Nos dois casos **ausência
+de medição virou medição de zero** — a mesma família do `None` vs `None` do
+recorte (12/08) e do `nao_avaliado`. Agora o veredito abre com a lista do que
+**NÃO foi medido** antes de concluir qualquer coisa.
+
 ### Onde parou (04/08, fim do dia)
 
 **Esperando o chip.** Pedido feito — Claro pré-pago, R$ 20,99, chegada prevista
