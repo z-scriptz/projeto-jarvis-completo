@@ -116,6 +116,19 @@ def main():
         print("nada a fazer — todos ja tem foto ✔")
         return 0
 
+    # ⚠️ TETO, porque o acervo agora CRESCE (15/08). Até hoje a fila era
+    # truncada em 80 pelo gravador, e esse corte protegia este laço sem que
+    # ninguém tivesse escrito isso em lugar nenhum. Com o teto movido pro
+    # deploy_site (FILA_ACERVO_MAX=500), este laço passaria a fazer centenas
+    # de chamadas de API com 1,2s cada — mesma armadilha que o validar_fila
+    # tinha. Default generoso: hoje não muda nada, e amanhã não vira rodada
+    # que não termina.
+    limite = int(os.environ.get("PREENCHER_FOTOS_MAX", "60"))
+    if len(sem_foto) > limite:
+        print(f"⚠️  {len(sem_foto)} sem foto, mas paro em {limite} nesta "
+              f"rodada (PREENCHER_FOTOS_MAX). Rode de novo pra continuar.")
+        sem_foto = sem_foto[:limite]
+
     achou = 0
     for i, it in enumerate(sem_foto, 1):
         nome = (it.get("produto") or "?")[:50]
