@@ -3029,6 +3029,61 @@ A pergunta que isso responde é a que mais vale no projeto: **o template
 autoral é melhor ou pior que reciclar viral?** Todo o investimento de semanas
 está apostado no "melhor", e ninguém mediu.
 
+### 🎣 A MEDIÇÃO DOS HOOKS EXISTIA E NÃO ALCANÇAVA A PRODUÇÃO (15/08)
+
+Dre: *"o hook nós temos uma medição... são aqueles em primeira pessoa"*. Ele
+estava certo, e ela está escrita em `storyboard.py:18`, de **133 posts de
+08/08**:
+
+```
+hook em 1ª pessoa   3,8 a 5,1% de engajamento
+hook de urgência    1,8 a 2,2%
+"A Shopee:"         1,0 a 1,8%   (14 posts)
+```
+
+**Mas ela só valia no `storyboard.py` — o caminho AUTORAL, que nunca roda.**
+Quem produz de verdade é o `produzir_tiktok.py`, que chama o `hook_alana.py`.
+E lá:
+
+```python
+amostra = random.sample(FORMULAS, k=min(5, len(FORMULAS)))
+```
+
+**Sorteio uniforme sobre 10 moldes, dos quais só 4 são em 1ª pessoa.** ~60% do
+que o modelo via vinha de moldes que os próprios 133 posts dizem render 2-3×
+menos. E **nenhuma verificação de proibido** neste caminho: o
+`storyboard.PROIBIDO` bane `corre ver/que/pra` com o número do lado, e *"corre
+ver isso antes"* estava no ar com 6 posts medidos.
+
+⚠️ **Terceira vez no mesmo dia:** o conhecimento existe, está escrito, está
+até com o número ao lado — e mora num arquivo que a produção não executa. Igual
+ao `piloto.py` e ao `amazon_playwright` de 03/08.
+
+**Dois consertos no `hook_alana.py`:**
+
+1. **Amostra garante 3 de 1ª pessoa em 5** (verificado em 2.000 sorteios).
+   Sobem de ~40% para 60% — e ficam **2 vagas abertas de propósito**: gerador
+   que só produz 1ª pessoa impede medir se isso continua verdade. A medição de
+   08/08 tem uma semana, não é lei da natureza. Sem variação não há
+   aprendizado.
+2. **Trava de proibido importando `storyboard.PROIBIDO`** — importada, não
+   copiada: duas listas do que é proibido envelhecem separadas, alguém corrige
+   uma e a outra segue publicando. Recusa e regera (2 tentativas, não
+   infinitas — cada uma custa uma chamada), e a **reserva também passa pela
+   regra**, porque o banco antigo pode ter frase banida.
+
+Validado contra os hooks que estão **em produção hoje**: barra `"Corre ver
+isso antes que esgote"` (o de maior retenção medida, n=6) e o `"A Shopee:"`
+(2,8s, entre os cinco piores); deixa passar `"Comprei achando que era
+firula…"` e `"Não mostre isso pra quem…"`.
+
+⚠️ **E fica uma tensão registrada, não resolvida:** "corre ver isso antes" é
+proibido por ENGAJAMENTO (1,8-2,2%) e foi o de **maior RETENÇÃO** entre os
+moldes com n≥5 (6,8s). São métricas diferentes e podem ordenar hooks de formas
+opostas — urgência faz parar de rolar, 1ª pessoa faz comentar. O espalhamento
+estava dentro do ruído, então isso não é contradição provada; é uma pergunta
+que só mais posts por molde respondem.
+
 ### 📏 O HOOK NÃO EXPLICA NADA (ainda) — e a tabela convidava a mentir (15/08)
 
 Rodada real: **casaram 68/79** posts pela legenda, e saíram **35 moldes de

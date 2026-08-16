@@ -81,6 +81,19 @@ _REACH_JSONL = Path(__file__).resolve().parent / "shared" / "reach.jsonl"  # alc
 #   - <...> = o que o Gemini preenche pensando no produto
 #   - <emoji> = 1 emoji que combine (ele escolhe)
 # ─────────────────────────────────────────────────────────────────────────────
+# ⚠️ QUAIS DESTES MOLDES SÃO EM 1ª PESSOA (medido, não gosto).
+# `storyboard.py:18` guarda o resultado de **133 posts de 08/08**:
+#     hook em 1ª pessoa   3,8 a 5,1% de engajamento
+#     hook de urgência    1,8 a 2,2%
+#     "A Shopee:"         1,0 a 1,8%  (14 posts)
+# Ou seja: 1ª pessoa rende 2 a 3× mais. Só que essa regra vivia SÓ no
+# `storyboard.py`, que é o caminho AUTORAL — e o caminho autoral (`piloto.py`)
+# nunca é chamado por nada. Quem produz de verdade é o `produzir_tiktok.py`,
+# que chama ESTE arquivo. A medição existia, estava escrita, e não alcançava a
+# produção. (15/08)
+PRIMEIRA_PESSOA = {"desabafo_shopee", "eu_vs_shopee", "virei_fa",
+                   "comprei_testei"}
+
 FORMULAS = [
     ("desabafo_shopee",  '"<dor ou desejo do dia a dia em 1a pessoa>" <emoji>\n{tag}'),
     ("eu_vs_shopee",     'Eu: <juramento ou resistencia engracada>\n{tag}'),
@@ -434,7 +447,21 @@ def _via_gemini(produto: str, descricao: str, nicho: str) -> Optional[str]:
         from google import genai
         cli = genai.Client(api_key=key)
         # mostra um SUBCONJUNTO aleatorio das formulas (forca variedade entre posts)
-        amostra = random.sample(FORMULAS, k=min(5, len(FORMULAS)))
+        # ⚠️ SORTEIO UNIFORME DESPERDIÇAVA A MEDIÇÃO. Eram 10 moldes, só 4 em
+        # 1ª pessoa, e `random.sample` os tratava como iguais — então ~60% do
+        # que o modelo via vinha de moldes que os 133 posts dizem render 2-3×
+        # menos. Agora a amostra GARANTE 3 de 1ª pessoa e deixa 2 vagas pros
+        # outros.
+        #
+        # E ficam 2 vagas de propósito, em vez de forçar 5/5: se o gerador só
+        # puder produzir 1ª pessoa, ninguém nunca mede se isso continua sendo
+        # verdade. Sem variação não há aprendizado — e a medição de 08/08 é de
+        # uma semana atrás, não é lei da natureza.
+        _pp = [f for f in FORMULAS if f[0] in PRIMEIRA_PESSOA]
+        _outros = [f for f in FORMULAS if f[0] not in PRIMEIRA_PESSOA]
+        amostra = (random.sample(_pp, k=min(3, len(_pp)))
+                   + random.sample(_outros, k=min(2, len(_outros))))
+        random.shuffle(amostra)
         moldes = "\n".join(f"- {nome}: {molde.replace('{tag}', TAG_PADRAO)}"
                            for nome, molde in amostra)
         # APRENDE COM OS PRÓPRIOS VENCEDORES: injeta os hooks que MAIS alcançaram nas
@@ -482,16 +509,53 @@ def _via_gemini(produto: str, descricao: str, nicho: str) -> Optional[str]:
         return None
 
 
+def _proibido(hook: str):
+    """O motivo, se este hook viola uma regra MEDIDA. None se estiver limpo.
+
+    ⚠️ A LISTA VEM DO `storyboard.py`, IMPORTADA — não copiada. Duas ideias do
+    que é proibido é o mesmo que nenhuma: a cópia envelhece, alguém corrige um
+    lado, e o outro segue publicando o que já foi medido como ruim.
+
+    O buraco que isto fecha (15/08): o `storyboard.PROIBIDO` bane "corre
+    ver/que/pra" com o número do lado ("1,8 a 2,2%, contra 3,8 a 5,1% dos de
+    1ª pessoa") — mas só valia no caminho autoral, que não roda. Enquanto
+    isso, "corre ver isso antes" estava no ar, com 6 posts medidos.
+    """
+    try:
+        import storyboard as SB
+        regras = SB.PROIBIDO
+    except Exception:
+        return None          # sem a regra, não invento uma: deixo passar
+    for padrao, motivo in regras:
+        if padrao.search(hook or ""):
+            return motivo
+    return None
+
+
 def gerar_hook_alana(produto: str, descricao: str = "", nicho: str = "") -> str:
     """Retorna hook viral (1-2 linhas, varias formulas). Tenta Gemini
     (HOOK_ALANA=1 + key); senao usa o banco de reserva por nicho."""
     ligado = os.getenv("HOOK_ALANA", "1").strip().lower() in ("1", "true", "sim")
     if ligado:
-        via = _via_gemini(produto, descricao, nicho)
-        if via:
-            _registrar(via)
-            return via
-    return _fallback(nicho, produto)
+        for tentativa in range(2):        # 2, não infinitas: cada uma é 1 chamada
+            via = _via_gemini(produto, descricao, nicho)
+            if not via:
+                break
+            motivo = _proibido(via)
+            if not motivo:
+                _registrar(via)
+                return via
+            log.warning('hook recusado (%s): "%s" — %s',
+                        f"tentativa {tentativa + 1}", via.splitlines()[0][:60],
+                        motivo)
+    # a reserva também passa pela regra: banco antigo pode ter frase banida
+    reserva = _fallback(nicho, produto)
+    motivo = _proibido(reserva)
+    if motivo:
+        log.warning('reserva também recusada ("%s" — %s); usando 1ª pessoa '
+                    'genérica', reserva.splitlines()[0][:50], motivo)
+        return 'Comprei sem esperar nada e me surpreendeu demais 😅'
+    return reserva
 
 
 # ═════════════════════════════════════════════════════════════════════════════
