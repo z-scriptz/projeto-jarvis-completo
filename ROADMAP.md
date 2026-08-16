@@ -137,6 +137,57 @@ quem ama flores") + **miram a dor/público primeiro** ("Se você trabalha vária
 em pé…"). Curiosity gap = retenção alta = viraliza. Ensinar o gerador de hook do
 Jarvis a copiar essa fórmula (dor/público + "isso" sem revelar o produto). Replicável.
 
+#### 📐 REFINADO pelo framework da Ava Yuergens (16/08) — recebido, NÃO implementado
+
+O Dre trouxe um carrossel do @joelsonmadeira_ (03/08) analisando a **Ava
+Yuergens** (PBL, 350-400 clientes, ~US$700k/ano). A legenda em PT dizia:
+
+> *"Quando você deixa de falar com um público muito específico e começa a
+> falar com mais pessoas, seu conteúdo tende a viralizar."*
+
+⚠️ **E ESSA LEGENDA É UMA SIMPLIFICAÇÃO QUE INVERTE METADE DA ESTRATÉGIA.** Eu
+li só ela e reportei pro Dre que "bate de frente com o 2.5". Estava errado — a
+formulação original tem **três** etapas, não uma:
+
+    HOOK AMPLO      → maximiza watch time (ninguém é filtrado no segundo 0)
+    VALOR ESTREITO  → entregue pro cliente ideal (a dor, o benefício concreto)
+    CTA DE NICHO    → só quem serve converte
+
+Não é *"amplo em vez de específico"*. É **amplo e específico, em PARTES
+DIFERENTES do vídeo.** O que o 2.5 já tinha achado na Alana mistura os dois no
+hook: *"não mostre isso pra quem ama flores"* é curiosity-gap (amplo) **e**
+recorte de público (estreito) na mesma frase. A Ava separa: o gap fica no
+hook, o recorte desce pro corpo.
+
+✅ **E NÓS JÁ TEMOS 2 DAS 3 PEÇAS**, o que torna isto ajuste, não obra:
+
+| etapa da Ava | onde já vive | estado |
+|---|---|---|
+| hook amplo | `hook_alana.FORMULAS` (10 moldes) | **misturado** — 3 moldes são estreitos |
+| valor estreito | `narracao_ia._PROMPT` passo (1) e (2) | ✅ já faz: "dorzinha, incômodo comum" + 1 benefício |
+| CTA de nicho | `narracao_ia._PROMPT` passo (3) | ⚠️ existe, mas é **genérico** ("link da bio") |
+
+**Os 3 moldes que filtram público no segundo 0** (contra o framework):
+`necessidade` ("Toda pessoa que <gosta de X> precisa ter isso"),
+`alerta_exclusao` ("Não mostre isso pra quem <ama X>"), `cumplice_humor`.
+Os outros 7 já são amplos — inclusive os 4 de 1ª pessoa que o Dre priorizou
+(`comprei_testei`, `virei_fa`, `eu_vs_shopee`, `desabafo_shopee`): história
+pessoal não filtra ninguém.
+
+⚠️ **O QUE EU NÃO COPIARIA IGUAL: o "CTA de nicho".** A Ava vende serviço de
+ticket alto pra dono de negócio — filtrar quem clica é lucro, porque cada lead
+errado custa atendimento. Nós vendemos comissão de item de R$30 por impulso:
+**filtrar clique é perder comissão.** A adaptação honesta é o CTA ficar
+específico **do produto**, não do público.
+
+🚧 **BLOQUEIO PRA DECIDIR ISSO COM DINHEIRO:** o `sub_id` usa 4 de 5 etiquetas
+(`[canal, nicho, produto, FONTE]`) e **nenhuma identifica o vídeo** — então
+venda não se liga a hook. A 5ª está livre, e o docstring do
+`shopee_affiliate.gerar_link_afiliado` já sugeria o uso: `["tiktok",
+"cortador", "video01"]`. Sem ela, "amplo vende mais?" só se responde por
+retenção — e a retenção já provou não separar molde (n=80, 0,8s de spread
+contra ±1,0s de ruído).
+
 ### 3. Expandir a rede de vídeos (fontes novas)
 - ✅ **Instagram como FONTE** (2026-07-13): o `tiktok_coletor` agora coleta Reels
   do Instagram na MESMA esteira (yt-dlp cobre os 2). Lê `instagram_perfis.txt`
