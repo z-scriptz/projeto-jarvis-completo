@@ -2952,6 +2952,50 @@ acha `ρ = 0.78`; com retenção independente do alcance ele acha `ρ = -0.085` 
 diz "praticamente independentes". Ferramenta que só sabe confirmar acharia
 padrão em ruído.
 
+**RODADO NA VPS — 80 posts. E o resultado contraria a leitura natural:**
+
+```
+@topshoptech_      6.4s  ·  alcance 374        mediana da retenção
+@topshopcasa_      6.0s  ·  alcance 108        e do alcance
+@topshopbeauty._   6.0s  ·  alcance 112
+@topshop.__        5.8s  ·  alcance 112
+```
+
+**A retenção é praticamente IGUAL nas quatro contas (5,8-6,4s, desvio 2,2s).
+O alcance é 3,4× diferente.** Ou seja: o conteúdo segura o espectador do mesmo
+jeito em todas — o que muda é **quanta gente recebe**. "Tech é melhor" não se
+sustenta: Tech não retém mais, Tech é distribuído mais.
+
+⚠️ **E média × mediana muda a história.** O `reach_agent` reporta médias —
+562 / 264 / 207 / 128, que parecem um gradiente, e foi essa tabela que o
+ChatGPT leu como *"Tech performa 2,7× acima de Casa"*. Por **mediana** são
+374 / 112 / 112 / 108: **Tech, e todo o resto empatado.** O gradiente era
+feito de alguns posts virais puxando as médias.
+
+Distribuição: mín 0,9 · p25 4,4 · **mediana 6,1** · p75 7,1 · máx 14,1 ·
+desvio 2,2. Concentrada, sem cauda que justifique falar em média.
+
+**Duas correções que a rodada real exigiu:**
+
+1. **Correlação DENTRO de cada conta**, não só agregada. Com retenção quase
+   igual entre contas e alcance 3,4× diferente, o `ρ = 0.69` do bolo pode ser
+   pura composição (Simpson). Testado nos dois sentidos: com efeito de
+   composição plantado ele acusa `agregado 0.944 × dentro 0.247 → é diferença
+   entre contas`; com relação real dentro das contas, `0.956 × 0.938 → se
+   sustenta`.
+2. **Post com alcance < 10 sai da conta.** Apareceu um `0,9s com reach=0`:
+   ninguém viu e mesmo assim veio um tempo médio. Insight de post recém-
+   publicado ainda não amadureceu — **isso não é retenção baixa, é ausência de
+   dado**, e deixá-lo puxava a cauda de baixo.
+
+⚠️ **E um defeito meu que o teste pegou:** a 1ª versão do veredito só
+perguntava "o agregado é maior que o interno?". Com os **dois** perto de zero
+ela imprimia *"a relação se sustenta dentro das contas"* — anunciando que se
+sustenta uma relação que não existe. São três casos, não dois: agregado fraco
+(nada a explicar), agregado forte com interno fraco (composição), agregado
+forte com interno forte (real). **Ausência de relação não é confirmação de
+relação** — a mesma família do `UNKNOWN ≠ SUCCESS`.
+
 ⚠️ **E a auditoria se contradisse na própria saída.** O bloco 2 leu
 `push falhou` do log (rodada das 14:00, código antigo) e o bloco 5 leu do git
 que o clone estava em dia — o veredito listou os dois. **Estado vivo ganha de

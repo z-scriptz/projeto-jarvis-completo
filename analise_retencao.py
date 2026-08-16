@@ -127,6 +127,19 @@ def main():
               f"coletas feitas antes do conserto do `plays`. Ficam de fora "
               f"das contas abaixo, não entram como zero.")
 
+    # ⚠️ POST NOVO DEMAIS NÃO TEM RETENÇÃO, TEM RUÍDO. Na rodada real apareceu
+    # um `0.9s com reach=0`: ninguém viu, e ainda assim veio um tempo médio.
+    # Insights de post recém-publicado ainda não amadureceram, e deixar isso no
+    # bolo puxa a cauda de baixo sem significar nada.
+    MIN_ALCANCE = 10
+    crus = len(com)
+    com = [r for r in com
+           if not isinstance(r.get("reach"), int) or r["reach"] >= MIN_ALCANCE]
+    if crus > len(com):
+        print(f"  ⚠️  {crus - len(com)} post(s) com alcance < {MIN_ALCANCE} "
+              f"fora da conta — insight que ainda não amadureceu não é "
+              f"retenção baixa, é ausência de dado.")
+
     vals = [r["retencao_s"] for r in com]
 
     # ── distribuição, não média ─────────────────────────────────────────────
@@ -191,6 +204,42 @@ def main():
                 print("     Praticamente independentes neste volume. Ou seja:")
                 print("     segurar mais o espectador, aqui, ainda não está")
                 print("     comprando mais entrega.")
+
+        # ⚠️ A CORRELAÇÃO AGREGADA PODE SER ARTEFATO DAS CONTAS. Se uma conta
+        # tem alcance alto E retenção um pouco maior, o ρ do bolo inteiro sobe
+        # sem que exista relação nenhuma DENTRO de cada conta — é o paradoxo de
+        # Simpson na prática. Medido em 15/08: retenção quase igual entre as
+        # quatro contas (5,8 a 6,4s, desvio 2,2) e alcance 3,4× diferente. Com
+        # esse formato, olhar só o agregado é a receita pra ver causa onde há
+        # composição.
+        print()
+        print("     dentro de cada conta (é aqui que a relação é real ou some):")
+        dentro = []
+        for h, rs in sorted(por_conta.items()):
+            pr = [(r["retencao_s"], r["reach"]) for r in rs
+                  if isinstance(r.get("reach"), int)]
+            if len(pr) < 5:
+                print(f"       {h[:22]:22} n={len(pr)} — poucos posts pra medir")
+                continue
+            rh = _spearman([a for a, _ in pr], [b for _, b in pr])
+            dentro.append(rh)
+            print(f"       {h[:22]:22} ρ = {rh:>6}   (n={len(pr)})")
+        if dentro:
+            medio = round(sum(dentro) / len(dentro), 3)
+            # ⚠️ TRÊS CASOS, NÃO DOIS. A 1ª versão só perguntava "o agregado é
+            # maior que o interno?" e, com os DOIS perto de zero, imprimia
+            # "a relação se sustenta" — anunciando que se sustenta uma relação
+            # que não existe. Ausência de relação não é confirmação de relação.
+            if rho is None or abs(rho) < 0.25:
+                print(f"     agregado fraco ({rho}) — não há relação a "
+                      f"explicar. Dentro das contas: média {medio}.")
+            elif abs(rho) - abs(medio) > 0.25:
+                print(f"     ⚠️  agregado {rho} × média dentro das contas "
+                      f"{medio}: boa parte do agregado é DIFERENÇA ENTRE "
+                      f"CONTAS, não relação entre posts.")
+            else:
+                print(f"     a relação se sustenta dentro das contas "
+                      f"(média {medio}) — não é só composição.")
 
     # ── extremos, com o texto ───────────────────────────────────────────────
     ordem = sorted(com, key=lambda r: -r["retencao_s"])
