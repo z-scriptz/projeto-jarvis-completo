@@ -3134,6 +3134,34 @@ resto de template, ou só hashtags. Contar caractere responde "tem algo"; o que
 responde "é a coisa certa" é ler. Por isso o `--mostrar` imprime o texto cru,
 um de cada ramo, lado a lado.
 
+⚠️ **E A MEDIÇÃO MATOU A MINHA HIPÓTESE.** O `--mostrar` na casa devolveu:
+
+```
+[descricoes.instagram] babuche_infantil_unissex  (894 caracteres)
+   │ Pouca gente imagina que o tipo de calçado usado na infância...
+   │ 👉 Garanta o seu no LINK DA BIO!
+[plano.legenda] capa_para_colchão_king_size  (716 caracteres)
+```
+
+**O ramo 1 produz uma legenda BOA — maior que a do ramo 3.** A assimetria dos
+três ramos existe e é um risco real, mas **não é a causa deste sintoma**. O
+"9 bate com 9" era coincidência, e coincidência convincente é o disfarce mais
+perigoso: eu tinha uma explicação elegante, casada com um número que o Dre
+tinha dado, e ela estava errada.
+
+⚠️ **E o erro de método por trás dela:** passei uma rodada medindo
+`pronto_para_postar/` — os pacotes **pendentes** — pra explicar 11 vídeos que
+**já foram ao ar**. O pacote de um post publicado pode nem estar mais lá. O
+próprio arquivo já avisava disso na saída ("ou foi um pacote já consumido") e
+eu li por cima.
+
+**A medição certa já existia e eu não estava usando:** o `reach.jsonl` guarda o
+`caption` que a própria Graph API devolve por `media_id` — a legenda que o
+Instagram TEM, não a que o plano pretendia. Virou o `--postados`: lista os
+posts no ar em ordem cronológica, marca os sem legenda e **aponta a data do
+primeiro** — que é o divisor entre o "antes" e o "depois" que o Dre descreveu.
+Verdade de campo ganha de inferência sobre arquivo local, sempre.
+
 O `diag_pacotes.py` ganhou uma **réplica exata** do `_legenda_instagram`,
 defeitos inclusos, e reporta por conta **qual ramo dispara** e quantos sairiam
 vazios. Copiar lógica normalmente é ruim; aqui é o ponto — o publicador só

@@ -111,15 +111,77 @@ def _legenda_do_plano(slug: str):
     return (txt, "plano.legenda") if txt else (None, "plano existe, legenda VAZIA")
 
 
+def _postados(filtro_conta: str = "") -> int:
+    """A legenda que o INSTAGRAM devolve, por post, em ordem de publicação."""
+    reach = BASE / "shared" / "reach.jsonl"
+    if not reach.exists():
+        raise SystemExit(f"[pacotes] não achei {reach} — rode o reach_agent")
+
+    por_id = {}
+    for linha in reach.read_text(encoding="utf-8").splitlines():
+        try:
+            r = json.loads(linha)
+        except Exception:
+            continue
+        if r.get("media_id"):
+            por_id[r["media_id"]] = r          # a leitura mais recente vence
+
+    posts = [r for r in por_id.values()
+             if not filtro_conta
+             or filtro_conta.lower() in (r.get("handle") or "").lower()]
+    if not posts:
+        raise SystemExit("[pacotes] nenhum post dessa conta no reach.jsonl")
+
+    posts.sort(key=lambda r: r.get("timestamp") or "")
+    sem = [r for r in posts if not (r.get("caption") or "").strip()]
+
+    print()
+    print(f"  {len(posts)} post(s) no ar · {len(sem)} SEM legenda no Instagram")
+    print()
+    print(f"  {'publicado':12} {'conta':20} {'chars':>6}  início da legenda")
+    print("  " + "─" * 74)
+    for r in posts:
+        cap = (r.get("caption") or "").strip()
+        marca = "❌" if not cap else "  "
+        print(f"  {marca}{(r.get('timestamp') or '?')[:10]:10} "
+              f"{(r.get('handle') or '?')[:20]:20} {len(cap):6}  "
+              f"{cap.splitlines()[0][:40] if cap else '(SEM LEGENDA)'}")
+
+    print()
+    if not sem:
+        _log("todos os posts no ar TÊM legenda segundo a própria API.")
+        _log("   Se algum aparece sem legenda no app, o problema não é o que "
+             "foi enviado — é exibição, ou o post foi feito por outro "
+             "caminho (app, Metricool).")
+    else:
+        primeiro_sem = sem[0].get("timestamp", "?")[:10]
+        _log(f"{len(sem)} post(s) foram publicados SEM legenda de verdade.")
+        _log(f"   O primeiro foi em {primeiro_sem} — é a data que separa o "
+             f"'antes' do 'depois'. Procure o que mudou nesse dia.")
+    return 0
+
+
 def main():
     p = argparse.ArgumentParser(
         description="Os pacotes prontos pra postar têm legenda? Por conta.")
     p.add_argument("--conta", default="", help="filtra por handle/nicho")
+    p.add_argument("--postados", action="store_true",
+                   help="olha o que o INSTAGRAM devolve dos posts já no ar "
+                        "(reach.jsonl), em ordem cronológica")
     p.add_argument("--mostrar", type=int, default=0,
                    help="imprime o TEXTO que iria pro Instagram, N por conta")
     p.add_argument("--listar", action="store_true",
                    help="mostra pacote a pacote, não só o resumo")
     args = p.parse_args()
+
+    # ⚠️ OS PACOTES PENDENTES NÃO SÃO OS POSTS PUBLICADOS. Passei uma rodada
+    # inteira medindo `pronto_para_postar/` pra explicar 11 vídeos que já
+    # FORAM AO AR — e o pacote de um post publicado pode nem estar mais lá.
+    # O `reach.jsonl` guarda o `caption` que a própria Graph API devolve por
+    # media_id: é a legenda que o Instagram TEM, não a que o plano pretendia.
+    # Verdade de campo ganha de inferência sobre arquivo local, sempre.
+    if args.postados:
+        return _postados(args.conta)
 
     if not PACOTES.exists():
         raise SystemExit(f"[pacotes] não achei {PACOTES}")
