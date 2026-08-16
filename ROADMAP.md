@@ -2534,6 +2534,32 @@ antes do primeiro commit, não depois de rodar na VPS.
 `/root/jarvis/integrations/telegram_repurpose_hunter.py`, e as duas cópias têm
 o `FILA_ACERVO_MAX`. A do pacote é a viva; a da raiz é o fallback.
 
+✅ **CONFIRMADO PONTA A PONTA (16/08).** O número que não mexia há 11 dias
+mexeu: fila **84 → 87**, vitrine **130 → 139 produtos publicados**. Não é o
+deploy que voltou a rodar — o deploy já rodava e publicava os mesmos 130. É a
+matéria-prima que parou de ser expulsa. A prova de que o teto era a causa não
+é o conserto ter sido aplicado; é o acervo ter crescido depois dele **sem que
+nada tenha sido acrescentado à mão**.
+
+⚠️ **E APARECEU O PRÓXIMO GARGALO, que o teto escondia.** Com o acervo
+crescendo, o `preencher_fotos` rodou nos 5 sem foto e preencheu **0/5**:
+
+    [1/5] Organizador de canto giratório ...     (sem itemId no link)
+    [4/5] Kit 2 Luvas de Forno 2 Aparadores ...  (API: produto não encontrado
+                                                  (itemId=21797993391))
+
+Isso **não é bug do script** — ele fez exatamente o que devia e disse por que
+não deu. É defeito do que a mineração GRAVOU: 4 dos 5 links de afiliado não
+carregam `itemId`, e o 1 que carrega aponta pra um item que a Shopee não
+reconhece mais (produto saiu do ar). Sem `itemId` não há como perguntar a foto
+pra API, e sem foto o produto fica fora da grade — são eles os
+`🚧 produto(s) sem foto e sem preço fora da vitrine`.
+
+Conserto de verdade é na ORIGEM (gravar o `itemId` junto do link, ou extraí-lo
+do link curto resolvendo o redirect), não no `preencher_fotos`. Fica anotado
+como pendência: **enquanto o acervo era janela de 7 dias isso quase não doía —
+o produto sumia antes de alguém reparar. Agora ele fica, e fica visível.**
+
 ### 🔄 ROTAÇÃO DA VITRINE: decidido, e decidido NÃO fazer agora (15/08)
 
 Pergunta do Dre: *"como os sites maiores fazem pra deixar tanto produto
@@ -2610,6 +2636,18 @@ travar no `BLOQUEADO_SEM_LEVER`.
 
 **✅ O TETO DO ACERVO FUNCIONOU.** Primeira rodada na VPS: **84 itens na
 fila.** Estava travada em 80 desde sempre. Acumulando.
+
+**✅ TRIAGEM COMPLETA (16/08) — 67%, não 55%.** Com a fila em 87 e 83 já
+julgados, o número parou de ser amostra: **52 de 78 produzíveis agora (67%)**,
+`aprovado 51 · ressalva 12 · reprovado 15`. A amostra parcial de 12/08 dizia
+55% e subestimava — o que muda a decisão, porque 51 produtos com foto limpa e
+texto aprovado é fila de produção pra semanas, não um punhado. Faltam **4** a
+julgar (`--limite 4`); o cache faz a rodada custar só esses 4.
+
+**É daqui que sai o produto do teste do Kling**, e por isso a ordem tinha que
+vir antes: escolher o melhor material disponível em vez do próximo da lista é
+a diferença entre testar *"foto vira vídeo?"* e testar *"foto ruim vira vídeo
+ruim?"*.
 
 ⚠️ **E O RANKING NÃO RANQUEOU — erro meu, de novo o mesmo.** Os 12 produtos
 saíram todos `C·nao_avaliado·1 distinta`: empate geral. Causa:
