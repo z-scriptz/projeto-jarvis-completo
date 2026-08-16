@@ -3117,6 +3117,23 @@ ao mesmo tempo.
 `{p: d.get("descricao", "") for p, d in descs.items()}`. String vazia é
 inofensiva (cai pro ramo 3); **espaço em branco não é**.
 
+**MEDIDO NA VPS, e o Dre fechou o caso.** Ele contou: *"os primeiros 9 vídeos
+da casa estavam com legenda"* — e o diagnóstico da casa saiu:
+
+```
+@topshopcasa_    instagram:25 · legenda:9      (0 vazias)
+```
+
+**Nove pacotes usam `plano.legenda` (ramo 3, validado). Nove vídeos tiveram
+legenda.** Os outros 25 saem pelo `descricoes.instagram`, o ramo que ninguém
+checa. A correspondência é exata.
+
+⚠️ **Mas nenhum sai VAZIO** — então o ramo 1 tem conteúdo, só não é a legenda
+certa. *"Não está vazio" ≠ "é uma legenda"*: pode ser descrição de YouTube,
+resto de template, ou só hashtags. Contar caractere responde "tem algo"; o que
+responde "é a coisa certa" é ler. Por isso o `--mostrar` imprime o texto cru,
+um de cada ramo, lado a lado.
+
 O `diag_pacotes.py` ganhou uma **réplica exata** do `_legenda_instagram`,
 defeitos inclusos, e reporta por conta **qual ramo dispara** e quantos sairiam
 vazios. Copiar lógica normalmente é ruim; aqui é o ponto — o publicador só
