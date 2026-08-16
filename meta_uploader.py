@@ -370,6 +370,21 @@ def postar_instagram(video_path: str, legenda: str = "") -> dict:
     ig = _ig_user_id()
     tok = _token()
 
+    # ⚠️ REGISTRA O QUE VAI SER ENVIADO, ANTES DE ENVIAR (15/08).
+    # 11 posts do @topshopcasa_ saíram sem legenda entre 10 e 15/08 e passei
+    # uma tarde tentando DEDUZIR de artefato: pacote pendente, plano no disco,
+    # ramo do publish_guard, data de commit. Duas hipóteses elegantes caíram
+    # contra dado. E a razão de nenhuma fechar é simples: **ninguém anotou a
+    # legenda que foi enviada**. O container é criado e a informação some.
+    #
+    # Uma linha de log responde na próxima postagem o que quatro rodadas de
+    # inferência não responderam. Registra tamanho e começo — nunca o texto
+    # inteiro, que polui o log e não acrescenta.
+    _corte = (legenda or "").strip()
+    log.info(f"   📝 legenda p/ Instagram: {len(_corte)} caractere(s)"
+             + (f" · começa com {_corte.splitlines()[0][:60]!r}" if _corte
+                else "  ⚠️ VAZIA — o Reel vai sair sem legenda"))
+
     # ── 1. Cria o container resumable ────────────────────────────────────
     try:
         r1 = _req().post(

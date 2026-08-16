@@ -3162,6 +3162,39 @@ posts no ar em ordem cronológica, marca os sem legenda e **aponta a data do
 primeiro** — que é o divisor entre o "antes" e o "depois" que o Dre descreveu.
 Verdade de campo ganha de inferência sobre arquivo local, sempre.
 
+⚠️ **E A SEGUNDA HIPÓTESE CAIU TAMBÉM.** Se o ramo 1 fosse a causa, os planos
+teriam ganhado `descricoes.instagram` em 10/08. Medido: **eles têm desde
+05/08** — antes e depois da virada. Os posts de 05 a 09 tinham legenda **e**
+usavam o mesmo ramo. A estrutura do plano é idêntica dos dois lados.
+
+**O que sobrou provado, e o que não:**
+
+| | |
+|---|---|
+| 11 posts sem legenda no Instagram | ✅ confirmado pela própria API |
+| produção limpa | ✅ 336/336 pacotes com legenda |
+| ramo 1 produz legenda boa | ✅ 894 caracteres |
+| `descricoes` mudou em 10/08 | ❌ existe desde 05/08 |
+| troca de produtor em 10/08 | ❌ cron da casa é de 04/08 |
+| código da legenda mudou em agosto | ❌ nada desde 31/07 |
+| Dre postou à mão / agendou | ❌ ele confirmou que nunca |
+
+⚠️ **E os "280 caracteres" das legendas boas não significam nada:** é o corte do
+meu próprio coletor (`reach_agent.py:114` guarda `[:280]`). Eu ia entregar um
+número que parecia padrão e era artefato de medição.
+
+**A causa de eu não conseguir responder é a mesma de sempre: ninguém anotou.**
+O `postar_instagram` recebe `legenda`, cria o container e **nunca registra o
+que enviou**. Quatro rodadas tentando deduzir de artefato — pacote pendente,
+plano no disco, ramo do guarda, data de commit — quando uma linha de log
+responderia na próxima postagem.
+
+Virou uma linha no `meta_uploader.py`, antes da criação do container: tamanho
+e começo da legenda, com aviso explícito quando vier vazia. **E o problema
+está VIVO** — o último post sem legenda é de 15/08, hoje. Então a resposta
+chega na próxima rodada de postagem da casa, sem precisar de mais nenhuma
+hipótese minha.
+
 O `diag_pacotes.py` ganhou uma **réplica exata** do `_legenda_instagram`,
 defeitos inclusos, e reporta por conta **qual ramo dispara** e quantos sairiam
 vazios. Copiar lógica normalmente é ruim; aqui é o ponto — o publicador só
