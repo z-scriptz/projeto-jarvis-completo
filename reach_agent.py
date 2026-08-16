@@ -63,10 +63,28 @@ def _brl_int(n) -> str:
 
 
 def _insights(media_id: str, token: str) -> dict:
-    """Tenta reach + views (plays). Degrada com elegância: métrica inválida p/ o tipo
-    de mídia derruba a chamada, então cai pra só 'reach', depois pra nada."""
+    """Tenta RETENÇÃO + reach + views. Degrada com elegância: métrica inválida
+    p/ o tipo de mídia derruba a chamada inteira, então tenta do mais rico pro
+    mais pobre e para no primeiro que responder.
+
+    ⚠️ POR QUE A RETENÇÃO ENTROU (15/08). Medido: **9 conversões em 30 dias.**
+    Divididas em dois braços de um A/B são ~4,5 cada — detectar 50% de
+    diferença precisaria de ~60 eventos por braço, ou seja **~13 meses**. O
+    experimento "vídeo rico × vídeo simples" medido por COMISSÃO nasce morto
+    nesse volume, e tanto eu quanto o ChatGPT tínhamos proposto exatamente
+    isso. A medição de potência matou o desenho antes de gastar 20 produções.
+
+    Subir no funil não é prêmio de consolação — para ESTA pergunta a retenção
+    é a métrica MELHOR. "Vídeo de uma foto só prende o espectador?" é
+    respondido diretamente por tempo médio assistido; comissão fica dois
+    saltos depois, cheia de ruído. E `ig_reels_avg_watch_time` vem com
+    contagem na casa das centenas por post, não 9 por mês.
+    """
     out = {}
-    for metricas in ("reach,plays", "reach", "views"):
+    for metricas in ("reach,plays,ig_reels_avg_watch_time,"
+                     "ig_reels_video_view_total_time",
+                     "reach,plays,ig_reels_avg_watch_time",
+                     "reach,plays", "reach", "views"):
         try:
             r = requests.get(f"{GRAPH}/{media_id}/insights",
                              params={"metric": metricas, "access_token": token},
@@ -84,6 +102,14 @@ def _insights(media_id: str, token: str) -> dict:
                 out["reach"] = val
             elif nome in ("plays", "views"):
                 out["views"] = val
+            elif nome == "ig_reels_avg_watch_time":
+                # vem em MILISSEGUNDOS na Graph API — guardar em segundos
+                # evita que alguém compare 3200 com 3,2 daqui a três meses
+                out["retencao_s"] = (round(val / 1000.0, 2)
+                                     if isinstance(val, (int, float)) else None)
+            elif nome == "ig_reels_video_view_total_time":
+                out["tempo_total_s"] = (round(val / 1000.0, 1)
+                                        if isinstance(val, (int, float)) else None)
         if "reach" in out:
             break
     return out
@@ -161,6 +187,20 @@ def main():
                   f"reach médio {_brl_int(media)} · "
                   f"top {_brl_int(top.get('reach', top.get('likes', 0)))} "
                   f"(\"{(top.get('caption') or '')[:40]}…\")")
+    # a retenção é o número que decide o experimento "vídeo rico × 1 foto".
+    # Se ela NÃO estiver vindo, dizer isso alto — descobrir daqui a um mês que
+    # o campo estava vazio o tempo todo é perder o mês.
+    com_ret = [i.get("retencao_s") for i in total
+               if isinstance(i.get("retencao_s"), (int, float))]
+    if com_ret:
+        print(f"\n  ⏱️  retenção: {len(com_ret)}/{len(total)} posts com tempo "
+              f"médio assistido · média {sum(com_ret) / len(com_ret):.1f}s")
+    elif total:
+        print("\n  ⚠️  NENHUM post trouxe `ig_reels_avg_watch_time` — só Reels "
+              "têm essa métrica, e ela exige 'instagram_manage_insights'. "
+              "Sem ela não dá pra medir retenção, e o A/B de formato fica sem "
+              "métrica (comissão não serve: são 9 vendas/mês).")
+
     _salvar(total)
     print(f"\n💾 {len(total)} posts salvos em {REACH.name}")
     if sem_insights:

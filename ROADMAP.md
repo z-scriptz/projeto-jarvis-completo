@@ -2795,6 +2795,50 @@ O terceiro estado é o mais importante: relatório sem o campo **não vira
 aprovação**. É o `UNKNOWN ≠ SUCCESS` do ChatGPT implementado no primeiro lugar
 onde ele faz falta.
 
+**CONFIRMADO NA VPS.** Mesma Camisa Feminina, mesmo produto, laudo virou:
+
+```
+❌ REPROVADO   ·   ❌ midia_viva (57.04)
+→ movimento SEM informação nova: os pixels mudam porque há zoom/pan,
+  mas o vídeo inteiro sai de UMA foto
+```
+
+Antes: `✅ PASSOU · midia_viva 56.06`. **O crítico voltou a dizer a verdade**, e
+a partir daqui o que ele aprova significa alguma coisa.
+
+### 💀 O A/B POR COMISSÃO NASCEU MORTO — e a medição matou antes de gastar
+
+**9 conversões em 30 dias.** Medido antes de desenhar o experimento.
+
+Divididas em dois braços: ~4,5 cada. Detectar 50% de diferença precisaria de
+**~60 eventos por braço** — no ritmo atual, **~13 meses**. Com contagens
+assim, o intervalo de confiança de 4,5 vai de ~1 a ~11: dois braços
+indistinguíveis a menos que o efeito seja de 3× ou mais.
+
+⚠️ **Eu propus esse experimento e o ChatGPT o refinou com pareamento. Os dois
+estávamos desenhando um experimento impossível.** Foi a checagem de potência
+— aplicar a mim mesmo a regra de medir antes de construir — que pegou. E ela
+custou um comando.
+
+**A saída não é prêmio de consolação: para ESTA pergunta a retenção é a
+métrica MELHOR.** "Vídeo de uma foto só prende o espectador?" é respondido
+diretamente por tempo médio assistido. Comissão fica dois saltos depois, cheia
+de ruído do preço, da página e da concorrência.
+
+`reach_agent` passou a pedir `ig_reels_avg_watch_time` e
+`ig_reels_video_view_total_time` (em segundos — a Graph devolve
+milissegundos), degradando para o conjunto antigo quando a métrica não vale
+pro tipo de mídia. E **grita quando nenhum post trouxe retenção**: descobrir
+daqui a um mês que o campo estava vazio o tempo todo é perder o mês.
+
+**Contagem esperada: centenas por post, contra 9 por mês.** É a diferença
+entre um experimento que termina em semanas e um que termina em 2027.
+
+⚠️ **Ainda em aberto:** o sub_id não tem etiqueta de vídeo/variante
+(`[canal, nicho, produto, FONTE]`, 4 de 5 slots). Para retenção isso não
+bloqueia — a métrica é por `media_id` e o `reach.jsonl` já guarda por post.
+Só volta a importar quando o experimento for de COMISSÃO.
+
 ⚠️ **E a auditoria se contradisse na própria saída.** O bloco 2 leu
 `push falhou` do log (rodada das 14:00, código antigo) e o bloco 5 leu do git
 que o clone estava em dia — o veredito listou os dois. **Estado vivo ganha de
