@@ -3029,6 +3029,64 @@ A pergunta que isso responde é a que mais vale no projeto: **o template
 autoral é melhor ou pior que reciclar viral?** Todo o investimento de semanas
 está apostado no "melhor", e ninguém mediu.
 
+### ❓ OS 42 POSTS COM PLATAFORMA "?" — um argumento omitido (15/08)
+
+Relatório de domingo: **42 de 85 posts sem plataforma**, apagando qualquer
+análise por plataforma de venda. A recomendação era *"implementar um
+procedimento obrigatório"*. **Não é procedimento — é uma linha.**
+
+São dois produtores gravando no mesmo ledger, e só um passa o campo:
+
+```
+produzir_tiktok.py:264   plataforma = (info.get("plataforma") or "shopee")
+                 :425    _reg(..., plataforma=plataforma, ...)        ✅
+telegram_repurpose_hunter.py:1750
+                         _reg_post(..., slug=slug, sub_ids=_subs,
+                                   extra={...})                       ❌
+```
+
+`posts_ledger.registrar()` tem `plataforma: str = ""` — o campo entra vazio e
+vira `?`. Dois produtores, um omitindo o argumento, **quase exatamente meio a
+meio: 42/85.**
+
+Virou o **`patch_plataforma_ledger.py`** (o `deploy_seguro` recusa esse arquivo
+com COLISÃO, e trocar 1800 linhas pra corrigir 1 é que estaria errado).
+
+⚠️ **Valor DERIVADO, não chutado:** `"shopee" if url_shopee else ""`. Sem link
+da Shopee eu não afirmo Shopee — **`?` honesto é melhor que rótulo errado**,
+porque rótulo errado contamina justamente a análise que o conserto existe pra
+viabilizar. E "não achei o trecho" conta como FALHA no patcher, não como
+sucesso silencioso: cópia não corrigida segue gravando `?`.
+
+⚠️ **Só vale pros posts NOVOS.** Os 42 antigos continuam `?`: o campo não
+existe no registro gravado, e preenchê-lo agora seria adivinhar a plataforma
+de um post do passado.
+
+### 📝 A CONTA CASA POSTA SEM LEGENDA — e o repo não tem o publicador (15/08)
+
+Dre: *"a topshopcasa_ não está postando com legenda, só o vídeo"*. E legenda
+não é enfeite: o `hook_alana.py:500` registra que ela existe pra fazer a pessoa
+**salvar e compartilhar**, que é dos maiores sinais de alcance do Instagram.
+
+⚠️ **Não dá pra responder lendo este repo.** O daemon publica via
+`agents.publish_guard.publicar_com_garantia` — arquivo que só existe na VPS. O
+`publish_guard.py` daqui é o `brain/publish_guard.py`, que só valida permissão
+e nem tem essa função. Adivinhar o que o outro faz repetiria o erro do campo
+`texto` que inventei hoje de manhã.
+
+**O que dá pra afirmar lendo o produtor** (`produzir_tiktok.py:378-411`): o
+pacote que vai pro ar tem `video.mp4`, `conta.json`, `engajamento.json`,
+`titulo_youtube.txt`, `descricao_youtube.txt`, `hashtags.txt` — e **nenhum
+`legenda.txt`**. A legenda mora no `shared/content_plans/plano_<slug>.json`, e
+o `descricao_youtube.txt` é legenda+hashtags com nome de YouTube.
+
+Virou o **`diag_pacotes.py`**: abre os pacotes reais e conta, por conta,
+quantos têm legenda e onde. O veredito separa dois consertos em arquivos
+diferentes — **nenhum pacote com legenda** = defeito na produção; **todos com**
+= o publicador não está lendo, e o caminho é o `agents/publish_guard.py` da
+VPS. Testado com um cenário onde só a casa vem vazia: aponta a conta, o motivo
+("plano existe, legenda VAZIA") e exemplos.
+
 ### 🎣 A MEDIÇÃO DOS HOOKS EXISTIA E NÃO ALCANÇAVA A PRODUÇÃO (15/08)
 
 Dre: *"o hook nós temos uma medição... são aqueles em primeira pessoa"*. Ele

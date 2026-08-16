@@ -1751,6 +1751,14 @@ async def processar_mensagem_telegram(msg, sub_id: str = "hunter_radar"):
         _reg_post(produto=nome_produto, link=meu_link, url_shopee=url_shopee,
                   categoria=categoria or nicho, hook=hook_preview, legenda=legenda,
                   slug=slug, sub_ids=_subs,
+                  # ⚠️ SEM ISTO O CEO VÊ "?" — e viu: 42 de 85 posts sem
+                  # plataforma no relatório de domingo. O `produzir_tiktok`
+                  # sempre passa (default "shopee"); este caminho nunca
+                  # passava, e o `registrar()` tem `plataforma: str = ""`.
+                  # Dois produtores, um omitindo o campo, e metade da produção
+                  # ficava fora de qualquer análise por plataforma.
+                  # Derivado, não chutado: sem url_shopee eu não afirmo shopee.
+                  plataforma=("shopee" if url_shopee else ""),
                   extra={"fonte": "telegram", "nicho": nicho})
     except Exception:
         log.debug("posts_ledger indisponível (segue sem logar)")
