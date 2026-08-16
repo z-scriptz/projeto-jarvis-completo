@@ -2649,6 +2649,29 @@ vir antes: escolher o melhor material disponível em vez do próximo da lista é
 a diferença entre testar *"foto vira vídeo?"* e testar *"foto ruim vira vídeo
 ruim?"*.
 
+⚠️ **MAS A LISTA FILTRA, NÃO ORDENA — e eu quase deixei ela mentir de novo.**
+Fila completa (87/87 julgados, 55/82 produzíveis), e os 15 do topo saíram
+**todos idênticos**: `C · aprovado · 1 distinta(s)`. Conferido: a chave de
+ordenação é a mesma para os **55**, e como o `sorted` é estável, o que a tela
+chamava de *"o melhor da fila AGORA"* era **a fila na ordem em que estava**.
+
+A causa está escrita no próprio arquivo desde que eu o criei: com 1 foto por
+produto, `nivel` é C pra todos e `distintas` é 1 pra todos — o único eixo vivo
+é o texto queimado, que é categórico (3 valores). 53 aprovados não se
+distinguem entre si.
+
+**É a mesma forma do erro da tabela de moldes de hook, um dia depois:** a
+FORMA de ranking convida a ler ranking mesmo quando os valores empataram.
+Filtrar os 27 ruins (16 reprovados + 5 sem material + resto) é resultado real
+e é o que a medição de fato entrega. Ordenar não é.
+
+Conserto: o `fila_qualidade` agora conta os empatados no topo e, quando há
+empate, diz que ali não é ranking e devolve a escolha pra quem lê ("escolha
+por critério seu: nicho, sazonalidade"). Quando a medição de fato separar, ele
+volta a recomendar. **E isto vira mais um argumento pro teste do Kling: só com
+mais de uma foto — ou com movimento de verdade — é que existe eixo pra
+ordenar.**
+
 ⚠️ **E O RANKING NÃO RANQUEOU — erro meu, de novo o mesmo.** Os 12 produtos
 saíram todos `C·nao_avaliado·1 distinta`: empate geral. Causa:
 

@@ -302,13 +302,41 @@ def main():
               f"{reg.get('distintas') or '?'} distinta(s)  "
               f"{reg.get('nome', '')[:52]}")
 
+    # ── a lista ORDENA, ou só FILTRA? ───────────────────────────────────────
+    # ⚠️ Medido em 16/08 com a fila cheia (87 julgados): os 55 produzíveis
+    # saíram TODOS `C · aprovado · 1 distinta` — chave de ordenação idêntica
+    # pra todo mundo. Como o `sorted` é estável, o que aparece como "ranking"
+    # é a fila na ordem em que estava, e "produzir o melhor da fila" vira uma
+    # afirmação que a medição não sustenta.
+    #
+    # É o mesmo erro da tabela de moldes de hook do dia anterior: a FORMA de
+    # ranking convida a ler ranking mesmo quando os valores empataram. Filtrar
+    # 27 produtos ruins é um resultado real e útil — só não é ordenar.
+    # Enquanto cada produto tiver 1 foto, `nivel` e `distintas` não têm como
+    # variar, e o único eixo vivo é o texto, que é categórico (3 valores).
+    empatados = sum(1 for _, r in ordem
+                    if _chave_de_ordem(r) == _chave_de_ordem(ordem[0][1])
+                    ) if ordem else 0
+
     if ordem:
         melhor = ordem[0][0]
         print()
-        print("  Para produzir o melhor da fila AGORA:"
-              if not cegos >= max(1, len(avaliados) // 2)
-              else "  O PRIMEIRO da lista (sem medição de texto, é só o "
-                   "primeiro):")
+        if cegos >= max(1, len(avaliados) // 2):
+            print("  O PRIMEIRO da lista (sem medição de texto, é só o "
+                  "primeiro):")
+        elif empatados > 1:
+            print(f"  ⚠️ {empatados} produtos EMPATARAM no topo (mesmo nível, "
+                  f"mesmo texto, mesma")
+            print("     diversidade). Entre eles isto NÃO é ranking — é a fila "
+                  "na ordem")
+            print("     em que estava. A medição separou os 27 ruins; ela não "
+                  "tem como")
+            print("     dizer qual dos empatados é melhor, porque com 1 foto "
+                  "por produto")
+            print("     só o texto varia. Escolha por critério seu (nicho, "
+                  "sazonalidade):")
+        else:
+            print("  Para produzir o melhor da fila AGORA:")
         print(f"    {sys.executable} piloto.py --fila-link '{melhor}'")
         print()
         print("  ⚠️ use --fila-link, não --fila N: o índice muda a cada")
