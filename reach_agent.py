@@ -81,10 +81,20 @@ def _insights(media_id: str, token: str) -> dict:
     contagem na casa das centenas por post, não 9 por mês.
     """
     out = {}
-    for metricas in ("reach,plays,ig_reels_avg_watch_time,"
+    # ⚠️ `plays` FOI DEPRECIADO NA v21 — medido com o diag_retencao em 15/08:
+    #     (#100) metric[0] must be one of: impressions, reach, replies, saved,
+    #     likes, comments, shares, total_interactions, follows...
+    # E o pedido de Insights é ATÔMICO: UM nome inválido derruba o lote
+    # inteiro. Todas as combinações antigas começavam com `reach,plays,...`,
+    # inclusive o fallback `reach,plays` — então o encadeamento caía até
+    # `reach` sozinho e a retenção NUNCA era pedida. Ela estava disponível o
+    # tempo todo (3567ms = 3,57s no post de teste).
+    # Lição pra próxima depreciação: um nome morto envenena o lote todo, e é
+    # por isso que os erros agora são acumulados e impressos.
+    for metricas in ("reach,views,ig_reels_avg_watch_time,"
                      "ig_reels_video_view_total_time",
-                     "reach,plays,ig_reels_avg_watch_time",
-                     "reach,plays", "reach", "views"):
+                     "reach,views,ig_reels_avg_watch_time",
+                     "reach,views", "reach", "views"):
         try:
             r = requests.get(f"{GRAPH}/{media_id}/insights",
                              params={"metric": metricas, "access_token": token},

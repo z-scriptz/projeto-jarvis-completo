@@ -2873,6 +2873,50 @@ permissão certa.
   lendo `reach_agent.GRAPH` — sondar em v23 e concluir sobre uma produção em
   v21 responderia a pergunta de outro sistema.
 
+**A API RESPONDEU, e a culpada era `plays`:**
+
+```
+❌ plays                          (#100) metric[0] must be one of: impressions,
+                                  reach, replies, saved, likes, comments,
+                                  shares, total_interactions, follows...
+✅ reach                        = 108
+✅ views                        = 119
+✅ ig_reels_avg_watch_time      = 3567     ← estava disponível o tempo todo
+✅ ig_reels_video_view_total_time = 385342
+```
+
+⚠️ **O pedido de Insights é ATÔMICO: um nome inválido derruba o lote inteiro.**
+`plays` foi depreciado na v21, e TODAS as minhas combinações começavam com
+`reach,plays,...` — inclusive o fallback `reach,plays`. O encadeamento caía até
+`reach` sozinho, e a retenção nunca chegava a ser pedida. **A métrica nunca
+esteve indisponível; o nome morto ao lado dela envenenava o lote.**
+
+Corrigido para `reach,views,...`. Verificado contra as respostas reais:
+cadeia antiga devolve `{reach: 108}`; a nova devolve
+`{reach: 108, views: 119, retencao_s: 3.57, tempo_total_s: 385.3}`.
+
+### 📉 LINHA DE BASE: 3,57 SEGUNDOS (15/08)
+
+**O espectador médio assiste 3,57s de um vídeo de 14 a 22 segundos.** ~16-25%
+de retenção. Primeira medição direta do que o público faz com o que o Jarvis
+produz.
+
+⚠️ **E isso põe em dúvida a premissa do projeto inteiro — a minha, a do Dre e
+a do ChatGPT.** Passamos o dia tratando "cada vídeo só tem uma imagem" como O
+gargalo. Mas se a pessoa sai em 3,5s, **ela nunca chega na parte onde a
+variedade visual apareceria.** Diversidade de cenas no meio do vídeo não pode
+ser o gargalo de quem abandona no começo.
+
+Hipótese que isso levanta (NÃO é conclusão, é o que a medição sugere): a
+alavanca está nos **primeiros 2 segundos** — primeiro quadro, hook, gancho — e
+não na riqueza de material ao longo do vídeo. Se for verdade, pagar ferramenta
+de vídeo autoral resolveria a parte que ninguém vê.
+
+**Isso muda o desenho do experimento:** testar variedade visual **nos primeiros
+segundos**, não espalhada. E agora ele é viável — ~119 views por post × 10
+posts por braço ≈ 1.200 observações por braço, contra as 9 conversões/mês que
+inviabilizaram o A/B por comissão.
+
 ⚠️ **E a auditoria se contradisse na própria saída.** O bloco 2 leu
 `push falhou` do log (rodada das 14:00, código antigo) e o bloco 5 leu do git
 que o clone estava em dia — o veredito listou os dois. **Estado vivo ganha de
