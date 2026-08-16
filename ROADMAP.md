@@ -2996,6 +2996,49 @@ sustenta uma relação que não existe. São três casos, não dois: agregado fr
 forte com interno forte (real). **Ausência de relação não é confirmação de
 relação** — a mesma família do `UNKNOWN ≠ SUCCESS`.
 
+**A CORRELAÇÃO SE SUSTENTOU DENTRO DAS CONTAS:** 0.584 · 0.797 · 0.447 ·
+0.638 (média **0.617**) contra 0.679 do agregado. Não era composição — reter
+mais e ser entregue mais andam juntos **no nível do post**.
+
+### 🎯 A OBSERVAÇÃO DO DRE QUE REENQUADRA O DIA (15/08)
+
+*"esses posts que estão sendo entregues são posts que não são autorais... mesmo
+sendo outro tipo de conteúdo, ainda são bons, podemos pegar de exemplo"*
+
+**Ele está certo, e isso é mais importante que qualquer número acima.**
+
+Os 80 posts medidos são **TODOS reciclados** — saem do `produzir_tiktok.py`,
+que monta a partir do `inbox_tiktok` (viral do TikTok). O `piloto.py`, que usa
+o template autoral que levou semanas de ajuste (selo, logo, vozes, música,
+crítico), **nunca foi chamado por nada e nunca postou**.
+
+Ou seja: **mediana 6,2s · desvio 2,1 · ρ 0.617 descrevem o conteúdo
+RECICLADO. O autoral tem zero medições.**
+
+O dia inteiro — eu, o Dre e o ChatGPT — discutimos como melhorar o vídeo
+autoral, com um crítico afiado, um ranking de material e uma métrica nova.
+Nenhum de nós tinha notado que **o que está no ar não é ele.**
+
+**E isso transforma a pergunta cara numa comparação barata.** Um braço já
+existe, medido, com variância conhecida (n=80, mediana 6,2s, desvio 2,1). Para
+detectar uma diferença de 1,5s (efeito ~0,7 desvios) com 80% de poder, o
+segundo braço precisa de **~20-25 posts autorais** — cerca de uma semana no
+ritmo atual. Contra os ~13 meses que o A/B por comissão exigiria.
+
+A pergunta que isso responde é a que mais vale no projeto: **o template
+autoral é melhor ou pior que reciclar viral?** Todo o investimento de semanas
+está apostado no "melhor", e ninguém mediu.
+
+**Junção do HOOK real (`analise_retencao`):** o `caption` do reach.jsonl é a
+legenda; o hook que aparece NA TELA está no `posts_ledger`. Sem juntar, a
+análise fala de legenda achando que fala de hook. ⚠️ O ledger **não tem
+`media_id`**, então a junção é pela legenda — e a **taxa de casamento é
+impressa antes de qualquer agrupamento**, porque junção aproximada que falha
+em silêncio inventa padrão. Agrupa por MOLDE (4 primeiras palavras) e só
+mostra grupos com **n≥5**, dizendo quantos ficaram de fora: com 2-3 posts a
+mediana é anedota. Testado com moldes plantados — casou 50/60 e recuperou a
+ordem (6,9 / 4,1 / 3,5 contra 6,5 / 4,0 / 3,0 plantados).
+
 ⚠️ **E a auditoria se contradisse na própria saída.** O bloco 2 leu
 `push falhou` do log (rodada das 14:00, código antigo) e o bloco 5 leu do git
 que o clone estava em dia — o veredito listou os dois. **Estado vivo ganha de

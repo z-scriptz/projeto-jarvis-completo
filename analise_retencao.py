@@ -241,6 +241,71 @@ def main():
                 print(f"     a relação se sustenta dentro das contas "
                       f"(média {medio}) — não é só composição.")
 
+    # ── o HOOK real, vindo do ledger ────────────────────────────────────────
+    # O `caption` do reach.jsonl é a legenda do Instagram. O hook que aparece
+    # NA TELA é outro texto, e quem o guarda é o posts_ledger. Sem essa junção
+    # a análise fala de legenda achando que fala de hook.
+    #
+    # ⚠️ O LEDGER NÃO TEM `media_id`, então a junção é pela legenda. Junção
+    # aproximada que falha em silêncio inventa padrão — por isso a taxa de
+    # casamento é impressa antes de qualquer agrupamento.
+    LEDGER = BASE / "shared" / "posts_ledger.jsonl"
+    if LEDGER.exists():
+        def _chave(t):
+            return "".join(ch for ch in (t or "").lower() if ch.isalnum())[:60]
+
+        por_legenda = {}
+        for linha in LEDGER.read_text(encoding="utf-8").splitlines():
+            try:
+                r = json.loads(linha)
+            except Exception:
+                continue
+            k = _chave(r.get("legenda"))
+            if k:
+                por_legenda[k] = r
+
+        casados = 0
+        for r in com:
+            lig = por_legenda.get(_chave(r.get("caption")))
+            if lig:
+                casados += 1
+                r["_hook"] = lig.get("hook") or ""
+                r["_categoria"] = lig.get("categoria") or ""
+
+        print()
+        print(f"  ── HOOK (do posts_ledger) ──   casaram {casados}/{len(com)} "
+              f"posts pela legenda")
+        if casados < len(com) * 0.5:
+            print("     ⚠️  menos da metade casou. O agrupamento abaixo fala de "
+                  "uma AMOSTRA enviesada — provavelmente os posts mais novos, "
+                  "que o ledger tem. Não leia como retrato da frota.")
+
+        if casados >= 10:
+            # agrupa pelas 4 primeiras palavras do hook: é o MOLDE, e é o que
+            # se repete entre produções diferentes
+            grupos = defaultdict(list)
+            for r in com:
+                h = (r.get("_hook") or "").strip()
+                if h:
+                    grupos[" ".join(h.split()[:4]).lower()].append(r["retencao_s"])
+            uteis = {k: v for k, v in grupos.items() if len(v) >= 5}
+            if uteis:
+                print(f"     molde de hook (só grupos com n>=5, de "
+                      f"{len(grupos)} moldes vistos):")
+                for k, v in sorted(uteis.items(),
+                                   key=lambda kv: -_pct(kv[1], .5)):
+                    print(f"       {_pct(v, .5):5.1f}s  n={len(v):3}  "
+                          f"\"{k}…\"")
+                print("     ⚠️ moldes com n<5 ficaram de fora: com 2-3 posts a "
+                      "mediana é anedota.")
+            else:
+                print(f"     nenhum molde com n>=5 ({len(grupos)} moldes em "
+                      f"{casados} posts) — variedade demais pra agrupar ainda.")
+    else:
+        print()
+        print("  ── HOOK ──  posts_ledger.jsonl não existe: sem ele só dá pra "
+              "olhar legenda, que não é o texto da tela.")
+
     # ── extremos, com o texto ───────────────────────────────────────────────
     ordem = sorted(com, key=lambda r: -r["retencao_s"])
     print()
