@@ -7,6 +7,23 @@ converte → repete. **Objetivo: virar máquina de dinheiro, dia após dia.**
 > Documento vivo. É a memória do projeto entre sessões — tudo que a gente
 > combina entra aqui. Legenda: ✅ pronto · 🔜 próximo · 🧠 backlog/avançado · 🐞 bug.
 
+> 🚩 **COMO LER ISTO — leia antes de usar qualquer seção como estado atual.**
+> As duas primeiras seções (`✅ Concluído` e `🔜 Próximas (prioridade)`) foram
+> escritas em **julho** e **não são atualizadas quando um item muda**. Os
+> **diários (`🗓️ Dia …`) vêm depois e mandam sobre elas.** O documento cresce
+> por baixo, então **o mais autoritário está no fim, não no topo** — o
+> contrário do que a diagramação sugere.
+>
+> Isto já me fez reportar coisa errada **duas vezes**, e a segunda foi depois
+> de eu ter escrito a primeira aqui dentro (16/08): li a rampa `2→3→4` da
+> seção 4.5 (19/07) como plano atual quando o que roda é a **pirâmide**, e
+> ressuscitei a review do TikTok como "pendente" quando ela foi **reprovada**.
+> Nos dois casos a informação certa estava no MESMO arquivo, mais embaixo.
+>
+> **Regra:** antes de afirmar que algo está pendente/desligado/aguardando,
+> `grep` o termo no arquivo inteiro e acredite na ocorrência **mais recente** —
+> e quando existir código, no código, não aqui.
+
 ---
 
 ## ✅ Concluído (funcionando)
@@ -226,9 +243,16 @@ games + celulares + produtos**.
 - **Postagem balanceada ✅ (opt-in):** `daemon_maestro` ganhou `post_por_conta`
   (OFF por padrão). Ligado, cada slot posta 1 vídeo de CADA conta que ainda não bateu
   `max_posts_por_conta_dia` → beauty/tech/geral no mesmo ritmo; volume = slots×contas.
-  **Rampa recomendada:** teto 2 → 3 → 4-5 conforme as contas (novas) provam que não
-  tomam flag de spam. Ligar no `agendador_config.json` (recarrega sozinho; código
-  novo precisa `systemctl restart jarvis.service`).
+  ~~**Rampa recomendada:** teto 2 → 3 → 4-5~~ Ligar no `agendador_config.json`
+  (recarrega sozinho; código novo precisa `systemctl restart jarvis.service`).
+  - 🛑 **SUPERADO — NÃO LEIA A RAMPA ACIMA.** Correção do Dre em 16/08: o
+    `post_por_conta` **já está LIGADO na VPS** há tempos, e a rampa linear
+    2→3→4 **nunca foi o desenho**. O que roda é a **PIRÂMIDE SEMANAL**,
+    `posts_por_dia_semana: [3, 2, 1, 3, 2, 1, 0]` (seg→dom, POR CONTA), com
+    `horarios_por_volume` casando o espaçamento ao volume do dia (1 post →
+    manhã; 2 → 9h/18h; 3 → 9h/13h/18h30). Volume igual todo dia faria os Reels
+    da MESMA conta disputarem a mesma janela de entrega. A verdade viva está em
+    `daemon_maestro.py:108-133` e no `agendador_config.json` da VPS.
 - ⚠️ **Ruído externo visto no log:** Gemini dando **503 UNAVAILABLE** intermitente
   (visão/narração caem pro fallback simples) + alguns renders em **timeout**. Lado
   Google/carga do VPS — não é bug nosso, só conviver; explica parte do "?" de nicho.
@@ -251,8 +275,18 @@ caminho era PyAutoGUI (PC-only) — agora é a **API oficial**, do VPS.
   produção só depois de aprovado; (2) redirect URI tem que estar no Login Kit DO
   SANDBOX, idêntico; (3) app não auditado só posta em conta **privada**; (4) e só como
   **SELF_ONLY** (não `FOLLOWER_OF_CREATOR` — o `niveis[0]` estava errado).
-- ✅ **1º post real pela API confirmado** (SELF_ONLY, sandbox) + **review SUBMETIDO
-  (2026-07-19) — aguardando resultado do TikTok.**
+- ✅ **1º post real pela API confirmado** (SELF_ONLY, sandbox) + review SUBMETIDO
+  (2026-07-19).
+- 🛑 **REPROVADO — ARQUIVADO. NÃO É MAIS OBJETIVO** (registrado 16/08, correção
+  do Dre). O TikTok **não liberou**: a Content Posting API é concedida a
+  **empresa**, não a uso pessoal. Não é questão de reenviar nem de ajustar o
+  formulário — o critério é quem somos, não o que mandamos.
+  **Nada disso está quebrado e nada precisa de conserto**; o motor
+  (`tiktok_poster.py`), o painel, o Caddy, o subdomínio e as páginas legais
+  continuam no disco, gated em `postar_tiktok: false`, e ficam aí caso um dia
+  exista CNPJ. **Não me proponha "conferir o resultado da review" de novo** —
+  o resultado é este, e ficou 4 semanas parecendo pendência aberta só porque
+  ninguém escreveu o "não" aqui.
 - ✅ **PRÉ-POSICIONADO pra aprovação (2026-07-19):** `tiktok_poster.py` é o motor
   ÚNICO (token/refresh, creator_info, privacidade auditado→público / sandbox→SELF_ONLY,
   init+upload+status, mapa nicho→conta via `TIKTOK_CONTA_<NICHO>`, CLI de teste). O
@@ -2241,10 +2275,32 @@ Nenhum TTS funcionando. O piloto sai com `voz —` e o vídeo vai mudo, sem que
 nada além do `faltou` avise. ⏳ Conferir se algum pacote da esteira entrou sem
 faixa de áudio enquanto isso durou — esses seriam postados sem narração.
 
-🔧 **FERRAMENTA PRONTA (16/08): `auditoria_audio.py`.** O ⏳ acima ficou 5 dias
-sem ninguém conferir, e ele é da mesma família de tudo que apareceu em 15/08:
-**o render relata sucesso e entrega vídeo sem voz.** Falta só rodar na VPS
-(`.venv/bin/python auditoria_audio.py --desde 2026-08-10`).
+🛑 **DECIDIDO NÃO PAGAR POR ENQUANTO (16/08, decisão do Dre).** A voz paga só
+se justifica quando a produção AUTORAL estiver de pé; estamos em fase de teste,
+e pagar assinatura pra um caminho que ainda não roda sozinho é gastar antes da
+resposta. **Não é pendência — é decisão.**
+
+⚠️ **E O ALCANCE DISTO É MENOR DO QUE EU ESCREVI.** Eu tratei "TTS caído" como
+"vídeo saindo mudo" e sugeri urgência no dia 16/08. Fui ler o código: **os dois
+caminhos reagem DIFERENTE ao mesmo TTS caído.**
+
+| caminho | roda sozinho? | TTS cai → |
+|---|---|---|
+| `produzir_tiktok.py` (reciclado) | **sim**, é toda a produção automática | mantém o **áudio ORIGINAL** do criador |
+| `piloto.py` (autoral) | não, só por comando | sai **`voz —`**, sem narração |
+
+`produzir_tiktok._narrar_e_trocar_audio` é *best-effort*: falhou o roteiro ou a
+voz, ele **não muta nada** — devolve o vídeo com o som que já veio da fonte
+(`produzir_tiktok.py:160,177-180`). Ou seja: **o "mudo" só atinge o caminho
+autoral, que é justamente o que não está em produção.** O Dre estava certo, e
+a razão é mecânica, não de prioridade.
+
+🔧 **`auditoria_audio.py` fica de ferramenta, sem urgência.** Mas o que ela
+deve procurar mudou: no caminho vivo o defeito **não é silêncio, é áudio de
+terceiro**. O próprio código chama isso de `risco de copyright/crédito` e
+dispara alerta no Telegram a cada ocorrência (`produzir_tiktok.py:166-168`) —
+então **a pergunta útil é quantos alertas desses chegaram desde 11/08**, e essa
+resposta está no Telegram, não no disco.
 
 ⚠️ **E A PERGUNTA NÃO É "TEM ÁUDIO?"** — foi isso que quase me fez escrever a
 ferramenta errada. Um Reels sem narração mas COM a música de fundo tem faixa,
