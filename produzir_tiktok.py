@@ -393,18 +393,36 @@ def _produzir(pasta: Path, pj: Path, video_src: Path) -> bool:
     # O 1º comentário do FB (e a auto-resposta que reusa esse link) sai com um link
     # ETIQUETADO 'fb' → toda venda vinda dele aparece como 'fb-<nicho>-<produto>' no
     # relatório (atribuição por canal). Só Shopee re-etiqueta; Amazon usa o base.
-    try:
-        link_fb = link
-        if plataforma == "shopee":
+    # ⚠️ ISTO FALHAVA CALADO EM 43% DOS PACOTES. Medido em 15/08 com o
+    # `diag_pacotes.py`: `engajamento.json` faltava em 146 de 336 pacotes —
+    # 25 de 34 só na conta casa (74%). O `except Exception: pass` engolia,
+    # ninguém via, e o 1º comentário (que carrega o link etiquetado 'fb' e é o
+    # que dá atribuição por canal) simplesmente não saía.
+    #
+    # A causa provável é a geração do link etiquetado: `_link_do_canal` bate na
+    # API de afiliado e, falhando, derrubava o bloco INTEIRO — inclusive a
+    # escrita do arquivo, que nem depende dela.
+    #
+    # Dois consertos: o link etiquetado tem try próprio e cai pro link base
+    # (link sem etiqueta é pior que link nenhum? não: é MUITO melhor — perde
+    # atribuição, não perde a venda); e a falha da escrita passa a APARECER.
+    link_fb = link
+    if plataforma == "shopee":
+        try:
             link_fb = _link_do_canal("fb", info.get("origem_url", ""), nicho, nome,
                                      link, fonte=perfil_fonte)
+        except Exception as e:
+            _log(f"   ⚠️  link etiquetado 'fb' falhou ({str(e)[:60]}) — uso o "
+                 f"link base; a venda conta, a atribuição por canal não")
+    try:
         eng = {"link": link_fb, "link_post": link, "produto": nome,
                "handle": (conta.get("handle") if conta else "") or "",
                "plataforma": plataforma, "nicho": nicho}
         (pp / "engajamento.json").write_text(
             json.dumps(eng, ensure_ascii=False, indent=2), encoding="utf-8")
-    except Exception:
-        pass
+    except Exception as e:
+        _log(f"   ❌ NÃO gravei engajamento.json ({str(e)[:80]}) — este post "
+             f"vai sair SEM o 1º comentário com o link")
     (pp / "titulo_youtube.txt").write_text(f"{nome} #shorts"[:100], encoding="utf-8")
     (pp / "descricao_youtube.txt").write_text(
         (legenda + "\n\n" + hashtags).strip(), encoding="utf-8")

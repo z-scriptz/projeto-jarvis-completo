@@ -3087,6 +3087,54 @@ diferentes — **nenhum pacote com legenda** = defeito na produção; **todos co
 VPS. Testado com um cenário onde só a casa vem vazia: aponta a conta, o motivo
 ("plano existe, legenda VAZIA") e exemplos.
 
+**MEDIDO NA VPS: 336 de 336 pacotes têm legenda no plano.** Todas as quatro
+contas, 100%. **A produção está limpa — o defeito é do publicador**, e o
+próximo passo é ver de onde ele lê:
+`grep -n 'legenda\|caption' agents/publish_guard.py`.
+
+### 🔗 O 1º COMENTÁRIO SUMIU EM 43% DOS POSTS, calado (15/08)
+
+O `diag_pacotes` achou de brinde algo que ninguém procurava:
+**`engajamento.json` faltando em 146 de 336 pacotes.** Por conta:
+
+```
+@topshopcasa_    25/34   (74%)  ← a mesma conta do problema da legenda
+@topshop.__      68/135  (50%)
+@topshoptech_    33/96   (34%)
+@topshopbeauty._ 20/71   (28%)
+```
+
+Esse arquivo monta o **1º comentário com o link etiquetado `fb`** — é o que dá
+atribuição por canal no relatório de vendas. Sem ele o post sai sem link no
+comentário.
+
+A causa está em `produzir_tiktok.py:396`:
+
+```python
+try:
+    link_fb = link
+    if plataforma == "shopee":
+        link_fb = _link_do_canal("fb", ...)      # bate na API de afiliado
+    ...
+    (pp / "engajamento.json").write_text(...)     # nem depende dela
+except Exception:
+    pass                                          # ← engole tudo
+```
+
+**A geração do link etiquetado derrubava o bloco inteiro — inclusive a escrita
+do arquivo, que não dependia dela.** E o `except: pass` garantia que ninguém
+soubesse.
+
+Consertado em dois pontos: o link etiquetado tem `try` próprio e **cai pro link
+base** (perder atribuição é muito melhor que perder o link), e a falha da
+escrita **aparece no log**. Verificado com o link falhando: antes o arquivo não
+saía; agora avisa, usa o base, e o arquivo sai.
+
+⚠️ **Sexta vez no mesmo dia que a causa é erro silenciado.** Push num log que
+ninguém lia · fila truncando · campo `texto` inventado · `midia_viva` medindo
+movimento · `plays` depreciado envenenando o lote · e agora `except: pass`
+comendo 43% dos primeiros comentários.
+
 ### 🎣 A MEDIÇÃO DOS HOOKS EXISTIA E NÃO ALCANÇAVA A PRODUÇÃO (15/08)
 
 Dre: *"o hook nós temos uma medição... são aqueles em primeira pessoa"*. Ele
