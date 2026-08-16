@@ -3029,6 +3029,34 @@ A pergunta que isso responde é a que mais vale no projeto: **o template
 autoral é melhor ou pior que reciclar viral?** Todo o investimento de semanas
 está apostado no "melhor", e ninguém mediu.
 
+### 📏 O HOOK NÃO EXPLICA NADA (ainda) — e a tabela convidava a mentir (15/08)
+
+Rodada real: **casaram 68/79** posts pela legenda, e saíram **35 moldes de
+hook em 68 posts** — ~2 posts por molde. Só três chegaram a n≥5:
+
+```
+6.8s  n=6  "corre ver isso antes…"
+6.4s  n=5  "o segredo pra ter…"
+6.0s  n=9  "não mostre isso pra…"
+```
+
+Com desvio de 2,1s, o erro esperado da mediana é ±0,9 a ±1,2s. **O
+espalhamento entre o primeiro e o terceiro é 0,8s** — menor que o ruído. Os
+três são indistinguíveis, e 48 dos 68 posts nem entraram na tabela.
+
+⚠️ **A tabela ordenada convidava a concluir "use o molde do topo".** Eu ordenei
+medianas e deixei parecer ranking. Corrigido: o arquivo agora imprime o
+espalhamento ao lado do ruído esperado e diz na cara quando um não supera o
+outro.
+
+⚠️ **E a primeira versão da correção também estava errada.** Usei o erro de
+UMA mediana para comparar o **maior com o menor de três grupos** — e amplitude
+de k medianas cresce com k só por acaso. Testado com moldes rigorosamente
+iguais, ele chamou ruído de "sugestivo". Agora escala pela amplitude esperada
+de k amostras (d₃≈1,69). Reteste com 3 sementes de dados nulos: duas dizem
+"menor que o ruído", uma cai na faixa cautelosa ("longe de conclusivo"); com
+efeito real de 3s, diz "supera o ruído".
+
 **Junção do HOOK real (`analise_retencao`):** o `caption` do reach.jsonl é a
 legenda; o hook que aparece NA TELA está no `posts_ledger`. Sem juntar, a
 análise fala de legenda achando que fala de hook. ⚠️ O ledger **não tem

@@ -298,6 +298,39 @@ def main():
                           f"\"{k}…\"")
                 print("     ⚠️ moldes com n<5 ficaram de fora: com 2-3 posts a "
                       "mediana é anedota.")
+                # ⚠️ LISTA ORDENADA PARECE RANKING. E com n=5..9 sobre um
+                # desvio de ~2s, a mediana de cada grupo balança mais do que a
+                # distância entre os grupos — ordenar sem dizer isso convida a
+                # concluir "use o molde do topo", que é o tipo de conclusão que
+                # este projeto já pagou caro pra aprender a não tirar.
+                # Erro-padrão da MEDIANA ~ 1.253 * desvio / raiz(n).
+                medianas = [_pct(v, .5) for v in uteis.values()]
+                menor_n = min(len(v) for v in uteis.values())
+                erro_um = 1.253 * st.pstdev(vals) / (menor_n ** 0.5)
+                # ⚠️ COMPARAR O MAIOR COM O MENOR DE k GRUPOS NÃO É COMPARAR
+                # DOIS. Quanto mais moldes na tabela, maior a distância entre
+                # os extremos SÓ POR ACASO. A 1ª versão usava o erro de UMA
+                # mediana e, testada com moldes rigorosamente iguais, chamou
+                # ruído de "sugestivo". Amplitude esperada de k medianas sob
+                # acaso ≈ erro × d(k), com d tabelado.
+                D = {2: 1.128, 3: 1.693, 4: 2.059, 5: 2.326, 6: 2.534}
+                k = len(uteis)
+                ruido = erro_um * D.get(k, 2.7)
+                espalha = max(medianas) - min(medianas)
+                print(f"     espalhamento entre {k} moldes: {espalha:.1f}s   "
+                      f"esperado só por acaso: ±{ruido:.1f}s "
+                      f"(n={menor_n}, erro de uma mediana ±{erro_um:.1f}s)")
+                if espalha < ruido:
+                    print("     ⚠️  O ESPALHAMENTO É MENOR QUE O RUÍDO — nenhum "
+                          "molde se separa dos outros. A ordem acima é acaso; "
+                          "não escolha hook por ela.")
+                elif espalha < 2 * ruido:
+                    print("     ⚠️  espalhamento da ordem do ruído — sugestivo, "
+                          "longe de conclusivo. Precisa de mais posts por "
+                          "molde, não de mais moldes.")
+                else:
+                    print("     o espalhamento supera o ruído: vale testar o "
+                          "molde do topo contra o da base, de propósito.")
             else:
                 print(f"     nenhum molde com n>=5 ({len(grupos)} moldes em "
                       f"{casados} posts) — variedade demais pra agrupar ainda.")
