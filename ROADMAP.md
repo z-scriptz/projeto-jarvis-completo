@@ -2917,6 +2917,41 @@ segundos**, não espalhada. E agora ele é viável — ~119 views por post × 10
 posts por braço ≈ 1.200 observações por braço, contra as 9 conversões/mês que
 inviabilizaram o A/B por comissão.
 
+⚠️ **CORREÇÃO NA HORA SEGUINTE: são 6,0s, não 3,57s.** A primeira rodada
+completa deu **80/80 posts com retenção · média 6,0s**. Os 3,57s eram **UM
+post** — o que o `diag_retencao` sondou.
+
+Sobre um vídeo de 14-22s, 6,0s são **27-43% de retenção**, e isso é outra
+história: o espectador chega bem além do hook. **A hipótese que escrevi acima
+— "ninguém chega na parte onde a variedade visual apareceria" — nasceu de
+n=1 e a medição com n=80 a enfraquece muito.** Ela não morreu; só não sustenta
+mais o peso que dei a ela. Fica registrada com a correção do lado, porque
+apagar o erro esconderia como ele aconteceu: eu li um número de um post e
+generalizei para a frota.
+
+### 📊 O PRIMEIRO CONJUNTO DE DADOS DE AUDIÊNCIA (15/08)
+
+80 posts com comportamento medido. Até ontem havia alcance (quantos viram) e
+venda (9 em 30 dias) — nada sobre o que a pessoa **faz durante** o vídeo.
+
+Virou o **`analise_retencao.py`**, e as escolhas dele são o ponto:
+
+- **distribuição, não média.** "6,0s" pode ser 80 posts em 6s, ou 40 em 2s e
+  40 em 10s — e essas duas realidades pedem ações opostas. Sai histograma,
+  quartis, e um aviso quando média e mediana se afastam mais de 15%.
+- **posts sem retenção não entram como zero.** As coletas anteriores ao
+  conserto do `plays` ficam de fora e são contadas em voz alta.
+- **`ρ` de Spearman, não Pearson:** o alcance tem cauda longa (1.288 contra
+  dezenas de ~100) e Pearson viraria refém desse ponto.
+- ⚠️ **e ele recusa concluir causa.** Retenção e alcance andarem juntos não
+  diz quem puxa quem: o algoritmo entrega mais o que retém, e mais entrega
+  muda quem assiste. O arquivo diz isso na tela toda vez.
+
+Validado nos dois sentidos com dados sintéticos: com correlação plantada ele
+acha `ρ = 0.78`; com retenção independente do alcance ele acha `ρ = -0.085` e
+diz "praticamente independentes". Ferramenta que só sabe confirmar acharia
+padrão em ruído.
+
 ⚠️ **E a auditoria se contradisse na própria saída.** O bloco 2 leu
 `push falhou` do log (rodada das 14:00, código antigo) e o bloco 5 leu do git
 que o clone estava em dia — o veredito listou os dois. **Estado vivo ganha de

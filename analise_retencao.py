@@ -1,0 +1,217 @@
+#!/usr/bin/env python3
+# analise_retencao.py -- o que os 80 posts já dizem, antes de construir nada.
+#
+# POR QUE EXISTE (15/08)
+# Hoje o `reach_agent` passou a trazer `ig_reels_avg_watch_time`, e a primeira
+# rodada deu **80/80 posts com retenção, média 6,0s**. Isso é o primeiro dado
+# de COMPORTAMENTO DE AUDIÊNCIA que o projeto tem — até ontem havia alcance
+# (quantos viram) e venda (9 em 30 dias), e nada sobre o que a pessoa faz
+# durante o vídeo.
+#
+# ⚠️ E ELE JÁ ME CORRIGIU. Eu tinha lido 3,57s de UM post e escrito que "a
+# pessoa sai em 3,5s, então variedade visual no meio do vídeo não pode ser o
+# gargalo". Com n=80 a média é 6,0s — 27-43% de um vídeo de 14-22s. A hipótese
+# não morreu, mas nasceu de n=1 e não sustenta o peso que eu dei a ela.
+#
+# Por isso este arquivo mostra DISTRIBUIÇÃO, não média. Média esconde
+# bimodalidade: "6,0s" pode ser 80 posts em 6s, ou 40 posts em 2s e 40 em 10s,
+# e essas duas realidades pedem ações opostas.
+#
+# ⚠️ O QUE ELE NÃO FAZ: não conclui causalidade. Retenção alta e alcance alto
+# andarem juntos não diz quem puxa quem — o algoritmo do Instagram entrega mais
+# o que retém, e mais entrega muda o público que assiste. Ele mostra o que há e
+# nomeia as explicações alternativas.
+#
+# Só stdlib. Não escreve nada.
+#
+# Uso (na VPS):  python3 analise_retencao.py
+#                python3 analise_retencao.py --top 8
+
+import argparse
+import json
+import statistics as st
+import sys
+from collections import defaultdict
+from pathlib import Path
+
+BASE = Path(__file__).resolve().parent
+REACH = BASE / "shared" / "reach.jsonl"
+
+
+def _log(m):
+    print(f"[retencao] {m}", flush=True)
+
+
+def _carregar() -> list:
+    """Dedup por media_id, ficando com a leitura de MAIOR alcance.
+
+    Mesma regra do `ceo_agent._ler_reach`: o agente roda todo dia e o alcance
+    só cresce, então a última leitura é a mais completa. Contar o mesmo post
+    várias vezes inflaria qualquer média aqui.
+    """
+    if not REACH.exists():
+        raise SystemExit(f"[retencao] não achei {REACH}")
+    por_id = {}
+    for linha in REACH.read_text(encoding="utf-8").splitlines():
+        try:
+            r = json.loads(linha)
+        except Exception:
+            continue
+        mid = r.get("media_id")
+        if not mid:
+            continue
+        ant = por_id.get(mid)
+        if ant is None or (r.get("reach") or 0) >= (ant.get("reach") or 0):
+            por_id[mid] = r
+    return list(por_id.values())
+
+
+def _pct(vals, p):
+    if not vals:
+        return None
+    v = sorted(vals)
+    k = (len(v) - 1) * p
+    lo, hi = int(k), min(int(k) + 1, len(v) - 1)
+    return v[lo] + (v[hi] - v[lo]) * (k - lo)
+
+
+def _spearman(xs, ys):
+    """Correlação por POSTO, sem numpy. Posto e não valor porque alcance tem
+    cauda longa (um post de 1.288 contra dezenas de 100) e Pearson viraria
+    refém desse ponto."""
+    n = len(xs)
+    if n < 5:
+        return None
+
+    def postos(v):
+        ordem = sorted(range(n), key=lambda i: v[i])
+        r = [0.0] * n
+        i = 0
+        while i < n:
+            j = i
+            while j + 1 < n and v[ordem[j + 1]] == v[ordem[i]]:
+                j += 1
+            media = (i + j) / 2 + 1
+            for k in range(i, j + 1):
+                r[ordem[k]] = media
+            i = j + 1
+        return r
+
+    rx, ry = postos(xs), postos(ys)
+    mx, my = sum(rx) / n, sum(ry) / n
+    num = sum((a - mx) * (b - my) for a, b in zip(rx, ry))
+    den = (sum((a - mx) ** 2 for a in rx) *
+           sum((b - my) ** 2 for b in ry)) ** 0.5
+    return round(num / den, 3) if den else None
+
+
+def main():
+    p = argparse.ArgumentParser(
+        description="O que os posts já medidos dizem sobre retenção.")
+    p.add_argument("--top", type=int, default=5)
+    args = p.parse_args()
+
+    posts = _carregar()
+    com = [r for r in posts
+           if isinstance(r.get("retencao_s"), (int, float))]
+
+    print()
+    print(f"  {len(posts)} posts únicos no reach.jsonl · "
+          f"{len(com)} com retenção medida")
+    if not com:
+        _log("nenhum post com `retencao_s` ainda — rode o reach_agent "
+             "atualizado primeiro (só as coletas novas trazem o campo)")
+        return 1
+    if len(com) < len(posts):
+        print(f"  ⚠️  {len(posts) - len(com)} post(s) SEM retenção — são as "
+              f"coletas feitas antes do conserto do `plays`. Ficam de fora "
+              f"das contas abaixo, não entram como zero.")
+
+    vals = [r["retencao_s"] for r in com]
+
+    # ── distribuição, não média ─────────────────────────────────────────────
+    print()
+    print("  ── DISTRIBUIÇÃO DA RETENÇÃO (segundos) ──")
+    print(f"     mínimo {min(vals):5.1f}   p25 {_pct(vals, .25):5.1f}   "
+          f"mediana {_pct(vals, .5):5.1f}   p75 {_pct(vals, .75):5.1f}   "
+          f"máximo {max(vals):5.1f}")
+    print(f"     média  {st.mean(vals):5.1f}   desvio {st.pstdev(vals):5.1f}")
+
+    # histograma cru: é o que denuncia bimodalidade, que a média esconde
+    largura = max(1.0, (max(vals) - min(vals)) / 10 or 1.0)
+    faixas = defaultdict(int)
+    for v in vals:
+        faixas[int((v - min(vals)) // largura)] += 1
+    print()
+    for i in range(10):
+        ini = min(vals) + i * largura
+        n = faixas.get(i, 0)
+        if n or i == 0:
+            print(f"     {ini:5.1f}-{ini + largura:4.1f}s │"
+                  f"{'█' * min(40, n)} {n}")
+
+    mediana = _pct(vals, .5)
+    if abs(st.mean(vals) - mediana) > 0.15 * st.mean(vals):
+        print()
+        print(f"  ⚠️  média ({st.mean(vals):.1f}s) longe da mediana "
+              f"({mediana:.1f}s) — a distribuição é torta. Use a MEDIANA pra "
+              f"falar do post típico.")
+
+    # ── por conta ───────────────────────────────────────────────────────────
+    por_conta = defaultdict(list)
+    for r in com:
+        por_conta[r.get("handle") or r.get("nicho") or "?"].append(r)
+    print()
+    print("  ── POR CONTA ──")
+    print(f"     {'conta':22} {'posts':>5} {'retenção':>10} {'alcance':>9}")
+    for h, rs in sorted(por_conta.items(),
+                        key=lambda kv: -_pct([x["retencao_s"] for x in kv[1]], .5)):
+        ret = _pct([x["retencao_s"] for x in rs], .5)
+        alc = [x.get("reach") for x in rs if isinstance(x.get("reach"), int)]
+        print(f"     {h[:22]:22} {len(rs):5} {ret:9.1f}s "
+              f"{(_pct(alc, .5) if alc else 0):9.0f}")
+
+    # ── retenção × alcance ──────────────────────────────────────────────────
+    pares = [(r["retencao_s"], r["reach"]) for r in com
+             if isinstance(r.get("reach"), int)]
+    if len(pares) >= 5:
+        rho = _spearman([a for a, _ in pares], [b for _, b in pares])
+        print()
+        print(f"  ── RETENÇÃO × ALCANCE ──   ρ (Spearman) = {rho}   "
+              f"n = {len(pares)}")
+        if rho is not None:
+            if rho > 0.4:
+                print("     Andam juntos. ⚠️ E isso NÃO diz quem puxa quem: o")
+                print("     algoritmo entrega mais o que retém, e mais entrega")
+                print("     muda quem assiste. Correlação aqui é pista, não causa.")
+            elif rho < -0.2:
+                print("     Andam em sentidos OPOSTOS — inesperado o bastante")
+                print("     pra checar se o alcance alto veio de outra origem.")
+            else:
+                print("     Praticamente independentes neste volume. Ou seja:")
+                print("     segurar mais o espectador, aqui, ainda não está")
+                print("     comprando mais entrega.")
+
+    # ── extremos, com o texto ───────────────────────────────────────────────
+    ordem = sorted(com, key=lambda r: -r["retencao_s"])
+    print()
+    print(f"  ── {args.top} QUE MAIS SEGURARAM ──")
+    for r in ordem[:args.top]:
+        print(f"     {r['retencao_s']:5.1f}s  r={r.get('reach', '?'):>5}  "
+              f"{(r.get('caption') or '')[:58]}")
+    print()
+    print(f"  ── {args.top} QUE MENOS SEGURARAM ──")
+    for r in ordem[-args.top:]:
+        print(f"     {r['retencao_s']:5.1f}s  r={r.get('reach', '?'):>5}  "
+              f"{(r.get('caption') or '')[:58]}")
+
+    print()
+    _log("⚠️ nada aqui é causa. São 80 posts, sem variação controlada: os "
+         "vídeos diferem em hook, produto, horário e conta ao mesmo tempo.")
+    _log("   Serve pra escolher a PRÓXIMA pergunta, não pra responder "
+         "nenhuma.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
