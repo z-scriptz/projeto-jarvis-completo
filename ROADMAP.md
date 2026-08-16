@@ -2241,6 +2241,33 @@ Nenhum TTS funcionando. O piloto sai com `voz —` e o vídeo vai mudo, sem que
 nada além do `faltou` avise. ⏳ Conferir se algum pacote da esteira entrou sem
 faixa de áudio enquanto isso durou — esses seriam postados sem narração.
 
+🔧 **FERRAMENTA PRONTA (16/08): `auditoria_audio.py`.** O ⏳ acima ficou 5 dias
+sem ninguém conferir, e ele é da mesma família de tudo que apareceu em 15/08:
+**o render relata sucesso e entrega vídeo sem voz.** Falta só rodar na VPS
+(`.venv/bin/python auditoria_audio.py --desde 2026-08-10`).
+
+⚠️ **E A PERGUNTA NÃO É "TEM ÁUDIO?"** — foi isso que quase me fez escrever a
+ferramenta errada. Um Reels sem narração mas COM a música de fundo tem faixa,
+toca som e **passa em qualquer teste booleano de áudio**. É exatamente o que o
+ElevenLabs caído produz: a música sobra, a voz some. Então são 4 estados:
+
+| estado | o que é | pegaria num teste "tem áudio?" |
+|---|---|---|
+| `MUDO` | sem faixa nenhuma | sim |
+| `SILENCIOSO` | faixa presente, volume médio ≤ −50 dBFS | não |
+| `SEM_NARRACAO` | som de verdade, `voz —` no relatório | **não** ← o caso |
+| `OK` | som + voz registrada | — |
+
+O único jeito de separar "só música" de "música + voz" é o `voz` do
+`video.relatorio.json` — o áudio sozinho não sabe. Por isso a ferramenta cruza
+ffprobe (faixa), ffmpeg `volumedetect` (volume) e o relatório do render (voz),
+e não conclui a partir de um só.
+
+E ela **diz o que não mediu**: sem `ffprobe` ela recusa e sai com código 2 em
+vez de imprimir "0 mudos"; pacote já postado e apagado não deixa arquivo, e
+sobre esses ela declara não ter opinião. Zero medido no lugar errado é pior
+que erro, porque parece resultado.
+
 ### 🔒 COLETA EXTERNA: as três portas fechadas, e o que isso decide (12/08)
 
 O Kit 10 Calcinhas foi barrado pelo detector (43% de texto promocional, nível
