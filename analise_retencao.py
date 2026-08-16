@@ -75,6 +75,54 @@ def _pct(vals, p):
     return v[lo] + (v[hi] - v[lo]) * (k - lo)
 
 
+# Marcas de PORTA: o hook exige que o espectador PERTENÇA a um grupo pra
+# continuar. É a definição operacional da Ava Yuergens — "se você tem um golden
+# que come tudo" fala só com dono de golden; "quer um cachorro que não come nada
+# do chão?" fala com dono de cachorro. Note que o exemplo AMPLO dela continua
+# sendo sobre cachorro: amplo NÃO é genérico, é **um degrau acima no mesmo
+# assunto**. Por isso as marcas abaixo procuram o RECORTE, não o tema.
+_PORTAS = (
+    "se voce tem", "se voce e ", "se voce trabalha", "se voce sofre",
+    "se voce usa", "se voce ama", "se vc tem",
+    "pra quem ", "para quem ", "com quem ",
+    "quem tem ", "quem ama ", "quem gosta", "quem usa ", "quem sofre",
+    "toda pessoa que", "todo mundo que", "todas que ", "todos que ",
+    "dona de ", "donas de ", "dono de ", "donos de ", "mae de ", "maes de ",
+)
+
+
+def _amplitude(hook: str) -> str:
+    """"estreito" se o hook exige pertencer a um grupo; "amplo" caso contrário.
+
+    ⚠️ HEURÍSTICA, e conservadora de propósito: na dúvida devolve "amplo".
+    Errar pra "estreito" criaria um balde pequeno e sujo, e um balde sujo dá
+    diferença falsa justamente na direção que a hipótese prevê — que é o jeito
+    mais fácil de "confirmar" uma tese com a própria régua. Por isso quem chama
+    IMPRIME exemplos dos dois lados: a classificação tem que poder ser
+    conferida a olho, não aceita no escuro.
+
+    ⚠️ E ELA SÓ PEGA UM DOS DOIS TIPOS DE RECORTE. O carrossel tem dois:
+      (1) recorte de PÚBLICO  — "se você tem um golden que come tudo"
+      (2) recorte de OBJETO   — "vou fazer um review do livro Pai Rico e Pai
+                                 Pobre" (só quem conhece o livro assiste)
+    Isto aqui detecta (1) e chama (2) de "amplo", errado. Descobri montando o
+    teste: escrevi `esperava amplo` pro exemplo do livro e o teste "passou"
+    12/12 — porque eu tinha codificado a minha própria limitação como gabarito.
+    Um teste que herda o ponto cego do código sempre passa.
+    Fica assim de propósito: nossos moldes de hook não nomeiam o produto (o
+    curiosity-gap existe justamente pra escondê-lo), então (2) quase não ocorre
+    aqui. **Se um dia os hooks passarem a citar marca/modelo, esta função
+    precisa de um segundo detector — e não vai avisar sozinha.**
+    """
+    t = (hook or "").lower()
+    for a, b in (("á", "a"), ("â", "a"), ("ã", "a"), ("é", "e"), ("ê", "e"),
+                 ("í", "i"), ("ó", "o"), ("ô", "o"), ("õ", "o"), ("ú", "u"),
+                 ("ç", "c")):
+        t = t.replace(a, b)
+    t = " " + " ".join(t.split()) + " "
+    return "estreito" if any(p in t for p in _PORTAS) else "amplo"
+
+
 def _spearman(xs, ys):
     """Correlação por POSTO, sem numpy. Posto e não valor porque alcance tem
     cauda longa (um post de 1.288 contra dezenas de 100) e Pearson viraria
@@ -334,6 +382,73 @@ def main():
             else:
                 print(f"     nenhum molde com n>=5 ({len(grupos)} moldes em "
                       f"{casados} posts) — variedade demais pra agrupar ainda.")
+
+        # ── AMPLO × ESTREITO: a hipótese da Ava Yuergens, no eixo certo ─────
+        # A tabela de moldes acima mede RETENÇÃO, e a afirmação dela é sobre
+        # DISTRIBUIÇÃO: "se você filtrar muita gente no começo, o algoritmo
+        # entende que o vídeo é ruim e não distribui" → gancho estreito não
+        # perde watch time de quem ficou, perde ALCANCE. Testar a hipótese na
+        # retenção seria medir no eixo errado e concluir "não tem efeito".
+        #
+        # ⚠️ E O AGRUPAMENTO EM 2 BALDES É O QUE DÁ POTÊNCIA. A tabela de
+        # moldes trabalha com n=5..9 por grupo, onde nada se separa do ruído
+        # (medido: espalhamento 0,8s contra ±1,0s). Dois baldes juntam os
+        # mesmos posts em grupos ~10x maiores — é a MESMA amostra, com uma
+        # pergunta que ela consegue responder.
+        if casados >= 10:
+            print()
+            print("  ── AMPLO × ESTREITO (hipótese da Ava Yuergens) ──")
+            baldes = defaultdict(list)
+            for r in com:
+                h = (r.get("_hook") or "").strip()
+                if h:
+                    baldes[_amplitude(h)].append(r)
+
+            # ⚠️ A CLASSIFICAÇÃO É HEURÍSTICA, então ela se mostra. Regra que
+            # rotula em silêncio inventa o resultado que o rótulo já continha.
+            for nome in ("estreito", "amplo"):
+                rs = baldes.get(nome) or []
+                if not rs:
+                    continue
+                ret = [x["retencao_s"] for x in rs]
+                alc = [x["reach"] for x in rs if isinstance(x.get("reach"), int)]
+                print(f"     {nome:9} n={len(rs):3}  "
+                      f"retenção {_pct(ret, .5):4.1f}s  "
+                      f"alcance {_pct(alc, .5):6.0f}" if alc else
+                      f"     {nome:9} n={len(rs):3}  "
+                      f"retenção {_pct(ret, .5):4.1f}s  alcance —")
+                for x in rs[:2]:
+                    print(f"                 ex: \"{(x.get('_hook') or '')[:52]}\"")
+
+            e, a = baldes.get("estreito") or [], baldes.get("amplo") or []
+            if len(e) >= 8 and len(a) >= 8:
+                ae = [x["reach"] for x in e if isinstance(x.get("reach"), int)]
+                aa = [x["reach"] for x in a if isinstance(x.get("reach"), int)]
+                if len(ae) >= 8 and len(aa) >= 8:
+                    dif = _pct(aa, .5) - _pct(ae, .5)
+                    # ⚠️ ALCANCE TEM CAUDA LONGA: o desvio é inflado por poucos
+                    # posts grandes, então este piso de ruído sai LARGO. Isso
+                    # torna o teste conservador — "não separou" aqui é fraco,
+                    # mas "separou" seria forte.
+                    juntos = ae + aa
+                    erro = 1.253 * st.pstdev(juntos) / (min(len(ae), len(aa)) ** 0.5)
+                    ruido = erro * 1.128           # d(k) para k=2 baldes
+                    print(f"     diferença de alcance (amplo − estreito): "
+                          f"{dif:+.0f}   ruído esperado: ±{ruido:.0f}")
+                    if abs(dif) < ruido:
+                        print("     ⚠️  DENTRO DO RUÍDO — estes dados NÃO "
+                              "confirmam nem refutam a tese. Não mude a "
+                              "estratégia de hook com base nesta linha.")
+                    else:
+                        lado = "amplo" if dif > 0 else "estreito"
+                        print(f"     o balde {lado.upper()} alcança mais, "
+                              f"acima do ruído. Ainda é observação, não "
+                              f"experimento: ninguém sorteou qual post levou "
+                              f"qual gancho.")
+            else:
+                print(f"     ⚠️  baldes pequenos demais (estreito={len(e)}, "
+                      f"amplo={len(a)}) — precisa de ≥8 de cada lado. "
+                      f"Sem isso eu não comparo.")
     else:
         print()
         print("  ── HOOK ──  posts_ledger.jsonl não existe: sem ele só dá pra "

@@ -180,6 +180,63 @@ errado custa atendimento. Nós vendemos comissão de item de R$30 por impulso:
 **filtrar clique é perder comissão.** A adaptação honesta é o CTA ficar
 específico **do produto**, não do público.
 
+✅ **SLIDES RECEBIDOS (16/08) — o carrossel confirma as 3 etapas.** O slide
+"PÚBLICO QUALIFICADO" fecha em caixa preta: *"o começo é amplo a ponto de
+atrair todo mundo, mas do meio para o final, você pode e DEVE ser específico."*
+Era exatamente a leitura de três etapas; a legenda é que só carregava a
+primeira. Dois achados que só os slides deram:
+
+**1. O mecanismo alegado é ALGORÍTMICO, não de gosto.** *"Se você filtrar muita
+gente no começo, o algoritmo entende que aquele vídeo é ruim e não distribui
+pra mais pessoas. É por isso que você não passa das 300 views."* Ou seja: o
+custo do gancho estreito é pago em **ALCANCE**, não em retenção de quem ficou.
+**Isso invalida o jeito como a gente vinha medindo hook.** A tabela de moldes
+do `analise_retencao` compara `retencao_s` — mediria a tese no eixo errado e
+concluiria "não tem efeito" mesmo se ela fosse verdadeira.
+
+**2. "Amplo" NÃO é "genérico" — é um degrau acima no MESMO assunto.** O exemplo
+de pets prova:
+
+| | |
+|---|---|
+| estreito | *"se você tem um **golden** que come tudo, ensine isso"* |
+| amplo | *"quer um **cachorro** que não come nada do chão? siga esses passos"* |
+
+O amplo continua falando de cachorro. Isso **derruba a objeção que eu tinha
+levantado** ("hook amplo em conta de nicho vira vago"): não se sobe até "todo
+mundo", sobe-se de golden para cachorro. Numa conta de nicho o degrau existe e
+é curto.
+
+🔧 **FEITO (16/08): `analise_retencao` ganhou o eixo AMPLO × ESTREITO.**
+Classifica cada hook do ledger por *"exige pertencer a um grupo pra continuar
+assistindo?"* e compara os dois baldes em **alcance**, não só em retenção.
+Os baldes também resolvem a falta de potência: a tabela de moldes tem n=5..9
+por grupo (onde 0,8s de espalhamento morre contra ±1,0s de ruído); dois baldes
+juntam os MESMOS posts em grupos ~10× maiores. Mesma amostra, pergunta que ela
+consegue responder. Recusa comparar com <8 de cada lado, imprime exemplos dos
+dois baldes pra classificação poder ser conferida a olho, e avisa que o piso de
+ruído do alcance sai largo (cauda longa) — logo "não separou" é fraco ali, mas
+"separou" seria forte.
+
+⚠️ **O CLASSIFICADOR TEM UM PONTO CEGO CONHECIDO, e ele quase passou batido.**
+O carrossel tem DOIS tipos de recorte: de **público** ("se você tem um golden")
+e de **objeto** ("review do livro Pai Rico" — só quem conhece o livro assiste).
+A função detecta o primeiro e chama o segundo de "amplo". Descobri montando o
+teste: escrevi `esperava amplo` pro exemplo do livro, e o teste passou **12/12**
+— porque **o gabarito era a minha própria limitação**. Teste que herda o ponto
+cego do código passa sempre. Fica como está porque nossos hooks não nomeiam o
+produto (o curiosity-gap existe pra escondê-lo), mas está anotado no docstring:
+se os hooks passarem a citar marca/modelo, falta um segundo detector.
+
+⚠️ **E A COLISÃO QUE ISTO CRIA COM O PRÓPRIO 2.5, dita sem maquiagem:** o
+exemplo que o Dre elogiou na Alana — *"não mostre isso pra quem ama flores"* —
+é **exatamente a forma que a Ava chama de flop**. Nomeia um grupo na primeira
+linha. Os dois são observação do Dre, em datas diferentes, e **não dá pra
+"conciliar" no papel**: ou a Alana vende apesar disso, ou o alcance dela seria
+maior sem isso, e nenhuma das duas se decide argumentando. Temos 2 dos 10
+moldes nessa forma (`necessidade`, `alerta_exclusao`) rodando em produção
+agora — então a comparação é contra dado nosso, não contra teoria de ninguém.
+
 🚧 **BLOQUEIO PRA DECIDIR ISSO COM DINHEIRO:** o `sub_id` usa 4 de 5 etiquetas
 (`[canal, nicho, produto, FONTE]`) e **nenhuma identifica o vídeo** — então
 venda não se liga a hook. A 5ª está livre, e o docstring do
