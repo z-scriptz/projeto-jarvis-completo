@@ -2839,6 +2839,40 @@ entre um experimento que termina em semanas e um que termina em 2027.
 bloqueia — a métrica é por `media_id` e o `reach.jsonl` já guarda por post.
 Só volta a importar quando o experimento for de COMISSÃO.
 
+**A retenção não veio, e as duas explicações óbvias caíram — medidas:**
+
+| hipótese | veredito |
+|---|---|
+| falta `instagram_manage_insights` | **NÃO** — o `reach` chegou (207 · 264 · 561 · 128). Sem a permissão ele também viria vazio |
+| não são Reels | **NÃO** — `2041 REELS` no `reach.jsonl`, zero de qualquer outro tipo |
+
+Sobra a chamada. **E o defeito é meu, do mesmo feitio de tudo hoje:**
+
+```python
+if r.get("error"):
+    out["_insights_erro"] = (r["error"].get("message") or "")[:120]
+    continue          # ← a próxima tentativa sobrescreve, e ninguém imprime
+```
+
+O `_insights` tenta combinações da mais rica pra mais pobre; ao errar, guarda
+a mensagem num campo que a tentativa seguinte apaga e que nada lê. Depois
+`reach,plays` passa e ele sai satisfeito. Saída final: *"nenhum post trouxe
+retenção"* **sem uma palavra sobre o motivo** — com os Reels certos e a
+permissão certa.
+
+**Dois consertos:**
+
+- `_insights` **acumula** os erros (`_insights_erros`, lista) e o resumo
+  imprime a resposta literal da API. Verificado: a queda pro plano B continua
+  funcionando E o motivo sobrevive.
+- **`diag_retencao.py`** — pede UMA métrica por vez num Reel real e mostra o
+  que a API responde, com `reach`/`views` como controle (se o controle falhar,
+  o problema não é o nome). ⚠️ **Não chuta nome de métrica**: a Meta deprecia
+  e renomeia Insights por versão, e adivinhar aqui repetiria o erro do campo
+  `texto` que inventei no `fila_qualidade`. Ele também fixa a versão da API
+  lendo `reach_agent.GRAPH` — sondar em v23 e concluir sobre uma produção em
+  v21 responderia a pergunta de outro sistema.
+
 ⚠️ **E a auditoria se contradisse na própria saída.** O bloco 2 leu
 `push falhou` do log (rodada das 14:00, código antigo) e o bloco 5 leu do git
 que o clone estava em dia — o veredito listou os dois. **Estado vivo ganha de

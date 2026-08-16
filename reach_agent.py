@@ -92,8 +92,14 @@ def _insights(media_id: str, token: str) -> dict:
         except Exception:
             continue
         if r.get("error"):
-            # sem permissão de insights → avisa uma vez lá em cima; aqui só segue
-            out["_insights_erro"] = (r["error"].get("message") or "")[:120]
+            # ⚠️ ACUMULA, não sobrescreve. A versão anterior fazia
+            # `out["_insights_erro"] = ...` a cada tentativa: a última apagava
+            # as anteriores, ninguém imprimia o campo, e a combinação pobre
+            # passava. Resultado real (15/08): "nenhum post trouxe retenção"
+            # sem uma palavra sobre o motivo — com os Reels certos e a
+            # permissão certa. Erro engolido é o modo de falha desta casa.
+            msg = (r["error"].get("message") or "")[:120]
+            out.setdefault("_insights_erros", []).append(f"{metricas}: {msg}")
             continue
         for d in r.get("data", []):
             nome = d.get("name")
@@ -196,10 +202,21 @@ def main():
         print(f"\n  ⏱️  retenção: {len(com_ret)}/{len(total)} posts com tempo "
               f"médio assistido · média {sum(com_ret) / len(com_ret):.1f}s")
     elif total:
-        print("\n  ⚠️  NENHUM post trouxe `ig_reels_avg_watch_time` — só Reels "
-              "têm essa métrica, e ela exige 'instagram_manage_insights'. "
-              "Sem ela não dá pra medir retenção, e o A/B de formato fica sem "
-              "métrica (comissão não serve: são 9 vendas/mês).")
+        print("\n  ⚠️  NENHUM post trouxe tempo médio assistido — sem ele não "
+              "dá pra medir retenção (comissão não serve: 9 vendas/mês).")
+        # o motivo vem da própria API, não de palpite meu
+        vistos = []
+        for i in total:
+            for e in (i.get("_insights_erros") or []):
+                if e not in vistos:
+                    vistos.append(e)
+        for e in vistos[:4]:
+            print(f"       a API respondeu → {e}")
+        if not vistos:
+            print("       (a API não devolveu erro: a métrica simplesmente "
+                  "não veio nos dados)")
+        print("       Diagnóstico métrica a métrica:  "
+              ".venv/bin/python diag_retencao.py")
 
     _salvar(total)
     print(f"\n💾 {len(total)} posts salvos em {REACH.name}")
