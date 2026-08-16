@@ -3088,9 +3088,42 @@ VPS. Testado com um cenário onde só a casa vem vazia: aponta a conta, o motivo
 ("plano existe, legenda VAZIA") e exemplos.
 
 **MEDIDO NA VPS: 336 de 336 pacotes têm legenda no plano.** Todas as quatro
-contas, 100%. **A produção está limpa — o defeito é do publicador**, e o
-próximo passo é ver de onde ele lê:
-`grep -n 'legenda\|caption' agents/publish_guard.py`.
+contas, 100%. **A produção está limpa — o defeito é do publicador.**
+
+**E o publicador explica.** `agents/publish_guard._legenda_instagram` tem
+**três ramos**, e o guarda da linha 95 valida **só o terceiro**:
+
+```python
+descs = plano.get("descricoes") or {}
+if descs.get("instagram"):
+    return descs["instagram"]            # ramo 1 — SEM .strip(), sem validação
+pack = plano.get("publish_pack") or {}
+if pack.get("legenda_instagram"):
+    return pack["legenda_instagram"]     # ramo 2 — SEM .strip(), sem validação
+return (plano.get("legenda") or "").strip()   # ramo 3 — o único exigido
+```
+
+A linha 95 bloqueia a publicação quando falta `plano["legenda"]` — o **ramo 3**,
+que medimos em 336/336. Mas **o que vai pro ar pode vir do ramo 1 ou 2**, e
+esses ninguém checa. Um `descricoes.instagram` com `"   \n"` é *truthy*,
+sobrescreve a legenda boa, passa no guarda e sai vazio no Instagram.
+
+⚠️ **É a assimetria que explica o sintoma exato:** post publicado (logo passou
+na validação) **e** sem legenda. Nenhuma outra hipótese casa com as duas coisas
+ao mesmo tempo.
+
+`descricoes` é escrito em dois lugares — `telegram_repurpose_hunter.py:1693` e
+`finalizar_plano.py:152` — ambos com
+`{p: d.get("descricao", "") for p, d in descs.items()}`. String vazia é
+inofensiva (cai pro ramo 3); **espaço em branco não é**.
+
+O `diag_pacotes.py` ganhou uma **réplica exata** do `_legenda_instagram`,
+defeitos inclusos, e reporta por conta **qual ramo dispara** e quantos sairiam
+vazios. Copiar lógica normalmente é ruim; aqui é o ponto — o publicador só
+existe na VPS, e a única forma honesta de saber por onde a legenda sai é rodar
+a mesma decisão sobre os mesmos planos. Testado com `descricoes.instagram =
+"   \n "` numa conta e `publish_pack.legenda_instagram = "\n"` noutra: aponta
+as duas, com o ramo e o valor cru.
 
 ### 🔗 O 1º COMENTÁRIO SUMIU EM 43% DOS POSTS, calado (15/08)
 

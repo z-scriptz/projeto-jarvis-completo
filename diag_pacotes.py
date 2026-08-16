@@ -61,6 +61,42 @@ def _conta_do_pacote(pasta: Path) -> str:
     return "(sem conta.json)"
 
 
+def _legenda_instagram(plano: dict):
+    """RÉPLICA EXATA do `agents/publish_guard._legenda_instagram`, inclusive
+    os defeitos — devolve (texto, qual_ramo).
+
+    ⚠️ COPIAR LÓGICA É RUIM, E AQUI É O PONTO. Não estou reimplementando pra
+    usar: estou reproduzindo pra MEDIR qual ramo a produção real dispara. O
+    publicador só existe na VPS, e a única forma honesta de saber por onde a
+    legenda sai é rodar a mesma decisão sobre os mesmos planos.
+
+    Os três ramos, e a assimetria que interessa:
+        1. descricoes.instagram      → devolvido SEM .strip(), sem validação
+        2. publish_pack.legenda_ig   → devolvido SEM .strip(), sem validação
+        3. plano.legenda             → .strip() e é o ÚNICO que o guarda da
+                                       linha 95 exige antes de publicar
+    Ou seja: o guarda valida o ramo 3 e o post pode sair pelo 1 ou pelo 2. Foi
+    por isso que medimos 336/336 com legenda e mesmo assim há post sem.
+    """
+    descs = plano.get("descricoes") or {}
+    if descs.get("instagram"):
+        return descs["instagram"], "descricoes.instagram"
+    pack = plano.get("publish_pack") or {}
+    if pack.get("legenda_instagram"):
+        return pack["legenda_instagram"], "publish_pack.legenda_instagram"
+    return (plano.get("legenda") or "").strip(), "plano.legenda"
+
+
+def _plano(slug: str):
+    f = PLANOS / f"plano_{slug}.json"
+    if not f.exists():
+        return None
+    try:
+        return json.loads(f.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
 def _legenda_do_plano(slug: str):
     """(texto, de_onde) — ou (None, motivo). A legenda REAL que o publicador
     teria disponível."""
@@ -91,7 +127,9 @@ def main():
         raise SystemExit(f"[pacotes] {PACOTES} está vazia")
 
     por_conta = defaultdict(lambda: {"n": 0, "com": 0, "sem": [],
-                                     "faltando": defaultdict(int)})
+                                     "faltando": defaultdict(int),
+                                     "ramos": defaultdict(int),
+                                     "ig_vazia": []})
     for pasta in pastas:
         conta = _conta_do_pacote(pasta)
         if args.conta and args.conta.lower() not in conta.lower():
@@ -106,6 +144,15 @@ def main():
             c["com"] += 1
         else:
             c["sem"].append((pasta.name, de_onde))
+
+        # O QUE O INSTAGRAM RECEBERIA DE VERDADE — pelo caminho do publicador
+        pl = _plano(pasta.name)
+        if pl is not None:
+            saida, ramo = _legenda_instagram(pl)
+            vazia = not (saida or "").strip()
+            c["ramos"][ramo] += 1
+            if vazia:
+                c["ig_vazia"].append((pasta.name, ramo, repr(saida)[:40]))
         if args.listar:
             marca = "✅" if txt else "❌"
             print(f"  {marca} {conta[:20]:20} {pasta.name[:38]:38} "
@@ -135,16 +182,47 @@ def main():
         for slug, motivo in c["sem"][:3]:
             print(f"       ex.: {slug[:44]} → {motivo}")
 
+    # ── POR QUAL RAMO A LEGENDA DO INSTAGRAM SAI ───────────────────────────
+    print()
+    print("  ── O QUE O INSTAGRAM RECEBE (ramo do publish_guard) ──")
+    print(f"     {'conta':22} {'ramo usado':32} {'vazias':>7}")
+    for conta, c in sorted(por_conta.items()):
+        if not c["ramos"]:
+            continue
+        ramos = " · ".join(f"{r.split('.')[-1]}:{q}"
+                           for r, q in sorted(c["ramos"].items(),
+                                              key=lambda kv: -kv[1]))
+        print(f"     {conta[:22]:22} {ramos[:32]:32} "
+              f"{len(c['ig_vazia']):7}")
+
+    vazias = [(conta, x) for conta, c in por_conta.items()
+              for x in c["ig_vazia"]]
+    if vazias:
+        print()
+        print(f"  ❌ {len(vazias)} post(s) sairiam com legenda VAZIA no "
+              f"Instagram:")
+        for conta, (slug, ramo, valor) in vazias[:6]:
+            print(f"     {conta[:18]:18} {slug[:30]:30} ramo={ramo} "
+                  f"valor={valor}")
+        print()
+        print("     ⚠️ O guarda da linha 95 exige `plano.legenda` — o RAMO 3.")
+        print("        Estes saem pelo ramo acima, que ninguém valida: o post")
+        print("        passa na checagem e vai pro ar sem legenda.")
+    else:
+        print()
+        print("  ✅ nenhum pacote atual sairia com legenda vazia por este")
+        print("     caminho. Se a casa postou sem legenda, ou foi um pacote já")
+        print("     consumido (não está mais aqui), ou a perda é depois — no")
+        print("     `meta_uploader.postar_instagram` / na própria API.")
+
     print()
     total = sum(c["n"] for c in por_conta.values())
     com = sum(c["com"] for c in por_conta.values())
     if com == total:
-        _log("TODO pacote tem legenda no plano.")
-        _log("   Então o defeito NÃO é da produção: é o publicador que não "
-             "está lendo, ou está lendo de outro lugar. O caminho é o "
-             "`agents/publish_guard.py` da VPS — este repo não tem esse "
-             "arquivo, então o próximo passo é olhar de onde ELE lê a legenda:")
-        _log("     grep -n 'legenda\\|caption' agents/publish_guard.py")
+        _log("TODO pacote tem legenda no plano (ramo 3) — a produção está "
+             "limpa.")
+        _log("   O que decide é a tabela de RAMOS acima: o guarda só exige o "
+             "ramo 3, e o post sai pelo 1 ou pelo 2 quando eles existem.")
     elif com == 0:
         _log("NENHUM pacote tem legenda no plano — o defeito é na PRODUÇÃO, "
              "antes de publicar.")
