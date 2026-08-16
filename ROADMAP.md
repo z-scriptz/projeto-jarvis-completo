@@ -3246,6 +3246,39 @@ ninguém lia · fila truncando · campo `texto` inventado · `midia_viva` medind
 movimento · `plays` depreciado envenenando o lote · e agora `except: pass`
 comendo 43% dos primeiros comentários.
 
+### 🎬 CLIPE DE FORA VIRA REEL: o adaptador que faltava (15/08)
+
+O Dre tem **66 créditos/dia de Kling grátis até 16/09** (com marca d'água) e
+vai gerar um clipe de 8s pra responder a pergunta que trava o caminho autoral
+há semanas: **uma foto de produto vira vídeo com movimento de verdade?**
+
+⚠️ **Sem adaptador, o teste morreria em "ficou bonito".** O `piloto.py` monta
+vídeo a partir de FOTOS — não aceita clipe pronto. A gente compararia
+impressão com impressão em vez de Reel com Reel.
+
+**E a peça já existia.** `produzir_tiktok._produzir(pasta, plano, video)`
+recebe um ARQUIVO DE VÍDEO local + o JSON do produto e devolve o Reel
+completo: template TopShop, logo da conta, hook, narração, legenda, hashtags,
+`engajamento.json`, ledger e a pasta em `pronto_para_postar/`. **Reciclar
+viral do TikTok e "reciclar" um clipe do Kling é a MESMA operação.**
+
+O `produzir_de_video.py` é só o adaptador: monta o inbox que aquela função
+espera e a chama. Pipeline novo aqui seria reconstruir o que já roda 44 vezes
+por semana.
+
+Decisões que importam:
+- **produto por LINK, não por índice** — mesma razão do `piloto --fila-link`:
+  o gravador insere no topo ~11x/dia e o índice aponta pra outro produto
+  poucas horas depois, **com o link de afiliado de outro produto junto**.
+  Link ausente erra alto, não produz "o mais parecido".
+- **pasta temporária**, não o inbox de verdade: teste manual largado lá dentro
+  faria o cron reproduzir aquilo sozinho na próxima rodada.
+- **não posta** e avisa que o daemon posta nos horários, com o comando pra
+  conferir antes.
+
+Marca d'água não atrapalha esta pergunta: quem julga é o Dre, não a audiência.
+Ela só impede o A/B de retenção — esse fica pra quando houver clipe sem marca.
+
 ### 🔚 O ALARME FALSO ERA MEU: CRLF (15/08)
 
 O `deploy_seguro` recusou o `meta_uploader.py` com **DIVERGENTE** — "alguém
