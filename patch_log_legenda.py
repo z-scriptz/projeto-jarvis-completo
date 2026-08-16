@@ -55,6 +55,43 @@ def _log(m):
     print(f"[log-legenda] {m}", flush=True)
 
 
+def _ler(p: Path) -> str:
+    """Lê preservando as quebras de linha ORIGINAIS.
+
+    ⚠️ `Path.read_text()` normaliza CRLF→LF na leitura e `write_text()` grava
+    LF: juntos, reescrevem o arquivo INTEIRO em silêncio. Medido em 15/08 —
+    meus patchers converteram `meta_uploader.py` (510 CR) e o
+    `telegram_repurpose_hunter.py` (1968 CR) sem que nada avisasse, e o
+    `deploy_seguro` passou a classificar os dois como DIVERGENTE por causa
+    disso. Efeito colateral invisível numa ferramenta feita justamente pra
+    não ter efeito colateral invisível.
+    """
+    with open(p, encoding="utf-8", newline="") as f:
+        return f.read()
+
+
+def _escrever(p: Path, texto: str):
+    """Grava sem traduzir quebra de linha (o texto já traz as originais)."""
+    with open(p, "w", encoding="utf-8", newline="") as f:
+        f.write(texto)
+
+
+def _no_estilo_do_arquivo(texto: str, original: str) -> str:
+    """Converte as linhas NOVAS pra mesma quebra de linha do arquivo.
+
+    Preservar o resto e inserir `\n` num arquivo CRLF deixaria o arquivo
+    misturado — funciona em Python e suja qualquer diff daqui pra frente.
+    Quem manda é o arquivo que já está lá, não o meu editor.
+    """
+    # normaliza SEMPRE, não só quando o texto novo é puro LF: o `subn` da
+    # regex devolve o arquivo inteiro (já com CRLF) mais 3 linhas novas em LF,
+    # e a versão condicional desistia justamente aí — deixando 1970 CR em 1973
+    # linhas. Medido.
+    if "\r\n" in original:
+        return texto.replace("\r\n", "\n").replace("\n", "\r\n")
+    return texto.replace("\r\n", "\n")
+
+
 def main():
     p = argparse.ArgumentParser(
         description="Loga a legenda antes de criar o container do Instagram.")
@@ -69,7 +106,7 @@ def main():
 
     falhou = mexidos = 0
     for c in copias:
-        texto = c.read_text(encoding="utf-8")
+        texto = _ler(c)
 
         if MARCA in texto:
             _log(f"·  {c.relative_to(RAIZ)}: já registra a legenda")
@@ -81,7 +118,8 @@ def main():
             _log(f"·  {c.relative_to(RAIZ)}: não tem `postar_instagram`, pulo")
             continue
 
-        n = texto.count(ANCORA)
+        _ancora = _no_estilo_do_arquivo(ANCORA, texto)
+        n = texto.count(_ancora)
         if n != 1:
             _log(f"⚠️  {c.relative_to(RAIZ)}: âncora aparece {n}x — NÃO mexo")
             _log(f"     a VPS divergiu do repo; confira à mão onde o container "
@@ -97,7 +135,8 @@ def main():
 
         bak = c.with_suffix(c.suffix + ".bak_loglegenda")
         shutil.copy2(c, bak)
-        c.write_text(texto.replace(ANCORA, LINHAS + ANCORA, 1), encoding="utf-8")
+        _escrever(c, texto.replace(
+            _ancora, _no_estilo_do_arquivo(LINHAS, texto) + _ancora, 1))
         r = subprocess.run([sys.executable, "-m", "py_compile", str(c)],
                            capture_output=True, text=True)
         if r.returncode != 0:

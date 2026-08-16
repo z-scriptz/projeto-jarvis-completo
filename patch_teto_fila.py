@@ -55,7 +55,7 @@ RAIZ = Path(__file__).resolve().parent
 ALVO = "telegram_repurpose_hunter.py"
 
 RE_ASSINATURA = re.compile(r"(max_itens\s*:\s*int\s*=\s*)(\d+)")
-RE_CORTE = re.compile(r"^([ \t]*)fila = fila\[:max_itens\]\s*$", re.MULTILINE)
+RE_CORTE = re.compile(r"^([ \t]*)fila = fila\[:max_itens\][ \t]*\r?$", re.MULTILINE)
 
 CORTE_NOVO = (
     "\\1_teto = max_itens or int(os.environ.get(\"FILA_ACERVO_MAX\", \"500\"))\n"
@@ -65,12 +65,49 @@ CORTE_NOVO = (
 # a 1a versão deste patcher escreveu ESTE trecho; ele precisa convergir pro de
 # cima, senão quem já rodou fica com o acervo ilimitado pra sempre
 RE_CORTE_V1 = re.compile(
-    r"^([ \t]*)if max_itens and max_itens > 0:.*\n[ \t]*fila = fila\[:max_itens\]\s*$",
+    r"^([ \t]*)if max_itens and max_itens > 0:.*\r?\n[ \t]*fila = fila\[:max_itens\][ \t]*\r?$",
     re.MULTILINE)
 
 
 def _log(m):
     print(f"[teto] {m}", flush=True)
+
+
+def _ler(p: Path) -> str:
+    """Lê preservando as quebras de linha ORIGINAIS.
+
+    ⚠️ `Path.read_text()` normaliza CRLF→LF na leitura e `write_text()` grava
+    LF: juntos, reescrevem o arquivo INTEIRO em silêncio. Medido em 15/08 —
+    meus patchers converteram `meta_uploader.py` (510 CR) e o
+    `telegram_repurpose_hunter.py` (1968 CR) sem que nada avisasse, e o
+    `deploy_seguro` passou a classificar os dois como DIVERGENTE por causa
+    disso. Efeito colateral invisível numa ferramenta feita justamente pra
+    não ter efeito colateral invisível.
+    """
+    with open(p, encoding="utf-8", newline="") as f:
+        return f.read()
+
+
+def _escrever(p: Path, texto: str):
+    """Grava sem traduzir quebra de linha (o texto já traz as originais)."""
+    with open(p, "w", encoding="utf-8", newline="") as f:
+        f.write(texto)
+
+
+def _no_estilo_do_arquivo(texto: str, original: str) -> str:
+    """Converte as linhas NOVAS pra mesma quebra de linha do arquivo.
+
+    Preservar o resto e inserir `\n` num arquivo CRLF deixaria o arquivo
+    misturado — funciona em Python e suja qualquer diff daqui pra frente.
+    Quem manda é o arquivo que já está lá, não o meu editor.
+    """
+    # normaliza SEMPRE, não só quando o texto novo é puro LF: o `subn` da
+    # regex devolve o arquivo inteiro (já com CRLF) mais 3 linhas novas em LF,
+    # e a versão condicional desistia justamente aí — deixando 1970 CR em 1973
+    # linhas. Medido.
+    if "\r\n" in original:
+        return texto.replace("\r\n", "\n").replace("\n", "\r\n")
+    return texto.replace("\r\n", "\n")
 
 
 def _copias():
@@ -150,13 +187,14 @@ def main():
     falhou = 0
     for c in copias:
         try:
-            texto = c.read_text(encoding="utf-8")
+            texto = _ler(c)
         except Exception as e:
             _log(f"✗ {c.name}: não consegui ler — {str(e)[:70]}")
             falhou += 1
             continue
 
         novo, mudancas = _patchar(texto)
+        novo = _no_estilo_do_arquivo(novo, texto)
         if not mudancas:
             _log(f"·  {c.relative_to(RAIZ)}: já está no formato novo "
                  f"(nada a fazer)")
@@ -171,7 +209,7 @@ def main():
 
         bak = c.with_suffix(c.suffix + ".bak_teto")
         shutil.copy2(c, bak)
-        c.write_text(novo, encoding="utf-8")
+        _escrever(c, novo)
         r = subprocess.run([sys.executable, "-m", "py_compile", str(c)],
                            capture_output=True, text=True)
         if r.returncode != 0:

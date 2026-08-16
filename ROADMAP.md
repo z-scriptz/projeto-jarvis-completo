@@ -3246,6 +3246,49 @@ ninguém lia · fila truncando · campo `texto` inventado · `midia_viva` medind
 movimento · `plays` depreciado envenenando o lote · e agora `except: pass`
 comendo 43% dos primeiros comentários.
 
+### 🔚 O ALARME FALSO ERA MEU: CRLF (15/08)
+
+O `deploy_seguro` recusou o `meta_uploader.py` com **DIVERGENTE** — "alguém
+editou de um lado só". Eu usei isso como prova do problema de proveniência, e
+até apontei que podia ser a causa do sumiço da legenda.
+
+**Era eu.** O `mtime` do arquivo na VPS é **12/07** e o `diff` mostrava só as
+15 linhas que eu tinha acabado de adicionar. Medido:
+
+```
+antes do meu commit:  510 CR (CRLF)
+depois:                 0 CR (LF)
+git diff:  525 inserções, 510 deleções   ← o arquivo INTEIRO
+```
+
+Meus scripts de edição usam `Path.read_text()` + `write_text()`. O primeiro
+**normaliza CRLF→LF na leitura**, o segundo grava LF: juntos reescrevem o
+arquivo inteiro sem uma palavra. Blast radius medido: **2 arquivos** —
+`meta_uploader.py` (510 CR) e `telegram_repurpose_hunter.py` (1968 CR).
+
+⚠️ **E os patchers que mandei rodar na VPS faziam o mesmo**, então converteram
+as cópias de lá também. Funcionalmente inofensivo em Python; mas é reescrita
+de arquivo inteiro, silenciosa, feita por ferramentas que existem justamente
+pra não ter efeito colateral invisível. **Nono caso do dia, e o autor sou eu.**
+
+**Consertado nos três patchers**, e cada etapa do conserto quebrou a seguinte:
+
+1. Ler/gravar com `newline=""` → preserva o arquivo… mas os **padrões de
+   busca** usavam `\n` e passaram a não casar em arquivo CRLF. O patcher
+   avisou (`ESTA CÓPIA SEGUE SEM PLATAFORMA`) — **foi a única razão de eu ver**,
+   e é o retorno do princípio de falhar alto.
+2. Adaptar os padrões (e as regex, com `\r?`) → passou a casar… mas as linhas
+   INSERIDAS saíam em LF dentro de arquivo CRLF: 1970 CR em 1973 linhas.
+3. Normalizar SEMPRE, não só quando o texto novo é puro LF.
+
+Verificado no fim contra os arquivos CRLF reais: `1973 CR / 1973 LF` e
+`517 CR / 517 LF`, nenhum misturado, os dois compilam, e as três mudanças
+entraram.
+
+**O que isso ensina sobre o dia:** eu passei a sessão inteira caçando efeito
+colateral silencioso dos outros e produzi um. A diferença é só que o meu foi
+encontrado — porque a ferramenta gritou em vez de seguir em frente.
+
 ### 🎣 A MEDIÇÃO DOS HOOKS EXISTIA E NÃO ALCANÇAVA A PRODUÇÃO (15/08)
 
 Dre: *"o hook nós temos uma medição... são aqueles em primeira pessoa"*. Ele
