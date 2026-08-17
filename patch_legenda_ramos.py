@@ -60,25 +60,30 @@ MARCA = "_ramo_limpo"          # idempotência
 # espaçamento flexível e aspas de qualquer tipo) erra menos que apostar em
 # bytes que eu não vi. E se mesmo assim não casar, o patcher recusa — o que é
 # o comportamento certo: melhor não mexer do que mexer no lugar errado.
-RE_RAMO1 = re.compile(
-    r"""(?P<i>[ \t]*)if\s+descs\.get\(\s*["']instagram["']\s*\)\s*:\s*\r?\n"""
-    r"""[ \t]*return\s+descs\[\s*["']instagram["']\s*\]\s*,\s*"""
-    r"""(?P<r>["']descricoes\.instagram["'])""")
+# ⚠️ A FORMA REAL, vista no arquivo da VPS em 17/08 — e diferente da que eu
+# tinha suposto. A "RÉPLICA EXATA" do `diag_pacotes.py` devolvia `(texto, ramo)`;
+# a função de verdade devolve só o texto. O nome do ramo era invenção do
+# diagnóstico, pra poder contar qual disparava.
+#
+# ⚠️ A DECISÃO, PORÉM, É IDÊNTICA (`if X.get("k"): return X["k"]`, mesma ordem,
+# mesmos campos) — então a medição de qual ramo dispara continua valendo. Errei
+# a forma, não o comportamento. Registro os dois porque "minha réplica estava
+# errada" e "minha conclusão estava errada" são coisas diferentes, e confundir
+# as duas joga fora medição boa.
+#
+# UM PADRÃO SÓ, aplicado a cada (dicionário, chave) conhecido — o mesmo defeito
+# aparece 3x: instagram em 2 ramos e facebook em 1. Regex genérico demais
+# pegaria `if X.get(...): return X[...]` em qualquer outro lugar do arquivo,
+# então a lista de chaves é fechada de propósito.
+RAMOS = [("descs", "instagram"), ("pack", "legenda_instagram"),
+         ("descs", "facebook")]
 
-RE_RAMO2 = re.compile(
-    r"""(?P<i>[ \t]*)if\s+pack\.get\(\s*["']legenda_instagram["']\s*\)\s*:\s*\r?\n"""
-    r"""[ \t]*return\s+pack\[\s*["']legenda_instagram["']\s*\]\s*,\s*"""
-    r"""(?P<r>["']publish_pack\.legenda_instagram["'])""")
 
-NOVO1 = (
-    "\\g<i>_t = _ramo_limpo(descs.get(\"instagram\"))\n"
-    "\\g<i>if _t:\n"
-    "\\g<i>    return _t, \\g<r>")
+def _re_ramo(var: str, chave: str):
+    return re.compile(
+        r"""(?P<i>[ \t]*)if\s+%s\.get\(\s*["']%s["']\s*\)\s*:\s*\r?\n"""
+        r"""[ \t]*return\s+%s\[\s*["']%s["']\s*\]""" % (var, chave, var, chave))
 
-NOVO2 = (
-    "\\g<i>_t = _ramo_limpo(pack.get(\"legenda_instagram\"))\n"
-    "\\g<i>if _t:\n"
-    "\\g<i>    return _t, \\g<r>")
 
 # a função auxiliar entra logo antes do `def _legenda_instagram`
 RE_DEF = re.compile(r"^(?P<i>[ \t]*)def\s+_legenda_instagram\s*\(", re.MULTILINE)
@@ -143,29 +148,40 @@ def main():
             _log(f"·  {c.relative_to(RAIZ)}: já tem os ramos limpos")
             continue
 
-        n1 = len(RE_RAMO1.findall(texto))
-        n2 = len(RE_RAMO2.findall(texto))
+        achados = [(v, k, len(_re_ramo(v, k).findall(texto))) for v, k in RAMOS]
         nd = len(RE_DEF.findall(texto))
-        if (n1, n2, nd) != (1, 1, 1):
-            # ⚠️ não achar NÃO é sucesso: esta cópia segue podendo publicar
-            # espaço em branco como legenda
-            _log(f"⚠️  {c.relative_to(RAIZ)}: ramo1={n1} ramo2={n2} def={nd} "
-                 f"(esperado 1/1/1) — NÃO mexo")
+        # ⚠️ TOLERO RAMO AUSENTE, NÃO RAMO DUPLICADO. `_legenda_facebook` pode
+        # não existir numa cópia, e exigir os 3 travaria o conserto dos outros
+        # 2 por causa de um que nem está lá. Mas 2+ ocorrências do MESMO ramo
+        # significa que eu não entendi o arquivo — aí não mexo.
+        if nd != 1 or any(n > 1 for _v, _k, n in achados) or \
+                sum(n for _v, _k, n in achados) == 0:
+            _log(f"⚠️  {c.relative_to(RAIZ)}: def={nd} · "
+                 + " · ".join(f"{k}={n}" for _v, k, n in achados)
+                 + " — NÃO mexo")
             _log(f"     veja como está escrito lá:")
             _log(f"     grep -n -A 12 'def _legenda_instagram' "
                  f"{c.relative_to(RAIZ)}")
             falhou += 1
             continue
 
-        _log(f"→  {c.relative_to(RAIZ)}: limpo os 2 ramos + insiro `_ramo_limpo`")
+        quais = [k for _v, k, n in achados if n == 1]
+        _log(f"→  {c.relative_to(RAIZ)}: limpo {len(quais)} ramo(s) "
+             f"({', '.join(quais)}) + insiro `_ramo_limpo`")
         if not args.aplicar:
             _log("     (seco: não escrevi. use --aplicar)")
             continue
 
         bak = c.with_suffix(c.suffix + ".bak_legramos")
         shutil.copy2(c, bak)
-        novo = RE_RAMO1.sub(NOVO1, texto, count=1)
-        novo = RE_RAMO2.sub(NOVO2, novo, count=1)
+        novo = texto
+        for var, chave, n in achados:
+            if n != 1:
+                continue
+            novo = _re_ramo(var, chave).sub(
+                "\\g<i>_t = _ramo_limpo(%s.get(\"%s\"))\n"
+                "\\g<i>if _t:\n"
+                "\\g<i>    return _t" % (var, chave), novo, count=1)
         m = RE_DEF.search(novo)
         novo = novo[:m.start()] + AUX + novo[m.start():]
         _escrever(c, _no_estilo(novo, texto))
