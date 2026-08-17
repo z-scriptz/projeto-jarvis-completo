@@ -444,7 +444,7 @@ def _fallback(nicho: str, produto: str = "") -> str:
     return escolha
 
 
-def _limpar_saida(txt: str) -> Optional[str]:
+def _limpar_saida(txt: str, motivos: Optional[list] = None) -> Optional[str]:
     """Normaliza a saida do Gemini: tira markdown/rotulos, no maximo 2 linhas."""
     txt = (txt or "").strip()
     txt = txt.replace("```", "").replace("**", "")
@@ -469,11 +469,26 @@ def _limpar_saida(txt: str) -> Optional[str]:
     _min  = int(os.environ.get("HOOK_MIN_CHARS", 44))   # piso da frase unica
     _maxL1 = int(os.environ.get("HOOK_MAX_L1", 40))     # teto da frase antes da tag
     _vis0 = len(_EMOJI_RX.sub("", linhas[0]).strip())
+    # ⚠️ `motivos` existe pra REJEIÇÃO PODER VIRAR PEDIDO. Antes isto só
+    # devolvia None, e None caía direto na reserva — o modelo tinha escrito
+    # algo aproveitável, errava o tamanho por 4 caracteres, e o vídeo saía com
+    # frase fixa de banco. Medido em 16/08: "Não mostre isso pra quem ama
+    # cabelo liso" tem 40 visíveis contra piso de 44, e virava fallback sem
+    # ninguém pedir de novo. Quem chama usa o motivo pra reescrever o pedido.
     if len(linhas) == 1:
         if _vis0 < _min:            # 1 linha curta -> nao enche 2 linhas -> rejeita
+            if motivos is not None:
+                motivos.append(
+                    f"seu hook tinha {_vis0} caracteres e o minimo e {_min}: "
+                    f"ficou pequeno demais na tela. Escreva MAIS LONGO "
+                    f"(~8 a 12 palavras), sem virar duas frases.")
             return None
     else:                           # frase + tag
         if _vis0 > _maxL1:          # frase longa -> quebraria e viraria 3 linhas -> rejeita
+            if motivos is not None:
+                motivos.append(
+                    f"a 1a linha tinha {_vis0} caracteres e o teto e {_maxL1} "
+                    f"quando existe uma 2a linha: encurte a 1a linha.")
             return None
     return "\n".join(linhas)
 
@@ -650,28 +665,44 @@ def _via_gemini(produto: str, descricao: str, nicho: str) -> Optional[str]:
         # desobediencia sai calada direto pro video. A regra so vale se ela for
         # CHECADA depois. Uma retentativa com o trecho exato que violou; se
         # insistir, cai na reserva (que e ruim, mas e ruim de forma conhecida).
+        # ⚠️ E A RETENTATIVA VALE PROS DOIS MOTIVOS DE REJEICAO, nao so pra
+        # porta. Achado de 16/08 testando este caminho: hook reprovado por
+        # FORMATO (curto demais, 1a linha longa demais) devolvia None e caia
+        # direto na reserva -- sem ninguem pedir de novo. O modelo tinha
+        # escrito algo aproveitavel e errado o tamanho por 4 caracteres, e o
+        # video saia com frase fixa de banco. Isso explica parte dos 22% de
+        # posts com hook de reserva medidos hoje.
         for tentativa in (1, 2):
             r = cli.models.generate_content(
                 model="gemini-2.5-flash",
                 contents=[{"parts": [{"text": prompt}]}],
             )
-            hook = _limpar_saida(getattr(r, "text", "") or "")
-            if not _amplo or not hook:
+            motivos = []
+            hook = _limpar_saida(getattr(r, "text", "") or "", motivos)
+            queixa = ""
+            if not hook:
+                # sem motivo registrado = veio vazio/ilegivel, nada a explicar
+                queixa = motivos[0] if motivos else ""
+            elif _amplo:
+                porta = filtra_publico(hook)
+                if porta:
+                    queixa = (f"voce usou \"{porta}\", que FECHA a porta pra "
+                              f"quem nao pertence a esse grupo. Reescreva a "
+                              f"FRASE INTEIRA falando do RESULTADO, nao de "
+                              f"quem a pessoa e.")
+            if hook and not queixa:
                 return hook
-            porta = filtra_publico(hook)
-            if not porta:
-                return hook
-            log.info("hook fechou publico com %r — reescrevendo (%d/2)",
-                     porta, tentativa)
+            if not queixa:
+                return None                     # saida vazia: nao ha o que pedir
             if tentativa == 2:
-                # ⚠️ devolve None (nao o hook estreito): passar adiante o que a
+                # ⚠️ devolve None (nao o hook reprovado): passar adiante o que a
                 # regra acabou de reprovar transformaria a checagem em teatro.
-                log.warning("hook seguiu estreito (%r) apos 2 tentativas — "
-                            "vai pra reserva", porta)
+                log.warning("hook seguiu reprovado apos 2 tentativas (%s) — "
+                            "vai pra reserva", queixa[:70])
                 return None
-            prompt += (f"\nATENCAO: sua resposta anterior usava \"{porta}\", que "
-                       f"FECHA a porta pra quem nao pertence a esse grupo. "
-                       f"Reescreva SEM essa construcao, mantendo a promessa.\n")
+            log.info("hook reprovado, reescrevendo (%d/2): %s",
+                     tentativa, queixa[:70])
+            prompt += f"\nATENCAO sobre a sua resposta anterior: {queixa}\n"
         return None
     except Exception as erro:
         log.warning("Gemini falhou no HOOK (%s: %s) — usando reserva",
