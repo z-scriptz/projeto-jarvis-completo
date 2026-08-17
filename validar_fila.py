@@ -212,6 +212,19 @@ def validar_fila(produtos: list, vendas_minimas: int = None,
                 "imagem": c.get("imagem", ""),
                 "link": c.get("offer_link") or c.get("product_link") or "",
                 "preco": c.get("preco", 0),
+                # ⚠️ MESMA HISTÓRIA DA FOTO, um parágrafo acima — e ela custou
+                # 4 de 5 produtos em 17/08. O `item_id` é a IDENTIDADE do
+                # anúncio, a busca já devolve (`shopee_affiliate:444`), e era
+                # descartado aqui. Depois, quem precisava dele (preencher_fotos,
+                # deploy_site) tinha que SEGUIR o link curto até a página pra
+                # redescobrir — e o link curto não carrega o id, então o
+                # redirect é a única saída e ele falha: anti-bot, interstício,
+                # URL fora do padrão `i.shop.item`. Resultado medido:
+                # `(sem itemId no link)` em 4 de 5, 0 fotos preenchidas, e os
+                # produtos parados fora da vitrine.
+                # Guardar aqui é de graça: o dado já está na mão.
+                "item_id": str(c.get("item_id") or ""),
+                "shop_id": str(c.get("shop_id") or ""),
                 # só aparece quando o nome cheio não achou nada e o termo curto
                 # achou. Serve pra saber de onde veio o campeão sem adivinhar.
                 **({"termo_busca": termo_usado} if termo_usado != nome else {}),

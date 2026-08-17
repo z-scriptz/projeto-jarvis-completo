@@ -52,6 +52,36 @@ FILA = next((c for c in CANDIDATOS if c.exists()), CANDIDATOS[0])
 
 _UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36"
 
+# ⚠️ O MESMO ARQUIVO QUE O `deploy_site` JÁ ESCREVE. O health-check resolve o
+# link e guarda `{link: {estado, ts, item}}` — o `item` é o itemId. Este script
+# resolvia tudo de novo, do zero, a cada rodada: mesma requisição, mesmo
+# resultado, mesma exposição ao anti-bot da Shopee. Cache compartilhado não é
+# otimização aqui, é parar de jogar fora trabalho que já foi feito.
+CACHE_IDS = Path(__file__).resolve().parent / "shared" / "health_cache.json"
+
+
+def _cache_ler() -> dict:
+    try:
+        return json.loads(CACHE_IDS.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _cache_gravar(cache: dict) -> None:
+    """Grava sem NUNCA derrubar a rodada: cache é conveniência, não requisito.
+
+    ⚠️ E preserva o que já estava lá. O `deploy_site` guarda `estado` e `ts`
+    nas mesmas chaves; sobrescrever a entrada inteira com só o `item` apagaria
+    o health-check e faria o site re-checar tudo na próxima rodada — uma
+    chamada de API por produto, de graça, por causa de uma escrita descuidada.
+    """
+    try:
+        CACHE_IDS.parent.mkdir(parents=True, exist_ok=True)
+        CACHE_IDS.write_text(json.dumps(cache, ensure_ascii=False, indent=2),
+                             encoding="utf-8")
+    except Exception as e:
+        print(f"   (não gravei o cache de itemId: {str(e)[:60]})")
+
 
 def _ids_do_link(link: str):
     """Segue o link de afiliado ate a pagina do produto e extrai (shop_id, item_id)."""
@@ -66,16 +96,55 @@ def _ids_do_link(link: str):
     return pares[-1] if pares else (None, None)
 
 
-def _foto(link: str) -> str:
+def _foto(link: str, item_guardado: str = "", cache: dict = None) -> str:
+    """A foto oficial do produto. `item_guardado` = itemId que a FILA já tem.
+
+    ⚠️ A ORDEM DAS FONTES É O CONSERTO. Antes ele ia direto pro redirect, e o
+    redirect é a parte frágil: em 17/08 falhou em 4 de 5 produtos com
+    `(sem itemId no link)` — o link curto da Shopee não carrega o id, então
+    era preciso segui-lo até a página, e a página nem sempre responde o que a
+    gente espera (anti-bot, interstício, URL sem o padrão `i.shop.item`).
+
+    O id, porém, **já é conhecido em dois lugares mais confiáveis**: gravado na
+    própria fila pela mineração, e no `health_cache.json` que o `deploy_site`
+    escreve. Perguntar à rede algo que está no disco é o desperdício; e aqui
+    não era só lentidão, era falha — 0 de 5 fotos preenchidas.
+    """
     try:
-        shop_id, item_id = _ids_do_link(link)
+        shop_id = item_id = None
+        origem = ""
+
+        # 1) o que a fila guardou (mineração) — não custa nada
+        if item_guardado:
+            item_id, shop_id, origem = str(item_guardado), None, "fila"
+
+        # 2) o que o health-check do site já resolveu
+        if not item_id and cache is not None:
+            ent = cache.get(link) or {}
+            if ent.get("item"):
+                item_id, origem = str(ent["item"]), "cache"
+
+        # 3) só então a rede
         if not item_id:
-            print("   (sem itemId no link)")
+            shop_id, item_id = _ids_do_link(link)
+            origem = "redirect"
+            if item_id and cache is not None:
+                ent = dict(cache.get(link) or {})   # preserva estado/ts
+                ent["item"] = str(item_id)
+                cache[link] = ent
+
+        if not item_id:
+            print("   (sem itemId: nem na fila, nem no cache, nem no redirect)")
             return ""
-        d = obter_dados_produto(str(item_id), shop_id=int(shop_id))
+
+        # ⚠️ `shop_id` pode ser None quando o id veio da fila/cache — a API
+        # aceita a consulta só com o itemId. `int(None)` explodiria, e a
+        # exceção viraria "(erro: ...)" mascarando um caminho que FUNCIONA.
+        d = (obter_dados_produto(str(item_id), shop_id=int(shop_id))
+             if shop_id else obter_dados_produto(str(item_id)))
         if d.get("ok") and d.get("imagem"):
             return d["imagem"]
-        print(f"   (API: {str(d.get('erro'))[:70]})")
+        print(f"   (API via {origem}: {str(d.get('erro'))[:60]})")
         return ""
     except Exception as e:
         print(f"   (erro: {str(e)[:70]})")
@@ -129,21 +198,44 @@ def main():
               f"rodada (PREENCHER_FOTOS_MAX). Rode de novo pra continuar.")
         sem_foto = sem_foto[:limite]
 
-    achou = 0
+    cache = _cache_ler()
+    achou = sem_id = 0
     for i, it in enumerate(sem_foto, 1):
         nome = (it.get("produto") or "?")[:50]
         print(f"[{i}/{len(sem_foto)}] {nome} ...", end=" ")
-        img = _foto(it["link"])
+        guardado = str(it.get("item_id") or "").strip()
+        img = _foto(it["link"], item_guardado=guardado, cache=cache)
         if img:
             it["imagem"] = img
             achou += 1
             print("OK 📷")
         else:
             print("sem foto")
+        # ⚠️ o itemId resolvido volta pra FILA, não só pro cache: o cache é do
+        # health-check e tem TTL de 6h; a fila é o registro do produto. Gravar
+        # nos dois faz a próxima rodada não repetir nada.
+        ent = cache.get(it["link"]) or {}
+        if ent.get("item") and not guardado:
+            it["item_id"] = str(ent["item"])
+        if not (it.get("item_id") or ent.get("item")):
+            sem_id += 1
         time.sleep(1.2)   # gentil com a API
 
+    _cache_gravar(cache)
     _salvar_atomico(FILA, fila)
-    print(f"\nPreenchi {achou}/{len(sem_foto)} fotos. Agora: python3 deploy_site.py")
+    print(f"\nPreenchi {achou}/{len(sem_foto)} fotos.")
+    if sem_id:
+        # ⚠️ ISTO NÃO É "TENTE DE NOVO". Sem itemId em nenhuma das três fontes,
+        # repetir a rodada dá exatamente o mesmo resultado — o link não leva a
+        # um produto que a API reconheça. É defeito do que a mineração gravou,
+        # e o conserto é lá, não aqui.
+        print(f"⚠️  {sem_id} produto(s) sem itemId em NENHUMA fonte (fila, "
+              f"cache, redirect).")
+        print("    Rodar de novo não muda: o link não resolve pra um produto "
+              "que a API conheça.")
+        print("    Esses ficam fora da vitrine até a mineração gravar o "
+              "item_id na origem.")
+    print("Agora: python3 deploy_site.py")
     return 0
 
 

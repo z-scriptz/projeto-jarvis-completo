@@ -80,6 +80,12 @@ def _filtrar_aprovados(relatorio: dict, classes_manter: set) -> list:
             "imagem":         p.get("imagem", ""),
             "link":           p.get("link", ""),
             "preco":          p.get("preco", 0),
+            # ⚠️ A CURADORIA REESCREVE A FILA INTEIRA a cada rodada (foi assim
+            # que a foto sumiu de TODOS em 03/08). Campo que ela não copia é
+            # campo apagado — então o `item_id` que o validador acabou de
+            # gravar precisa passar por aqui, senão ele vive uma rodada e some.
+            "item_id":        str(p.get("item_id") or ""),
+            "shop_id":        str(p.get("shop_id") or ""),
         })
     return aprovados
 
