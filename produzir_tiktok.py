@@ -118,29 +118,83 @@ def _video_integro(video: Path, segundos: int = 3) -> bool:
     return True
 
 
-def _subids(canal: str, nicho: str, nome: str, fonte: str = "") -> list:
-    """Sub-IDs na ordem canônica: [canal, nicho, produto, FONTE]. O índice 3
-    (fonte = perfil de origem) é o que o CEO cruza com a venda pra saber qual
-    perfil converte. Só alfanumérico e ≤16 chars cada (a Shopee rejeita
-    _/-/espaço → erro 11001). Fonte vazia → slot omitido (link de canal sem fonte)."""
+SEM_FONTE = "semfonte"      # sentinela do slot 3 (ver _subids)
+
+
+def _id_video(slug: str) -> str:
+    """Etiqueta curta e única DESTE vídeo, pro slot 5 do sub_id.
+
+    ⚠️ POR QUE PRECISA EXISTIR (17/08): a ordem canônica usava 4 das 5
+    etiquetas — `[canal, nicho, produto, FONTE]` — e **nenhuma identifica o
+    vídeo**. Uma venda dizia de qual conta, nicho, produto e perfil de origem
+    veio, mas não de qual POST nem de qual HOOK. Sem isso, "hook amplo vende
+    mais?" só se responde em segundos de retenção, nunca em dinheiro — e a
+    estratégia de hook mudou HOJE, então cada post publicado sem etiqueta é um
+    post que nunca vai poder ser atribuído depois.
+
+    Hash e não contador: o produtor roda em processos separados (cron), e
+    contador compartilhado entre processos precisaria de trava. Hash de
+    semente única dá unicidade sem coordenação — e o mesmo produto produzido
+    duas vezes recebe etiquetas diferentes, que é justamente o que se quer.
+
+    ⚠️ A SEMENTE NÃO PODE SER SÓ `slug + tempo`. Foi a primeira versão, e o
+    teste pegou: 5 chamadas seguidas deram 4 ids distintos — `time.time()` com
+    3 casas colide dentro do mesmo milissegundo. Id repetido não é um detalhe
+    estatístico aqui: são duas vendas atribuídas ao vídeo errado, em silêncio,
+    justamente na medição que este campo existe pra viabilizar. Com `urandom`
+    a chance de colisão em 36 bits some pro volume que a gente produz.
+    """
+    import hashlib
+    import os as _os
+    import time as _t
+    semente = f"{slug}|{_t.time_ns()}|{_os.getpid()}|{_os.urandom(8).hex()}"
+    return "v" + hashlib.sha1(semente.encode("utf-8")).hexdigest()[:9]
+
+
+def _subids(canal: str, nicho: str, nome: str, fonte: str = "",
+            video: str = "") -> list:
+    """Sub-IDs na ordem canônica: [canal, nicho, produto, FONTE, VIDEO]. O
+    índice 3 (fonte = perfil de origem) é o que o CEO cruza com a venda pra
+    saber qual perfil converte; o índice 4 identifica o vídeo/hook. Só
+    alfanumérico e ≤16 chars cada (a Shopee rejeita _/-/espaço → erro 11001).
+
+    ⚠️ A ARMADILHA QUE QUASE ME PEGOU: a versão antiga OMITIA o slot da fonte
+    quando ela vinha vazia. Um `ids.append(video)` ingênuo colocaria o vídeo no
+    ÍNDICE 3 — e `metricas_agent._fonte()` lê o índice 3 como FONTE. Cada venda
+    de link sem fonte passaria a reportar um "perfil de origem" que é, na
+    verdade, um hash de vídeo. **Não daria erro nenhum**: o CEO simplesmente
+    começaria a ver centenas de fontes inventadas, cada uma com 1 venda, e a
+    poda por venda passaria a cortar fonte boa.
+
+    Por isso, quando há vídeo, o slot 3 é preenchido com `SEM_FONTE` em vez de
+    omitido — e o `metricas_agent._fonte()` traduz essa sentinela de volta pra
+    "". Posição é contrato; buraco no meio de um contrato posicional não é
+    "campo ausente", é o campo seguinte mentindo.
+    """
     import re
     def s(x, padrao):
         v = re.sub(r"[^A-Za-z0-9]", "", str(x or ""))[:16]
         return v or padrao
     ids = [s(canal, "x"), s(nicho, "geral"), s(nome, "prod")]
-    if str(fonte or "").strip():
+    tem_fonte = bool(str(fonte or "").strip())
+    if tem_fonte:
         ids.append(s(fonte, "fonte"))
+    elif video:
+        ids.append(SEM_FONTE)       # segura a posição, senão o vídeo vira fonte
+    if video:
+        ids.append(s(video, "vid"))
     return ids
 
 
 def _link_do_canal(canal: str, origem_url: str, nicho: str, nome: str, base: str,
-                   fonte: str = "") -> str:
-    """Gera um link de afiliado etiquetado pro CANAL (ex: 'fb') + FONTE. Se não der,
-    usa o link base (best-effort — nunca quebra a produção)."""
+                   fonte: str = "", video: str = "") -> str:
+    """Gera um link de afiliado etiquetado pro CANAL (ex: 'fb') + FONTE + VIDEO.
+    Se não der, usa o link base (best-effort — nunca quebra a produção)."""
     if not (_gerar_link and origem_url):
         return base
     try:
-        r = _gerar_link(origem_url, sub_ids=_subids(canal, nicho, nome, fonte))
+        r = _gerar_link(origem_url,
+                        sub_ids=_subids(canal, nicho, nome, fonte, video))
         if isinstance(r, dict) and r.get("ok"):
             return r.get("short_link") or r.get("link") or base
     except Exception as e:
@@ -477,11 +531,17 @@ def _produzir(pasta: Path, pj: Path, video_src: Path) -> bool:
     # Dois consertos: o link etiquetado tem try próprio e cai pro link base
     # (link sem etiqueta é pior que link nenhum? não: é MUITO melhor — perde
     # atribuição, não perde a venda); e a falha da escrita passa a APARECER.
+    # ⚠️ A ETIQUETA DO VÍDEO NASCE AQUI e precisa ir pros DOIS lugares: o link
+    # (pra venda carregar) e o ledger (pra saber qual hook era). Gerar duas
+    # vezes daria dois hashes diferentes e o join nunca fecharia — por isso ela
+    # é calculada uma vez só e reusada logo abaixo, no `_reg`.
+    id_video = _id_video(slug)
+
     link_fb = link
     if plataforma == "shopee":
         try:
             link_fb = _link_do_canal("fb", info.get("origem_url", ""), nicho, nome,
-                                     link, fonte=perfil_fonte)
+                                     link, fonte=perfil_fonte, video=id_video)
         except Exception as e:
             _log(f"   ⚠️  link etiquetado 'fb' falhou ({str(e)[:60]}) — uso o "
                  f"link base; a venda conta, a atribuição por canal não")
@@ -509,12 +569,19 @@ def _produzir(pasta: Path, pj: Path, video_src: Path) -> bool:
     try:
         from posts_ledger import registrar as _reg
         categoria_ledger = categoria or nicho     # nunca vazio (nicho já calculado)
+        # ⚠️ ANTES ISTO GRAVAVA `sub_ids=["tiktok"]` — uma etiqueta que NÃO é a
+        # que foi pro link. O ledger guardava um rótulo genérico enquanto o
+        # link carregava [canal, nicho, produto, fonte]: os dois lados nunca
+        # tiveram como se encontrar. Agora grava a MESMA lista, e o `video_id`
+        # solto no extra pra quem for cruzar não precisar saber a posição.
         _reg(produto=nome, link=link, categoria=categoria_ledger, hook=hook,
-             legenda=legenda, slug=slug, sub_ids=["tiktok"],
+             legenda=legenda, slug=slug,
+             sub_ids=_subids("ig", nicho, nome, perfil_fonte, id_video),
              plataforma=plataforma,                # shopee / amazon
              extra={"fonte": "tiktok", "nicho": nicho,
                     "perfil_fonte": perfil_fonte,   # PERFIL de origem (o CEO mede/poda)
                     "plataforma_afiliado": plataforma,
+                    "video_id": id_video,           # ← join venda × hook
                     "fonte_views": info.get("views", 0)})
     except Exception:
         pass

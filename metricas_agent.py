@@ -100,10 +100,32 @@ def _canal(utm: str) -> str:
 
 def _fonte(utm: str) -> str:
     """4ª etiqueta do sub_id (índice 3) = a FONTE (perfil de origem, alfanumérico).
-    Ordem canônica: [canal, nicho, produto, FONTE]. Links antigos (2-3 sub_ids) não
-    têm → ''. É a chave que o CEO cruza com o ledger p/ saber qual perfil converte."""
+    Ordem canônica: [canal, nicho, produto, FONTE, VIDEO]. Links antigos (2-3
+    sub_ids) não têm → ''. É a chave que o CEO cruza com o ledger p/ saber qual
+    perfil converte.
+
+    ⚠️ `semfonte` É AUSÊNCIA, NÃO NOME. Quando o link leva etiqueta de vídeo
+    (índice 4) mas não tem perfil de origem, o produtor preenche o índice 3 com
+    a sentinela `semfonte` — porque omitir o slot faria o VÍDEO cair no índice
+    3 e ser lido aqui como se fosse a fonte. Traduzir de volta é obrigatório:
+    sem isto o CEO passaria a ver uma fonte chamada "semfonte" no ranking, e
+    ela ganharia de perfis reais só por acumular todo link sem origem.
+    """
     parts = (utm or "").strip().lower().split("-")
-    return parts[3].strip() if len(parts) > 3 else ""
+    v = parts[3].strip() if len(parts) > 3 else ""
+    return "" if v == "semfonte" else v
+
+
+def _video(utm: str) -> str:
+    """5ª etiqueta (índice 4) = o VÍDEO/post que gerou a venda.
+
+    É a peça que faltava pra responder "qual HOOK vende?": o `posts_ledger`
+    guarda `extra.video_id` junto do hook, então venda → vídeo → hook fecha.
+    Vazio nos links antigos, que não têm o slot — e vazio aqui significa "não
+    dá pra saber", nunca "foi o vídeo padrão".
+    """
+    parts = (utm or "").strip().lower().split("-")
+    return parts[4].strip() if len(parts) > 4 else ""
 
 
 def _pagina(ini, fim, scroll_id=None, limite=100):
