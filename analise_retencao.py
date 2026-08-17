@@ -75,20 +75,51 @@ def _pct(vals, p):
     return v[lo] + (v[hi] - v[lo]) * (k - lo)
 
 
-# Marcas de PORTA: o hook exige que o espectador PERTENÇA a um grupo pra
-# continuar. É a definição operacional da Ava Yuergens — "se você tem um golden
-# que come tudo" fala só com dono de golden; "quer um cachorro que não come nada
-# do chão?" fala com dono de cachorro. Note que o exemplo AMPLO dela continua
-# sendo sobre cachorro: amplo NÃO é genérico, é **um degrau acima no mesmo
-# assunto**. Por isso as marcas abaixo procuram o RECORTE, não o tema.
-_PORTAS = (
-    "se voce tem", "se voce e ", "se voce trabalha", "se voce sofre",
-    "se voce usa", "se voce ama", "se vc tem",
-    "pra quem ", "para quem ", "com quem ",
-    "quem tem ", "quem ama ", "quem gosta", "quem usa ", "quem sofre",
-    "toda pessoa que", "todo mundo que", "todas que ", "todos que ",
-    "dona de ", "donas de ", "dono de ", "donos de ", "mae de ", "maes de ",
-)
+# ⚠️ A RÉGUA VEM DO `hook_alana`, NÃO É COPIADA. Quem GERA o hook e quem MEDE
+# o hook precisam usar exatamente a mesma definição de "estreito" — duas cópias
+# viram duas réguas na primeira edição, e aí a análise aprova o que o gerador
+# rejeita (ou pior: o contrário, calado). Mesmo padrão do `_proibido`, que
+# importa `storyboard.PROIBIDO` em vez de repetir a lista.
+try:
+    sys.path.insert(0, str(BASE))
+    from hook_alana import PORTAS_DE_PUBLICO as _PORTAS
+except Exception:
+    _PORTAS = ()
+
+
+def _norm_hook(t: str) -> str:
+    """Chave de comparação: sem emoji, sem tag, sem pontuação, minúsculo."""
+    t = (t or "").replace("{tag}", " ")
+    t = "".join(ch for ch in t if ch.isalnum() or ch.isspace())
+    return " ".join(t.lower().split())
+
+
+_RESERVA_NORM = None
+
+
+def _origem_do_hook(hook: str) -> str:
+    """"reserva" se o hook é uma das frases fixas do `HOOKS_RESERVA`.
+
+    O pool de reserva existe pra quando o Gemini cai. Ele é FIXO, então
+    aparece literal e repetido no ledger; hook gerado sai único por vídeo.
+    Comparar normalizado (sem emoji/tag) é o suficiente pra separar os dois.
+
+    Devolve "?" se nem der pra importar o `hook_alana` — porque chutar
+    "gerado" aqui inflaria justamente o número que a gente quer vigiar.
+    """
+    global _RESERVA_NORM
+    if _RESERVA_NORM is None:
+        try:
+            sys.path.insert(0, str(BASE))
+            import hook_alana as HA
+            _RESERVA_NORM = {_norm_hook(h)
+                             for lista in HA.HOOKS_RESERVA.values()
+                             for h in lista}
+        except Exception:
+            _RESERVA_NORM = set()
+    if not _RESERVA_NORM:
+        return "?"
+    return "reserva" if _norm_hook(hook) in _RESERVA_NORM else "gerado"
 
 
 def _amplitude(hook: str) -> str:
@@ -114,10 +145,12 @@ def _amplitude(hook: str) -> str:
     aqui. **Se um dia os hooks passarem a citar marca/modelo, esta função
     precisa de um segundo detector — e não vai avisar sozinha.**
     """
+    if not _PORTAS:
+        return "?"          # sem a régua não há veredito — "amplo" seria chute
     t = (hook or "").lower()
-    for a, b in (("á", "a"), ("â", "a"), ("ã", "a"), ("é", "e"), ("ê", "e"),
-                 ("í", "i"), ("ó", "o"), ("ô", "o"), ("õ", "o"), ("ú", "u"),
-                 ("ç", "c")):
+    for a, b in (("á", "a"), ("â", "a"), ("ã", "a"), ("à", "a"), ("é", "e"),
+                 ("ê", "e"), ("í", "i"), ("ó", "o"), ("ô", "o"), ("õ", "o"),
+                 ("ú", "u"), ("ç", "c")):
         t = t.replace(a, b)
     t = " " + " ".join(t.split()) + " "
     return "estreito" if any(p in t for p in _PORTAS) else "amplo"
@@ -319,6 +352,45 @@ def main():
                 casados += 1
                 r["_hook"] = lig.get("hook") or ""
                 r["_categoria"] = lig.get("categoria") or ""
+                r["_origem_hook"] = _origem_do_hook(r["_hook"])
+
+        # ── GERADO pelo Gemini, ou RESERVA de quando ele cai? ───────────────
+        # ⚠️ ISTO PRECISA VIR ANTES DA TABELA DE MOLDES, porque decide o que a
+        # tabela significa. O `HOOKS_RESERVA` é um pool FIXO de ~107 frases
+        # usado quando o Gemini falha (e o ROADMAP registra 503 intermitente).
+        # Frase fixa REPETE literal; hook gerado é único a cada vídeo.
+        #
+        # Consequência que eu não tinha visto: o corte `n>=5` da tabela abaixo
+        # **seleciona reserva por construção**. O que repete o bastante pra
+        # juntar n=5 é justamente o que não foi gerado. Medido em 16/08 — dos 3
+        # moldes que passaram o corte, 2 são do pool de reserva. O "molde de
+        # hook" que a gente vinha lendo era, em boa parte, o comportamento do
+        # FALLBACK, não do gerador.
+        _res = {k: 0 for k in ("gerado", "reserva", "?")}
+        for r in com:
+            if r.get("_hook"):
+                _res[r.get("_origem_hook", "?")] += 1
+        tot = sum(_res.values())
+        if tot:
+            print()
+            print(f"  ── ORIGEM DO HOOK ──   gerado {_res['gerado']} · "
+                  f"reserva (Gemini caiu) {_res['reserva']}"
+                  + (f" · indefinido {_res['?']}" if _res["?"] else ""))
+            if _res["reserva"]:
+                pc = 100 * _res["reserva"] / tot
+                print(f"     {pc:.0f}% dos posts medidos saíram com hook de "
+                      f"RESERVA — frase fixa, não escrita pro produto.")
+                if pc >= 25:
+                    print("     ⚠️  Melhorar o gerador só alcança o resto. "
+                          "Esta fatia depende do Gemini ficar de pé.")
+                ret_g = [x["retencao_s"] for x in com
+                         if x.get("_origem_hook") == "gerado"]
+                ret_r = [x["retencao_s"] for x in com
+                         if x.get("_origem_hook") == "reserva"]
+                if len(ret_g) >= 8 and len(ret_r) >= 8:
+                    print(f"     retenção: gerado {_pct(ret_g, .5):.1f}s "
+                          f"(n={len(ret_g)})  ·  reserva "
+                          f"{_pct(ret_r, .5):.1f}s (n={len(ret_r)})")
 
         print()
         print(f"  ── HOOK (do posts_ledger) ──   casaram {casados}/{len(com)} "

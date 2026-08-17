@@ -341,6 +341,50 @@ def _cabe_no_formato(h: str) -> bool:
         os.environ.get("HOOK_MIN_CHARS", 44))
 
 
+# ── A REGRA DA AVA YUERGENS, num lugar só ───────────────────────────────────
+# "O gancho é um filtro. Se você filtrar muita gente no começo, o algoritmo
+# entende que aquele vídeo é ruim e não distribui pra mais pessoas."
+#
+# Estas são as marcas de PORTA: construções que exigem o espectador PERTENCER a
+# um grupo pra continuar assistindo. O `analise_retencao` IMPORTA daqui em vez
+# de copiar — régua duplicada vira duas réguas diferentes na primeira edição.
+#
+# ⚠️ AMPLO NÃO É GENÉRICO. No exemplo dela, "se você tem um golden que come
+# tudo" vira "quer um cachorro que não come nada do chão?" — continua sendo
+# sobre cachorro. Sobe UM degrau, não até "todo mundo".
+PORTAS_DE_PUBLICO = (
+    "se voce tem", "se voce e ", "se voce trabalha", "se voce sofre",
+    "se voce usa", "se voce ama", "se vc tem",
+    "pra quem ", "para quem ", "com quem ",
+    "quem tem ", "quem ama ", "quem gosta", "quem usa ", "quem sofre",
+    "toda pessoa que", "todo mundo que", "todas que ", "todos que ",
+    "dona de ", "donas de ", "dono de ", "donos de ", "mae de ", "maes de ",
+)
+
+
+def _sem_acento(t: str) -> str:
+    t = (t or "").lower()
+    for a, b in (("á", "a"), ("â", "a"), ("ã", "a"), ("à", "a"), ("é", "e"),
+                 ("ê", "e"), ("í", "i"), ("ó", "o"), ("ô", "o"), ("õ", "o"),
+                 ("ú", "u"), ("ç", "c")):
+        t = t.replace(a, b)
+    return " " + " ".join(t.split()) + " "
+
+
+def filtra_publico(hook: str) -> str:
+    """A porta que o hook fecha, ou "" se ele não fecha nenhuma.
+
+    Devolve o TRECHO encontrado (não um booleano) porque quem rejeita precisa
+    dizer ao modelo o que exatamente reescrever — "seu hook está estreito" não
+    ensina nada; "você escreveu 'pra quem'" ensina.
+    """
+    t = _sem_acento(hook)
+    for p in PORTAS_DE_PUBLICO:
+        if p in t:
+            return p.strip()
+    return ""
+
+
 def _fallback(nicho: str, produto: str = "") -> str:
     pool = HOOKS_RESERVA.get(_chave_nicho(nicho)) or HOOKS_RESERVA["geral"]
     # 1) formato: nada que renderize em 3 linhas
@@ -475,16 +519,47 @@ def _via_gemini(produto: str, descricao: str, nicho: str) -> Optional[str]:
                 "ALCANCARAM pessoas de verdade. Gere no MESMO espirito/energia deles "
                 "(o que ja funcionou AQUI), mas sob medida pra ESTE produto, sem "
                 "copiar:\n" + _lst + "\n\n")
+        # ⚠️ PRINCIPIO NO LUGAR DE CATALOGO (16/08, pedido do Dre).
+        # O catalogo de FORMULAS e um conjunto de formas EMPRESTADAS de outros
+        # perfis, e ele tem um teto: o gerador so sabe preencher o que ja esta
+        # na lista. O pedido foi outro -- "o proprio jarvis ira fazer os hooks".
+        # Entao o modelo recebe a REGRA (a da Ava Yuergens) e escreve; os
+        # moldes viram EXEMPLO de tom, nao gabarito a preencher.
+        _amplo = os.environ.get("HOOK_AMPLO", "1").strip().lower() not in (
+            "0", "false", "nao", "não")
+        regra_ava = (
+            "REGRA 1 - NAO FECHE A PORTA NA PRIMEIRA LINHA.\n"
+            "  O gancho e um FILTRO: se ele exige a pessoa pertencer a um grupo\n"
+            "  pra continuar, a maioria rola pra frente, e o algoritmo le isso\n"
+            "  como 'video ruim' e para de distribuir.\n"
+            "    FECHA:  'se voce tem cabelo cacheado, isso e pra voce'\n"
+            "    ABRE :  'quer o cabelo desembaracado sem passar 20 minutos?'\n"
+            "  Repare: o segundo CONTINUA sendo sobre cabelo. Amplo nao e\n"
+            "  generico -- e UM DEGRAU acima, no mesmo assunto. Nunca escreva\n"
+            "  'pra quem', 'quem tem', 'se voce e', 'toda pessoa que'.\n\n"
+            "REGRA 2 - AMPLO SEM CHAMADA E VAGO. Prometa um resultado ou abra\n"
+            "  uma curiosidade que a pessoa queira fechar.\n"
+            "    VAGO   : 'meu setup vivia um caos de fios'  (nao filtra, mas\n"
+            "             tambem nao chama ninguem)\n"
+            "    CHAMA  : 'eu li 997 livros sobre dinheiro, esses 5 vao te\n"
+            "             deixar rico'  /  'siga esses passos'\n\n"
+            "REGRA 3 - 1a pessoa e BEM-VINDA como TOM, desde que cumpra as duas\n"
+            "  regras acima. Experiencia individual aproxima:\n"
+            "    'Nunca imaginei que aplicar base fosse tao rapido e sem sujeira'\n\n")
         prompt = (
             "Voce e copywriter de videos virais de afiliado (Shopee), estilo das "
             "criadoras que mais vendem no Reels/TikTok. Crie UM gancho (hook) "
-            "curtissimo pro produto abaixo, no estilo curiosity-gap que faz a "
-            "pessoa PARAR de rolar e comentar.\n\n"
+            "curtissimo pro produto abaixo, que faca a pessoa PARAR de rolar.\n\n"
             f"{bloco_venc}"
-            "Escolha a FORMULA que melhor combina com ESTE produto (adapte, nao "
-            "copie literal). Formulas disponiveis:\n"
-            f"{moldes}\n\n"
-            "REGRAS:\n"
+            + (regra_ava +
+               "Os exemplos abaixo servem de TOM, nao de formulario -- nao "
+               "preencha lacuna, ESCREVA um gancho novo pra este produto:\n"
+               f"{moldes}\n\n"
+               if _amplo else
+               "Escolha a FORMULA que melhor combina com ESTE produto (adapte, nao "
+               "copie literal). Formulas disponiveis:\n"
+               f"{moldes}\n\n")
+            + "REGRAS:\n"
             "- Responda APENAS o hook, nada mais (sem explicar, sem aspas em volta "
             "de tudo, sem hashtag, sem markdown).\n"
             "- O hook DEVE ocupar 2 LINHAS no video: OU uma frase relatable/curiosidade "
@@ -498,11 +573,34 @@ def _via_gemini(produto: str, descricao: str, nicho: str) -> Optional[str]:
             f"Produto: {produto}\n"
             f"Descricao: {(descricao or '')[:300]}\n"
         )
-        r = cli.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=[{"parts": [{"text": prompt}]}],
-        )
-        return _limpar_saida(getattr(r, "text", "") or "")
+        # ⚠️ VERIFICAR A SAIDA, NAO CONFIAR NA INSTRUCAO. Mandar "nunca escreva
+        # 'pra quem'" no prompt nao garante nada -- modelo desobedece, e a
+        # desobediencia sai calada direto pro video. A regra so vale se ela for
+        # CHECADA depois. Uma retentativa com o trecho exato que violou; se
+        # insistir, cai na reserva (que e ruim, mas e ruim de forma conhecida).
+        for tentativa in (1, 2):
+            r = cli.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=[{"parts": [{"text": prompt}]}],
+            )
+            hook = _limpar_saida(getattr(r, "text", "") or "")
+            if not _amplo or not hook:
+                return hook
+            porta = filtra_publico(hook)
+            if not porta:
+                return hook
+            log.info("hook fechou publico com %r — reescrevendo (%d/2)",
+                     porta, tentativa)
+            if tentativa == 2:
+                # ⚠️ devolve None (nao o hook estreito): passar adiante o que a
+                # regra acabou de reprovar transformaria a checagem em teatro.
+                log.warning("hook seguiu estreito (%r) apos 2 tentativas — "
+                            "vai pra reserva", porta)
+                return None
+            prompt += (f"\nATENCAO: sua resposta anterior usava \"{porta}\", que "
+                       f"FECHA a porta pra quem nao pertence a esse grupo. "
+                       f"Reescreva SEM essa construcao, mantendo a promessa.\n")
+        return None
     except Exception as erro:
         log.warning("Gemini falhou no HOOK (%s: %s) — usando reserva",
                     type(erro).__name__, str(erro)[:140])
