@@ -999,6 +999,14 @@ def ciclo_postagem(cfg: dict, hist: dict, dry_run: bool) -> dict:
             log.info(f"   🎬 [{datetime.now():%H:%M}] Postando '{slug}' → {conta}")
             if dry_run or _postar_produto(slug, cfg, hist):
                 ok_slugs.append(slug)
+            elif not dry_run:
+                # ⚠️ FALHA AQUI CUSTAVA O SLOT INTEIRO DA CONTA. Cada conta traz
+                # UM pacote em `alvos`; se ele falha, antes acabava aqui e a
+                # conta simplesmente não postava — mesmo com 97 pacotes bons
+                # atrás. Medido em 17/08: a @topshoptech_ ficou 3 dias fora do
+                # ar por causa de um único arquivo que a Meta recusa
+                # (`retriable: False`, Instagram E Facebook).
+                _registrar_falha(slug, cfg)
         if ok_slugs:
             _registrar_postagem(hist, horario, ok_slugs)
             resultado.update(postou=True, produtos=ok_slugs, dry_run=dry_run)
@@ -1124,6 +1132,78 @@ def _drenar_por_idade(candidatos: list, validade: int) -> bool:
              + ("MAIS ANTIGO primeiro (drenagem)" if drenar
                 else "mais novo primeiro (fila saudável)"))
     return drenar
+
+
+_FALHAS = RAIZ / "shared" / "falhas_postagem.json"
+
+
+def _registrar_falha(slug: str, cfg: dict) -> None:
+    """Conta as falhas de um pacote e, no teto, tira ele da frente da conta.
+
+    ⚠️ POR QUE ISTO EXISTE (17/08) — o pacote-veneno.
+    O `mesa_magica_de_desenho_projetor_de_giraf` falhou no Instagram em 15/08
+    (3 tentativas) e DE NOVO em 17/08 (3 tentativas), com o mesmo erro:
+
+        ProcessingFailedError · 'retriable': False
+        Facebook: "There was a problem uploading your video file.
+                   Please try again with another file."
+
+    As duas redes recusam o ARQUIVO, e a Meta diz explicitamente que não
+    adianta repetir. Só que nada marcava o pacote, então ele continuava sendo
+    o escolhido da @topshoptech_ a cada slot — e, como `alvos` traz UM pacote
+    por conta e o laço não cai pro próximo quando falha (`daemon_maestro:1000`),
+    **a conta inteira perdia o slot por causa de um arquivo.** A tech ficou 3
+    dias sem postar com 97 pacotes bons esperando atrás desse.
+
+    Sem teto, isso duraria os 27 dias da validade: ~40 posts perdidos por um
+    vídeo. O contador não conserta o arquivo — ele impede que UM defeito vire
+    uma conta parada.
+
+    Config: `falhas_pra_quarentena` (padrão 2; 0 desliga).
+    """
+    try:
+        teto = int(cfg.get("falhas_pra_quarentena", 2))
+    except (TypeError, ValueError):
+        teto = 2
+    if teto <= 0:
+        return
+    try:
+        dados = (json.loads(_FALHAS.read_text(encoding="utf-8"))
+                 if _FALHAS.exists() else {})
+    except Exception:
+        dados = {}
+    n = int(dados.get(slug, 0)) + 1
+    dados[slug] = n
+
+    if n >= teto:
+        destino = PRONTO_DIR.parent / "fila_problema"
+        pasta = PRONTO_DIR / slug
+        try:
+            if pasta.is_dir():
+                destino.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(pasta), str(destino / slug))
+                # ⚠️ ERRO, não warning: alguém precisa OLHAR o arquivo. Sem
+                # isso a quarentena vira um cemitério silencioso — o pacote
+                # some da fila e ninguém descobre que o render está gerando
+                # vídeo que a Meta recusa.
+                log.error(f"   🚧 '{slug}' falhou {n}x → fila_problema/ "
+                          f"(a conta volta a postar no próximo slot). "
+                          f"CONFIRA o video.mp4: as duas redes recusaram o "
+                          f"arquivo, o render pode estar gerando fora do "
+                          f"padrão de Reels.")
+                dados.pop(slug, None)
+        except Exception as erro:
+            log.warning(f"   ⚠️  não consegui mover '{slug}' pra quarentena: "
+                        f"{str(erro)[:100]}")
+    else:
+        log.warning(f"   ⚠️  '{slug}' falhou {n}/{teto} — mais uma e sai da "
+                    f"frente da conta")
+    try:
+        _FALHAS.parent.mkdir(parents=True, exist_ok=True)
+        _FALHAS.write_text(json.dumps(dados, ensure_ascii=False, indent=2),
+                           encoding="utf-8")
+    except Exception as erro:
+        log.warning(f"   ⚠️  não gravei {_FALHAS.name}: {str(erro)[:80]}")
 
 
 def _expurgar_vencidos() -> int:
