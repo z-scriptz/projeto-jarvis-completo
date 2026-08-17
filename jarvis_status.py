@@ -175,7 +175,23 @@ def main():
     _linha("📤 POSTAGEM (últimos 7d)")
     hist = _ler_json(HIST, {})
     pordia = hist.get("por_dia", {})
-    seriep = [len(pordia.get(d, {})) for d in dias7]
+
+    # ⚠️ CONTAR VÍDEOS, NÃO HORÁRIOS — o mesmo bug que a `auditoria_postagem`
+    # corrigiu em 11/08 e que sobreviveu aqui por mais uma semana. O histórico
+    # guarda `por_dia[dia][HORARIO] = slug` (modo clássico) ou `= [slug, ...]`
+    # (modo `post_por_conta`, LIGADO na VPS), então `len(pordia[d])` conta as
+    # CHAVES = os slots usados, não os vídeos que saíram.
+    #
+    # Medido em 17/08, lado a lado na mesma máquina:
+    #     jarvis_status        "10 posts publicados"   ← slots
+    #     auditoria_postagem   "últimos 7d: 39"        ← vídeos
+    # O Dre olhou o painel achando que a postagem tinha desabado pra 10/semana.
+    # Um slot com 4 contas vale 4 vídeos e este painel contava 1.
+    def _videos_no_dia(slots):
+        return sum(len(v) if isinstance(v, list) else 1
+                   for v in (slots or {}).values())
+
+    seriep = [_videos_no_dia(pordia.get(d, {})) for d in dias7]
     total_post7 = sum(seriep)
     print(f"  Total: {_c(total_post7, 'b')} posts publicados · "
           f"{_c(len(hist.get('postados', [])), 'd')} no histórico")

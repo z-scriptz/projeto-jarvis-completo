@@ -386,12 +386,49 @@ def _veredito(r: dict) -> list:
     if dr and c["validade_dias"] > 0 and dr > c["validade_dias"]:
         sobra = max(0, e["visiveis_pro_daemon"] -
                     round(c["ritmo_real_por_dia"] * c["validade_dias"]))
+        # ⚠️ NÃO AFIRME A ORDEM — PERGUNTE. Esta frase dizia, fixa, "a ordem é
+        # MAIS NOVO PRIMEIRO", e em 17/08 ela saiu três linhas abaixo do log do
+        # próprio daemon dizendo `ordem MAIS ANTIGO primeiro (drenagem)`. O
+        # `daemon_maestro` ganhou modo de drenagem (FIFO quando o mais antigo
+        # passa de `limiar_drenagem × validade`) e este texto não soube.
+        #
+        # E a diferença muda o diagnóstico, não só a redação: em LIFO quem
+        # vence é sempre o mesmo rabo antigo; em FIFO quem vence é o material
+        # NOVO, que é o mais fresco e provavelmente o melhor. Conselho tirado
+        # da ordem errada manda consertar a ponta errada da fila.
+        # a MESMA decisão do `daemon_maestro._drenar_por_idade`, refeita com os
+        # números que esta auditoria já tem (aquela função exige a lista de
+        # candidatos do daemon, que aqui não existe)
+        try:
+            _cfg = _cfg()
+            _modo = str(_cfg.get("ordem_da_fila", "auto")).strip().lower()
+            if _modo == "mais_antigo":
+                _drenando = True
+            elif _modo == "mais_novo":
+                _drenando = False
+            elif c["validade_dias"] <= 0:
+                _drenando = False
+            else:
+                _frac = float(_cfg.get("limiar_drenagem", 0.4))
+                _frac = max(0.0, min(1.0, _frac))
+                _drenando = (e["mais_antigo_dias"]
+                             > c["validade_dias"] * _frac)
+        except Exception:
+            _drenando = None
+        if _drenando is True:
+            _ordem = ("a ordem AGORA é MAIS ANTIGO primeiro (drenagem ligada), "
+                      "então quem tende a vencer é o material NOVO")
+        elif _drenando is False:
+            _ordem = ("a ordem é MAIS NOVO primeiro, então é sempre o mesmo "
+                      "rabo antigo que espera")
+        else:
+            _ordem = ("não consegui ler a ordem do daemon — confira no log "
+                      "dele qual modo está ativo")
         fora.append((
             "A FILA NÃO DRENA ANTES DE VENCER",
             f"{e['visiveis_pro_daemon']} pacotes ÷ {c['ritmo_real_por_dia']}"
             f"/dia (ritmo REAL) = {dr} dias pra esvaziar, contra validade de "
-            f"{c['validade_dias']} dias. Como a ordem é MAIS NOVO PRIMEIRO "
-            "(daemon_maestro:1050), é sempre o mesmo rabo que espera: "
+            f"{c['validade_dias']} dias. Como {_ordem}: "
             f"~{sobra} pacote(s) tendem a vencer sem nunca sair.",
             f"no ritmo configurado ({c['capacidade_semanal_total']}/semana) "
             f"seriam {c['semanas_pra_drenar'] * 7:.0f} dias — cabe na validade. "
