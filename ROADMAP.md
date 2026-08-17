@@ -137,6 +137,47 @@ quem ama flores") + **miram a dor/público primeiro** ("Se você trabalha vária
 em pé…"). Curiosity gap = retenção alta = viraliza. Ensinar o gerador de hook do
 Jarvis a copiar essa fórmula (dor/público + "isso" sem revelar o produto). Replicável.
 
+#### 🛟 A RESERVA TEM QUE SER TÃO BOA QUANTO O NORMAL (16/08)
+
+Pedido do Dre, depois de eu confundir hook de fallback com hook gerado:
+*"não quero ver caindo no fallback e sendo um hook horroroso"*. Três defeitos
+saíram de olhar o `HOOKS_RESERVA` a sério — todos do mesmo tipo: **degradação
+silenciosa**, o pool encolhendo sem ninguém ver.
+
+**1. 21 das 107 frases (20%) FECHAVAM a porta.** *"Não mostre isso pra quem
+ama…"*, *"Toda pessoa que…"* — exatamente a forma que o gerador passou a
+rejeitar. O Gemini caía e o vídeo saía com o hook que a regra nova proíbe.
+Reescritas mantendo nicho, tom e emoji (*"Não mostre isso pra quem ama deixar a
+casa organizada"* → *"Sua casa pode ficar organizada sem tomar o seu fim de
+semana"*). Pool: 21 → **0** frases estreitas.
+
+**2. E a faxina não bastava:** o `_fallback` agora aplica `filtra_publico` **em
+tempo de uso**. Reescrever zera hoje; o filtro garante amanhã, quando alguém
+adicionar frase nova — e o cabeçalho do arquivo convida a isso ("cresça à
+vontade"). Verificado injetando uma frase estreita no banco: 0 de 80 sorteios a
+trouxeram. **Régua que só roda no dia da limpeza não é régua.**
+
+**3. 🐞 O BUG QUE FAZIA A RESERVA PARECER POBRE — e era o pior dos três.**
+`_conflita` comparava a frase com o **nome** do produto, e nome é proxy ruim de
+assunto: *"Organizador de Armário Dobrável"* não contém a palavra "casa", então
+**toda** frase do pool da casa que dizia "casa" era descartada. Sobravam 3 de
+15, e as mesmas 3 se repetiam — era isso que fazia o fallback parecer pobre.
+
+    nicho      antes → depois (frases utilizáveis, produto real do nicho)
+    casa           3 → 14
+    cozinha        0 → 12      ← ZERO
+    academia       6 →  8
+    beleza         8 → 13
+
+**A `cozinha` estava em ZERO.** O filtro rejeitava 100% do pool, e o
+`sem_conflito or ... or pool` caía calado no pool inteiro — inclusive nas
+frases que os outros filtros tinham acabado de reprovar. O guarda-chuva do
+`or` transformava "não sobrou nada" em "serve qualquer coisa", sem log.
+
+Conserto: `_conflita` recebe o `nicho` e ignora as famílias NATIVAS daquele
+pool (`_NATIVO_DO_NICHO`). A frase veio do pool da casa; o assunto dela é o
+assunto do pool, por construção.
+
 #### 📐 REFINADO pelo framework da Ava Yuergens (16/08) — recebido, NÃO implementado
 
 O Dre trouxe um carrossel do @joelsonmadeira_ (03/08) analisando a **Ava

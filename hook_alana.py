@@ -115,15 +115,15 @@ HOOKS_RESERVA = {
         '"Queria uma casa mais aconchegante" 🥺\n{tag}',
         '"Cansei de viver no meio da zona" 😮‍💨\n{tag}',
         '"Achava que casa arrumada era só pra rico" 😳\n{tag}',
-        'Não mostre isso pra quem ama deixar a casa sempre organizada 👀',
-        'Toda pessoa que sofre com bagunça dentro de casa precisa ver isso 🙌',
+        'Sua casa pode ficar organizada sem tomar o seu fim de semana 👀',
+        'A bagunça de casa some bem mais rápido do que você imagina 🙌',
         'Pov: a comprinha baratinha que transformou a minha casa inteira 😍',
         'Eu não sabia que precisava disso até deixar minha casa impecável 🤯',
         'O segredo pra deixar a casa sempre cheirosa que ninguém te conta 🤫',
         'Comprei sem esperar nada e resolveu um problema que eu tinha há anos 😱',
         'Corre ver isso antes que acabe, tá baratinho demais na promoção 🏃‍♀️',
         'Você organizando a sua casa do jeito difícil esse tempo todo 😅',
-        'Presente perfeito pra quem acabou de se mudar pra casa nova 🏡',
+        'O presente que salva uma casa nova e ninguém lembra de dar 🏡',
         'Isso deixou minha casa com cara de apartamento de revista 😍',
         'Parei de gastar à toa depois que achei esse achadinho pra casa 💸',
     ],
@@ -131,8 +131,8 @@ HOOKS_RESERVA = {
         '"Passo horas na cozinha à toa" 😮‍💨\n{tag}',
         '"Odiava perder tempo cozinhando" 😩\n{tag}',
         '"Minha cozinha vivia um caos na hora do almoço" 😫\n{tag}',
-        'Não mostre isso pra quem passa o dia inteiro dentro da cozinha 👀',
-        'Toda pessoa que cozinha todo santo dia precisa ter isso na cozinha 😍',
+        'Dá pra passar menos tempo na cozinha e comer igual de bem 👀',
+        'Cozinhar todo dia deixa de ser sacrifício com um detalhe barato 😍',
         'Pov: a melhor compra que fiz pra facilitar a minha cozinha 🍳',
         'Eu não sabia viver sem isso depois que testei aqui em casa 🤯',
         'O truque de cozinha que a minha avó queria ter conhecido antes 👵',
@@ -140,7 +140,7 @@ HOOKS_RESERVA = {
         'Pare de perder tempo cozinhando do jeito mais difícil de todos 🛑',
         'Isso me economiza uns 30 minutos toda vez que eu vou cozinhar ⏱️',
         'Corre que esse achadinho de cozinha tá saindo baratinho demais 🏃‍♀️',
-        'Presente perfeito pra quem ama cozinhar mas odeia a bagunça depois 🎁',
+        'O presente de cozinha que resolve a pior parte: a bagunça 🎁',
         'Ninguém me contou que existia isso e mudou minha cozinha inteira 🤫',
     ],
     "beleza": [
@@ -148,7 +148,7 @@ HOOKS_RESERVA = {
         '"Queria me sentir mais bonita" 🥺\n{tag}',
         '"Achava que pele linda era só de filtro" 😳\n{tag}',
         'Toda mulher que ama se cuidar e ficar linda precisa ter isso 😍',
-        'Não mostre isso pra quem é viciada em skincare e maquiagem 👀',
+        'A pele muda de um jeito que maquiagem nenhuma consegue imitar 👀',
         'Pov: o achadinho que mudou a minha rotina de beleza inteira ✨',
         'Eu não sabia que precisava disso até ver o resultado na minha pele 🤯',
         'O segredo de beleza que as famosas não te contam de jeito nenhum 🤫',
@@ -163,7 +163,7 @@ HOOKS_RESERVA = {
         '"Meu setup vivia um caos de fios" 😩\n{tag}',
         '"Vivia sem espaço nenhum no meu setup" 😮‍💨\n{tag}',
         '"Meu celular vivia descarregando na pior hora" 😫\n{tag}',
-        'Não mostre isso pra quem é apaixonado por tecnologia e gadget 👀',
+        'Esse gadget resolve em segundos o que te irrita há meses 👀',
         'Toda pessoa viciada em tecnologia precisa ter esse gadget agora 🔌',
         'Pov: o gadget que parece coisa do futuro bem na sua mão 🤯',
         'Eu não sabia que precisava disso até deixar meu setup impecável 😍',
@@ -171,28 +171,28 @@ HOOKS_RESERVA = {
         'Comprei achando que era firula e hoje não vivo mais sem 😅',
         'Corre ver isso antes que esgote, tá baratinho demais pra função 🏃',
         'Você usando seu celular sem esse acessório ainda em 2026? 😬',
-        'Presente perfeito pra quem é nerd e ama uma tecnologia nova 🎁',
+        'O presente de tecnologia que arranca um "onde achou isso?" 🎁',
         'Isso deixou meu setup com cara de gamer profissional na hora 🎮',
         'Parece caro mas foi um dos achadinhos mais baratos que já fiz 🤫',
     ],
     "pets": [
         '"Meu pet merecia muito mais" 🥺\n{tag}',
         '"Vivia sofrendo pra dar banho no meu cachorro" 😩\n{tag}',
-        'Não mostre isso pra quem ama e cuida de cachorro dentro de casa 😱',
-        'Toda pessoa que ama o seu pet como um filho precisa ter isso 🐶',
+        'Dá pra ter cachorro em casa sem a casa inteira cheirar mal 😱',
+        'Seu pet fica bem mais tranquilo com uma coisinha barata 🐶',
         'Pov: a comprinha barata que deixou o meu pet muito mais feliz 🐾',
         'Eu não sabia que precisava disso até ver a alegria do meu pet 🥹',
         'O segredo pra acabar com o pelo espalhado pela casa toda 🐕',
         'Comprei sem esperar nada e virou o brinquedo favorito dele 🎾',
-        'Corre ver isso antes que acabe, todo dono de pet vai amar 🏃‍♀️',
-        'Presente perfeito pra quem trata o cachorro como parte da família 🎁',
+        'Corre ver isso antes que acabe, resolve a maior chatice do pet 🏃‍♀️',
+        'O presente que transforma o cachorro no bicho mais mimado da rua 🎁',
         'Isso salvou minha casa dos estragos do meu pet quando fico fora 😅',
         'Ninguém me contou que existia isso e facilitou a vida com o pet 🤫',
     ],
     "moda": [
         '"Nunca me sentia bem vestida" 🥲\n{tag}',
         '"Achava que roupa boa custava uma fortuna" 😳\n{tag}',
-        'Não mostre isso pra quem ama se arrumar e se sentir linda 👀',
+        'Dá pra se arrumar em 5 minutos e parecer que levou uma hora 👀',
         'Toda mulher que quer se vestir bem sem gastar muito precisa ver 😍',
         'Pov: a peça que me devolveu a autoestima na hora de me arrumar 😍',
         'Eu não sabia que precisava disso até receber um monte de elogio 🥰',
@@ -200,28 +200,28 @@ HOOKS_RESERVA = {
         'Comprei sem fé e virou a peça que eu mais uso no guarda-roupa 😅',
         'Corre ver isso antes que acabe o estoque, tá voando na promoção 🏃‍♀️',
         'Você se vestindo bem sem gastar rios de dinheiro finalmente 💸',
-        'Presente perfeito pra quem ama moda mas vive de olho no preço 🎁',
+        'O presente que parece caro e custou menos que um lanche 🎁',
         'Isso valoriza qualquer corpo e disfarça o que a gente não gosta 😍',
     ],
     "academia": [
         '"Minhas costas vivem doendo o dia todo" 😩\n{tag}',
         '"Cansei de acordar todo travado de manhã" 😮‍💨\n{tag}',
-        'Toda pessoa que treina pesado e sente muita dor precisa ter isso 💪',
-        'Não mostre isso pra quem é viciado em treino e academia 👀',
+        'A dor depois do treino passa bem mais rápido com esse truque 💪',
+        'Dá pra treinar em casa e sentir o mesmo peso da academia 👀',
         'Pov: o alívio que o meu corpo todo estava precisando há tempos 😮‍💨',
         'Eu não sabia que precisava disso até aliviar a dor na hora 😌',
         'O segredo pra recuperar o corpo mais rápido depois do treino 🤫',
         'Comprei achando que não ia funcionar e me arrependi de não ter antes 😅',
-        'Corre ver isso, todo mundo que treina devia ter um em casa 🏃',
-        'Presente perfeito pra quem vive na academia e sente dor depois 🎁',
+        'Corre ver isso antes que suma, muda o treino em casa inteiro 🏃',
+        'O presente que alivia a dor do treino e custa quase nada 🎁',
         'Isso substituiu a massagem cara que eu pagava toda semana 💸',
     ],
     "geral": [
         '"Nunca imaginei precisar disso na vida" 😳\n{tag}',
         '"Vivia com um probleminha que ninguém resolvia" 😩\n{tag}',
         '"Achava que isso não ia funcionar de jeito nenhum" 🤨\n{tag}',
-        'Não mostre isso pra quem ama economizar e achar promoção 👀',
-        'Toda pessoa que ama um bom achadinho baratinho precisa ver isso 🤫',
+        'Economizar de verdade não é achar promoção, é achar isso aqui 👀',
+        'Esse achadinho baratinho resolve um problema que todo mundo tem 🤫',
         'Pov: a melhor comprinha que eu fiz nesse mês inteiro 😍',
         'Comprei sem esperar nada e me surpreendeu demais com o resultado 🤯',
         'Eu não sabia que precisava disso até resolver de vez o meu problema 😱',
@@ -310,7 +310,20 @@ _CONCRETO = {
 }
 
 
-def _conflita(frase: str, produto: str) -> bool:
+# As famílias de `_CONCRETO` que são NATIVAS de cada pool da reserva. Serve pra
+# não rejeitar uma frase por falar do próprio assunto do nicho de onde ela veio.
+_NATIVO_DO_NICHO = {
+    "casa":     ("casa",),
+    "cozinha":  ("cozinha", "cozinhar", "cozinhando"),
+    "beleza":   ("beleza", "pele", "cabelo", "mulher"),
+    "tech":     ("setup", "gadget", "celular"),
+    "pets":     ("cachorro",),
+    "moda":     ("roupa", "mulher"),
+    "academia": ("treino", "academia", "corpo"),
+}
+
+
+def _conflita(frase: str, produto: str, nicho: str = "") -> bool:
     """A frase fala de uma coisa que o produto não é?
 
     'Meu celular vivia descarregando' + um mouse = a pessoa lê sobre bateria e
@@ -318,9 +331,21 @@ def _conflita(frase: str, produto: str) -> bool:
     conflita — e é por isso que a mais genérica da semana ('Vivia com um
     probleminha que ninguém resolvia') foi a de melhor alcance: ela serve
     qualquer produto.
+
+    ⚠️ O NICHO DESARMA O CHOQUE, e sem ele a reserva emagrecia sozinha. O teste
+    comparava a frase com o NOME do produto, e nome é um proxy ruim de assunto:
+    "Organizador de Armário Dobrável" não contém a palavra "casa", então TODA
+    frase do pool da casa que dizia "casa" era descartada — 11 de 14. Sobravam
+    3 frases pra um nicho inteiro, e as mesmas 3 se repetiam. A frase veio do
+    pool DA CASA; o assunto dela é o assunto do pool, por construção.
+
+    Medido em 16/08: casa 3 → 14 frases utilizáveis com o mesmo produto.
     """
     f, p = frase.lower(), (produto or "").lower()
+    nativas = _NATIVO_DO_NICHO.get(_chave_nicho(nicho), ()) if nicho else ()
     for palavra, parentes in _CONCRETO.items():
+        if palavra in nativas:
+            continue
         if palavra in f and not any(r in p for r in parentes):
             return True
     return False
@@ -389,8 +414,26 @@ def _fallback(nicho: str, produto: str = "") -> str:
     pool = HOOKS_RESERVA.get(_chave_nicho(nicho)) or HOOKS_RESERVA["geral"]
     # 1) formato: nada que renderize em 3 linhas
     pool = [h for h in pool if _cabe_no_formato(h)] or pool
+    # 1b) MESMA REGRA DO GERADOR (16/08, pedido do Dre: "a reserva tem que ser
+    # tão boa quanto o conteúdo normal"). Antes disto, 21 das 107 frases do
+    # banco FECHAVAM a porta ("não mostre isso pra quem…", "toda pessoa
+    # que…") — exatamente a forma que o gerador passou a rejeitar. O Gemini
+    # caía e o vídeo saía com o hook que a regra nova proíbe, sem ninguém ver.
+    #
+    # ⚠️ FILTRO EM TEMPO DE USO, não só faxina no banco. Reescrever as 21 zera
+    # HOJE; o filtro garante AMANHÃ, quando alguém adicionar uma frase nova
+    # (o cabeçalho deste arquivo convida: "cresça à vontade"). Régua que só
+    # roda no dia da limpeza não é régua.
+    _abertas = [h for h in pool if not filtra_publico(h)]
+    if _abertas:
+        pool = _abertas
+    else:
+        # não silencio: cair aqui significa que o nicho inteiro está estreito
+        log.warning("reserva de %r: TODAS as frases fecham público — uso "
+                    "mesmo assim, mas isso precisa ser corrigido no banco",
+                    _chave_nicho(nicho))
     # 2) sentido: nada que fale de uma coisa que o produto não é
-    sem_conflito = [h for h in pool if not _conflita(h, produto)]
+    sem_conflito = [h for h in pool if not _conflita(h, produto, nicho)]
     pool = sem_conflito or [h for h in pool if not any(
         w in h.lower() for w in _CONCRETO)] or pool
     # 3) variedade
