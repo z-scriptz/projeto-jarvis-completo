@@ -614,6 +614,60 @@ código velho.** Está escrito no roadmap desde julho ("código novo precisa
 dizendo a verdade sobre o DISCO e nada sobre o que está EXECUTANDO. Os dois
 patchers novos passaram a mandar reiniciar na última linha.
 
+### ✅ AS TRÊS PENDÊNCIAS ANTIGAS, FECHADAS (17/08)
+
+**1. 5ª ETIQUETA DO `sub_id` — venda passa a cruzar com hook.** A ordem
+canônica usava 4 de 5 (`[canal, nicho, produto, FONTE]`) e **nenhuma dizia
+qual POST** gerou a venda. Feito primeiro de propósito: a estratégia de hook
+mudou hoje, e post publicado sem etiqueta nunca poderá ser atribuído depois.
+Três armadilhas no caminho, todas silenciosas:
+- `_subids` **omitia** o slot da fonte quando vazia → um `append` ingênuo poria
+  o vídeo no índice 3, que `metricas_agent._fonte()` lê como FONTE. O CEO
+  passaria a ver centenas de "fontes" que são hashes, cada uma com 1 venda, e
+  a poda por venda cortaria fonte boa. **Sem erro nenhum.** Sentinela
+  `semfonte` segura a posição; o leitor traduz de volta.
+- O ledger gravava `sub_ids=["tiktok"]` — rótulo genérico, não a lista do
+  link. Os dois lados nunca tiveram como se encontrar.
+- A semente do id era `slug + time.time()` com 3 casas: **5 chamadas deram 4
+  ids**. Id repetido = venda atribuída ao vídeo errado, justamente na medição
+  que o campo existe pra viabilizar. Com `time_ns+pid+urandom`: 20.000/20.000.
+
+**2. `itemId` NA ORIGEM.** O `preencher_fotos` deu 0/5 porque o id **nunca foi
+guardado** — o link curto não o carrega, então era preciso SEGUIR o redirect
+pra redescobrir, e o redirect falha (anti-bot, interstício, URL fora do
+padrão). E o dado sempre esteve na mão: `shopee_affiliate:444` devolve
+`item_id`/`shop_id` no campeão, e o `validar_fila` descartava os dois
+**exatamente onde já descartava a foto** — mesmo ponto, mesmo comentário de
+03/08, mesmo efeito. Agora: grava na origem, o `curar_fila` repassa (ela
+reescreve a fila INTEIRA, campo não copiado é campo apagado), e o consumo vai
+por ordem de confiança — fila → `health_cache.json` → rede. Medido com dublês:
+**id na fila ou no cache não chama a rede nenhuma vez.**
+
+**3. RAMOS DE LEGENDA — e não era "falta um `.strip()`", era a CONDIÇÃO.**
+`if descs.get("instagram")` é True pra `"   \n  "`: string de espaço é truthy.
+O ramo disparava, devolvia branco, e o post saía sem legenda **sem nunca
+chegar no ramo 3**, que é o único que o guarda valida. É a explicação de uma
+contradição que estava solta: medimos *336/336 pacotes com legenda* e havia
+post sem — a contagem olhava a EXISTÊNCIA do campo, o publicador olhava a
+VERDADE dele.
+
+⚠️ **E o patcher recusou na primeira tentativa, com razão.** Eu escrevi o
+regex a partir da "RÉPLICA EXATA" do `diag_pacotes`, que devolvia
+`(texto, ramo)`; a função real devolve só o texto — o nome do ramo era
+invenção do diagnóstico, pra contar qual disparava. **A DECISÃO é idêntica**
+(`if X.get("k"): return X["k"]`, mesma ordem, mesmos campos), então a medição
+de qual ramo dispara continua valendo. *"Minha réplica estava errada"* e
+*"minha conclusão estava errada"* são coisas diferentes — confundir as duas
+joga fora medição que custou trabalho.
+
+O `grep` do arquivo real ainda revelou que **`_legenda_facebook` tem o mesmo
+defeito**. Foram 3 ramos corrigidos, não 2.
+
+⚠️ **Isto NÃO prova que causou os 11 posts da casa.** Fecha um caminho real
+pelo qual um post sai mudo. "Achei um mecanismo possível" ≠ "achei a causa" —
+e quem responde aquele caso é o log da legenda, que só começou a rodar de
+verdade depois do restart de hoje.
+
 ---
 
 ## 🗓️ Dia 2026-08-03 — a foto sumida, e o que ela revelou
