@@ -67,6 +67,57 @@ def _log(m):
     print(f"[produzir_tiktok] {m}")
 
 
+# marcas de bitstream quebrado — as MESMAS do `auditoria_video.py`, que foi
+# quem mediu os 5 arquivos corrompidos em 17/08
+_MARCAS_QUEBRADO = (
+    "Invalid NAL unit size",
+    "Error splitting the input into NAL units",
+    "missing picture in access unit",
+    "Invalid data found when processing input",
+    "moov atom not found",
+)
+
+
+def _video_integro(video: Path, segundos: int = 3) -> bool:
+    """O arquivo DECODIFICA? (não "os metadados estão certos?")
+
+    ⚠️ A DIFERENÇA ENTRE AS DUAS PERGUNTAS É O BUG INTEIRO. O vídeo que parou a
+    @topshoptech_ por 3 dias tinha container impecável — h264, 1080x1920,
+    30fps, 7,93s, aac. Qualquer checagem por `ffprobe -show_entries` aprovava.
+    O fluxo H.264 lá dentro é que estava corrompido, e isso só aparece quando
+    alguém decodifica de verdade — que é o que a Meta faz do lado dela.
+
+    ⚠️ NA DÚVIDA, DEIXA PASSAR. Sem `ffmpeg` no PATH, ou com o processo
+    falhando por outro motivo, devolve True: barrar produção por causa de uma
+    ferramenta ausente trocaria um defeito raro (5 em 355) por uma esteira
+    parada. O erro caro aqui é o falso POSITIVO, não o falso negativo.
+    """
+    exe = shutil.which("ffmpeg")
+    if not exe:
+        try:
+            import imageio_ffmpeg
+            exe = imageio_ffmpeg.get_ffmpeg_exe()
+        except Exception:
+            exe = None
+    if not exe or not Path(video).exists():
+        return True
+    cmd = [exe, "-v", "error", "-nostdin"]
+    if segundos > 0:
+        cmd += ["-t", str(segundos)]
+    cmd += ["-i", str(video), "-f", "null", "-"]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+    except Exception:
+        return True
+    erro = r.stderr or ""
+    achadas = [m for m in _MARCAS_QUEBRADO if m in erro]
+    if achadas:
+        _log(f"   🔴 bitstream quebrado em {Path(video).name}: "
+             f"{' · '.join(achadas[:2])}")
+        return False
+    return True
+
+
 def _subids(canal: str, nicho: str, nome: str, fonte: str = "") -> list:
     """Sub-IDs na ordem canônica: [canal, nicho, produto, FONTE]. O índice 3
     (fonte = perfil de origem) é o que o CEO cruza com a venda pra saber qual
@@ -376,6 +427,26 @@ def _produzir(pasta: Path, pj: Path, video_src: Path) -> bool:
     H._salvar_json_atomico(H.SHARED_PLANS / "ultimo_plano.json", plano)
 
     # 3) Esteira de postagem (passo 7 do hunter)
+    #
+    # ⚠️ CONFERE O ARQUIVO ANTES DE ENTRAR NA ESTEIRA (17/08). Cinco vídeos de
+    # 355 estavam com o bitstream H.264 corrompido (`Invalid NAL unit size`), e
+    # um deles derrubou a @topshoptech_ por 3 dias: o Instagram e o Facebook
+    # recusam (`ProcessingFailedError · retriable: False`) e a conta perde o
+    # slot inteiro, porque cada conta entra com UM pacote.
+    #
+    # O que torna isso invisível é que o CONTAINER fica perfeito — 1080x1920,
+    # 30fps, duração certa, tudo dentro do padrão de Reels. Só a DECODIFICAÇÃO
+    # revela. Então a checagem tem que decodificar, e não ler metadado.
+    #
+    # Custa ~0,6s por vídeo (medido: 355 arquivos em 208s). Barato contra o
+    # preço de um slot perdido, e barato contra o preço real: o vídeo entra na
+    # fila, envelhece dias esperando a vez, e só aí descobre que nunca serviu.
+    if not _video_integro(destino):
+        _log(f"   ❌ '{nome[:45]}' NÃO entrou na esteira: vídeo corrompido")
+        _log("      (a Meta recusaria e a conta perderia o slot. Confira o "
+             "render — provável interrupção na gravação do arquivo.)")
+        return False
+
     pp = H.BASE_DIR / "pronto_para_postar" / slug
     pp.mkdir(parents=True, exist_ok=True)
     shutil.copy2(str(destino), str(pp / "video.mp4"))
