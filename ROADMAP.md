@@ -137,6 +137,70 @@ quem ama flores") + **miram a dor/público primeiro** ("Se você trabalha vária
 em pé…"). Curiosity gap = retenção alta = viraliza. Ensinar o gerador de hook do
 Jarvis a copiar essa fórmula (dor/público + "isso" sem revelar o produto). Replicável.
 
+#### ✋ "AMPLO NÃO É TIRAR O 'PRA QUEM'" — a correção do Dre (16/08)
+
+Ele derrubou a minha regra com um exemplo tirado da **minha própria saída**:
+
+    nao_fecha  ex: "Odeio boné que amassa o cabelo! 😩"
+
+Não tem "pra quem", passa na régua, e é estreitíssimo de assunto.
+**Ausência de porta não é amplitude.** Eu implementei um filtro negativo e
+chamei de amplitude — dá pra obedecer a regra inteira e continuar estreito.
+
+No exemplo dele a frase INTEIRA muda de vocabulário:
+
+    estreito: "se você tem um golden que come tudo, ensino isso"
+    amplo   : "quer um cachorro que não come nada do chão sem sua
+               permissão? siga esses passos"
+
+**Nenhuma palavra sobrevive.** O substantivo sobe um degrau (golden→cachorro) e
+a frase passa a falar do RESULTADO, não de quem a pessoa é. Nada disso uma
+lista de expressões proibidas alcança.
+
+**Conserto 1 — ensinar por transformação, não por proibição.** O prompt nomeia
+3 movimentos ((1) troque quem-você-é pelo que-você-quer; (2) suba o substantivo
+um degrau; (3) feche com promessa de método) e mostra 3 PARES estreito→amplo,
+com a frase explícita: *"não é a mesma frase sem o recorte — é OUTRA frase,
+sobre o resultado"*.
+
+**Conserto 2 — o prompt mostrava o que proibia.** O sorteio podia colocar
+`alerta_exclusao` ("Nao mostre isso pra quem <X>") e `necessidade` ("Toda
+pessoa que <X>") como "exemplo de tom" **na mesma mensagem** que mandava nunca
+escrever aquilo. Exemplo concreto ganha de proibição abstrata quase sempre.
+Filtrados pela MESMA função que julga a saída, então molde novo que feche porta
+já nasce excluído.
+
+**Conserto 3 — rótulo honesto.** `amplo/estreito` → `nao_fecha/fecha_porta`, e
+a saída avisa que uma coisa não é a outra. Medir amplitude de verdade exigiria
+julgar vocabulário e especificidade do substantivo (provavelmente com o próprio
+Gemini). Até lá, **rótulo honesto e estreito vale mais que rótulo bonito e
+falso** — foi o rótulo bonito que me fez reportar "85 amplos" pra uma coluna
+que só media a ausência de uma expressão.
+
+#### 🕳️ REJEIÇÃO POR FORMATO IA DIRETO PRA RESERVA (16/08)
+
+Achado montando o teste do caminho de geração com um modelo simulado — o teste
+falhou por um motivo que eu não tinha previsto:
+
+    chamadas ao modelo: 1  (esperado 2)
+    "Não mostre isso pra quem ama cabelo liso 👀"
+    40 caracteres visíveis · piso HOOK_MIN_CHARS = 44  →  _limpar_saida = None
+
+`_limpar_saida` devolvia `None` e o `None` caía **direto na reserva, sem
+segunda chance**. O modelo escrevia algo aproveitável, errava o tamanho por 4
+caracteres, e o vídeo saía com frase fixa de banco. Comportamento antigo, não
+regressão — e explica parte dos **22% de posts com hook de reserva** medidos
+hoje (`gerado 76 · reserva 22`, retenção 6,2 × 6,1s).
+
+Conserto: `_limpar_saida(txt, motivos=None)` registra POR QUE rejeitou, **com o
+número** ("tinha 40 caracteres e o mínimo é 44"), e a retentativa passa a
+cobrir os dois motivos. Rejeição vira PEDIDO em vez de silêncio.
+
+Verificado com modelo simulado, 5 caminhos: porta→reescreve e aceita ·
+formato→reescreve e aceita · insiste 2×→`None` e vai pra reserva com warning ·
+hook bom de primeira→1 chamada só (sem custo extra) · `HOOK_AMPLO=0`→volta ao
+comportamento antigo.
+
 #### 🛟 A RESERVA TEM QUE SER TÃO BOA QUANTO O NORMAL (16/08)
 
 Pedido do Dre, depois de eu confundir hook de fallback com hook gerado:
