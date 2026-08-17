@@ -123,37 +123,50 @@ def _origem_do_hook(hook: str) -> str:
 
 
 def _amplitude(hook: str) -> str:
-    """"estreito" se o hook exige pertencer a um grupo; "amplo" caso contrário.
+    """"fecha_porta" se o hook exige pertencer a um grupo; "nao_fecha" senão.
 
-    ⚠️ HEURÍSTICA, e conservadora de propósito: na dúvida devolve "amplo".
-    Errar pra "estreito" criaria um balde pequeno e sujo, e um balde sujo dá
-    diferença falsa justamente na direção que a hipótese prevê — que é o jeito
-    mais fácil de "confirmar" uma tese com a própria régua. Por isso quem chama
-    IMPRIME exemplos dos dois lados: a classificação tem que poder ser
-    conferida a olho, não aceita no escuro.
+    ⚠️ OS RÓTULOS MUDARAM DE NOME EM 16/08, E A MUDANÇA É O ACHADO. Antes eram
+    "estreito"/"amplo", e o Dre derrubou isso com um exemplo: a saída rotulou
+    "Odeio boné que amassa o cabelo!" como AMPLO — não tem "pra quem", passa na
+    régua, e é estreitíssimo de assunto. **Ausência de porta não é amplitude.**
 
-    ⚠️ E ELA SÓ PEGA UM DOS DOIS TIPOS DE RECORTE. O carrossel tem dois:
-      (1) recorte de PÚBLICO  — "se você tem um golden que come tudo"
-      (2) recorte de OBJETO   — "vou fazer um review do livro Pai Rico e Pai
-                                 Pobre" (só quem conhece o livro assiste)
-    Isto aqui detecta (1) e chama (2) de "amplo", errado. Descobri montando o
-    teste: escrevi `esperava amplo` pro exemplo do livro e o teste "passou"
-    12/12 — porque eu tinha codificado a minha própria limitação como gabarito.
-    Um teste que herda o ponto cego do código sempre passa.
-    Fica assim de propósito: nossos moldes de hook não nomeiam o produto (o
-    curiosity-gap existe justamente pra escondê-lo), então (2) quase não ocorre
-    aqui. **Se um dia os hooks passarem a citar marca/modelo, esta função
-    precisa de um segundo detector — e não vai avisar sozinha.**
+    No exemplo dele a frase INTEIRA muda de vocabulário:
+        estreito: "se você tem um golden que come tudo, ensino isso"
+        amplo   : "quer um cachorro que não come nada do chão sem sua
+                   permissão? siga esses passos"
+    Nenhuma palavra sobrevive; o substantivo sobe um degrau (golden→cachorro)
+    e a frase passa a falar do RESULTADO, não de quem a pessoa é. Nada disso é
+    detectável por lista de expressões proibidas.
+
+    Então esta função continua útil e passa a se chamar pelo que faz: ela acha
+    a PORTA. Medir amplitude de verdade precisaria julgar vocabulário e
+    especificidade do substantivo — provavelmente com o próprio Gemini, e sem
+    isso é melhor um rótulo honesto e estreito do que um rótulo bonito e falso.
+
+    ⚠️ HEURÍSTICA, e conservadora: na dúvida devolve "nao_fecha". Errar pra
+    "fecha_porta" criaria um balde pequeno e sujo, e balde sujo dá diferença
+    falsa justamente na direção que a hipótese prevê — o jeito mais fácil de
+    "confirmar" uma tese com a própria régua. Por isso quem chama IMPRIME
+    exemplos dos dois lados: tem que dar pra conferir a olho.
+
+    ⚠️ E MESMO COMO DETECTOR DE PORTA ela pega só um dos dois recortes:
+      (1) recorte de PÚBLICO  — "se você tem um golden que come tudo"   ← pega
+      (2) recorte de OBJETO   — "review do livro Pai Rico e Pai Pobre"  ← não
+    Descobri montando o teste: escrevi `esperava amplo` pro exemplo do livro e
+    o teste "passou" 12/12 — porque o gabarito era a minha própria limitação.
+    Teste que herda o ponto cego do código passa sempre. Fica assim porque
+    nossos hooks não nomeiam o produto (o curiosity-gap existe pra escondê-lo);
+    se um dia passarem a citar marca/modelo, falta um segundo detector.
     """
     if not _PORTAS:
-        return "?"          # sem a régua não há veredito — "amplo" seria chute
+        return "?"      # sem a régua não há veredito — "nao_fecha" seria chute
     t = (hook or "").lower()
     for a, b in (("á", "a"), ("â", "a"), ("ã", "a"), ("à", "a"), ("é", "e"),
                  ("ê", "e"), ("í", "i"), ("ó", "o"), ("ô", "o"), ("õ", "o"),
                  ("ú", "u"), ("ç", "c")):
         t = t.replace(a, b)
     t = " " + " ".join(t.split()) + " "
-    return "estreito" if any(p in t for p in _PORTAS) else "amplo"
+    return "fecha_porta" if any(p in t for p in _PORTAS) else "nao_fecha"
 
 
 def _spearman(xs, ys):
@@ -469,7 +482,11 @@ def main():
         # pergunta que ela consegue responder.
         if casados >= 10:
             print()
-            print("  ── AMPLO × ESTREITO (hipótese da Ava Yuergens) ──")
+            print("  ── O HOOK FECHA A PORTA? (hipótese da Ava Yuergens) ──")
+            print("     ⚠️ isto mede a PORTA, não a amplitude. 'não fecha' "
+                  "NÃO quer dizer amplo:")
+            print("        'Odeio boné que amassa o cabelo' passa aqui e "
+                  "é estreito de assunto.")
             baldes = defaultdict(list)
             for r in com:
                 h = (r.get("_hook") or "").strip()
@@ -478,21 +495,22 @@ def main():
 
             # ⚠️ A CLASSIFICAÇÃO É HEURÍSTICA, então ela se mostra. Regra que
             # rotula em silêncio inventa o resultado que o rótulo já continha.
-            for nome in ("estreito", "amplo"):
+            for nome in ("fecha_porta", "nao_fecha"):
                 rs = baldes.get(nome) or []
                 if not rs:
                     continue
                 ret = [x["retencao_s"] for x in rs]
                 alc = [x["reach"] for x in rs if isinstance(x.get("reach"), int)]
-                print(f"     {nome:9} n={len(rs):3}  "
+                print(f"     {nome:11} n={len(rs):3}  "
                       f"retenção {_pct(ret, .5):4.1f}s  "
                       f"alcance {_pct(alc, .5):6.0f}" if alc else
-                      f"     {nome:9} n={len(rs):3}  "
+                      f"     {nome:11} n={len(rs):3}  "
                       f"retenção {_pct(ret, .5):4.1f}s  alcance —")
                 for x in rs[:2]:
                     print(f"                 ex: \"{(x.get('_hook') or '')[:52]}\"")
 
-            e, a = baldes.get("estreito") or [], baldes.get("amplo") or []
+            e, a = (baldes.get("fecha_porta") or [],
+                    baldes.get("nao_fecha") or [])
             if len(e) >= 8 and len(a) >= 8:
                 ae = [x["reach"] for x in e if isinstance(x.get("reach"), int)]
                 aa = [x["reach"] for x in a if isinstance(x.get("reach"), int)]
@@ -505,21 +523,21 @@ def main():
                     juntos = ae + aa
                     erro = 1.253 * st.pstdev(juntos) / (min(len(ae), len(aa)) ** 0.5)
                     ruido = erro * 1.128           # d(k) para k=2 baldes
-                    print(f"     diferença de alcance (amplo − estreito): "
+                    print(f"     diferença de alcance (não-fecha − fecha): "
                           f"{dif:+.0f}   ruído esperado: ±{ruido:.0f}")
                     if abs(dif) < ruido:
                         print("     ⚠️  DENTRO DO RUÍDO — estes dados NÃO "
                               "confirmam nem refutam a tese. Não mude a "
                               "estratégia de hook com base nesta linha.")
                     else:
-                        lado = "amplo" if dif > 0 else "estreito"
-                        print(f"     o balde {lado.upper()} alcança mais, "
+                        lado = "quem NÃO fecha" if dif > 0 else "quem FECHA"
+                        print(f"     o balde de {lado} alcança mais, "
                               f"acima do ruído. Ainda é observação, não "
                               f"experimento: ninguém sorteou qual post levou "
                               f"qual gancho.")
             else:
-                print(f"     ⚠️  baldes pequenos demais (estreito={len(e)}, "
-                      f"amplo={len(a)}) — precisa de ≥8 de cada lado. "
+                print(f"     ⚠️  baldes pequenos demais (fecha={len(e)}, "
+                      f"não-fecha={len(a)}) — precisa de ≥8 de cada lado. "
                       f"Sem isso eu não comparo.")
     else:
         print()

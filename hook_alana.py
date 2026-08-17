@@ -533,6 +533,8 @@ def _via_gemini(produto: str, descricao: str, nicho: str) -> Optional[str]:
     try:
         from google import genai
         cli = genai.Client(api_key=key)
+        _amplo = os.environ.get("HOOK_AMPLO", "1").strip().lower() not in (
+            "0", "false", "nao", "não")
         # mostra um SUBCONJUNTO aleatorio das formulas (forca variedade entre posts)
         # ⚠️ SORTEIO UNIFORME DESPERDIÇAVA A MEDIÇÃO. Eram 10 moldes, só 4 em
         # 1ª pessoa, e `random.sample` os tratava como iguais — então ~60% do
@@ -546,6 +548,17 @@ def _via_gemini(produto: str, descricao: str, nicho: str) -> Optional[str]:
         # uma semana atrás, não é lei da natureza.
         _pp = [f for f in FORMULAS if f[0] in PRIMEIRA_PESSOA]
         _outros = [f for f in FORMULAS if f[0] not in PRIMEIRA_PESSOA]
+        # ⚠️ NAO MOSTRE O QUE VOCE ACABOU DE PROIBIR. `alerta_exclusao` ("Nao
+        # mostre isso pra quem <X>") e `necessidade` ("Toda pessoa que <X>")
+        # sao LITERALMENTE as construcoes que a regra proibe — e o sorteio
+        # podia colocar as duas na frente do modelo como "exemplo de tom", na
+        # mesma mensagem que dizia pra nunca escrever aquilo. Instrucao
+        # contraditoria: o exemplo concreto ganha da proibicao abstrata quase
+        # sempre. Filtrado pela MESMA funcao que julga a saida, entao molde
+        # novo que feche porta ja nasce excluido.
+        if _amplo:
+            _pp = [f for f in _pp if not filtra_publico(f[1])]
+            _outros = [f for f in _outros if not filtra_publico(f[1])]
         amostra = (random.sample(_pp, k=min(3, len(_pp)))
                    + random.sample(_outros, k=min(2, len(_outros))))
         random.shuffle(amostra)
@@ -568,27 +581,43 @@ def _via_gemini(produto: str, descricao: str, nicho: str) -> Optional[str]:
         # na lista. O pedido foi outro -- "o proprio jarvis ira fazer os hooks".
         # Entao o modelo recebe a REGRA (a da Ava Yuergens) e escreve; os
         # moldes viram EXEMPLO de tom, nao gabarito a preencher.
-        _amplo = os.environ.get("HOOK_AMPLO", "1").strip().lower() not in (
-            "0", "false", "nao", "não")
+        # ⚠️ AMPLO NAO E "TIRAR O 'PRA QUEM'" -- correcao do Dre em 16/08, e ele
+        # esta certo. A 1a versao desta regra so PROIBIA a construcao que fecha
+        # porta. Proibicao nao produz amplitude: da pra obedecer a regra inteira
+        # e escrever "Odeio bone que amassa o cabelo!", que nao fecha porta
+        # nenhuma e continua estreito de assunto. No exemplo dele a frase INTEIRA
+        # muda -- outro vocabulario, outra estrutura, o substantivo sobe um
+        # degrau. Por isso agora o modelo ve PARES de transformacao, nao uma
+        # lista de proibicoes: exemplo negativo ensina o que nao fazer, exemplo
+        # PAREADO ensina o que fazer no lugar.
         regra_ava = (
-            "REGRA 1 - NAO FECHE A PORTA NA PRIMEIRA LINHA.\n"
-            "  O gancho e um FILTRO: se ele exige a pessoa pertencer a um grupo\n"
-            "  pra continuar, a maioria rola pra frente, e o algoritmo le isso\n"
-            "  como 'video ruim' e para de distribuir.\n"
-            "    FECHA:  'se voce tem cabelo cacheado, isso e pra voce'\n"
-            "    ABRE :  'quer o cabelo desembaracado sem passar 20 minutos?'\n"
-            "  Repare: o segundo CONTINUA sendo sobre cabelo. Amplo nao e\n"
-            "  generico -- e UM DEGRAU acima, no mesmo assunto. Nunca escreva\n"
-            "  'pra quem', 'quem tem', 'se voce e', 'toda pessoa que'.\n\n"
-            "REGRA 2 - AMPLO SEM CHAMADA E VAGO. Prometa um resultado ou abra\n"
-            "  uma curiosidade que a pessoa queira fechar.\n"
-            "    VAGO   : 'meu setup vivia um caos de fios'  (nao filtra, mas\n"
-            "             tambem nao chama ninguem)\n"
-            "    CHAMA  : 'eu li 997 livros sobre dinheiro, esses 5 vao te\n"
-            "             deixar rico'  /  'siga esses passos'\n\n"
-            "REGRA 3 - 1a pessoa e BEM-VINDA como TOM, desde que cumpra as duas\n"
-            "  regras acima. Experiencia individual aproxima:\n"
-            "    'Nunca imaginei que aplicar base fosse tao rapido e sem sujeira'\n\n")
+            "COMO ESCREVER UM GANCHO AMPLO (a regra que importa)\n"
+            "Nao e 'tirar a palavra pra quem'. E REESCREVER A FRASE INTEIRA em\n"
+            "outro vocabulario. Faca estes 3 movimentos:\n\n"
+            "  (1) Troque QUEM A PESSOA E  ->  pelo QUE ELA QUER.\n"
+            "  (2) Suba o substantivo UM DEGRAU (golden -> cachorro; base ->\n"
+            "      maquiagem; air fryer -> jantar). Um degrau, nao ate 'todo\n"
+            "      mundo': continua sendo do mesmo assunto.\n"
+            "  (3) Feche com promessa de metodo ou resultado ('siga esses\n"
+            "      passos', 'em 5 minutos', 'sem gastar quase nada').\n\n"
+            "VEJA A FRASE INTEIRA MUDAR:\n"
+            "  ESTREITO: 'se voce tem um golden que come tudo, ensino isso'\n"
+            "  AMPLO   : 'quer um cachorro que nao come nada do chao sem a sua\n"
+            "             permissao? siga esses passos'\n\n"
+            "  ESTREITO: 'pra quem tem cabelo cacheado que vive embaracado'\n"
+            "  AMPLO   : 'da pra desembaracar o cabelo em 5 minutos sem brigar\n"
+            "             com ele todo santo dia'\n\n"
+            "  ESTREITO: 'toda pessoa que cozinha todo dia precisa disso'\n"
+            "  AMPLO   : 'o jantar de todo dia pode sujar metade da louca'\n\n"
+            "Repare: nenhuma palavra da versao estreita sobrevive. Nao e a\n"
+            "mesma frase sem o recorte -- e OUTRA frase, sobre o RESULTADO.\n\n"
+            "VAGO NAO E AMPLO. 'meu setup vivia um caos de fios' nao fecha porta\n"
+            "e tambem nao chama ninguem: nao promete nada. Amplo = alcanca muita\n"
+            "gente E da um motivo pra ficar.\n\n"
+            "1a pessoa e BEM-VINDA como TOM, se cumprir os 3 movimentos:\n"
+            "  'Nunca imaginei que aplicar base fosse tao rapido e sem sujeira'\n\n"
+            "PROIBIDO: 'pra quem', 'para quem', 'quem tem', 'quem ama',\n"
+            "'se voce tem', 'se voce e', 'toda pessoa que', 'todo mundo que'.\n\n")
         prompt = (
             "Voce e copywriter de videos virais de afiliado (Shopee), estilo das "
             "criadoras que mais vendem no Reels/TikTok. Crie UM gancho (hook) "
