@@ -522,6 +522,100 @@ Ex.: "O segredo pra ter um iPhone 17 sem gastar / uma fortuna ✨".
 
 ---
 
+## 🗓️ Dia 2026-08-17 — o pacote-veneno, e três números que mentiam
+
+Começou com *"a topshoptech está 3 dias sem postar, é falta de fonte ou de
+produção?"* — e a resposta era **nenhuma das duas**.
+
+### 🧨 UM ARQUIVO CORROMPIDO PAROU UMA CONTA POR 3 DIAS
+
+O log entregou o culpado, e ele repetia:
+
+    08-15 09:06  'mesa_magica_de_desenho_projetor_de_giraf' → @topshoptech_  ❌ 3x
+    08-17 09:15  'mesa_magica_de_desenho_projetor_de_giraf' → @topshoptech_  ❌ 3x
+
+    ProcessingFailedError · 'retriable': False
+    Facebook: "There was a problem uploading your video file.
+               Please try again with another file."
+
+O `ffprobe` disse por quê, e **não foi o que eu esperava**:
+
+| METADADOS (container) | BITSTREAM (conteúdo) |
+|---|---|
+| h264 · 1080x1920 · 30fps · 7,93s · aac | `Invalid NAL unit size (-37075930 > 10943)` |
+| ✅ tudo dentro do padrão de Reels | `Error splitting the input into NAL units` (×centenas) |
+
+**O arquivo não estava fora de especificação — estava CORROMPIDO.** O container
+mente bonito. Quem checa com `ffprobe -show_entries` (como eu ia fazer)
+APROVA o vídeo. Só a DECODIFICAÇÃO revela — que é o que a Meta faz do lado
+dela. A recusa dela estava certa.
+
+**Por que isso parou a conta inteira:** cada conta entra no slot com UM pacote
+(`alvos`), e quando ele falha o laço acaba ali — **não cai pro próximo**. Nada
+marcava o pacote, então ele voltava a ser o escolhido no slot seguinte. Um
+arquivo ruim = conta parada até vencer, 27 dias depois. **~40 posts.**
+
+**Consertos (3 camadas, porque uma só não fecha):**
+1. `daemon_maestro._registrar_falha` — 2 falhas e o pacote vai pra
+   `fila_problema/`. MOVE, não apaga. Loga em **ERROR**: quarentena silenciosa
+   vira cemitério, e o alerta é a metade útil do conserto.
+2. `patch_quarentena.py` — porque o `deploy_seguro` recusou o `daemon_maestro`
+   com **COLISÃO** (2 cópias) e a recusa está certa. A cópia da raiz recusou o
+   patch por não ter `ok_slugs.append`: ela é anterior ao `post_por_conta`,
+   logo é espelho morto — se fosse a viva, a postagem por conta não existiria.
+3. `produzir_tiktok._video_integro` — **conferir ANTES de entrar na esteira.**
+   Custa 0,6s/vídeo contra um slot perdido; e contra o preço real, que é o
+   vídeo envelhecer dias na fila pra só então descobrir que nunca serviu.
+   ⚠️ **Na dúvida DEIXA PASSAR** (sem ffmpeg → `True`): barrar produção por
+   ferramenta ausente trocaria um defeito raro por uma esteira parada. Aqui o
+   erro caro é o falso positivo.
+
+### 📏 E ANTES DE CONSERTAR, MEDIR: é um acidente ou o render quebrou?
+
+`auditoria_video.py` decodificou os **355** pacotes do disco: **5 quebrados
+(1,4%)** — 4 vivos em `pronto_para_postar/`, 1 já em quarentena. A resposta
+decidiu o conserto: **acidente, não defeito de linha.** Acima de 5% o certo
+seria parar e arrumar o render (a produção repõe ~12/dia); em 1,4% a barreira
+de entrada resolve. Reconferir em alguns dias.
+
+### 🔢 TRÊS NÚMEROS QUE MENTIAM (e dois eram meus)
+
+**1. O painel dizia 10 posts/semana; eram 39.** `jarvis_status` fazia
+`len(por_dia[dia])` — que conta as CHAVES (horários), e no `post_por_conta`
+cada chave guarda uma lista. **É o MESMO bug que a `auditoria_postagem`
+corrigiu em 11/08 e que sobreviveu no painel por mais uma semana.**
+
+**2. A auditoria AFIRMAVA a ordem da fila.** O texto dizia fixo "a ordem é MAIS
+NOVO PRIMEIRO" — e saiu três linhas abaixo do log do próprio daemon dizendo
+`ordem MAIS ANTIGO primeiro (drenagem)`. E a diferença muda o diagnóstico: em
+LIFO quem vence é o rabo antigo; em FIFO quem vence é o material NOVO. Agora
+refaz a decisão do `_drenar_por_idade` em vez de afirmar.
+
+**3. Eu li a PIRÂMIDE como pane.** Reportei "a postagem despencou de 12 pra 0".
+O Dre corrigiu: domingo é 0 **por desenho**. Conferido dia a dia:
+
+    ter 8/8 ✅ · qua 4/4 ✅ · qui 12/12 ✅ · sex 8/8 ✅
+    sáb 3/4 (faltou 1) · dom 0/0 ✅ · seg parcial (só o slot das 09h)
+
+**A postagem estava rodando exatamente na pirâmide.** Sobrava UMA anomalia — e
+era a tech, exatamente onde o Dre tinha apontado.
+
+### 🔌 O PATCH ESTAVA NO DISCO E NÃO NO PROCESSO
+
+O log da legenda da casa não aparecia nem no arquivo certo, mesmo com
+`grep -c` = 1 no `agents/meta_uploader.py`. Eu tinha listado três explicações e
+**nenhuma era a certa**: o daemon importou o módulo quando subiu, e editar o
+`.py` no disco não muda um processo Python que já está rodando. O patch é de
+15/08 e o serviço não tinha sido reiniciado desde então — **dois dias rodando
+código velho.** Está escrito no roadmap desde julho ("código novo precisa
+`systemctl restart jarvis.service`") e eu não lembrei ao montar o diagnóstico.
+
+**Lição que vale além deste caso:** patcher que reporta "✅ escrito" está
+dizendo a verdade sobre o DISCO e nada sobre o que está EXECUTANDO. Os dois
+patchers novos passaram a mandar reiniciar na última linha.
+
+---
+
 ## 🗓️ Dia 2026-08-03 — a foto sumida, e o que ela revelou
 
 Começou com "tem produtos sem imagem no site" e terminou descobrindo que eu não
