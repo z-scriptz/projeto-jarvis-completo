@@ -432,8 +432,19 @@ def _link_etiquetado(item: dict) -> str:
         r = gerar_link_afiliado(origem, sub_ids=subs)
         if isinstance(r, dict) and r.get("ok"):
             return r.get("short_link") or r.get("link") or base
+        # ⚠️ SEGUNDA SAÍDA SILENCIOSA, na função que eu tinha ACABADO de
+        # consertar por ser silenciosa (17/08). Eu tratei o caso "não tem
+        # origem" e deixei passar o caso "a API respondeu não": o `if ok` sem
+        # `else` caía no `return base` sem uma linha de log. O teste seco na
+        # VPS mostrou o sintoma exato — link idêntico ao da rodada anterior e
+        # NENHUM aviso, ou seja, os dois caminhos que eu sabia diagnosticar
+        # estavam descartados e sobrou o que eu não tinha coberto.
+        # Todo `if sucesso: return` precisa do irmão que conta o fracasso.
+        _log(f"   (API recusou o link 'wa' de "
+             f"'{(item.get('produto') or '?')[:28]}': "
+             f"{str((r or {}).get('erro'))[:60]} — vai SEM etiqueta)")
     except Exception as e:
-        _log(f"   (link etiquetado 'wa' falhou, uso o base: {str(e)[:50]})")
+        _log(f"   (link etiquetado 'wa' falhou, uso o base: {str(e)[:60]})")
     return base
 
 
