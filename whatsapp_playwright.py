@@ -372,6 +372,51 @@ def _titulo_do_item(item: dict) -> str:
     return nome
 
 
+def _link_etiquetado(item: dict) -> str:
+    """O link do achadinho com o canal `wa` no sub_id. Best-effort.
+
+    ⚠️ POR QUE (17/08): este script mandava `item["link"]`, o link genérico da
+    fila — sem canal. Venda vinda do WhatsApp caía em "direto", misturada com
+    tráfego orgânico e com o que não tem etiqueta nenhuma. Ou seja: o canal
+    nasceria cego, e a pergunta "o WhatsApp paga?" só teria resposta refazendo
+    a atribuição meses depois, no chute. É a mesma história dos 42 posts com
+    plataforma `?` — e a gente acabou de montar as 5 etiquetas hoje justamente
+    pra não repetir isso.
+
+    ⚠️ ORDEM CANÔNICA, SEM BURACO: `[canal, nicho, produto]`. Três etiquetas e
+    ponto — nada de vídeo aqui, e por isso NÃO entra a sentinela `semfonte`.
+    Ela só existe pra segurar o índice 3 quando há vídeo no 4; usá-la aqui
+    criaria uma "fonte" chamada semfonte em toda venda do grupo, que é
+    exatamente o defeito que ela foi criada pra evitar.
+
+    ⚠️ E FALHA VOLTA PRO LINK BASE, nunca derruba o envio. Link sem etiqueta
+    perde a atribuição; link nenhum perde a venda. A escolha é fácil.
+    """
+    base = (item.get("link") or "").strip()
+    origem = (item.get("origem") or item.get("origem_url") or "").strip()
+    if not origem:
+        return base            # sem URL de produto não há o que reetiquetar
+    try:
+        try:
+            from integrations.shopee_affiliate import gerar_link_afiliado
+        except Exception:
+            from shopee_affiliate import gerar_link_afiliado
+        import re as _re
+
+        def _s(x, padrao):
+            v = _re.sub(r"[^A-Za-z0-9]", "", str(x or ""))[:16]
+            return v or padrao
+
+        subs = ["wa", _s(item.get("nicho"), "geral"),
+                _s(item.get("produto") or item.get("campeao"), "prod")]
+        r = gerar_link_afiliado(origem, sub_ids=subs)
+        if isinstance(r, dict) and r.get("ok"):
+            return r.get("short_link") or r.get("link") or base
+    except Exception as e:
+        _log(f"   (link etiquetado 'wa' falhou, uso o base: {str(e)[:50]})")
+    return base
+
+
 def _mensagem(item: dict) -> str:
     """A legenda do achadinho — mesmo formato do grupo do Telegram.
 
@@ -389,7 +434,11 @@ def _mensagem(item: dict) -> str:
         linhas.append(f"💰 {_reais(preco)}")
     linhas.append("🔥 Corre que é por tempo limitado!")
     linhas.append("")
-    linhas.append(f"👉 {item.get('link', '')}")
+    # ⚠️ o link ETIQUETADO vai pra mensagem; o `item["link"]` cru continua
+    # sendo a chave de dedup (`whatsapp_enviados.json`) em outro lugar do
+    # arquivo. Trocar a chave faria o script reenviar tudo que já saiu, porque
+    # o link etiquetado é novo a cada geração.
+    linhas.append(f"👉 {_link_etiquetado(item)}")
     return "\n".join(linhas)
 
 

@@ -84,8 +84,31 @@ def _tags_video() -> tuple:
     return VIDEO_TAGS + extra
 
 
+# Canais que a NOSSA esteira etiqueta na 1ª posição do sub_id.
+# ⚠️ CASADO POR IGUALDADE, NUNCA POR SUBSTRING — e a diferença não é estilo.
+# `_do_video` procura as tags como pedaço de texto, o que funciona pra
+# "tiktok" (6 chars, improvável dentro de nome de produto) e é uma bomba pra
+# "wa": medido em 17/08, `"wa" in "direto-KitWashComSabao"` é True. Adicionar
+# "wa" na lista de substring faria venda avulsa de sabão virar venda nossa, e
+# o CEO passaria a comemorar faturamento que não existe. Aqui o canal é
+# comparado com a 1ª etiqueta INTEIRA, via `_canal()`.
+CANAIS_NOSSOS = {"wa", "fb", "ig", "tiktok", "hunter", "telegram"}
+
+
 def _do_video(utm: str) -> bool:
+    """A venda veio de um post NOSSO?
+
+    ⚠️ SÓ A LISTA DE SUBSTRING NÃO BASTA — descoberto em 17/08 ao ligar o
+    WhatsApp. As tags herdadas (`tiktok`, `hunter`, `topshop`…) nasceram do
+    tempo em que o link levava o nome do pipeline no sub_id. Desde que a
+    esteira passou a etiquetar por CANAL (`[canal, nicho, produto, …]`), links
+    de `fb`, `ig` e agora `wa` não casam com nenhuma delas — e caíam em
+    "outros", exatamente o defeito que o comentário do `VIDEO_TAGS` descreve
+    ter acontecido com o TikTok ("sumia do radar do CEO, vendas_video=0").
+    """
     u = (utm or "").lower()
+    if _canal(u) in CANAIS_NOSSOS:
+        return True
     return any(t in u for t in _tags_video())
 
 
