@@ -63,7 +63,21 @@ ENV_ESPERADO = [
     ("ELEVENLABS_API_KEY", "narração"),
     ("GEMINI_API_KEY", "auditoria visual"),
     ("TELEGRAM_BOT_TOKEN", "avisos"),
-    ("TELEGRAM_ADMIN_CHAT_ID", "avisos"),
+    # ⚠️ ERA `TELEGRAM_ADMIN_CHAT_ID` — um nome FANTASMA. Conferido em 18/08:
+    # nenhum código do projeto lê essa variável; ela só existia nesta lista. A
+    # revisão vinha alertando "não encontrada — afeta avisos" enquanto os
+    # avisos chegavam normalmente, porque quem manda usa OUTRO nome. Checklist
+    # que cobra variável que ninguém usa gasta a atenção de quem lê e ensina a
+    # ignorar alerta — que é o oposto do que ela existe pra fazer.
+    #
+    # ⚠️ E O FALLBACK DELA É PERIGOSO: sem `TELEGRAM_ALERT_CHAT_ID`, o
+    # `_avisar` do WhatsApp cai em `TELEGRAM_CHAT_ID`, que é o ID do GRUPO de
+    # achadinhos. O QR do login do WhatsApp e os prints de erro iriam parar na
+    # comunidade — e QR de login em grupo público é sessão sequestrada. Por
+    # isso ela vira item da checklist: não por ser obrigatória (há fallback),
+    # mas porque o fallback manda pro lugar errado.
+    ("TELEGRAM_ALERT_CHAT_ID", "avisos privados (sem ela, o QR do WhatsApp "
+                               "e os erros vão pro GRUPO)"),
 ]
 
 SERVICOS = ["jarvis.service", "tiktok_painel.service"]
@@ -504,6 +518,11 @@ def bloco_travas():
             f"{n} {i}" for n, i in ociosas))
 
 
+# carimbo no começo da linha: "2026-08-18 15:20:45 [INFO] ..." (ou com T)
+_RE_DATA_LOG = __import__("re").compile(
+    r"^(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2})")
+
+
 # ── 11. erros recentes nos logs ─────────────────────────────────────────────
 def bloco_logs():
     B = "logs"
@@ -513,7 +532,7 @@ def bloco_logs():
         _diz(INFO, B, "nenhum .log nesta pasta (o daemon loga no journald)")
         return
     limite = time.time() - 24 * 3600
-    total, exemplos = 0, []
+    total, exemplos, sem_data = 0, [], 0
     for p in arqs:
         if p.stat().st_mtime < limite:
             continue
@@ -525,15 +544,49 @@ def bloco_logs():
                 texto = f.read().decode("utf-8", errors="replace")
         except Exception:
             continue
+
+        # ⚠️ A JANELA É DA LINHA, NÃO DO ARQUIVO (conserto de 18/08).
+        # Antes o filtro era só `p.stat().st_mtime`: bastava o arquivo ter
+        # sido tocado hoje pra TODA linha de erro do rabo entrar como "últimas
+        # 24h". O `grupo.log` está vivo, e a saída de 18/08 reportou "101
+        # erros nas últimas 24h" com amostras de **14/07, 01/08 e 14/08**.
+        # Alarme falso semanal, e do tipo pior: some no meio dele o erro que é
+        # de verdade de hoje.
+        #
+        # ⚠️ LINHA SEM DATA HERDA A ANTERIOR, de propósito: as linhas de um
+        # Traceback não têm carimbo próprio e pertencem à entrada que as
+        # abriu. Descartá-las esconderia justamente a pilha do erro.
+        ultima_ts = None
         for linha in texto.splitlines():
-            if ("Traceback" in linha or "ERROR" in linha
+            m = _RE_DATA_LOG.match(linha)
+            if m:
+                try:
+                    ultima_ts = datetime.strptime(
+                        m.group(1).replace("T", " "),
+                        "%Y-%m-%d %H:%M:%S").timestamp()
+                except ValueError:
+                    pass
+            if not ("Traceback" in linha or "ERROR" in linha
                     or "CRITICAL" in linha):
-                total += 1
-                if len(exemplos) < 4:
-                    exemplos.append(f"{p.name}: {linha.strip()[:100]}")
+                continue
+            if ultima_ts is None:
+                # log sem carimbo nenhum: não dá pra situar no tempo, e
+                # contar como "de hoje" seria inventar. Reportado à parte.
+                sem_data += 1
+                continue
+            if ultima_ts < limite:
+                continue
+            total += 1
+            if len(exemplos) < 4:
+                exemplos.append(f"{p.name}: {linha.strip()[:100]}")
+
+    extra = (f" · {sem_data} linha(s) de erro sem data (não datei, não contei)"
+             if sem_data else "")
     if total:
-        _diz(ALERTA, B, f"{total} linha(s) de erro nas últimas 24h",
+        _diz(ALERTA, B, f"{total} linha(s) de erro nas últimas 24h{extra}",
              " | ".join(exemplos))
+    elif sem_data:
+        _diz(ALERTA, B, f"nenhum erro datado nas últimas 24h,{extra}")
     else:
         _diz(OK, B, f"{len(arqs)} log(s), nenhum erro nas últimas 24h")
 
