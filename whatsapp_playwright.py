@@ -394,8 +394,28 @@ def _link_etiquetado(item: dict) -> str:
     """
     base = (item.get("link") or "").strip()
     origem = (item.get("origem") or item.get("origem_url") or "").strip()
+
+    # ⚠️ A FILA NÃO TEM CAMPO DE ORIGEM — e isso quase deixou esta função ser
+    # código morto. A 1ª versão exigia `origem`/`origem_url`; conferido em
+    # `validar_fila`/`curar_fila`, nenhum dos dois grava esse campo, então ela
+    # caía no `base` SEMPRE, em silêncio, e o teste seco mostrava link sem
+    # etiqueta com cara de link etiquetado. O que a fila tem (desde hoje) é
+    # `shop_id` + `item_id`, e a URL canônica se remonta com os dois — é o
+    # mesmo formato `i.{shop}.{item}` que o `_extrair_ids` do próprio
+    # `shopee_affiliate` sabe ler.
     if not origem:
-        return base            # sem URL de produto não há o que reetiquetar
+        shop, item_id = (str(item.get("shop_id") or "").strip(),
+                         str(item.get("item_id") or "").strip())
+        if shop.isdigit() and item_id.isdigit():
+            origem = f"https://shopee.com.br/-i.{shop}.{item_id}"
+
+    if not origem:
+        # ⚠️ NÃO SILENCIOSO. Sem origem não dá pra etiquetar, e o post sai com
+        # o link base — a venda conta, a atribuição por canal não. Dizer isso
+        # é o que impede "achei que estava medindo" daqui a um mês.
+        _log(f"   (sem shop_id/item_id: '{(item.get('produto') or '?')[:34]}' "
+             f"vai SEM etiqueta de canal)")
+        return base
     try:
         try:
             from integrations.shopee_affiliate import gerar_link_afiliado
