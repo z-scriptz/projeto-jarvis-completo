@@ -427,7 +427,25 @@ def _link_etiquetado(item: dict) -> str:
             v = _re.sub(r"[^A-Za-z0-9]", "", str(x or ""))[:16]
             return v or padrao
 
-        subs = ["wa", _s(item.get("nicho"), "geral"),
+        # ⚠️ A FILA NÃO GRAVA `nicho` — conferido, 0 ocorrências no
+        # `validar_fila` e no `curar_fila`. Então `item.get("nicho")` era
+        # sempre None e a 2ª etiqueta saía `geral` pra TUDO: capa de edredom
+        # (casa) e pijama (moda) vieram as duas como geral no teste de 18/08.
+        # Etiqueta constante não é etiqueta — é um campo ocupado sem informar
+        # nada, e ia empurrar a análise por nicho do WhatsApp pra sempre.
+        #
+        # Deriva com o MESMO roteador que a produção usa, em vez de inventar
+        # regra local: se o `produzir_tiktok` chama uma coisa de "casa", o
+        # WhatsApp precisa chamar igual, senão os dois canais não cruzam.
+        nicho = ""
+        try:
+            import roteador_contas as _RC
+            nicho = _RC.nicho_do_produto(
+                item.get("produto") or item.get("campeao") or "",
+                item.get("categoria") or "")
+        except Exception:
+            nicho = ""      # sem roteador cai no default, e o default é honesto
+        subs = ["wa", _s(nicho, "geral"),
                 _s(item.get("produto") or item.get("campeao"), "prod")]
         r = gerar_link_afiliado(origem, sub_ids=subs)
         if isinstance(r, dict) and r.get("ok"):
