@@ -400,8 +400,15 @@ def _veredito(r: dict) -> list:
         # números que esta auditoria já tem (aquela função exige a lista de
         # candidatos do daemon, que aqui não existe)
         try:
-            _cfg = _cfg()
-            _modo = str(_cfg.get("ordem_da_fila", "auto")).strip().lower()
+            # ⚠️ NOME DIFERENTE DA FUNÇÃO, DE PROPÓSITO. A 1ª versão fazia
+            # `_cfg = _cfg()`, e em Python isso torna `_cfg` local pra função
+            # INTEIRA — então a chamada do lado direito vira UnboundLocalError.
+            # Caía no `except` e a auditoria imprimia "não consegui ler a ordem
+            # do daemon" em 18/08, um dia depois do conserto. O aviso salvou:
+            # ele foi escrito pra dizer "não sei" em vez de chutar, e foi isso
+            # que expôs o defeito em vez de escondê-lo atrás de um palpite.
+            _conf = _cfg()
+            _modo = str(_conf.get("ordem_da_fila", "auto")).strip().lower()
             if _modo == "mais_antigo":
                 _drenando = True
             elif _modo == "mais_novo":
@@ -409,7 +416,7 @@ def _veredito(r: dict) -> list:
             elif c["validade_dias"] <= 0:
                 _drenando = False
             else:
-                _frac = float(_cfg.get("limiar_drenagem", 0.4))
+                _frac = float(_conf.get("limiar_drenagem", 0.4))
                 _frac = max(0.0, min(1.0, _frac))
                 _drenando = (e["mais_antigo_dias"]
                              > c["validade_dias"] * _frac)
