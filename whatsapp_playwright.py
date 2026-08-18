@@ -431,7 +431,20 @@ def _link_etiquetado(item: dict) -> str:
                 _s(item.get("produto") or item.get("campeao"), "prod")]
         r = gerar_link_afiliado(origem, sub_ids=subs)
         if isinstance(r, dict) and r.get("ok"):
-            return r.get("short_link") or r.get("link") or base
+            novo = r.get("short_link") or r.get("link") or base
+            # ⚠️ O SUCESSO TAMBÉM PRECISA FALAR. Eu tinha posto log nos quatro
+            # caminhos de falha e deixado este mudo — e aí "funcionou" e "nem
+            # foi chamado" produzem exatamente a mesma tela. Passei duas
+            # rodadas concluindo "não foi chamado" sem ter como saber.
+            #
+            # E há um caso real em que o link SAI IGUAL mesmo dando certo: se
+            # a Shopee devolve o mesmo short link pra mesma URL de origem, a
+            # etiqueta fica registrada do lado deles e a URL não muda do nosso.
+            # Pelo link não dá pra distinguir; pelos sub_ids, dá.
+            _log(f"   🏷️  sub_ids={subs}"
+                 + ("  (link inalterado — a Shopee reusou o encurtado)"
+                    if novo == base else ""))
+            return novo
         # ⚠️ SEGUNDA SAÍDA SILENCIOSA, na função que eu tinha ACABADO de
         # consertar por ser silenciosa (17/08). Eu tratei o caso "não tem
         # origem" e deixei passar o caso "a API respondeu não": o `if ok` sem
