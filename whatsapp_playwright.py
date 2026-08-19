@@ -775,12 +775,26 @@ _JS_LEGENDA_FOCADA = """
 () => {
   const a = document.activeElement;
   if (!a) return false;
-  if (a.getAttribute("contenteditable") !== "true") return false;
+  // ⚠️ NÃO EXIGIR MAIS `contenteditable` (19/08). O WhatsApp Web migrou os
+  // campos de texto: o `--diag` de 18/08 mostrou a própria caixa de busca
+  // como `<input type="text" role="textbox">`, e não mais como div
+  // contenteditable. Com a exigência antiga, o clique acertava a legenda e a
+  // VERIFICAÇÃO reprovava — o erro saía como "não consegui focar a legenda"
+  // quando o foco estava certo. Aceita editável de qualquer forma.
+  const tag = (a.tagName || "").toLowerCase();
+  const editavel = (a.getAttribute("contenteditable") === "true"
+                    || tag === "textarea"
+                    || (tag === "input" && !["checkbox", "radio", "button",
+                                             "submit", "file"].includes(
+                          (a.getAttribute("type") || "text").toLowerCase()))
+                    || a.getAttribute("role") === "textbox");
+  if (!editavel) return false;
   const rot = ((a.getAttribute("aria-label") || "") + " " +
                (a.getAttribute("aria-placeholder") || "") + " " +
+               (a.getAttribute("placeholder") || "") + " " +
                (a.getAttribute("data-tab") || "")).toLowerCase();
-  // a caixa de BUSCA também é contenteditable — se o foco caiu nela, digitar
-  // ali procura conversa em vez de escrever legenda
+  // a caixa de BUSCA também é editável — se o foco caiu nela, digitar ali
+  // procura conversa em vez de escrever legenda
   if (rot.includes("pesquis") || rot.includes("search")) return false;
   return true;
 }
@@ -813,11 +827,21 @@ def _focar_legenda(pagina) -> bool:
     NÃO seja a busca. E o teclado confirma onde está antes de digitar —
     digitar na caixa de busca procuraria conversa em vez de escrever legenda.
     """
+    # ⚠️ SEM PRENDER NA TAG (19/08). A lista antiga era toda `div[...]`, de
+    # quando os campos do WhatsApp eram divs contenteditable. Eles viraram
+    # `input`/`textarea` — visto no `--diag` de 18/08, onde a caixa de busca
+    # aparece como `<input type="text" role="textbox">`. Seletor preso em
+    # `div` não acha mais nada, e o sintoma é "não consegui focar a legenda".
+    # Agora casa pelo RÓTULO (que é o que descreve a função) em qualquer tag.
     alvos = [
-        "div[contenteditable='true'][aria-label*='legenda' i]",
-        "div[contenteditable='true'][aria-placeholder*='legenda' i]",
-        "div[contenteditable='true'][aria-label*='caption' i]",
-        "div[role='textbox'][aria-label*='legenda' i]",
+        "[contenteditable='true'][aria-label*='legenda' i]",
+        "[contenteditable='true'][aria-placeholder*='legenda' i]",
+        "[aria-label*='legenda' i]",
+        "[aria-placeholder*='legenda' i]",
+        "[placeholder*='legenda' i]",
+        "[aria-label*='caption' i]",
+        "[placeholder*='caption' i]",
+        "[role='textbox'][aria-label*='legenda' i]",
     ]
     for s in alvos:
         try:
@@ -840,9 +864,48 @@ def _focar_legenda(pagina) -> bool:
             break
     # a prévia às vezes já abre com a legenda focada
     try:
-        return bool(pagina.evaluate(_JS_LEGENDA_FOCADA))
+        if pagina.evaluate(_JS_LEGENDA_FOCADA):
+            return True
     except Exception:
         return False
+
+    # ⚠️ FALHA VIRA EVIDÊNCIA (19/08). Antes, não focar rendia só um PNG — e
+    # print não se lê de dentro de uma conversa, nem entra em `grep`. Sem a
+    # marcação real, o conserto do seletor vira adivinhação, que é exatamente
+    # o que o cabeçalho desta função diz não fazer. Agora ela DESPEJA os
+    # campos de texto que existem na tela no momento da falha, e a próxima
+    # quebra do WhatsApp Web já chega com o dado do lado do erro.
+    #
+    # Nunca imprime VALOR de campo — só rótulo, tag e tipo.
+    try:
+        campos = pagina.evaluate("""
+        () => {
+          const sel = "[contenteditable='true'],input,textarea,[role='textbox']";
+          return Array.from(document.querySelectorAll(sel))
+            .filter(e => e.offsetParent !== null)
+            .slice(0, 14)
+            .map(e => ({
+              tag: e.tagName.toLowerCase(),
+              tipo: e.getAttribute("type") || "",
+              editavel: e.getAttribute("contenteditable") || "",
+              papel: e.getAttribute("role") || "",
+              rotulo: (e.getAttribute("aria-label") ||
+                       e.getAttribute("aria-placeholder") ||
+                       e.getAttribute("placeholder") || "").slice(0, 60),
+            }));
+        }""")
+        _log("   campos de texto visíveis na prévia (pra corrigir o seletor):")
+        for c in campos or []:
+            _log(f"     <{c['tag']}{(' type=' + c['tipo']) if c['tipo'] else ''}"
+                 f"{(' contenteditable=' + c['editavel']) if c['editavel'] else ''}"
+                 f"{(' role=' + c['papel']) if c['papel'] else ''}>"
+                 f"  rótulo: {c['rotulo']!r}")
+        if not campos:
+            _log("     NENHUM campo de texto visível — a prévia pode não ter "
+                 "aberto de verdade, apesar de o passo anterior achar que sim.")
+    except Exception as e:
+        _log(f"   (não consegui listar os campos: {str(e)[:60]})")
+    return False
 
 
 def _enviar_com_foto(pagina, foto: Path, legenda: str) -> bool:
