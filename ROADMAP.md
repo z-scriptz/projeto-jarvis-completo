@@ -4262,6 +4262,27 @@ mandando. Escrito pra degradar em texto, não quebrar. **Testar com
     não tinha resposta em lugar nenhum** — o valor estava certo no `.env` e o
     CRITÉRIO não estava documentado, então venceu e ninguém sabia o que
     recomprar.
+  - **DIAGNÓSTICO DE PROXY MORTO — a sequência de 2 comandos (medida 18/08):**
+
+        .venv/bin/python ig_playwright.py --diag promosda.alana
+        IG_PROXY= .venv/bin/python ig_playwright.py --diag promosda.alana
+
+    | com proxy | sem proxy | veredito |
+    |---|---|---|
+    | `Timeout 45000ms` | carrega (mesmo em login wall) | **proxy morto** — comprar resolve |
+    | `Timeout` | `Timeout` | rede da VPS / IP bloqueado — proxy novo NÃO conserta |
+
+    Foi exatamente esse par que fechou o caso: timeout com proxy, e sem ele a
+    página carregou (redirect pro `/accounts/login/`). **Rodar os dois ANTES de
+    comprar** — o 2º comando é o que evita gastar num problema que não é o
+    proxy.
+  - ⚠️ **E o `login_duro: True` sem proxy é informação, não ruído.** Com 9
+    cookies de IG, o IP da VPS ainda caiu na tela de login. O `ig_cookies.txt`
+    não tem `sessionid` (registrado em 19/07), então o IG só entrega reels de
+    perfil público **enquanto não te throttla** — e o IP da VPS não passa.
+    **O proxy não é só pra contornar bloqueio: é o que faz o IG entregar
+    conteúdo.** É por isso que datacenter não serve: cairia no mesmo login
+    wall, só que pago.
 - **Padrão de deploy (git-deploy, o `pjc`):** a VPS `/root/jarvis` é um git repo que
   faz `git fetch pjc claude/opa-clau-dgs591` e `git show FETCH_HEAD:arquivo.py > destino`.
   ⚠️⚠️ **O REPO É ACHATADO (tudo na raiz), mas a VPS usa PACOTES.** Deploy no destino
