@@ -144,8 +144,33 @@ SEL_ANEXO = ["input[type='file'][accept*='image']",
 # esperada antes de qualquer tecla.
 SEL_PREVIA = ["div[data-testid='media-preview']",
               "div[aria-label*='Enviar'] img",
-              "div[role='dialog'] img[src^='blob:']",
-              "img[src^='blob:']"]
+              "div[role='dialog'] img[src^='blob:']"]
+# ⚠️ SAIU DAQUI: `img[src^='blob:']` solto. Medido em 19/08 — o WhatsApp
+# renderiza as fotos JÁ ENVIADAS na conversa como `blob:`, então esse seletor
+# casava com uma imagem qualquer do histórico do grupo e a checagem "a prévia
+# abriu" passava SEM PRÉVIA NENHUMA. O erro seguinte então falava de uma caixa
+# de legenda que não existia, e mandou a investigação (a minha) pro seletor
+# errado por duas rodadas.
+
+_JS_PREVIA_ABERTA = """
+() => {
+  // A prévia É a tela que tem caixa de LEGENDA. Definir por isso, e não por
+  // "existe uma imagem", é o que impede o falso positivo: imagem tem em toda
+  // conversa; caixa de legenda só existe quando a prévia está aberta.
+  const sel = "[contenteditable='true'],input,textarea,[role='textbox']";
+  for (const e of document.querySelectorAll(sel)) {
+    if (e.offsetParent === null) continue;
+    const rot = ((e.getAttribute("aria-label") || "") + " " +
+                 (e.getAttribute("aria-placeholder") || "") + " " +
+                 (e.getAttribute("placeholder") || "")).toLowerCase();
+    if (!rot) continue;
+    if (rot.includes("pesquis") || rot.includes("search")) continue;
+    if (rot.includes("digite uma mensagem") || rot.includes("type a message")) continue;
+    return rot.slice(0, 60);   // achou um campo que só existe na prévia
+  }
+  return "";
+}
+"""
 
 
 def _log(m):
@@ -937,14 +962,35 @@ def _enviar_com_foto(pagina, foto: Path, legenda: str) -> bool:
         _log(f"   falhei ao anexar ({str(e)[:60]}) — mando sem foto")
         return False
 
-    if not _achar(pagina, SEL_PREVIA, timeout=15000):
-        _print_erro(pagina, "anexei a foto mas a prévia não abriu")
+    # ⚠️ ESPERA PELA CAIXA DE LEGENDA, não por uma imagem. Ver o comentário do
+    # `SEL_PREVIA`: imagem `blob:` existe em qualquer conversa com foto no
+    # histórico, e o teste antigo dava positivo sem prévia aberta.
+    rotulo_previa = ""
+    for _ in range(15):                       # ~15s, mesmo teto de antes
+        try:
+            rotulo_previa = pagina.evaluate(_JS_PREVIA_ABERTA) or ""
+        except Exception:
+            rotulo_previa = ""
+        if rotulo_previa:
+            break
+        pagina.wait_for_timeout(1000)
+
+    if not rotulo_previa:
+        # o `SEL_PREVIA` ainda serve pra dizer se ao menos a IMAGEM apareceu —
+        # separa "o anexo não pegou" de "pegou mas a tela é outra"
+        viu_imagem = bool(_achar(pagina, SEL_PREVIA, timeout=1500))
+        _print_erro(pagina, "anexei a foto mas a prévia não abriu"
+                    + (" (achei a imagem, mas nenhuma caixa de legenda — a "
+                       "tela mudou de formato)" if viu_imagem else
+                       " (nem imagem nem legenda: o `set_input_files` não "
+                       "chegou a disparar a prévia)"))
         try:
             pagina.keyboard.press("Escape")
             pagina.wait_for_timeout(800)
         except Exception:
             pass
         return False
+    _log(f"   prévia aberta (campo de legenda: {rotulo_previa!r})")
 
     pagina.wait_for_timeout(1200)
     if not _focar_legenda(pagina):
