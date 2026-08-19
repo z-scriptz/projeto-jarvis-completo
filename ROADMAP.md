@@ -522,6 +522,98 @@ Ex.: "O segredo pra ter um iPhone 17 sem gastar / uma fortuna ✨".
 
 ---
 
+## 🗓️ Dia 2026-08-18 — o WhatsApp entra, e a fila revela o custo do atraso
+
+### 📱 WHATSAPP LIGADO NO MESMO TRILHO DO TELEGRAM
+
+O chip dedicado chegou e a conta WhatsApp **Business (App)** foi criada. O
+grupo (`ACHADINHOS VIP TOPSHOP ⭐ #1`) e o `wa.me` nas bios **já existiam** — eu
+tinha assumido que não e o Dre corrigiu. A máquina também já existia
+(`whatsapp_playwright.py`, 04/08), só desligada.
+
+**O que mudou de risco:** o registro de 04/08 dizia *"número banido leva junto o
+grupo e o contato comercial"* — era o número pessoal. Com chip dedicado o ban
+custa a conta do Jarvis, não a do Dre. O que NÃO mudou: continua sendo
+automação de WhatsApp Web, contra os termos, e as travas conservadoras (2/
+rodada, 6/dia, 07–21h, pausa 45–120s) existem por causa disso.
+
+**Mesmos produtos do Telegram, por construção** — arquivos de dedup separados
+(`grupo_postados.json` × `whatsapp_enviados.json`), então cada canal evita só o
+que ele mesmo mandou. E deve continuar assim: as listas não se sobrepõem
+(membro do Telegram ≠ contato do WhatsApp), e dividir a fila daria o 2º melhor
+produto pra um canal e o 7º pro outro. Diferenciar só quando os contatos vierem
+segmentados por conta de nicho.
+
+### 🏷️ QUATRO DEFEITOS NA MESMA ETIQUETA, UM ATRÁS DO OUTRO
+
+Etiquetar o canal `wa` no `sub_id` deveria ser trivial. Foram quatro rodadas:
+
+1. **Código morto.** A 1ª versão exigia `origem`/`origem_url` no item da fila —
+   e nem `validar_fila` nem `curar_fila` gravam esse campo. Caía no link base
+   SEMPRE, calado, e o teste seco mostrava link sem etiqueta com cara de link
+   etiquetado. Conserto: remontar a URL com `shop_id`+`item_id` (que passaram a
+   ser gravados em 17/08).
+2. **Segunda saída silenciosa, na função que eu tinha ACABADO de consertar por
+   ser silenciosa.** `if r.get("ok"): return ...` sem `else` caía no `return
+   base` sem log. **Todo `if sucesso: return` precisa do irmão que conta o
+   fracasso.**
+3. **O sucesso também precisava falar.** Com log só nas falhas, "funcionou" e
+   "nem foi chamado" produzem a MESMA tela — passei duas rodadas concluindo
+   "não foi chamado" sem ter como saber. E o Dre levantou a hipótese que eu não
+   tinha considerado: a Shopee pode reusar o mesmo short link pra mesma URL,
+   então a etiqueta funciona e o link não muda. Pelo link não dá pra
+   distinguir; pelos sub_ids, dá.
+4. **A 2ª etiqueta era constante.** A fila nunca grava `nicho` (0 ocorrências
+   nos dois escritores), então saía `geral` pra tudo — capa de edredom e pijama
+   idênticos. Etiqueta constante não é etiqueta. Agora deriva pelo
+   `roteador_contas.nicho_do_produto`, o MESMO da produção (regra local faria
+   os dois canais não cruzarem). ⏳ ainda erra: pijama → `casa` (é moda).
+
+### ⏳ O CUSTO DO ATRASO: tudo de hoje só vai ao ar em um mês
+
+    fila 194 pacotes ÷ 6,14/dia = ~32 dias · ordem MAIS ANTIGO primeiro
+
+Vídeo produzido hoje entra no FIM da fila. **Hooks novos, barreira de vídeo
+corrompido e etiqueta de vídeo no `sub_id` só alcançam o público em ~4 semanas.**
+E eu tinha dito "2 semanas pra medir o hook" — errado: são 2 semanas DEPOIS de
+começarem a ir ao ar. Contei da produção; o relógio começa na publicação.
+
+**Decisão do Dre: `ordem_da_fila: "mais_novo"`.** A auditoria já dizia que ~28
+pacotes vão vencer sem sair — alguém é descartado de qualquer jeito, e a ordem
+só decide quem. Com FIFO, o slot vai pro material feito ANTES da melhoria e o
+que vence é o melhor. Invertido, vence o que o Dre já achou pior.
+
+### 🔕 DOIS ALARMES FALSOS QUE ENCHIAM A VARREDURA
+
+**"101 linhas de erro nas últimas 24h"** com amostras de 14/07, 01/08 e 14/08.
+O filtro era o `mtime` do ARQUIVO: bastava o log ter sido tocado hoje pra toda
+linha do rabo entrar na janela. Agora a data vem da LINHA; linha de Traceback
+herda a anterior (não tem carimbo próprio e pertence à entrada que a abriu); e
+linha sem data nenhuma é contada à parte em vez de virar "de hoje".
+
+**`TELEGRAM_ADMIN_CHAT_ID não encontrada`** — variável FANTASMA: nenhum código
+a lê, ela só existia na checklist. A de verdade é `TELEGRAM_ALERT_CHAT_ID` (e
+estava setada). Checklist que cobra variável que ninguém usa ensina a ignorar
+alerta.
+
+⚠️ **E ao conferir isso apareceu um risco real:** sem `TELEGRAM_ALERT_CHAT_ID`,
+o `_avisar` do WhatsApp cai em `TELEGRAM_CHAT_ID`, que é o ID do **GRUPO**. O
+QR do login do WhatsApp iria pra comunidade — e QR de login em grupo público é
+sessão sequestrada. A variável fica na checklist por isso: não por ser
+obrigatória (há fallback), mas porque o fallback manda pro lugar errado.
+
+### 🐞 E UM BUG MEU, DE ONTEM, QUE A AUDITORIA PEGOU
+
+A auditoria imprimiu *"não consegui ler a ordem do daemon"* — o conserto de
+17/08 falhando. Causa: `_cfg = _cfg()`. Em Python isso torna `_cfg` local pra
+função inteira e a chamada do lado direito vira `UnboundLocalError`.
+
+**O aviso salvou.** Ele foi escrito pra dizer "não sei" em vez de chutar, e foi
+isso que expôs o defeito em vez de escondê-lo atrás de um palpite sobre a ordem
+da fila — que era justamente o número que o Dre estava decidindo.
+
+---
+
 ## 🗓️ Dia 2026-08-17 — o pacote-veneno, e três números que mentiam
 
 Começou com *"a topshoptech está 3 dias sem postar, é falta de fonte ou de
