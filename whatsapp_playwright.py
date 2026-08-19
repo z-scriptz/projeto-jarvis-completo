@@ -1236,8 +1236,35 @@ def _enviar_com_foto(pagina, foto: Path, legenda: str) -> bool:
     if editor and not rotulo_previa:
         _log(f"   prévia aberta pelo EDITOR ({editor!r}) e SEM caixa de "
              f"legenda — mando a foto e o texto em seguida")
+        # ⚠️ ENTER NO EDITOR MANDA FIGURINHA (medido 19/08, três rodadas).
+        # Eu culpei o formato do arquivo e converti tudo pra JPEG — e o log
+        # provou que estava errado: "foto JPEG normalizada pra JPEG" e a
+        # imagem saiu como sticker do mesmo jeito. O formato nunca foi o
+        # problema. O editor tem a ferramenta **Contorno** (recorte de
+        # figurinha), e o `Enter` dentro dele confirma ESSA ação.
+        # O botão de enviar manda foto; a tecla manda o que o editor estiver
+        # fazendo. São coisas diferentes.
+        _enviou = False
+        for s in ("span[data-icon='send']",
+                  "button[aria-label*='Enviar' i]",
+                  "div[role='button'][aria-label*='Enviar' i]",
+                  "span[data-icon='wds-ic-send-filled']",
+                  "button[data-testid='send']"):
+            try:
+                b = pagina.query_selector(s)
+                if b and b.is_visible():
+                    b.click(timeout=5000)
+                    _log(f"   foto enviada pelo BOTÃO ({s})")
+                    _enviou = True
+                    break
+            except Exception:
+                continue
+        if not _enviou:
+            _dump_botoes(pagina, "não achei o botão de enviar da prévia")
+            _log("   ⚠️ caindo no Enter — pode sair como FIGURINHA")
         try:
-            pagina.keyboard.press("Enter")       # envia a foto sozinha
+            if not _enviou:
+                pagina.keyboard.press("Enter")   # último recurso
             pagina.wait_for_timeout(2000)
         except Exception as e:
             _print_erro(pagina, f"não consegui enviar a foto: {str(e)[:60]}")
