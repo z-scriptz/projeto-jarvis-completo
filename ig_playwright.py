@@ -370,6 +370,37 @@ if __name__ == "__main__":
             if k in d:
                 print(f"  {k:18}: {d[k]}")
         print("\n📖 leitura:")
+        # ⚠️ O RAMO QUE FALTAVA (18/08). Quando a navegação falha de vez, os
+        # outros campos ficam vazios e a leitura saía EM BRANCO — o diagnóstico
+        # imprimia o traceback do Playwright e nenhuma interpretação, justo no
+        # caso em que ela é mais necessária. Medido: `Page.goto: Timeout
+        # 45000ms exceeded` com `proxy: True`, e a saída terminava no
+        # "📖 leitura:" sem uma linha embaixo.
+        _erro = str(d.get("erro") or "")
+        if _erro:
+            _tempo = "Timeout" in _erro or "timeout" in _erro
+            if _tempo and d.get("proxy"):
+                print("  ⚠️  TIMEOUT COM PROXY LIGADO → a página nem chegou a "
+                      "carregar. Não é login wall nem perfil vazio: a conexão "
+                      "sai pelo proxy e não volta.")
+                print("      Causa provável: proxy vencido/fora do ar.")
+                print("      TESTE QUE DECIDE (1 comando, antes de comprar "
+                      "outro):")
+                print("        IG_PROXY= python3 ig_playwright.py --diag "
+                      f"{d.get('perfil') or '<perfil>'}")
+                print("        · carregou sem proxy  → é o proxy, comprar "
+                      "resolve")
+                print("        · deu timeout também  → é rede da VPS ou "
+                      "bloqueio no IP dela;")
+                print("                                comprar proxy não "
+                      "resolveria nada")
+            elif _tempo:
+                print("  ⚠️  TIMEOUT SEM PROXY → rede da VPS ou o IG não "
+                      "responde pra este IP. Proxy novo não conserta isto.")
+            else:
+                print(f"  ⚠️  a navegação falhou antes de qualquer leitura "
+                      f"({_erro.splitlines()[0][:70]}). Os campos abaixo não "
+                      f"foram medidos — não os leia como resultado.")
         if d.get("cookies_instagram", 0) == 0:
             print("  ⚠️  ZERO cookies de instagram → o cookies.txt não tem sessão do IG. "
                   "É PRECISO um cookies.txt logado no IG.")
