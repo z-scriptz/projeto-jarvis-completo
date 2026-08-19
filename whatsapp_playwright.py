@@ -1492,7 +1492,12 @@ def diag_anexo():
         _log("defina WHATSAPP_GRUPO no .env")
         return 2
     with sync_playwright() as pw:
-        nav, pagina = _abrir(pw, headless=True)
+        # mesma abertura do `diagnostico()`: `_abrir` devolve o CONTEXTO
+        # persistente, não uma tupla. Eu tinha escrito `nav, pagina = _abrir(...)`
+        # sem conferir a assinatura, e quebrou na primeira execução.
+        ctx = _abrir(pw)
+        pagina = ctx.pages[0] if ctx.pages else ctx.new_page()
+        ctx.add_init_script(_STEALTH_JS)
         try:
             pagina.goto("https://web.whatsapp.com", timeout=60000)
             pagina.wait_for_timeout(6000)
@@ -1574,7 +1579,7 @@ def diag_anexo():
             return 0
         finally:
             try:
-                nav.close()
+                ctx.close()
             except Exception:
                 pass
 
