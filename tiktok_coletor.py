@@ -702,12 +702,48 @@ def _atualizar_saude_e_podar(perfis: list, keepers: dict, dry: bool):
         _log("saúde das fontes: rodada sem NENHUM keeper (rede/proxy?) — não penalizo "
              "ninguém desta vez.")
         return
+
+    # ⚠️ A TRAVA GLOBAL NÃO COBRIA O CASO REAL (18/08). Ela só protege quando a
+    # rodada INTEIRA dá zero. Só que as fontes vivem em dois canais com infra
+    # diferente: TikTok (3 fontes, direto) e Instagram (83, via `IG_PROXY` +
+    # Playwright). Com o proxy vencido, as 83 do IG dão zero e as 3 do TikTok
+    # continuam rendendo — `total_keepers > 0`, a trava não dispara, e o
+    # contador sobe para 83 fontes CURADAS de uma vez. Em `COLETA_ZUMBI_RUNS`
+    # (3) rodadas elas são comentadas do arquivo.
+    #
+    # Foi exatamente o cenário de 18/08: proxy vencido há 3 dias, e o painel
+    # mostrando **11 fontes a 1 rodada de podar**. A poda existe pra cortar
+    # fonte que não rende; não pra converter uma pane de infraestrutura em
+    # perda permanente de curadoria.
+    #
+    # A trava agora é POR CANAL: se NENHUMA fonte de um canal rendeu, o
+    # problema é do canal, não das fontes dele.
+    por_canal = defaultdict(int)
+    fontes_do_canal = defaultdict(int)
+    for perfil, fonte, _nf in perfis:
+        k = _norm_perfil(perfil)
+        if not k:
+            continue
+        fontes_do_canal[fonte] += 1
+        por_canal[fonte] += keepers.get(k, 0)
+    canais_mudos = {f for f, n in fontes_do_canal.items()
+                    if n >= 3 and por_canal.get(f, 0) <= 0}
+    for f in sorted(canais_mudos):
+        _log(f"saúde das fontes: canal '{f}' deu ZERO keeper em "
+             f"{fontes_do_canal[f]} fonte(s) — trato como pane do canal "
+             f"(proxy/login/429), NÃO penalizo essas fontes.")
+
     saude = _ler_saude()
     hoje = time.strftime("%Y-%m-%d")
     podados = []
     for perfil, fonte, _nf in perfis:
         k = _norm_perfil(perfil)
         if not k:
+            continue
+        if fonte in canais_mudos:
+            # ⚠️ não zera o contador: se o canal voltar e a fonte seguir muda,
+            # ela continua de onde parou. Zerar aqui daria imunidade eterna a
+            # quem sempre falha junto com o canal.
             continue
         s = saude.get(k) or {"zero_seguidas": 0, "fonte": fonte}
         s["fonte"] = fonte
