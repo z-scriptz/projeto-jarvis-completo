@@ -52,14 +52,58 @@ def _carregar_env():
 
 
 def _proxy_playwright():
-    """IG_PROXY=http://user:pass@host:porta → dict do Playwright (ou None)."""
+    """IG_PROXY=http://user:pass@host:porta → dict do Playwright (ou None).
+
+    ⚠️ RECUSA CALADA ERA IGUAL A VARIÁVEL AUSENTE (18/08). Se a regex não
+    casasse, isto devolvia `None` sem dizer nada — e o `--diag` imprimia
+    `proxy: False`, exatamente o mesmo que quando o `.env` não tem a linha.
+    Duas causas muito diferentes ("não configurei" × "configurei e o parser
+    recusou") produziam a MESMA tela, num momento em que a diferença decide se
+    a pessoa mexe no `.env` ou compra outro proxy.
+
+    Casos reais que a regex recusa embora o proxy seja válido:
+      · `socks5h://`  — o `h` não estava na alternativa
+      · senha com `@` ou `:` — quebrava `[^:@]+` / `[^@]+`
+      · sem `:porta` no fim
+    O `socks5h` entrou na regex. Os outros continuam recusados (mudar o
+    casamento de senha exigiria parser de URL de verdade), mas agora **falam**.
+    """
     px = (os.environ.get("IG_PROXY") or "").strip()
     if not px:
         return None
-    m = re.match(r"(https?|socks5)://(?:([^:@]+):([^@]+)@)?([^:/]+):(\d+)", px)
+    m = re.match(r"(https?|socks5h?)://(?:([^:@]+):([^@]+)@)?([^:/]+):(\d+)", px)
     if not m:
+        # ⚠️ nunca imprime o valor: só o formato, pra não vazar credencial no
+        # log de um cron que qualquer um lê depois.
+        _esquema = px.split("://")[0] if "://" in px else "(sem ://)"
+        _tem_cred = "@" in px
+        _tem_porta = bool(re.search(r":\d+/?$", px))
+        print(f"[ig_playwright] ⚠️  IG_PROXY existe mas NÃO foi entendido "
+              f"(esquema '{_esquema}', tem credencial: {_tem_cred}, "
+              f"termina em porta: {_tem_porta}). "
+              f"Rodando SEM proxy — o IG vai cair em login wall.", flush=True)
+        print("[ig_playwright]     formato aceito: "
+              "http(s)://user:pass@host:porta  ou  socks5(h)://...", flush=True)
+        print("[ig_playwright]     senha com '@' ou ':' não passa neste "
+              "parser — peça outra ao fornecedor.", flush=True)
         return None
     scheme, user, pw, host, port = m.groups()
+
+    # ⚠️ CASOU ERRADO É PIOR QUE NÃO CASAR. Medido: com senha contendo `@`, a
+    # regex casa e devolve `host='nha@79.127.168.43'`, `password='se'` — uma
+    # config com CARA de válida, que conecta em host inexistente com senha
+    # truncada. O erro que sai daí não se parece com "senha tem @"; parece
+    # rede ruim, e manda a investigação pro lado errado.
+    if "@" in host or px.count("@") > 1:
+        print(f"[ig_playwright] ⚠️  IG_PROXY tem mais de um '@' — a senha "
+              f"provavelmente contém '@', e o parser divide no lugar errado "
+              f"(host sairia '{host[:24]}…'). RECUSO em vez de conectar "
+              f"torto. Peça ao fornecedor uma senha sem '@' nem ':'.",
+              flush=True)
+        return None
+
+    # o Playwright não conhece `socks5h`; o `h` só diz "resolva o DNS no proxy"
+    scheme = "socks5" if scheme == "socks5h" else scheme
     cfg = {"server": f"{scheme}://{host}:{port}"}
     if user:
         cfg["username"] = user
