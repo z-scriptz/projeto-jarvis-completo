@@ -1161,12 +1161,57 @@ def _enviar_com_foto(pagina, foto: Path, legenda: str) -> bool:
     fecho a prévia com Escape e devolvo False pro texto seguir.
     """
     def _pegar_input():
+        """O input de FOTOS E VÍDEOS — não o de figurinha.
+
+        ⚠️ A CAUSA REAL DA FIGURINHA (19/08, 4ª tentativa). O menu de anexo do
+        WhatsApp novo tem entradas separadas: *Fotos e vídeos*, *Documento*,
+        *Figurinha*. Cada uma tem o SEU `input[type=file]`, e todos casam com
+        `accept*='image'`. Pegando o primeiro, a gente caía no de FIGURINHA —
+        e isso explica os três sintomas de uma vez: o editor era o de sticker
+        (por isso 'Contorno', que é recorte de figurinha), figurinha não tem
+        campo de legenda, e o envio saía sticker com tecla OU com botão.
+        Eu culpei o formato do arquivo e depois a tecla Enter; os dois estavam
+        errados porque o arquivo entrava pela porta errada.
+
+        O discriminador é o próprio `accept`: o input de foto aceita VÍDEO
+        junto; o de figurinha, não.
+        """
+        try:
+            achados = pagina.evaluate("""
+            () => Array.from(document.querySelectorAll("input[type='file']"))
+                   .map((e, i) => ({i, accept: e.getAttribute("accept") || ""}))
+            """) or []
+        except Exception:
+            achados = []
+
+        if achados:
+            _log(f"   {len(achados)} input(s) de arquivo na página:")
+            for a in achados:
+                _log(f"     [{a['i']}] accept={a['accept'][:70]!r}")
+
+        # 1) o que aceita vídeo é o de "Fotos e vídeos"
+        for a in achados:
+            if "video" in a["accept"].lower():
+                el = pagina.query_selector_all("input[type='file']")[a["i"]]
+                _log(f"     → uso o [{a['i']}] (aceita vídeo = Fotos e vídeos)")
+                return el
+        # 2) sem nenhum com vídeo, evito ao menos o que só aceita webp/png
+        #    (cara de input de figurinha)
+        for a in achados:
+            acc = a["accept"].lower()
+            if "image" in acc and "webp" not in acc:
+                el = pagina.query_selector_all("input[type='file']")[a["i"]]
+                _log(f"     → uso o [{a['i']}] (imagem, sem cara de figurinha)")
+                return el
+
         for s in SEL_ANEXO:
             try:
                 el = pagina.query_selector(s)
             except Exception:
                 el = None
             if el:
+                _log("     → nenhum distinguível; caí no primeiro que casou "
+                     "(pode ser o de FIGURINHA)")
                 return el
         return None
 
