@@ -890,35 +890,54 @@ def _baixar_foto(url: str) -> Path:
         # primeiro achadinho real do grupo saiu como figurinha quadradinha em
         # vez de foto de produto. Não é questão de extensão: o WhatsApp lê o
         # conteúdo, então renomear não resolve. Converte de verdade.
-        if "webp" in tipo:
-            try:
-                from PIL import Image
-                import io
-                img = Image.open(io.BytesIO(r.content))
-                # fundo branco: WebP costuma ter transparência, e JPEG não tem
-                # canal alfa — sem isto o fundo sairia PRETO
-                if img.mode in ("RGBA", "LA", "P"):
-                    fundo = Image.new("RGB", img.size, (255, 255, 255))
-                    img = img.convert("RGBA")
-                    fundo.paste(img, mask=img.split()[-1])
-                    img = fundo
-                else:
-                    img = img.convert("RGB")
+        # ⚠️ PELOS BYTES, NÃO PELO CABEÇALHO (19/08). A 1ª versão olhava só o
+        # `Content-Type` do HTTP — se o servidor manda header errado, ausente,
+        # ou `application/octet-stream`, o WebP passa batido e a foto continua
+        # virando figurinha. O arquivo diz o que é: WebP começa com "RIFF" e
+        # traz "WEBP" no byte 8. Isso não depende de ninguém ser honesto.
+        # ⚠️ SEMPRE JPEG, seja qual for a origem (19/08, 2ª volta).
+        # A 1ª versão convertia só quando o `Content-Type` dizia webp — e a
+        # foto continuou saindo como figurinha no grupo. Header mente, some,
+        # ou vem `application/octet-stream`; e o WhatsApp decide pelo CONTEÚDO.
+        # Em vez de acertar a adivinhação, tiro a adivinhação do caminho:
+        # abre, converte, grava JPEG. Um re-encode por achadinho (6/dia) é
+        # barato perto de um grupo recebendo sticker no lugar de produto.
+        try:
+            from PIL import Image
+            import io
+            img = Image.open(io.BytesIO(r.content))
+            formato = img.format or "?"
+            # fundo branco: WebP e PNG costumam ter transparência, e JPEG não
+            # tem canal alfa — sem isto o fundo sairia PRETO
+            if img.mode in ("RGBA", "LA", "P"):
+                fundo = Image.new("RGB", img.size, (255, 255, 255))
+                img = img.convert("RGBA")
+                fundo.paste(img, mask=img.split()[-1])
+                img = fundo
+            else:
+                img = img.convert("RGB")
+            destino = base.with_suffix(".jpg")
+            img.save(destino, "JPEG", quality=90)
+            if formato.upper() == "WEBP":
+                _log(f"   foto era WebP (iria como FIGURINHA) — convertida "
+                     f"pra JPEG  ·  Content-Type dizia {tipo or 'nada'}")
+            else:
+                _log(f"   foto {formato} normalizada pra JPEG")
+            return destino
+        except Exception as e:
+            # ⚠️ só salvo o arquivo cru se ele JÁ for JPEG pelos bytes. Salvar
+            # um webp que não consegui converter manda figurinha, e figurinha
+            # é pior que foto nenhuma: parece spam de sticker no grupo.
+            if r.content[:3] == b"\xff\xd8\xff":
                 destino = base.with_suffix(".jpg")
-                img.save(destino, "JPEG", quality=90)
-                _log("   foto era WebP (viraria figurinha) — convertida pra JPEG")
+                destino.write_bytes(r.content)
+                _log(f"   (não abri com PIL: {str(e)[:40]} — mas os bytes são "
+                     f"JPEG, mando assim)")
                 return destino
-            except Exception as e:
-                # ⚠️ não caio no .webp calado: mandar figurinha é pior que
-                # mandar sem foto, porque parece spam de sticker no grupo.
-                _log(f"   não converti o WebP ({str(e)[:50]}) — mando SEM "
-                     f"foto, porque .webp iria como figurinha")
-                return None
+            _log(f"   não converti a imagem ({str(e)[:45]}) — mando SEM foto, "
+                 f"porque o formato cru pode ir como figurinha")
+            return None
 
-        ext = ".png" if "png" in tipo else ".jpg"
-        destino = base.with_suffix(ext)
-        destino.write_bytes(r.content)
-        return destino
     except Exception as e:
         _log(f"   não baixei a foto ({str(e)[:60]}) — mando sem foto")
         return None
