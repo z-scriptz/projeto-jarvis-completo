@@ -848,12 +848,48 @@ _JS_LEGENDA_FOCADA = """
 
 
 def _sair_da_previa(pagina):
-    """Descarta a prévia sem enviar. Duas vezes: a 1ª pode abrir um
-    'descartar alterações?' que precisa de outro Escape."""
+    """Descarta a prévia sem enviar, e CONFIRMA o descarte.
+
+    ⚠️ ESCAPE NÃO FECHA O DIÁLOGO DE CONFIRMAÇÃO (medido 19/08, no print que o
+    Dre mandou). O 1º Escape abre "Deseja descartar a seleção?" com os botões
+    *Cancelar* e *Descartar* — e o 2º Escape não o dispensa. O diálogo ficava
+    ABERTO cobrindo a página, e a tentativa seguinte (mandar só o texto) morria
+    com `ElementHandle.click: Timeout 30000ms` — elemento visível cujo clique
+    não completa é elemento coberto, e o que cobria era o nosso próprio
+    diálogo.
+    """
     for _ in range(2):
         try:
             pagina.keyboard.press("Escape")
             pagina.wait_for_timeout(700)
+        except Exception:
+            return
+
+    # ⚠️ CLICO EM "Descartar" PELO TEXTO, e só dentro de um diálogo cujo
+    # enunciado fale em descartar. A regra do `_fechar_modal` vale aqui: botão
+    # de diálogo se clica sabendo qual diálogo é. "Descartar" no lugar errado
+    # joga fora uma mensagem composta; num diálogo de sessão, seria pior.
+    for _ in range(3):
+        try:
+            dlg = pagina.query_selector("div[role='dialog']")
+            if not dlg or not dlg.is_visible():
+                return
+            txt = (dlg.inner_text() or "").lower()
+            if "descartar" not in txt and "discard" not in txt:
+                _log(f"   ⚠️ diálogo aberto que NÃO é o de descarte "
+                     f"({txt.splitlines()[0][:48]!r}) — não clico, deixo pra "
+                     f"revisão humana")
+                _print_erro(pagina, "diálogo inesperado sobre a prévia")
+                return
+            for rot in ("Descartar", "Discard"):
+                b = dlg.query_selector(f"button:has-text('{rot}')")
+                if b and b.is_visible():
+                    b.click(timeout=4000)
+                    pagina.wait_for_timeout(700)
+                    _log("   prévia descartada (confirmei no diálogo)")
+                    break
+            else:
+                return
         except Exception:
             return
 
@@ -1008,20 +1044,27 @@ def _enviar_com_foto(pagina, foto: Path, legenda: str) -> bool:
                 return el
         return None
 
-    # 1) abre o menu de anexo — sem isto o input existe mas não está ligado
-    for s in SEL_BOTAO_ANEXO:
-        try:
-            b = pagina.query_selector(s)
-            if not b or not b.is_visible():
-                continue
-            b.click(timeout=4000)
-            pagina.wait_for_timeout(900)
-            _log(f"   menu de anexo aberto ({s})")
-            break
-        except Exception:
-            continue
-
+    # ⚠️ O CLIQUE NO MENU É PLANO B, NÃO PLANO A — corrigido em 19/08 com o
+    # print que o Dre mandou. Eu tinha acabado de escrever que o input só é
+    # montado sob demanda; a captura de tela mostra a PRÉVIA ABERTA com a foto,
+    # ou seja, `set_input_files` no input direto FUNCIONA. Meu diagnóstico
+    # anterior estava errado, e forçar o menu antes só adicionaria um clique
+    # que pode abrir painel por cima do fluxo que já funciona.
+    # Só abro o menu se o input não estiver lá.
     campo = _pegar_input()
+    if not campo:
+        for s in SEL_BOTAO_ANEXO:
+            try:
+                b = pagina.query_selector(s)
+                if not b or not b.is_visible():
+                    continue
+                b.click(timeout=4000)
+                pagina.wait_for_timeout(900)
+                _log(f"   input não estava montado — abri o menu de anexo ({s})")
+                break
+            except Exception:
+                continue
+        campo = _pegar_input()
     if not campo:
         _log("   não achei onde anexar arquivo — mando sem foto")
         _dump_botoes(pagina, "nenhum input[type=file] na tela")
@@ -1036,14 +1079,24 @@ def _enviar_com_foto(pagina, foto: Path, legenda: str) -> bool:
     # ⚠️ ESPERA PELA CAIXA DE LEGENDA, não por uma imagem. Ver o comentário do
     # `SEL_PREVIA`: imagem `blob:` existe em qualquer conversa com foto no
     # histórico, e o teste antigo dava positivo sem prévia aberta.
+    # ⚠️ 15s ERA POUCO — medido em 19/08 pelos horários dos dois prints: às
+    # 11:20:04 o check disse "nem imagem nem legenda"; às 11:20:43 a captura
+    # de tela mostra a prévia montada com a foto. Ela apareceu DEPOIS do meu
+    # teto. Eu declarei falha cedo e passei a caçar seletor de um problema que
+    # era de tempo. A foto precisa ser lida do disco, processada e renderizada
+    # — num VPS sem GPU isso passa de meio minuto.
+    _TETO_PREVIA = int(os.environ.get("WHATSAPP_PREVIA_SEG", "60"))
     rotulo_previa = ""
-    for _ in range(15):                       # ~15s, mesmo teto de antes
+    for seg in range(_TETO_PREVIA):
         try:
             rotulo_previa = pagina.evaluate(_JS_PREVIA_ABERTA) or ""
         except Exception:
             rotulo_previa = ""
         if rotulo_previa:
             break
+        # avisa a cada 15s pra não parecer travado num log de cron
+        if seg and seg % 15 == 0:
+            _log(f"   esperando a prévia montar… ({seg}s de {_TETO_PREVIA})")
         pagina.wait_for_timeout(1000)
 
     if not rotulo_previa:
