@@ -1131,7 +1131,13 @@ def _dump_botoes(pagina, motivo: str):
           const sel = "button,[role='button'],span[data-icon]";
           return Array.from(document.querySelectorAll(sel))
             .filter(e => e.offsetParent !== null)
-            .slice(0, 20)
+            // ⚠️ 20 ERA POUCO e cortava justamente o que interessa. Medido em
+            // 19/08: a barra lateral do app (Conversas, Ligações, Status,
+            // Canais, Comunidades, Ferramentas, Anunciar, Mídia, Config.,
+            // Perfil…) vem PRIMEIRO no DOM e já enche as 20 vagas — o menu de
+            // anexo, que abre perto da caixa de mensagem, nunca aparecia na
+            // lista. Eu li "só tem a barra lateral" como "o menu não abriu".
+            .slice(0, 60)
             .map(e => ({
               tag: e.tagName.toLowerCase(),
               icone: e.getAttribute("data-icon") || "",
