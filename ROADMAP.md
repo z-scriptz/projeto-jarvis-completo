@@ -543,13 +543,37 @@ de 12px. Fechava. Só que **o número que fechava era o número errado**. O
 
 | clip | quem cria | margem | contorno |
 |---|---|---|---|
-| **desenhado** | `_textclip_esq` | `TXT_MARGEM=8` dos dois lados | `SW_NOME=3` |
+| **desenhado** | `_textclip_esq` | `TXT_MARGEM` dos dois lados | `SW_NOME` |
 | **medidor** | `_textclip_justo` | nenhuma | nenhum |
 
-A tinta acabava ~11px depois do que o medidor dizia, e o selo, colocado com
-vão de 12, sobrava **1px**. Colado. E o log reportava um estado saudável
-porque a conta era consistente **com ela mesma** — esse é o tipo de erro que
-não aparece em log nenhum, só no olho de quem vê o post.
+O log reportava um estado saudável porque a conta era consistente **com ela
+mesma** — esse é o tipo de erro que não aparece em log nenhum, só no olho de
+quem vê o post.
+
+**MEDIDO NA VPS (não estimado).** Eu tinha calculado o erro com `TXT_MARGEM=8`,
+o padrão do código. O `.env` da VPS usa **20**. Com o log novo:
+
+| fundo | clip | margem | contorno | medidor antigo | tinta acaba | selo ANTES | selo AGORA |
+|---|---|---|---|---|---|---|---|
+| claro | 278 | 20 | 0 | **238** | 470 | **462 (−8px)** | 482 (+12) |
+| preto | 284 | 20 | 3 | **238** | 476 | **462 (−14px)** | 488 (+12) |
+
+O `238` e o `462` da tabela caem da conta sozinhos e são **exatamente** os do
+log de produção que eu declarei saudável. O modelo bate com a máquina: o selo
+entrava 8px na letra.
+
+⚠️ **Só o fundo CLARO está em uso** — o Dre: *"o contorno preto a gente não
+utiliza, só branco!"*. Então o caso real é o de −8px; a linha do fundo preto
+fica de registro. O conserto cobre os dois porque lê o contorno **aplicado**
+em vez de assumir um.
+
+**De graça no log:** `margem=20` provou que o moviepy da VPS **aceita** o kwarg
+`margin`. Era a incógnita que me fez gravar `_margem_x` no clip em vez de supor
+— se tivesse recusado, o desconto seria 0 e o conserto teria que ser outro.
+
+**Acoplamento anotado:** `TXT_MARGEM=20` empurra o nome nos DOIS lados, e alguém
+compensou baixando `TEXTO_DX` de 16 pra 8. Mexer na margem mexe também no vão
+entre a logo e o nome.
 
 **Quando começou:** commit `a099f60` (14/07) pôs `margin=8` no clip desenhado
 pra não cortar o **p** de "To**p**Shop". O medidor não acompanhou. É a resposta
@@ -561,13 +585,15 @@ realmente aplicou (`_textclip_esq` grava `_margem_x` no clip, porque a margem
 só entra se a versão do moviepy aceitar o kwarg — o laço `for com_margem in
 (True, False)` pode não aplicar). Sem segundo clip, não há como divergir.
 
-Medido com Pillow antes de subir (Liberation Bold 52, mesma geometria):
-
-```
-tinta do 'TopShop' termina em x=447
-selo ANTES  x=445  vão -2px   DENTRO DO NOME
-selo DEPOIS x=459  vão +12px  ok
-```
+**A prévia mostrava outro header.** `preview_layout.py` existe pra conferir
+layout sem render completo, e usa o código real — mas o `narrated_video_agent`
+lê os knobs de `os.environ` e **nunca carrega o `.env`**: em produção quem
+injeta é o systemd. Rodando na mão, a prévia usava `NOME_FONT=56`/`TEXTO_DX=16`
+(padrões do código) enquanto a VPS posta com 52/8. Ia me deixar "confirmar" o
+conserto do selo olhando o quadro errado — o mesmo erro, de novo, um nível
+acima. Agora carrega o `.env` **antes do import** (o agente lê env na linha 69),
+imprime os knobs em vigor marcando quem difere do padrão, e grava um recorte
+ampliado do topo (o selo tem 46px em 1080×1920; no celular não dá pra julgar).
 
 **`render.py` tinha o mesmo erro, menor.** `_texto_rico` media com
 `d.textlength` (avanço da fonte) e desenhava com `stroke_width=3` — 3px de
