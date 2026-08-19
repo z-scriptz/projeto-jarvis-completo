@@ -1473,6 +1473,112 @@ _DIAG_JS = """
 """
 
 
+def diag_anexo():
+    """Abre o menu de anexo no grupo e mostra o que aparece. NÃO ENVIA NADA.
+
+    ⚠️ POR QUE EXISTE (19/08). O teto diário (6) bateu no meio do conserto da
+    figurinha, e eu precisava saber se o clique em "Fotos e vídeos" resolveu —
+    sem esperar até amanhã e sem gastar mensagem no grupo testando. O que está
+    em dúvida (menu → opção → input certo) acontece ANTES de enviar, então dá
+    pra verificar sem enviar.
+
+    Também não incrementa o contador do dia nem entra na janela de horário:
+    ele não posta, então as travas que existem pra não parecer robô não se
+    aplicam. Roda quantas vezes quiser.
+    """
+    from playwright.sync_api import sync_playwright
+    grupo = _grupo()
+    if not grupo:
+        _log("defina WHATSAPP_GRUPO no .env")
+        return 2
+    with sync_playwright() as pw:
+        nav, pagina = _abrir(pw, headless=True)
+        try:
+            pagina.goto("https://web.whatsapp.com", timeout=60000)
+            pagina.wait_for_timeout(6000)
+            if not _achar(pagina, SEL_LOGADO, timeout=45000):
+                _log("não estou logado — rode --login")
+                return 1
+            _fechar_modal(pagina)
+            if not _abrir_grupo(pagina, grupo):
+                _log(f"não achei o grupo '{grupo}'")
+                return 1
+
+            print()
+            _log("=== ANTES de abrir o menu ===")
+            antes = pagina.evaluate("""
+            () => Array.from(document.querySelectorAll("input[type='file']"))
+                   .map((e,i)=>({i, accept: e.getAttribute("accept")||""}))""")
+            for a in antes or []:
+                _log(f"   input[{a['i']}] accept={a['accept'][:70]!r}")
+            if not antes:
+                _log("   (nenhum input de arquivo)")
+
+            aberto = ""
+            for s in SEL_BOTAO_ANEXO:
+                try:
+                    b = pagina.query_selector(s)
+                    if b and b.is_visible():
+                        b.click(timeout=4000)
+                        pagina.wait_for_timeout(1500)
+                        aberto = s
+                        break
+                except Exception:
+                    continue
+            print()
+            _log(f"=== DEPOIS de clicar no anexo ({aberto or 'NÃO ACHEI O +'}) ===")
+            if not aberto:
+                _dump_botoes(pagina, "procurando o botão '+'")
+                return 1
+
+            depois = pagina.evaluate("""
+            () => Array.from(document.querySelectorAll("input[type='file']"))
+                   .map((e,i)=>({i, accept: e.getAttribute("accept")||""}))""")
+            for a in depois or []:
+                marca = "  ← ACEITA VÍDEO (é o de fotos)" if "video" in a["accept"].lower() else ""
+                _log(f"   input[{a['i']}] accept={a['accept'][:70]!r}{marca}")
+
+            _log("   opções visíveis no menu:")
+            _dump_botoes(pagina, "menu de anexo aberto")
+
+            # tenta a opção de fotos e mostra o efeito
+            for rot in ("Fotos e vídeos", "Photos & videos", "Fotos", "Photos"):
+                try:
+                    o = pagina.query_selector(
+                        f"[role='button']:has-text('{rot}'), "
+                        f"li:has-text('{rot}'), "
+                        f"div[role='menuitem']:has-text('{rot}')")
+                    if o and o.is_visible():
+                        o.click(timeout=4000)
+                        pagina.wait_for_timeout(1500)
+                        print()
+                        _log(f"=== DEPOIS de clicar em '{rot}' ===")
+                        fim = pagina.evaluate("""
+                        () => Array.from(document.querySelectorAll("input[type='file']"))
+                               .map((e,i)=>({i, accept: e.getAttribute("accept")||""}))""")
+                        for a in fim or []:
+                            marca = ("  ← ESTE" if "video" in a["accept"].lower()
+                                     else "")
+                            _log(f"   input[{a['i']}] "
+                                 f"accept={a['accept'][:70]!r}{marca}")
+                        break
+                except Exception:
+                    continue
+            else:
+                _log("   ⚠️ não achei a opção de FOTOS no menu (veja a lista "
+                     "acima e me diga o rótulo certo)")
+
+            pagina.keyboard.press("Escape")
+            print()
+            _log("NADA foi enviado. Este modo só olha.")
+            return 0
+        finally:
+            try:
+                nav.close()
+            except Exception:
+                pass
+
+
 def diagnostico():
     """Mostra o que a página REALMENTE tem, em vez de eu chutar seletor.
 
@@ -1696,6 +1802,8 @@ def main():
     p.add_argument("--diag", action="store_true",
                    help="mostra os campos que a página tem (pra corrigir seletor)")
     p.add_argument("--teste", action="store_true", help="acha o grupo e mostra, sem enviar")
+    p.add_argument("--diag-anexo", dest="diag_anexo", action="store_true",
+                   help="abre o menu de anexo e mostra os inputs, SEM enviar")
     p.add_argument("--forcar", action="store_true", help="ignora a janela de horário")
     p.add_argument("--quantos", type=int, default=MAX_RODADA)
     args = p.parse_args()
@@ -1703,13 +1811,15 @@ def main():
     # As travas de configuração vêm ANTES do playwright: erro de .env é o caso
     # comum, e ouvir "playwright não instalado" quando o problema é
     # WHATSAPP_GRUPO vazio manda a pessoa procurar no lugar errado.
-    if not args.login and not args.diag and not _ligado() and not args.teste:
+    if (not args.login and not args.diag and not args.diag_anexo
+            and not _ligado() and not args.teste):
         _log("⚪ WHATSAPP_ATIVO desligado. Ligue com:")
         _log("     echo 'WHATSAPP_ATIVO=1' >> ~/jarvis/.env")
         _log("   (rode com --teste pra simular sem enviar)")
         return 0
 
-    if not args.login and not args.diag and not args.forcar and not _dentro_da_janela():
+    if (not args.login and not args.diag and not args.diag_anexo
+            and not args.forcar and not _dentro_da_janela()):
         _log(f"fora da janela ({HORA_INI:02d}:00–{HORA_FIM:02d}:59) — nada enviado.")
         return 0
 
@@ -1737,6 +1847,8 @@ def main():
             return login()
         if args.diag:
             return diagnostico()
+        if args.diag_anexo:
+            return diag_anexo()
         return enviar(max(1, min(args.quantos, MAX_RODADA)), teste=args.teste)
 
 
