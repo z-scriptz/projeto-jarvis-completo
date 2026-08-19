@@ -138,6 +138,27 @@ SEL_LOGADO = ["div[data-testid='chat-list']", "#pane-side", "div[aria-label*='Li
 SEL_ANEXO = ["input[type='file'][accept*='image']",
              "input[type='file'][accept*='jpeg']",
              "input[type='file'][accept*='png']"]
+
+# ⚠️ PRECISA CLICAR NO ANEXO ANTES (19/08). O código ia direto ao
+# `input[type=file]` e chamava `set_input_files` — o que funcionava no
+# WhatsApp Web antigo, onde os inputs ficavam sempre montados. No redesign
+# eles são montados SOB DEMANDA: o input existe no DOM, aceita o arquivo, e
+# nada acontece, porque não está ligado a nada até o menu ser aberto.
+# Sintoma medido: "nem imagem nem legenda: o set_input_files não chegou a
+# disparar a prévia".
+#
+# ⚠️ ESTES SELETORES SÃO INFERÊNCIA, não medição — eu não vi o DOM do menu.
+# Por isso a falha despeja os botões da tela: a próxima rodada corrige com
+# dado em vez de com outro palpite meu.
+SEL_BOTAO_ANEXO = [
+    "button[aria-label*='anexar' i]",
+    "button[aria-label*='attach' i]",
+    "span[data-icon='plus-rounded']",
+    "span[data-icon='clip']",
+    "span[data-icon='attach-menu-plus']",
+    "div[role='button'][aria-label*='anexar' i]",
+    "div[title*='Anexar' i]",
+]
 # Depois de anexar, o WhatsApp abre uma TELA DE PRÉVIA com a foto e uma caixa
 # de legenda separada da caixa de conversa. Digitar na caixa errada manda a
 # legenda como mensagem solta e a foto sem texto — por isso a prévia é
@@ -933,6 +954,39 @@ def _focar_legenda(pagina) -> bool:
     return False
 
 
+def _dump_botoes(pagina, motivo: str):
+    """Despeja os botões/ícones clicáveis da tela, pra corrigir seletor com
+    dado em vez de palpite.
+
+    ⚠️ Existe pela mesma razão do despejo de campos de texto: em 19/08 eu
+    passei duas rodadas consertando o seletor errado porque a mensagem de erro
+    descrevia um estado que não era o real. Print não entra em `grep`.
+    Nunca imprime texto de mensagem — só rótulo/ícone de controle.
+    """
+    try:
+        itens = pagina.evaluate("""
+        () => {
+          const sel = "button,[role='button'],span[data-icon]";
+          return Array.from(document.querySelectorAll(sel))
+            .filter(e => e.offsetParent !== null)
+            .slice(0, 20)
+            .map(e => ({
+              tag: e.tagName.toLowerCase(),
+              icone: e.getAttribute("data-icon") || "",
+              rotulo: (e.getAttribute("aria-label") ||
+                       e.getAttribute("title") || "").slice(0, 40),
+            }))
+            .filter(x => x.icone || x.rotulo);
+        }""")
+        _log(f"   controles visíveis ({motivo}):")
+        for i in itens or []:
+            _log(f"     <{i['tag']}"
+                 f"{(' data-icon=' + i['icone']) if i['icone'] else ''}>"
+                 f"  rótulo: {i['rotulo']!r}")
+    except Exception as e:
+        _log(f"   (não consegui listar os controles: {str(e)[:60]})")
+
+
 def _enviar_com_foto(pagina, foto: Path, legenda: str) -> bool:
     """Anexa a foto e manda com a legenda junto. False se não deu.
 
@@ -944,16 +998,33 @@ def _enviar_com_foto(pagina, foto: Path, legenda: str) -> bool:
     arquivo pode ter sido anexado mas nada foi enviado — aí eu tiro o print,
     fecho a prévia com Escape e devolvo False pro texto seguir.
     """
-    campo = None
-    for s in SEL_ANEXO:
+    def _pegar_input():
+        for s in SEL_ANEXO:
+            try:
+                el = pagina.query_selector(s)
+            except Exception:
+                el = None
+            if el:
+                return el
+        return None
+
+    # 1) abre o menu de anexo — sem isto o input existe mas não está ligado
+    for s in SEL_BOTAO_ANEXO:
         try:
-            campo = pagina.query_selector(s)
-        except Exception:
-            campo = None
-        if campo:
+            b = pagina.query_selector(s)
+            if not b or not b.is_visible():
+                continue
+            b.click(timeout=4000)
+            pagina.wait_for_timeout(900)
+            _log(f"   menu de anexo aberto ({s})")
             break
+        except Exception:
+            continue
+
+    campo = _pegar_input()
     if not campo:
         _log("   não achei onde anexar arquivo — mando sem foto")
+        _dump_botoes(pagina, "nenhum input[type=file] na tela")
         return False
 
     try:
@@ -984,6 +1055,8 @@ def _enviar_com_foto(pagina, foto: Path, legenda: str) -> bool:
                        "tela mudou de formato)" if viu_imagem else
                        " (nem imagem nem legenda: o `set_input_files` não "
                        "chegou a disparar a prévia)"))
+        if not viu_imagem:
+            _dump_botoes(pagina, "o menu de anexo provavelmente não abriu")
         try:
             pagina.keyboard.press("Escape")
             pagina.wait_for_timeout(800)
