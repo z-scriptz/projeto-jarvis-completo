@@ -1222,20 +1222,50 @@ def _enviar_com_foto(pagina, foto: Path, legenda: str) -> bool:
     # anterior estava errado, e forçar o menu antes só adicionaria um clique
     # que pode abrir painel por cima do fluxo que já funciona.
     # Só abro o menu se o input não estiver lá.
-    campo = _pegar_input()
-    if not campo:
-        for s in SEL_BOTAO_ANEXO:
-            try:
-                b = pagina.query_selector(s)
-                if not b or not b.is_visible():
-                    continue
-                b.click(timeout=4000)
-                pagina.wait_for_timeout(900)
-                _log(f"   input não estava montado — abri o menu de anexo ({s})")
-                break
-            except Exception:
+    # ⚠️ ABRIR O MENU SEMPRE, E ESCOLHER "FOTOS E VÍDEOS" (19/08, 5ª volta).
+    # O log fechou o caso: a página tem UM input só, `accept='image/*'` — sem
+    # vídeo, ou seja, o de FIGURINHA. O input de fotos não está montado; ele
+    # só nasce quando se clica na opção "Fotos e vídeos" dentro do menu do
+    # `+`. Eu tinha deixado o clique no menu como plano B, e como um input É
+    # encontrado (o errado), o menu nunca abria. Plano B que nunca roda é
+    # código morto — e aqui era o código que resolvia.
+    campo = None
+    for s in SEL_BOTAO_ANEXO:
+        try:
+            b = pagina.query_selector(s)
+            if not b or not b.is_visible():
                 continue
-        campo = _pegar_input()
+            b.click(timeout=4000)
+            pagina.wait_for_timeout(1200)
+            _log(f"   menu de anexo aberto ({s})")
+            break
+        except Exception:
+            continue
+    else:
+        _dump_botoes(pagina, "não achei o botão '+' de anexo")
+
+    # escolhe a entrada de FOTOS (não Documento, não Figurinha)
+    _escolhido = ""
+    for rot in ("Fotos e vídeos", "Photos & videos", "Fotos", "Photos",
+                "Galeria", "Gallery"):
+        try:
+            o = pagina.query_selector(f"[role='button']:has-text('{rot}'), "
+                                      f"li:has-text('{rot}'), "
+                                      f"div[role='menuitem']:has-text('{rot}')")
+            if o and o.is_visible():
+                o.click(timeout=4000)
+                pagina.wait_for_timeout(1200)
+                _escolhido = rot
+                _log(f"   escolhi '{rot}' no menu de anexo")
+                break
+        except Exception:
+            continue
+    if not _escolhido:
+        # ⚠️ não sigo calado: sem clicar em "Fotos e vídeos", o input que
+        # sobra é o de figurinha, e a foto sai como sticker de novo.
+        _dump_botoes(pagina, "menu aberto, mas não achei a opção de FOTOS")
+
+    campo = _pegar_input()
     if not campo:
         _log("   não achei onde anexar arquivo — mando sem foto")
         _dump_botoes(pagina, "nenhum input[type=file] na tela")
