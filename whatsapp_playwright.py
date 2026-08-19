@@ -434,6 +434,28 @@ def _titulo_do_item(item: dict) -> str:
     """
     oficial = _do_historico((item.get("link") or "").strip()).get("nome") or ""
     nome = " ".join((oficial or _nome_do_item(item) or "Achadinho").split())
+
+    # ⚠️ TÍTULO DA SHOPEE É EMPILHAMENTO DE PALAVRA-CHAVE, não frase. O
+    # primeiro achadinho real do grupo saiu como "Pá Pega Coletora Pet Coletor
+    # Fezes Cocô Cachorro Gato" — o vendedor repete sinônimo pra ranquear na
+    # busca, e o resultado no grupo é uma frase desagradável de ler (queixa do
+    # Dre em 19/08, e ele tem razão: ninguém compra de anúncio que dá nojo).
+    #
+    # Tiro só REPETIÇÃO e os termos crus mais óbvios. Não reescrevo o título:
+    # ele é o mesmo nome que o cliente vai reler quando abrir o link, e mudar
+    # o produto de nome faria a pessoa achar que clicou no lugar errado.
+    _CRUS = {"fezes", "cocô", "coco", "excremento", "dejeto"}
+    palavras, vistas, saida = nome.split(), set(), []
+    for p in palavras:
+        chave = _norm(p.strip(",.;")) or p.lower()
+        if chave in _CRUS and saida:      # nunca apago a 1ª palavra
+            continue
+        if chave and chave in vistas:     # "Pá Pega Coletora ... Coletor"
+            continue
+        vistas.add(chave)
+        saida.append(p)
+    nome = " ".join(saida) or nome
+
     if len(nome) > NOME_MAX:
         nome = nome[:NOME_MAX - 1].rsplit(" ", 1)[0] + "…"
     return nome
@@ -546,6 +568,38 @@ def _link_etiquetado(item: dict) -> str:
     return base
 
 
+# ⚠️ CHAMADAS VARIADAS (pedido do Dre em 19/08). Antes era UMA frase fixa,
+# "🔥 Corre que é por tempo limitado!", em todo achadinho de toda rodada. Num
+# grupo que recebe 6 por dia, a mesma frase repetida vira ruído: o membro para
+# de ler a linha inteira, e ela é justamente a que pede a ação.
+#
+# Repare que NENHUMA inventa urgência que não existe ("acaba em 2h", "últimas
+# unidades") — a gente não sabe o estoque, e promessa falsa queima a
+# comunidade que levou meses pra juntar. Elas variam o TOM, não o fato.
+CHAMADAS = [
+    "🔥 Corre que é por tempo limitado!",
+    "👀 Achadinho desses não fica parado, viu",
+    "🛒 Se gostou, garante o seu",
+    "💸 Tá valendo demais por esse preço",
+    "⚡ Dá uma olhada antes que suma",
+    "😍 Esse aqui eu não deixaria passar",
+]
+
+
+def _chamada(item: dict) -> str:
+    """A linha de chamada, sorteada — mas ESTÁVEL por produto.
+
+    Sorteio por hash do link, e não `random.choice`: o mesmo achadinho
+    reenviado (retentativa, rodada repetida) sai com a mesma frase. Com
+    sorteio puro, uma falha no meio do envio poderia mandar o mesmo produto
+    com duas chamadas diferentes, e no grupo isso lê como dois anúncios.
+    """
+    chave = (item.get("link") or item.get("produto") or "").strip()
+    if not chave:
+        return CHAMADAS[0]
+    return CHAMADAS[sum(chave.encode("utf-8")) % len(CHAMADAS)]
+
+
 def _mensagem(item: dict) -> str:
     """A legenda do achadinho — mesmo formato do grupo do Telegram.
 
@@ -561,7 +615,7 @@ def _mensagem(item: dict) -> str:
     preco = _preco_do_item(item)
     if preco:
         linhas.append(f"💰 {_reais(preco)}")
-    linhas.append("🔥 Corre que é por tempo limitado!")
+    linhas.append(_chamada(item))
     linhas.append("")
     # ⚠️ o link ETIQUETADO vai pra mensagem; o `item["link"]` cru continua
     # sendo a chave de dedup (`whatsapp_enviados.json`) em outro lugar do
@@ -828,9 +882,41 @@ def _baixar_foto(url: str) -> Path:
             _log("   foto veio vazia demais — mando sem foto")
             return None
         tipo = (r.headers.get("Content-Type") or "").lower()
-        ext = ".png" if "png" in tipo else ".webp" if "webp" in tipo else ".jpg"
         FOTOS.mkdir(parents=True, exist_ok=True)
-        destino = FOTOS / f"{datetime.now():%H%M%S}-{random.randint(100, 999)}{ext}"
+        base = FOTOS / f"{datetime.now():%H%M%S}-{random.randint(100, 999)}"
+
+        # ⚠️ WEBP VIRA FIGURINHA NO WHATSAPP (medido 19/08). A Shopee serve as
+        # fotos em WebP, e `.webp` É o formato de sticker do WhatsApp — o
+        # primeiro achadinho real do grupo saiu como figurinha quadradinha em
+        # vez de foto de produto. Não é questão de extensão: o WhatsApp lê o
+        # conteúdo, então renomear não resolve. Converte de verdade.
+        if "webp" in tipo:
+            try:
+                from PIL import Image
+                import io
+                img = Image.open(io.BytesIO(r.content))
+                # fundo branco: WebP costuma ter transparência, e JPEG não tem
+                # canal alfa — sem isto o fundo sairia PRETO
+                if img.mode in ("RGBA", "LA", "P"):
+                    fundo = Image.new("RGB", img.size, (255, 255, 255))
+                    img = img.convert("RGBA")
+                    fundo.paste(img, mask=img.split()[-1])
+                    img = fundo
+                else:
+                    img = img.convert("RGB")
+                destino = base.with_suffix(".jpg")
+                img.save(destino, "JPEG", quality=90)
+                _log("   foto era WebP (viraria figurinha) — convertida pra JPEG")
+                return destino
+            except Exception as e:
+                # ⚠️ não caio no .webp calado: mandar figurinha é pior que
+                # mandar sem foto, porque parece spam de sticker no grupo.
+                _log(f"   não converti o WebP ({str(e)[:50]}) — mando SEM "
+                     f"foto, porque .webp iria como figurinha")
+                return None
+
+        ext = ".png" if "png" in tipo else ".jpg"
+        destino = base.with_suffix(ext)
         destino.write_bytes(r.content)
         return destino
     except Exception as e:
