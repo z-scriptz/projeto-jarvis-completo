@@ -4242,6 +4242,26 @@ mandando. Escrito pra degradar em texto, não quebrar. **Testar com
 
 - **VPS:** Contabo · daemon `jarvis.service` (`python -m agents.daemon_maestro`)
   · venv em `/root/jarvis/.venv`.
+- **Proxy do Instagram (`IG_PROXY`):** tipo **ISP/residencial**, localização
+  **Brasil**, formato `http://user:pass@host:porta` (aceita `socks5://`).
+  ⚠️ **NUNCA o valor aqui** — ele vive só no `.env` da VPS. O que se anota é o
+  QUE COMPRAR, não a credencial.
+  - **Por que residencial e não datacenter:** o IG bloqueia IP de datacenter
+    agressivamente — é a razão de o proxy existir em vez de usar a VPS direto.
+  - **Por que Brasil:** as fontes são perfis BR, e o `YTDLP_COOKIES` é uma
+    sessão criada daqui. Sessão brasileira entrando por IP estrangeiro é
+    sinal clássico de conta comprometida, e o IG trata isso pior do que não
+    ter cookie.
+  - **Volume é baixo:** `IG_MAX_PERFIS_RUN=12` por rodada, 8s entre perfis. O
+    que se compra é qualidade de IP, não banda — plano de entrada resolve.
+  - ⚠️ **QUANDO ELE VENCE, DESLIGUE A PODA ANTES DE QUALQUER COISA:**
+    `echo 'COLETA_PODA_AUTO=0' >> .env`. Sem isso o coletor interpreta o
+    canal inteiro como fonte zumbi. (A trava por canal de 18/08 cobre isso,
+    mas o interruptor é a garantia que não depende de código.)
+  - **Registrado em 18/08 porque a pergunta "qual proxy e qual localização?"
+    não tinha resposta em lugar nenhum** — o valor estava certo no `.env` e o
+    CRITÉRIO não estava documentado, então venceu e ninguém sabia o que
+    recomprar.
 - **Padrão de deploy (git-deploy, o `pjc`):** a VPS `/root/jarvis` é um git repo que
   faz `git fetch pjc claude/opa-clau-dgs591` e `git show FETCH_HEAD:arquivo.py > destino`.
   ⚠️⚠️ **O REPO É ACHATADO (tudo na raiz), mas a VPS usa PACOTES.** Deploy no destino
