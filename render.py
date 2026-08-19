@@ -449,7 +449,14 @@ def _texto_rico(img, d, x: int, y_meio: int, texto: str, fonte, cor,
                        anchor="lm", stroke_width=contorno,
                        stroke_fill=cor_contorno)
             cur += int(d.textlength(pedaco, font=fonte))
-    return cur - x
+    # ⚠️ O CONTORNO OCUPA ESPAÇO E NÃO ESTAVA NA CONTA (19/08). `textlength` é
+    # o AVANÇO da fonte; o `stroke_width` engorda a tinta `contorno` px pra
+    # cada lado, e quem posiciona algo depois (o selo azul) pousava em cima da
+    # última letra. É o mesmo erro que o narrated_video_agent cometia com a
+    # margem do TextClip — achado lá primeiro, procurado aqui depois.
+    # Só o lado DIREITO entra: o esquerdo sangra pra trás do texto, onde não
+    # tem nada, e somá-lo empurraria a linha inteira sem motivo.
+    return (cur - x) + (contorno if contorno else 0)
 
 
 def _quebrar(d, texto: str, fonte, larg_max: int, max_linhas: int) -> list:

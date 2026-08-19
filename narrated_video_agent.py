@@ -757,9 +757,20 @@ def _textclip_esq(TextClip, texto, font_size, color, stroke_width, stroke_color,
                     kw["margin"] = (_m, _m)
                 if novo:
                     kw["font_size"] = font_size
-                    return TextClip(text=texto, **kw)
-                kw["fontsize"] = font_size
-                return TextClip(texto, **kw)
+                    clipe = TextClip(text=texto, **kw)
+                else:
+                    kw["fontsize"] = font_size
+                    clipe = TextClip(texto, **kw)
+                # ⚠️ QUANTO DESTE CLIP É VAZIO. Quem posiciona algo DEPOIS deste
+                # texto precisa saber que `.w` inclui margem transparente dos
+                # dois lados — e que a margem pode NÃO ter sido aplicada, se a
+                # versão do moviepy recusou o kwarg (é o laço aí de cima).
+                # Sem isso, quem lê `.w` acerta a conta e erra o pixel.
+                try:
+                    clipe._margem_x = _m if (com_margem and _m) else 0
+                except Exception:
+                    pass
+                return clipe
             except Exception:
                 continue
     # não deu label → cai no caption (pode centralizar, mas não quebra)
@@ -1030,33 +1041,49 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
         nome = _with_position(nome, (texto_x, logo_y - 12))
         camadas.append(nome)
 
-    # ── Selo verificado — posiciona após a largura REAL do texto 'TopShop'.
-    #    Mede criando um clip JUSTO (label) só pra ler a largura do texto,
-    #    em vez de estimar (o clip 'caption' tem caixa larga e engana). ──
+    # ── Selo verificado — vai DEPOIS da tinta do 'TopShop'.
+    #
+    # ⚠️ O SELO ENTRAVA DENTRO DO NOME (achado em 19/08). O código media o nome
+    # com um SEGUNDO clip (`_textclip_justo`) em vez de olhar o que desenhou.
+    # Os dois clips não são iguais:
+    #
+    #     desenhado (_textclip_esq):  margin=8 dos dois lados + stroke_width=3
+    #     medidor   (_textclip_justo): sem margem, sem contorno
+    #
+    # Então `larg_real` vinha ~11px curta e o selo pousava em cima da última
+    # letra. O log dizia "Selo verificado em x=462 (larg real TopShop=238)" —
+    # número certo, medida errada: a conta fechava com ela mesma. Foi o que me
+    # fez olhar o log de 19/08 e concluir que estava tudo bem enquanto o Dre
+    # via o selo dentro do nome. Ele estava certo.
+    #
+    # A margem entrou em 14/07 (a099f60, pra não cortar o 'p' de TopShop) e o
+    # medidor não acompanhou. Por isso "os antigos não estavam saindo assim".
+    #
+    # AGORA MEDE O PRÓPRIO CLIP DESENHADO. Não existe mais um segundo clip pra
+    # divergir do primeiro — que era a causa, não o sintoma.
     selo_aparado = _emoji_aparado("verificado.png", 46)
     if selo_aparado is not None:
         try:
-            # mede a largura real do "TopShop" com um TextClip justo (sem caixa)
-            larg_real = None
-            try:
-                medidor = _textclip_justo(TextClip, MARCA_NOME, _nome_font, fonte_bold)
-                if medidor is not None:
-                    larg_real = medidor.w
-                    try: medidor.close()
-                    except Exception: pass
-            except Exception:
-                pass
-            if larg_real:
-                # texto agora é JUSTO (label) → cola o selo logo após o nome
-                selo_x = texto_x + larg_real + int(os.environ.get("SELO_DX", 12))
+            fim_tinta = None
+            if nome is not None:
+                # `.w` inclui a margem transparente dos DOIS lados; a tinta
+                # termina uma margem antes da borda direita do clip.
+                _mx = int(getattr(nome, "_margem_x", 0) or 0)
+                fim_tinta = int(nome.w) - _mx
+            if fim_tinta:
+                selo_x = texto_x + fim_tinta + int(os.environ.get("SELO_DX", 12))
             else:
-                selo_x = texto_x + 200  # fallback estimado (nome justo ~180px)
+                # fallback estimado (fim_topshop_x é definido lá em cima)
+                selo_x = fim_topshop_x + int(os.environ.get("SELO_DX", 12))
             selo = ImageClip(str(selo_aparado))
             selo = _with_duration(selo, dur_total)
             selo = _with_start(selo, 0.0)
             selo = _with_position(selo, (selo_x, logo_y + 14))
             camadas.append(selo)
-            log.info(f"   ✔️  Selo verificado em x={selo_x} (larg real TopShop={larg_real})")
+            log.info(f"   ✔️  Selo em x={selo_x} · fim da tinta do TopShop="
+                     f"{(texto_x + fim_tinta) if fim_tinta else '?'} "
+                     f"(clip={getattr(nome, 'w', '?')} margem={_mx if nome is not None else '?'} "
+                     f"contorno={SW_NOME})")
         except Exception as e:
             log.warning(f"   ⚠️  Selo verificado falhou: {e}")
     else:
