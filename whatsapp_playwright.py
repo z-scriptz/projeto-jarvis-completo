@@ -23,6 +23,11 @@
 #   PARA NA PRIMEIRA DÚVIDA  sessão caída, grupo não achado, seletor que sumiu
 #                            → tira print, avisa no Telegram e encerra
 #
+# O FORMATO DA MENSAGEM (mudou em 19/08)
+#   Vai TEXTO + LINK, sem anexo. A foto do produto quem monta é o WhatsApp, no
+#   cartão de prévia que ele busca sozinho na URL da Shopee. O caminho antigo
+#   (anexar a nossa miniatura) está no código, desligado — ver COM_FOTO.
+#
 # SESSÃO
 #   O login é por QR, uma vez. Como a VPS não tem tela, o --login tira um print
 #   do QR e MANDA PRO SEU TELEGRAM PRIVADO — você escaneia do celular. A sessão
@@ -84,12 +89,12 @@ except Exception:
     def travar(_nome, base=None):
         yield True
 
-MAX_RODADA = int(float(os.environ.get("WHATSAPP_MAX_RODADA", "2")))
-MAX_DIA = int(float(os.environ.get("WHATSAPP_MAX_DIA", "6")))
-PAUSA_MIN = float(os.environ.get("WHATSAPP_PAUSA_MIN", "45"))
-PAUSA_MAX = float(os.environ.get("WHATSAPP_PAUSA_MAX", "120"))
-HORA_INI = int(float(os.environ.get("WHATSAPP_HORA_INI", "7")))
-HORA_FIM = int(float(os.environ.get("WHATSAPP_HORA_FIM", "21")))
+# ⚠️ AS CONSTANTES DE AJUSTE NÃO MORAM AQUI — moram DEPOIS do `_carregar_env()`
+# (procure por "AS TRAVAS, EM CÓDIGO"). Elas ficavam neste ponto do arquivo e
+# eram lidas ANTES do .env ser carregado, então `WHATSAPP_MAX_DIA=3` no .env
+# não mudava nada em execução manual: valia sempre o padrão do código. Só
+# funcionava pelo systemd, que injeta o ambiente antes do Python subir.
+# Corrigido em 19/08. Não traga knob nenhum pra cima desta linha.
 
 _UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
        "Chrome/126.0.0.0 Safari/537.36")
@@ -173,6 +178,20 @@ SEL_PREVIA = ["div[data-testid='media-preview']",
 # de legenda que não existia, e mandou a investigação (a minha) pro seletor
 # errado por duas rodadas.
 
+# A prévia do LINK é outra coisa: é o cartão que o WhatsApp monta sozinho
+# quando reconhece uma URL na caixa, antes de você mandar. Não confundir com
+# `SEL_PREVIA` acima, que é a tela de anexo de imagem.
+#
+# ⚠️ ESTES SELETORES SÃO PALPITE E SÓ SERVEM PRA LOG. Não vi este DOM. A
+# lição das seis rodadas de figurinha é não deixar decisão pendurada em
+# seletor não medido — então o envio NUNCA espera por eles: espera o relógio
+# (`PREVIA_LINK_SEG`) e manda. Se casar, o log diz que casou, e aí passa a
+# ser medição pra próxima vez.
+SEL_PREVIA_LINK = ["div[data-testid='media-url-preview']",
+                   "footer div[data-testid='link-preview']",
+                   "footer a[href^='http'] img",
+                   "footer div[role='button'] img[src^='http']"]
+
 # ⚠️ MEDIDO EM 19/08, no despejo de controles: com a prévia aberta aparecem
 # 'Cortar e girar', 'Filtrar', 'Desenho', 'Texto', 'Contorno' e o ícone
 # `scissors`. São as ferramentas do EDITOR DE IMAGEM, e só existem na prévia.
@@ -244,6 +263,43 @@ def _carregar_env():
 
 
 _carregar_env()
+
+# ── AS TRAVAS, EM CÓDIGO ──────────────────────────────────────────────────
+# ⚠️ SÓ DEPOIS DO `_carregar_env()`. Estas linhas viviam no topo do arquivo e
+# rodavam antes do .env ser lido — `os.environ.get` devolvia o padrão e o
+# valor do arquivo era ignorado em toda execução manual. É o mesmo tipo de
+# falha do `echo >> .env`: o ajuste "dá certo", o arquivo muda, o
+# comportamento não.
+MAX_RODADA = int(float(os.environ.get("WHATSAPP_MAX_RODADA", "2")))
+MAX_DIA = int(float(os.environ.get("WHATSAPP_MAX_DIA", "6")))
+PAUSA_MIN = float(os.environ.get("WHATSAPP_PAUSA_MIN", "45"))
+PAUSA_MAX = float(os.environ.get("WHATSAPP_PAUSA_MAX", "120"))
+HORA_INI = int(float(os.environ.get("WHATSAPP_HORA_INI", "7")))
+HORA_FIM = int(float(os.environ.get("WHATSAPP_HORA_FIM", "21")))
+
+# ⚠️ DESLIGADO POR PADRÃO DESDE 19/08 — o anexo de foto vira FIGURINHA.
+#
+# Histórico curto pra ninguém religar sem saber o que está religando: seis
+# tentativas de anexar a foto, seis vezes o grupo recebeu FIGURINHA em vez de
+# imagem. O `--diag-anexo` do dia 19 mostrou por quê: depois de clicar no "+"
+# o DOM continua com UM ÚNICO `input[type=file]`, `accept='image/*'`, o mesmo
+# de antes do clique — o menu de anexo não abre pra automação, e esse input
+# solitário é o da figurinha. Não existe seletor a corrigir: o elemento que
+# eu preciso não é montado.
+#
+# Então a mensagem vai SÓ COM O LINK, e quem monta o cartão de prévia é o
+# próprio WhatsApp, a partir da URL da Shopee. Foto oficial do produto, título
+# e preço vindos da origem — melhor do que a nossa miniatura, e sem anexo
+# nenhum pra dar errado.
+#
+# WHATSAPP_COM_FOTO=1 volta o caminho antigo (o código continua inteiro), pra
+# quando/se o WhatsApp Web montar o menu de novo.
+COM_FOTO = os.environ.get("WHATSAPP_COM_FOTO", "0").strip().lower() in (
+    "1", "true", "sim")
+# Quanto esperar, depois de digitar, pelo WhatsApp buscar a prévia do link.
+# Enter cedo demais manda a mensagem ANTES do cartão anexar, e aí sai link
+# pelado — que é justamente o que estamos tentando evitar.
+PREVIA_LINK_SEG = float(os.environ.get("WHATSAPP_PREVIA_LINK_SEG", "5"))
 
 
 def _ligado() -> bool:
@@ -629,8 +685,14 @@ def _candidatos(fila, ja: set, quantos: int, resta_dia: int) -> list:
     """Quem entra nesta rodada. Separado do navegador de propósito: é a parte
     que decide o que vai pro ar, e tem que ser testável sem abrir o Chromium.
 
-    Mesma regra do grupo do Telegram: precisa de link E foto. Sem foto o
-    achadinho fica sem prévia e parece corrente de spam.
+    Mesma regra do grupo do Telegram: precisa de link E foto.
+
+    ⚠️ A exigência de foto SOBREVIVEU à mudança pra link-só (19/08), e não por
+    esquecimento: desde que a prévia passou a vir do próprio WhatsApp, a nossa
+    `imagem` não é mais usada no envio — mas item sem `imagem` é item cuja
+    coleta veio incompleta, e esses costumam vir com preço e nome ruins
+    também. O campo virou um atestado de coleta inteira. Se um dia quiser
+    afrouxar, olhe primeiro quantos itens isso libera e com que cara.
 
     E precisa de NOME que sirva pra cliente. O teste seco de 04/08 ia mandar
     "*Produto com busca alta* — R$ 1.600,00": rótulo interno que vazou pra
@@ -1153,6 +1215,51 @@ def _dump_botoes(pagina, motivo: str):
                  f"  rótulo: {i['rotulo']!r}")
     except Exception as e:
         _log(f"   (não consegui listar os controles: {str(e)[:60]})")
+
+
+def _enviar_texto(pagina, texto: str) -> bool:
+    """Digita e manda a mensagem. False = não mandei nada (e já avisei).
+
+    Este é o caminho PRINCIPAL desde 19/08 (ver COM_FOTO no topo). A foto do
+    produto não vem mais de anexo nosso: vem do cartão de prévia que o próprio
+    WhatsApp monta a partir da URL da Shopee.
+
+    Por isso o `sleep` antes do Enter não é folclore de automação — é o tempo
+    do WhatsApp ir buscar título/imagem no link. Mandar antes disso publica o
+    link pelado, sem cartão, que é o formato que a gente está justamente
+    tentando não postar.
+    """
+    caixa = _achar(pagina, SEL_CAIXA)
+    if not caixa:
+        caminho = _print_erro(pagina, "não achei a caixa de mensagem")
+        _avisar("WhatsApp: a marcação mudou (caixa de mensagem).", caminho)
+        return False
+    caixa.click()
+    # digita linha a linha: Enter manda a mensagem, então quebra de linha
+    # tem que ser Shift+Enter
+    for n, linha in enumerate(texto.split("\n")):
+        if n:
+            pagina.keyboard.press("Shift+Enter")
+        if linha:
+            pagina.keyboard.type(linha, delay=random.randint(25, 70))
+
+    # espera pelo RELÓGIO, não pelo seletor — SEL_PREVIA_LINK é palpite e só
+    # entra no log. Se um dia o log mostrar que casa, aí sim vira espera de
+    # verdade e o envio fica mais rápido.
+    if PREVIA_LINK_SEG > 0:
+        pagina.wait_for_timeout(int(PREVIA_LINK_SEG * 1000))
+        achou = _achar(pagina, SEL_PREVIA_LINK, timeout=800)
+        if achou:
+            _log("   prévia do link: cartão apareceu")
+        else:
+            _log("   prévia do link: não vi cartão — pode ser só o seletor "
+                 "(palpite); mando assim mesmo")
+    else:
+        pagina.wait_for_timeout(random.randint(600, 1400))
+
+    pagina.keyboard.press("Enter")
+    pagina.wait_for_timeout(1500)
+    return True
 
 
 def _enviar_com_foto(pagina, foto: Path, legenda: str) -> bool:
@@ -1733,52 +1840,34 @@ def enviar(quantos: int, teste: bool = False) -> int:
             for i, it in enumerate(alvo):
                 texto = _mensagem(it)
                 if teste:
-                    foto = _baixar_foto(it.get("imagem", ""))
-                    _log(f"   [seco] mandaria {'COM foto' if foto else 'SEM foto'}:"
+                    _log(f"   [seco] mandaria {'COM foto' if COM_FOTO else 'SÓ LINK'}:"
                          f"\n{texto}\n")
+                    enviados += 1
+                    continue
+
+                foi = False
+                if COM_FOTO:
+                    # caminho antigo, desligado por padrão (ver COM_FOTO no topo).
+                    # Se a foto falhar em qualquer etapa, cai no texto — que
+                    # ainda vende.
+                    foto = _baixar_foto(it.get("imagem", ""))
                     if foto:
+                        foi = _enviar_com_foto(pagina, foto, texto)
                         try:
                             foto.unlink()
                         except Exception:
                             pass
-                    enviados += 1
-                    continue
-
-                # foto primeiro: achadinho sem foto vira link solto, que foi a
-                # queixa do primeiro post real. Se a foto falhar em qualquer
-                # etapa, cai no texto — que ainda vende.
-                foto = _baixar_foto(it.get("imagem", ""))
-                foi = False
-                if foto:
-                    foi = _enviar_com_foto(pagina, foto, texto)
-                    try:
-                        foto.unlink()
-                    except Exception:
-                        pass
 
                 if not foi:
-                    # se a prévia não fechou, digitar aqui escreveria a legenda
-                    # DENTRO dela — melhor pular este item que postar torto
-                    if _achar(pagina, SEL_PREVIA, timeout=2500):
+                    # se a prévia de imagem não fechou, digitar aqui escreveria
+                    # a legenda DENTRO dela — melhor pular este item que postar
+                    # torto. Com COM_FOTO=0 nunca há prévia, mas a checagem é
+                    # barata e protege quem religar a foto.
+                    if COM_FOTO and _achar(pagina, SEL_PREVIA, timeout=2500):
                         _print_erro(pagina, "a prévia não fechou — pulo este item")
                         break
-                    caixa = _achar(pagina, SEL_CAIXA)
-                    if not caixa:
-                        caminho = _print_erro(pagina, "não achei a caixa de mensagem")
-                        _avisar("WhatsApp: a marcação mudou (caixa de mensagem).",
-                                caminho)
+                    if not _enviar_texto(pagina, texto):
                         break
-                    caixa.click()
-                    # digita linha a linha: Enter manda a mensagem, então quebra
-                    # de linha tem que ser Shift+Enter
-                    for n, linha in enumerate(texto.split("\n")):
-                        if n:
-                            pagina.keyboard.press("Shift+Enter")
-                        if linha:
-                            pagina.keyboard.type(linha, delay=random.randint(25, 70))
-                    pagina.wait_for_timeout(random.randint(600, 1400))
-                    pagina.keyboard.press("Enter")
-                    pagina.wait_for_timeout(1500)
 
                 enviados += 1
                 ja.add(it["link"])

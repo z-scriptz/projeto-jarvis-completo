@@ -522,6 +522,97 @@ Ex.: "O segredo pra ter um iPhone 17 sem gastar / uma fortuna ✨".
 
 ---
 
+## 🗓️ Dia 2026-08-19 — o selo entrava no nome, e eu li o log em vez do vídeo
+
+### 🎯 O SELO VERIFICADO POUSAVA EM CIMA DA ÚLTIMA LETRA
+
+O Dre: *"o verificado da conta tá entrando nos nomes tudo"* e, quando eu
+argumentei que a conta fechava, *"pra mim o logo tá dentro do nome sim, e esses
+são os posts mais recentes, os antigos não estavam saindo assim"*. Ele estava
+certo nas duas vezes.
+
+**Por que eu não vi.** Fui no log de produção:
+
+```
+✔️  Selo verificado em x=462 (larg real TopShop=238)
+```
+
+e conferi a aritmética: `texto_x=212`, `212+238=450`, selo em `450+12=462`, vão
+de 12px. Fechava. Só que **o número que fechava era o número errado**. O
+`narrated_video_agent.py` desenhava o nome com um clip e media com OUTRO:
+
+| clip | quem cria | margem | contorno |
+|---|---|---|---|
+| **desenhado** | `_textclip_esq` | `TXT_MARGEM=8` dos dois lados | `SW_NOME=3` |
+| **medidor** | `_textclip_justo` | nenhuma | nenhum |
+
+A tinta acabava ~11px depois do que o medidor dizia, e o selo, colocado com
+vão de 12, sobrava **1px**. Colado. E o log reportava um estado saudável
+porque a conta era consistente **com ela mesma** — esse é o tipo de erro que
+não aparece em log nenhum, só no olho de quem vê o post.
+
+**Quando começou:** commit `a099f60` (14/07) pôs `margin=8` no clip desenhado
+pra não cortar o **p** de "To**p**Shop". O medidor não acompanhou. É a resposta
+pro *"os antigos não estavam saindo assim"*: antes de 14/07 não saíam.
+
+**O conserto** (`narrated_video_agent.py`): parei de criar um segundo clip.
+Agora lê o `.w` do **próprio clip desenhado** e desconta a margem que ele
+realmente aplicou (`_textclip_esq` grava `_margem_x` no clip, porque a margem
+só entra se a versão do moviepy aceitar o kwarg — o laço `for com_margem in
+(True, False)` pode não aplicar). Sem segundo clip, não há como divergir.
+
+Medido com Pillow antes de subir (Liberation Bold 52, mesma geometria):
+
+```
+tinta do 'TopShop' termina em x=447
+selo ANTES  x=445  vão -2px   DENTRO DO NOME
+selo DEPOIS x=459  vão +12px  ok
+```
+
+**`render.py` tinha o mesmo erro, menor.** `_texto_rico` media com
+`d.textlength` (avanço da fonte) e desenhava com `stroke_width=3` — 3px de
+tinta fora da conta. Corrigido junto; as duas chamadas que só MEDEM passam
+`contorno=0`, então nada mais se move.
+
+**A lição, que já apareceu 3x nesta semana:** quando o Dre descreve o que vê e
+o meu número diz o contrário, **o número é que está medindo a coisa errada**.
+Log consistente não é log correto. Renderizar os dois casos e OLHAR custou 10
+minutos e resolveu o que duas rodadas de aritmética não resolveram.
+
+### 📱 WHATSAPP: A FOTO SAIU, FICOU SÓ O LINK
+
+Depois de **seis** tentativas de anexar foto (todas viraram FIGURINHA), o
+`--diag-anexo` deu o veredito: depois de clicar no "+", o DOM continua com **um
+único** `input[type=file]`, `accept='image/*'`, idêntico ao de antes do clique.
+O menu de anexo **não é montado** pra automação, e esse input solitário é o da
+figurinha. Não há seletor a corrigir — o elemento que eu preciso não existe.
+
+Decisão do Dre: *"vamos tentar só a url mesmo, talvez fique melhor ainda"*.
+Agora vai **texto + link**, e o cartão de prévia quem monta é o próprio
+WhatsApp, a partir da URL da Shopee — foto oficial, título e preço da origem.
+`WHATSAPP_COM_FOTO=1` volta o caminho antigo (o código continua inteiro).
+
+⚠️ **Aberto:** não deu pra testar daqui se a Shopee serve `og:image` pro
+crawler do WhatsApp (link afiliado é encurtado e redireciona). O log novo diz
+`prévia do link: cartão apareceu` / `não vi cartão` a cada envio — mas os
+seletores desse cartão são **palpite**, não medição, então o envio nunca espera
+por eles: espera `WHATSAPP_PREVIA_LINK_SEG` (5s) no relógio e manda. Se não
+vier cartão, sai título + preço + chamada + link — o mesmo do Telegram.
+
+### 🐞 OS KNOBS DO WHATSAPP NUNCA FUNCIONARAM PELO .env
+
+Achado de raspão ao mexer no arquivo: `MAX_RODADA`, `MAX_DIA`, `PAUSA_*` e
+`HORA_*` eram lidos na **linha 92**, e o `_carregar_env()` só roda na **265**.
+`os.environ.get` devolvia o padrão do código e o valor do `.env` era ignorado
+em **toda execução manual**. Só funcionava pelo systemd, que injeta o ambiente
+antes do Python subir. (`_ativo()` e `_grupo()` escapavam por serem funções.)
+
+É primo do bug do `echo >> .env`: o ajuste "dá certo", o arquivo muda, o
+comportamento não. Movi o bloco pra depois do `_carregar_env()` e deixei um
+aviso no lugar antigo. **Regra: nenhum knob acima da linha do carregador.**
+
+---
+
 ## 🗓️ Dia 2026-08-18 — o WhatsApp entra, e a fila revela o custo do atraso
 
 ### 📱 WHATSAPP LIGADO NO MESMO TRILHO DO TELEGRAM
