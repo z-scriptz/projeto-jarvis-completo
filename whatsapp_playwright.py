@@ -173,6 +173,27 @@ SEL_PREVIA = ["div[data-testid='media-preview']",
 # de legenda que não existia, e mandou a investigação (a minha) pro seletor
 # errado por duas rodadas.
 
+# ⚠️ MEDIDO EM 19/08, no despejo de controles: com a prévia aberta aparecem
+# 'Cortar e girar', 'Filtrar', 'Desenho', 'Texto', 'Contorno' e o ícone
+# `scissors`. São as ferramentas do EDITOR DE IMAGEM, e só existem na prévia.
+# Isto não é palpite: é a lista que a própria tela imprimiu.
+_ROTULOS_EDITOR = ("cortar e girar", "crop and rotate", "filtrar", "filter",
+                   "desenho", "draw", "contorno")
+
+_JS_EDITOR_ABERTO = """
+() => {
+  const sel = "button,[role='button'],span[data-icon]";
+  for (const e of document.querySelectorAll(sel)) {
+    if (e.offsetParent === null) continue;
+    const rot = ((e.getAttribute("aria-label") || "") + " " +
+                 (e.getAttribute("title") || "")).toLowerCase();
+    if (!rot) continue;
+    for (const alvo of ROTULOS) if (rot.includes(alvo)) return rot.slice(0, 40);
+  }
+  return "";
+}
+"""
+
 _JS_PREVIA_ABERTA = """
 () => {
   // A prévia É a tela que tem caixa de LEGENDA. Definir por isso, e não por
@@ -1086,18 +1107,62 @@ def _enviar_com_foto(pagina, foto: Path, legenda: str) -> bool:
     # era de tempo. A foto precisa ser lida do disco, processada e renderizada
     # — num VPS sem GPU isso passa de meio minuto.
     _TETO_PREVIA = int(os.environ.get("WHATSAPP_PREVIA_SEG", "60"))
-    rotulo_previa = ""
+    _js_editor = _JS_EDITOR_ABERTO.replace(
+        "ROTULOS", json.dumps(list(_ROTULOS_EDITOR)))
+    rotulo_previa = editor = ""
     for seg in range(_TETO_PREVIA):
         try:
             rotulo_previa = pagina.evaluate(_JS_PREVIA_ABERTA) or ""
+            # ⚠️ A PRÉVIA PODE NÃO TER CAIXA DE LEGENDA. Medido 19/08: com a
+            # prévia montada, o despejo listou 'Cortar e girar', 'Filtrar',
+            # 'Desenho' — o editor de imagem — e NENHUM campo de legenda.
+            # Eu esperei 60s por uma caixa que o WhatsApp novo não mostra, e
+            # reportei "a prévia não abriu" com ela aberta na tela.
+            editor = pagina.evaluate(_js_editor) or ""
         except Exception:
-            rotulo_previa = ""
-        if rotulo_previa:
+            rotulo_previa = editor = ""
+        if rotulo_previa or editor:
             break
         # avisa a cada 15s pra não parecer travado num log de cron
         if seg and seg % 15 == 0:
             _log(f"   esperando a prévia montar… ({seg}s de {_TETO_PREVIA})")
         pagina.wait_for_timeout(1000)
+
+    if editor and not rotulo_previa:
+        _log(f"   prévia aberta pelo EDITOR ({editor!r}) e SEM caixa de "
+             f"legenda — mando a foto e o texto em seguida")
+        try:
+            pagina.keyboard.press("Enter")       # envia a foto sozinha
+            pagina.wait_for_timeout(2000)
+        except Exception as e:
+            _print_erro(pagina, f"não consegui enviar a foto: {str(e)[:60]}")
+            _sair_da_previa(pagina)
+            return False
+
+        # ⚠️ ESPERAR A PRÉVIA FECHAR ANTES DE DEVOLVER. Quem chama, ao receber
+        # False, só manda o texto se a prévia já saiu (`daemon` do envio:
+        # "se a prévia não fechou, digitar aqui escreveria a legenda DENTRO
+        # dela"). Se eu devolvesse com ela ainda na tela, o item seria PULADO
+        # e a foto ficaria no grupo sem preço e sem link — achadinho mudo, que
+        # é pior que não ter postado.
+        for _ in range(20):
+            try:
+                if not (pagina.evaluate(_js_editor) or ""):
+                    break
+            except Exception:
+                break
+            pagina.wait_for_timeout(500)
+        else:
+            _print_erro(pagina, "enviei a foto mas o editor não fechou")
+            _log("   ⚠️ a legenda NÃO foi enviada — a foto está no grupo "
+                 "sozinha. Mande o texto à mão ou apague a foto.")
+            return False
+        # ⚠️ devolve False DE PROPÓSITO: o contrato desta função é "True = foto
+        # E legenda foram juntas". A foto saiu, mas o texto ainda não — quem
+        # chama manda o texto em seguida, e é assim que a legenda não se perde.
+        # Mentir True aqui deixaria o achadinho sem preço e sem link.
+        _log("   foto enviada; a legenda vai como mensagem seguinte")
+        return False
 
     if not rotulo_previa:
         # o `SEL_PREVIA` ainda serve pra dizer se ao menos a IMAGEM apareceu —
