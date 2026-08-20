@@ -229,17 +229,55 @@ _JS_PREVIA_ABERTA = """
   // "existe uma imagem", é o que impede o falso positivo: imagem tem em toda
   // conversa; caixa de legenda só existe quando a prévia está aberta.
   const sel = "[contenteditable='true'],input,textarea,[role='textbox']";
+  let semRotulo = null;
   for (const e of document.querySelectorAll(sel)) {
     if (e.offsetParent === null) continue;
+    const tab = e.getAttribute("data-tab") || "";
+    // data-tab 3 = busca · 10/6 = caixa da conversa. Nenhum dos dois é legenda.
+    if (tab === "3" || tab === "10" || tab === "6") continue;
     const rot = ((e.getAttribute("aria-label") || "") + " " +
                  (e.getAttribute("aria-placeholder") || "") + " " +
                  (e.getAttribute("placeholder") || "")).toLowerCase();
-    if (!rot) continue;
-    if (rot.includes("pesquis") || rot.includes("search")) continue;
-    if (rot.includes("digite uma mensagem") || rot.includes("type a message")) continue;
-    return rot.slice(0, 60);   // achou um campo que só existe na prévia
+    if (rot) {
+      if (rot.includes("pesquis") || rot.includes("search")) continue;
+      if (rot.includes("digite uma mensagem") || rot.includes("type a message")) continue;
+      return rot.slice(0, 60);   // achou um campo rotulado que só existe na prévia
+    }
+    // ⚠️ CAMPO SEM RÓTULO TAMBÉM CONTA (20/08). A versão anterior fazia
+    // `if (!rot) continue` e descartava qualquer campo sem aria-label —
+    // exatamente o erro que escondeu o menu de anexo por três rodadas: exigir
+    // um atributo que o elemento não tem. O log provou aqui também: o editor
+    // ABRIU ('cortar e girar') e a legenda foi dada como inexistente, então a
+    // foto e o texto saíram como duas mensagens.
+    //
+    // Com o editor aberto, um contenteditable visível que NÃO é a busca nem a
+    // caixa da conversa só pode ser a legenda. Guardo como 2ª opção pra um
+    // campo rotulado ainda ter preferência.
+    if (!semRotulo) semRotulo = "(campo sem rótulo, data-tab=" + (tab || "-") + ")";
   }
-  return "";
+  return semRotulo || "";
+}
+"""
+
+# Despejo dos campos de texto da tela — pra corrigir COM DADO quando a
+# detecção da legenda falhar, em vez de eu inventar o próximo seletor.
+_JS_CAMPOS = """
+() => {
+  const sel = "[contenteditable='true'],input,textarea,[role='textbox']";
+  return Array.from(document.querySelectorAll(sel))
+    .filter(e => e.offsetParent !== null)
+    .slice(0, 20)
+    .map(e => {
+      const r = e.getBoundingClientRect();
+      return {
+        tag: e.tagName.toLowerCase(),
+        tab: e.getAttribute("data-tab") || "",
+        rotulo: (e.getAttribute("aria-label") || ""),
+        dica: (e.getAttribute("aria-placeholder") ||
+               e.getAttribute("placeholder") || ""),
+        y: Math.round(r.top), alt: Math.round(r.height),
+      };
+    });
 }
 """
 
@@ -1584,6 +1622,22 @@ def _enviar_com_foto(pagina, foto: Path, legenda: str) -> bool:
     if editor and not rotulo_previa:
         _log(f"   prévia aberta pelo EDITOR ({editor!r}) e SEM caixa de "
              f"legenda — mando a foto e o texto em seguida")
+        # ⚠️ DESPEJA OS CAMPOS ANTES DE DESISTIR. Cair no envio separado é
+        # perder a legenda junto da foto, e todo o histórico deste arquivo diz
+        # que "não achei" costuma ser detecção ruim, não ausência. Se a caixa
+        # estiver aqui embaixo, a próxima rodada corrige com dado.
+        try:
+            campos = pagina.evaluate(_JS_CAMPOS) or []
+            _log("   — campos de texto na tela da prévia —")
+            for c in campos:
+                _log(f"     <{c['tag']}> data-tab={c['tab']!r} "
+                     f"rótulo={c['rotulo'][:34]!r} dica={c['dica'][:34]!r} "
+                     f"y={c['y']} alt={c['alt']}")
+            if not campos:
+                _log("     (nenhum campo editável visível — a legenda não "
+                     "existe mesmo nesta tela)")
+        except Exception as e:
+            _log(f"   (não consegui listar os campos: {str(e)[:60]})")
         # ⚠️ ENTER NO EDITOR MANDA FIGURINHA (medido 19/08, três rodadas).
         # Eu culpei o formato do arquivo e converti tudo pra JPEG — e o log
         # provou que estava errado: "foto JPEG normalizada pra JPEG" e a
