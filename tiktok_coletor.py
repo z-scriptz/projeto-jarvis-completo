@@ -14,6 +14,7 @@ import os
 import re
 import sys
 import json
+import math
 import time
 import shutil
 import subprocess
@@ -220,6 +221,14 @@ MIN_VIEWS = int(os.environ.get("MIN_VIEWS", MIN_VIEWS))
 # a distribuição:  .venv/bin/python ig_playwright.py --diag-views <perfil>
 MIN_VIEWS_IG = int(os.environ.get("MIN_VIEWS_IG", "0"))
 
+# CORTE RELATIVO: fica com os melhores N% da grade de CADA perfil. É o que
+# substitui o número absoluto — ver `_melhores_do_perfil` pro porquê, com os
+# números dos dois perfis que provaram que absoluto não serve.
+IG_TOP_FRACAO = float(os.environ.get("IG_TOP_FRACAO", "0.6"))
+# abaixo desta amostra o ranking não significa nada (com 2 reels, "a mediana"
+# é ruído), então não corta
+IG_MIN_AMOSTRA = int(os.environ.get("IG_MIN_AMOSTRA", "4"))
+
 # quanto CADA corte descartaria nesta rodada — impresso no fim, pra decidir o
 # MIN_VIEWS_IG com número em vez de palpite
 _FAIXAS_VIEWS = (1_000, 5_000, 10_000, 25_000, 50_000, 100_000)
@@ -408,6 +417,52 @@ def _listar_ig_instaloader(perfil: str, limite: int) -> list:
         return []
 
 
+def _melhores_do_perfil(itens: list, perfil: str) -> list:
+    """Fica com os melhores N% da grade DESTE perfil. [(url, views)] → idem.
+
+    ⚠️ POR QUE RELATIVO E NÃO UM NÚMERO FIXO (medido em 20/08)
+    ─────────────────────────────────────────────────────────
+    Os dois perfis que o Dre mandou diagnosticar responderam coisas opostas:
+
+        @promosda.alana   12 reels · mediana  46.100 · maior 434.000
+        @descontopets      2 reels · mediana     270 · maior     270
+
+    Qualquer corte ABSOLUTO que sirva um destrói o outro:
+
+        MIN_VIEWS_IG= 1.000 → alana 12/12 · pets 0/2
+        MIN_VIEWS_IG=25.000 → alana  8/12 · pets 0/2
+
+    E zerar o pets é justamente reabrir o buraco que a gente fechou hoje: o
+    @topshoppet_ voltaria a ficar mudo, agora por filtro em vez de por
+    roteador. Um reel de 270 views num perfil que faz 200 É o viral daquele
+    perfil; um de 4.799 no alana, que faz 46 mil, é o fundo do poço dele.
+
+    Por isso o corte é por POSIÇÃO, não por valor: fica com os melhores da
+    grade de cada um. Isso não consegue esvaziar perfil nenhum — o topo sempre
+    existe — e some sozinho quando a amostra é pequena demais pra significar
+    algo (`IG_MIN_AMOSTRA`).
+
+    ⚠️ views=0 é "não sei", nunca "não teve": esses passam sempre, como no
+    resto do arquivo. Cortar por desconhecimento seria o mesmo erro de origem.
+    """
+    if IG_TOP_FRACAO <= 0 or IG_TOP_FRACAO >= 1:
+        return itens
+    conhecidos = [(u, v) for u, v in itens if v]
+    desconhecidos = [(u, v) for u, v in itens if not v]
+    if len(conhecidos) < IG_MIN_AMOSTRA:
+        if conhecidos:
+            _log(f"   (só {len(conhecidos)} view(s) conhecida(s) em @{perfil} — "
+                 f"amostra pequena demais pra ranquear, levo todos)")
+        return itens
+    quantos = max(1, math.ceil(len(conhecidos) * IG_TOP_FRACAO))
+    melhores = sorted(conhecidos, key=lambda x: -x[1])[:quantos]
+    piso = melhores[-1][1]
+    _log(f"   top {int(IG_TOP_FRACAO * 100)}% de @{perfil}: {quantos}/"
+         f"{len(conhecidos)} reel(s), de {piso:,} views pra cima"
+         + (f" · +{len(desconhecidos)} sem view conhecida" if desconhecidos else ""))
+    return melhores + desconhecidos
+
+
 def _listar_ig_playwright(perfil: str, limite: int) -> list:
     """[(url, views)] via NAVEGADOR real (Playwright + stealth) — contorna o bloqueio
     de API do instaloader. Reusa cookies (YTDLP_COOKIES) + proxy (IG_PROXY).
@@ -444,7 +499,10 @@ def _listar_videos(perfil: str, limite: int, fonte: str = "tiktok") -> list:
             time.sleep(int(os.environ.get("IG_RETRY_SEG", 6)))
             urls = _listar_ig_playwright(perfil, limite)
         if urls:
-            return urls
+            # ranqueia ANTES de devolver: cada vídeo que passa daqui custa
+            # download + uma chamada de visão do Gemini, então filtrar cedo é
+            # mais barato e é o que faz o sistema levar o melhor de cada fonte
+            return _melhores_do_perfil(urls, _ig_username(perfil))
         # 2) instaloader (API) SÓ se explicitamente ligado. O fallback yt-dlp do IG
         #    dá 429 e QUEIMA o IP do proxy (foi o que estrangulou tudo) — desligado
         #    por padrão. IG_FALLBACK_YTDLP=1 religa o comportamento antigo.
