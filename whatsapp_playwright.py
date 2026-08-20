@@ -299,7 +299,10 @@ COM_FOTO = os.environ.get("WHATSAPP_COM_FOTO", "0").strip().lower() in (
 # Quanto esperar, depois de digitar, pelo WhatsApp buscar a prévia do link.
 # Enter cedo demais manda a mensagem ANTES do cartão anexar, e aí sai link
 # pelado — que é justamente o que estamos tentando evitar.
-PREVIA_LINK_SEG = float(os.environ.get("WHATSAPP_PREVIA_LINK_SEG", "5"))
+# 10s e não 5: a espera agora é ATIVA (sai assim que o cartão aparece), então
+# um teto maior não custa tempo quando dá certo — só dá mais chance quando a
+# Shopee demora a responder ao crawler do WhatsApp.
+PREVIA_LINK_SEG = float(os.environ.get("WHATSAPP_PREVIA_LINK_SEG", "10"))
 
 
 def _ligado() -> bool:
@@ -1266,6 +1269,55 @@ def _dump_botoes(pagina, motivo: str):
         _log(f"   (não consegui listar os controles: {str(e)[:60]})")
 
 
+_JS_DESPEJO_PREVIA = """
+() => {
+  const pe = document.querySelector('footer') || document.body;
+  const fora = [];
+  for (const e of pe.querySelectorAll('img,div[role="button"],span[data-icon],a')) {
+    if (e.offsetParent === null) continue;
+    const r = e.getBoundingClientRect();
+    if (r.width < 8 || r.height < 8) continue;
+    fora.push({
+      tag: e.tagName.toLowerCase(),
+      icone: e.getAttribute('data-icon') || '',
+      src: (e.getAttribute('src') || '').slice(0, 70),
+      testid: e.getAttribute('data-testid') || '',
+      classe: (e.getAttribute('class') || '').split(' ')[0].slice(0, 24),
+      texto: (e.innerText || '').trim().slice(0, 40),
+      w: Math.round(r.width), h: Math.round(r.height),
+    });
+  }
+  return fora.slice(0, 40);
+}
+"""
+
+
+def _dump_previa(pagina):
+    """O que existe no rodapé quando o cartão do link deveria estar lá.
+
+    Existe porque MEDI que a Shopee serve og:image pro crawler do WhatsApp —
+    então o cartão é possível, e "não vi cartão" pode ser o cartão faltando OU
+    o meu seletor errado. Estas duas coisas pedem consertos opostos, e sem o
+    despejo eu escolheria por palpite. Foi assim que a figurinha custou seis
+    rodadas."""
+    try:
+        itens = pagina.evaluate(_JS_DESPEJO_PREVIA)
+        _log("   — o que tem no rodapé agora (pra achar o cartão) —")
+        for i in itens or []:
+            partes = [f"<{i['tag']}"]
+            for k in ("icone", "testid", "classe"):
+                if i.get(k):
+                    partes.append(f"{k}={i[k]}")
+            partes.append(f"{i['w']}x{i['h']}>")
+            if i.get("src"):
+                partes.append(f"src={i['src']}")
+            if i.get("texto"):
+                partes.append(f"txt={i['texto']!r}")
+            _log("     " + " ".join(partes))
+    except Exception as e:
+        _log(f"   (não consegui despejar o rodapé: {str(e)[:60]})")
+
+
 def _enviar_texto(pagina, texto: str) -> bool:
     """Digita e manda a mensagem. False = não mandei nada (e já avisei).
 
@@ -1292,6 +1344,20 @@ def _enviar_texto(pagina, texto: str) -> bool:
         if linha:
             pagina.keyboard.type(linha, delay=random.randint(25, 70))
 
+    # ⚠️ ESPAÇO DEPOIS DA URL — é o que dispara a busca da prévia (20/08).
+    #
+    # MEDIDO: a Shopee SERVE og:image pro crawler do WhatsApp, inclusive no
+    # link curto (`curl -A "WhatsApp/2.24.1 A" s.shopee.com.br/…` devolve
+    # og:title, og:image e og:square_image do produto). Ou seja, o cartão com
+    # foto é possível — não é limitação da Shopee, como parecia.
+    #
+    # O que falta é o WhatsApp RECONHECER que a URL acabou. Ele detecta link
+    # por token enquanto você digita, e a nossa URL é a última coisa da
+    # mensagem: sem delimitador, o token fica "aberto" e a busca não dispara.
+    # O espaço fecha o token. Custa um caractere invisível no fim da mensagem.
+    if "http" in texto.rsplit("\n", 1)[-1]:
+        pagina.keyboard.type(" ")
+
     # ⚠️ O TEXTO CAIU MESMO NA CAIXA? Em 20/08 o script disse "✅ enviei 1
     # mensagem" e NADA chegou no grupo. `caixa.click()` + `keyboard.type` é fé:
     # se o clique não deu foco (modal por cima, elemento errado, caixa de
@@ -1309,13 +1375,28 @@ def _enviar_texto(pagina, texto: str) -> bool:
     # entra no log. Se um dia o log mostrar que casa, aí sim vira espera de
     # verdade e o envio fica mais rápido.
     if PREVIA_LINK_SEG > 0:
-        pagina.wait_for_timeout(int(PREVIA_LINK_SEG * 1000))
-        achou = _achar(pagina, SEL_PREVIA_LINK, timeout=800)
+        # ESPERA ATIVA, não `sleep` cego: sai assim que o cartão aparece (a
+        # mensagem vai mais rápido) e só gasta o tempo todo quando ele não vem.
+        # Antes era um sleep fixo que nem olhava até o fim.
+        limite = time.time() + PREVIA_LINK_SEG
+        achou = None
+        while time.time() < limite:
+            achou = _achar(pagina, SEL_PREVIA_LINK, timeout=600)
+            if achou:
+                break
+            pagina.wait_for_timeout(400)
         if achou:
-            _log("   prévia do link: cartão apareceu")
+            _log(f"   prévia do link: cartão apareceu "
+                 f"({PREVIA_LINK_SEG - (limite - time.time()):.1f}s)")
         else:
-            _log("   prévia do link: não vi cartão — pode ser só o seletor "
-                 "(palpite); mando assim mesmo")
+            _log("   prévia do link: não vi cartão")
+            # ⚠️ Sem isto, "não vi cartão" é indistinguível de "o seletor está
+            # errado" — e eu já queimei seis rodadas nesta tela por confiar em
+            # seletor não medido. O despejo é o que transforma o próximo palpite
+            # em correção. Só no primeiro item, pra não encher o log.
+            if not getattr(_enviar_texto, "_ja_despejou", False):
+                _enviar_texto._ja_despejou = True
+                _dump_previa(pagina)
     else:
         pagina.wait_for_timeout(random.randint(600, 1400))
 
