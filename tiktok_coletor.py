@@ -212,6 +212,20 @@ _carregar_env()
 # agora que o .env está carregado, aplica o override do min de views (se houver)
 MIN_VIEWS = int(os.environ.get("MIN_VIEWS", MIN_VIEWS))
 
+# ⚠️ PISO SEPARADO PRO INSTAGRAM, NASCENDO EM 0 (DESLIGADO) — 19/08.
+# O MIN_VIEWS de 50k nunca valeu pro IG: as views vinham 0 do yt-dlp e o
+# filtro só corta quando o número é conhecido. Agora que a grade de reels
+# entrega a contagem, ligar 50k de repente cortaria quase tudo e a coleta
+# despencaria — trocar um defeito calado por outro. Escolha o número olhando
+# a distribuição:  .venv/bin/python ig_playwright.py --diag-views <perfil>
+MIN_VIEWS_IG = int(os.environ.get("MIN_VIEWS_IG", "0"))
+
+# quanto CADA corte descartaria nesta rodada — impresso no fim, pra decidir o
+# MIN_VIEWS_IG com número em vez de palpite
+_FAIXAS_VIEWS = (1_000, 5_000, 10_000, 25_000, 50_000, 100_000)
+_cortaria = defaultdict(int)
+_sem_views = defaultdict(int)
+
 try:
     from integrations.shopee_affiliate import minerar_oportunidades, gerar_link_afiliado
 except Exception:
@@ -395,24 +409,34 @@ def _listar_ig_instaloader(perfil: str, limite: int) -> list:
 
 
 def _listar_ig_playwright(perfil: str, limite: int) -> list:
-    """Lista os Reels via NAVEGADOR real (Playwright + stealth) — contorna o bloqueio
-    de API do instaloader. Reusa cookies (YTDLP_COOKIES) + proxy (IG_PROXY)."""
+    """[(url, views)] via NAVEGADOR real (Playwright + stealth) — contorna o bloqueio
+    de API do instaloader. Reusa cookies (YTDLP_COOKIES) + proxy (IG_PROXY).
+
+    ⚠️ AS VIEWS VÊM DAQUI, NÃO DO yt-dlp. Pro IG o `--skip-download -J` volta
+    sem `view_count`, e o filtro de viralidade do coletor só corta quando o
+    número é conhecido — então ele nunca cortava nada. Ver `listar_reels_detalhado`."""
     try:
         import ig_playwright
-        return ig_playwright.listar_reels(perfil, limite)
+        return ig_playwright.listar_reels_detalhado(perfil, limite)
     except Exception as e:
         _log(f"   playwright indisponível ({str(e)[:70]})")
         return []
 
 
 def _listar_videos(perfil: str, limite: int, fonte: str = "tiktok") -> list:
-    """URLs dos vídeos mais recentes do perfil (sem baixar). TikTok via yt-dlp;
-    Instagram via Playwright (navegador real) → instaloader → yt-dlp (fallbacks)."""
+    """[(url, views_da_listagem)] dos vídeos mais recentes do perfil (sem baixar).
+
+    TikTok via yt-dlp; Instagram via Playwright (navegador real) → instaloader →
+    yt-dlp (fallbacks).
+
+    ⚠️ Devolve TUPLA desde 19/08. Era só a URL, e as views ficavam por conta do
+    `_metadados` — que pro IG volta 0 e desliga o filtro de viralidade sem
+    ninguém notar. `views=0` aqui significa "não sei", nunca "não teve"."""
     if fonte == "instagram":
         # URL DIRETA de reel/post → não precisa listar; o yt-dlp baixa direto.
         low = perfil.lower()
         if perfil.startswith("http") and ("/reel/" in low or "/p/" in low or "/tv/" in low):
-            return [perfil]
+            return [(perfil, 0)]
         # 1) Playwright (navegador real) — com RETRY: o IG é flaky (vimos 0→12 reels
         #    no MESMO perfil sem trocar nada), então uma 2ª tentativa recupera muito.
         urls = _listar_ig_playwright(perfil, limite)
@@ -425,7 +449,8 @@ def _listar_videos(perfil: str, limite: int, fonte: str = "tiktok") -> list:
         #    dá 429 e QUEIMA o IP do proxy (foi o que estrangulou tudo) — desligado
         #    por padrão. IG_FALLBACK_YTDLP=1 religa o comportamento antigo.
         if os.environ.get("IG_FALLBACK_YTDLP", "0").strip().lower() in ("1", "true", "sim"):
-            urls = _listar_ig_instaloader(perfil, limite)
+            # o instaloader devolve só URL — views 0 = "não sei"
+            urls = [(u, 0) for u in _listar_ig_instaloader(perfil, limite)]
             if urls:
                 return urls
         else:
@@ -438,15 +463,43 @@ def _listar_videos(perfil: str, limite: int, fonte: str = "tiktok") -> list:
         d = json.loads(r.stdout)
         out = []
         for e in (d.get("entries") or []):
+            # o --flat-playlist do TikTok já traz view_count em muitos casos;
+            # quando não traz, 0 e o _metadados resolve depois
+            vw = int(e.get("view_count") or 0)
             u = e.get("url")
             if u:
-                out.append(u)
+                out.append((u, vw))
             elif e.get("id") and fonte == "tiktok":   # TikTok resolve id→url
-                out.append(f"https://www.tiktok.com/@x/video/{e.get('id')}")
+                out.append((f"https://www.tiktok.com/@x/video/{e.get('id')}", vw))
         return out
     except Exception:
         _log(f"   não consegui listar {perfil} [{fonte}]: {(r.stderr or '')[:120]}")
         return []
+
+
+def _relatorio_views():
+    """O que o filtro de viralidade FARIA, sem ter feito.
+
+    Existe porque o corte do IG nasce desligado (ver MIN_VIEWS_IG) e alguém
+    precisa escolher o número. Sem esta tabela a escolha seria palpite — e
+    palpite alto zera a coleta, palpite baixo mantém o problema que o Dre
+    apontou: meme recente ganhando de produto viral."""
+    total = sum(_sem_views.values()) + max(_cortaria.values(), default=0)
+    if not _cortaria and not _sem_views:
+        return
+    _log("— views nesta rodada —")
+    for fonte, n in sorted(_sem_views.items()):
+        _log(f"   {n} vídeo(s) de {fonte} SEM view conhecida "
+             f"(esses nunca são cortados — 0 significa 'não sei')")
+    if _cortaria:
+        _log(f"   corte que CADA piso faria (MIN_VIEWS_IG hoje = {MIN_VIEWS_IG:,}):")
+        for faixa in _FAIXAS_VIEWS:
+            n = _cortaria.get(faixa, 0)
+            if n:
+                _log(f"     abaixo de {faixa:>7,} → descartaria {n} vídeo(s)")
+    if not MIN_VIEWS_IG and _cortaria:
+        _log("   ⚠️  o corte do IG está DESLIGADO. Escolha um piso olhando a "
+             "tabela acima e ligue com:  python3 env_set.py MIN_VIEWS_IG 10000")
 
 
 def _metadados(url: str) -> dict:
@@ -1008,15 +1061,34 @@ def main():
         _log(f"perfil {perfil} [{fonte}{'/' + nicho_fonte if nicho_fonte else ''}] …")
         if fonte == "instagram" and ig_delay > 0 and not dry:
             time.sleep(ig_delay)     # espaça os requests de IG (anti-429)
-        for url in _listar_videos(perfil, limite, fonte):
+        for url, views_listagem in _listar_videos(perfil, limite, fonte):
             meta = _metadados(url)
             vid = meta.get("id")
             if not vid or vid in vistos:
                 continue
             vistos.add(vid)      # marca cedo pra não repetir mesmo se descartar
-            # views: só corta se for CONHECIDO e baixo. O yt-dlp às vezes não pega a
-            # contagem do IG (vem 0) — aí a gente confia na curadoria do perfil.
-            if (meta["views"] and meta["views"] < MIN_VIEWS) or \
+
+            # a listagem sabe mais que o yt-dlp no IG: lá o view_count não vem
+            if not meta.get("views") and views_listagem:
+                meta["views"] = views_listagem
+
+            # ⚠️ O CORTE DO IG É SEPARADO E NASCE DESLIGADO (MIN_VIEWS_IG=0).
+            # Até 19/08 o `MIN_VIEWS=50_000` não filtrava NADA no Instagram,
+            # porque views vinha 0 e a condição `if (meta["views"] and ...)` é
+            # falsa com zero. Agora que a view existe, ligar 50k de uma vez
+            # poderia cortar quase tudo e a coleta cairia pra perto de zero —
+            # trocar um defeito silencioso por outro. Então: ele CONTA quantos
+            # cortaria em cada faixa e só corta quando alguém escolher o número
+            # olhando a distribuição real (ig_playwright.py --diag-views).
+            piso = MIN_VIEWS_IG if fonte == "instagram" else MIN_VIEWS
+            if meta["views"]:
+                for faixa in _FAIXAS_VIEWS:
+                    if meta["views"] < faixa:
+                        _cortaria[faixa] += 1
+            else:
+                _sem_views[fonte] += 1
+
+            if (piso and meta["views"] and meta["views"] < piso) or \
                (meta["duracao"] and meta["duracao"] > MAX_DUR):
                 _log(f"   • {vid}: fora do filtro (views={meta['views']}, "
                      f"dur={meta['duracao']}s) — pulo")
@@ -1139,6 +1211,7 @@ def main():
         _salvar_vistos(vistos)
         _salvar_produtos_vistos(produtos_vistos)
     _atualizar_saude_e_podar(perfis, keepers, dry)   # poda por coleta (zumbis/429)
+    _relatorio_views()
     _log(f"fim. {achados} produto(s) casado(s) na Shopee "
          f"{'(dry — nada baixado, cache intacto)' if dry else ''}")
     return 0

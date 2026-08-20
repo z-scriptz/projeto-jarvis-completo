@@ -227,7 +227,66 @@ def diagnosticar(perfil: str, timeout: int = 45) -> dict:
     return out
 
 
+# JS que lê CADA tile da grade de reels e devolve o link + o texto do tile.
+#
+# ⚠️ POR QUE innerText E NÃO UM SELETOR DE CLASSE.
+# O Instagram gera nome de classe embaralhado e troca sem aviso — foi assim que
+# a saga da figurinha do WhatsApp queimou seis rodadas: seletor inventado,
+# corrigido por outro seletor inventado. O texto do tile, por outro lado, é o
+# que o olho vê: no tile de reel só existe a contagem ("12,3 mil", "543").
+# Se um dia vier mais coisa junto, o parser pega o primeiro número e o
+# `--diag-views` mostra o texto cru pra corrigir COM DADO.
+_JS_TILES = """
+() => {
+  const out = [];
+  for (const a of document.querySelectorAll('a[href*="/reel/"]')) {
+    const m = (a.getAttribute('href') || '').match(/\\/reel\\/([^/?#]+)/);
+    if (!m) continue;
+    out.push({id: m[1], texto: (a.innerText || '').trim().slice(0, 60)});
+  }
+  return out;
+}
+"""
+
+
+def _views_do_texto(txt: str) -> int:
+    """A contagem que estiver no texto do tile. 0 quando não há número."""
+    m = re.search(r"[\d][\d.,]*\s*(?:MIL|MI|K|M|B)?", (txt or "").upper())
+    return _views_para_int(m.group(0)) if m else 0
+
+
+def listar_reels_detalhado(perfil: str, limite: int = 8, headless: bool = True,
+                           timeout: int = 45, diag: bool = False) -> list:
+    """[(url, views)] dos reels do perfil, na ordem da grade.
+
+    ⚠️ POR QUE AS VIEWS PRECISAM VIR DAQUI (19/08)
+    ────────────────────────────────────────────
+    O coletor pegava as views do `yt-dlp --skip-download -J`, e pro Instagram
+    isso volta `view_count` ausente → **0**. O filtro do coletor é
+
+        if (meta["views"] and meta["views"] < MIN_VIEWS)
+
+    e com views=0 a condição é sempre falsa. Resultado: `MIN_VIEWS=50_000`
+    estava MORTO pras 100 fontes de IG — nada era filtrado por viralidade e o
+    sistema levava os reels mais RECENTES, não os que bombaram.
+
+    O Dre viu na saída: *"tem centenas e milhares de vídeos em cada perfil, não
+    apenas de produtos, mas alguns vídeos de memes, que tem milhares de views"*.
+    Exato: sem views, meme recente ganha de produto viral.
+
+    A grade `/reels/` mostra a contagem em cada tile. É de lá que ela sai agora.
+    """
+    urls = _listar_reels_bruto(perfil, limite, headless, timeout, diag)
+    return urls
+
+
 def listar_reels(perfil: str, limite: int = 8, headless: bool = True, timeout: int = 45) -> list:
+    """Só as URLs (compatibilidade com quem já chamava). Ver `_detalhado`."""
+    return [u for u, _ in listar_reels_detalhado(perfil, limite, headless, timeout)]
+
+
+def _listar_reels_bruto(perfil: str, limite: int = 8, headless: bool = True,
+                        timeout: int = 45, diag: bool = False) -> list:
     """Abre o /reels/ do perfil num Chromium real, rola e extrai os links dos reels."""
     try:
         from playwright.sync_api import sync_playwright
@@ -262,11 +321,15 @@ def listar_reels(perfil: str, limite: int = 8, headless: bool = True, timeout: i
                       timeout=timeout * 1000, wait_until="domcontentloaded")
             page.wait_for_timeout(4000)
             for _ in range(10):
-                for a in page.query_selector_all('a[href*="/reel/"]'):
-                    m = re.search(r"/reel/([^/?#]+)", a.get_attribute("href") or "")
-                    if m and m.group(1) not in seen:
-                        seen.add(m.group(1))
-                        urls.append(f"https://www.instagram.com/reel/{m.group(1)}/")
+                for t in (page.evaluate(_JS_TILES) or []):
+                    rid = t.get("id")
+                    if not rid or rid in seen:
+                        continue
+                    seen.add(rid)
+                    vw = _views_do_texto(t.get("texto", ""))
+                    urls.append((f"https://www.instagram.com/reel/{rid}/", vw))
+                    if diag:
+                        _log(f"   tile {rid}  texto={t.get('texto','')!r}  → {vw:,} views")
                 if len(urls) >= limite:
                     break
                 page.mouse.wheel(0, 5000)
@@ -275,8 +338,20 @@ def listar_reels(perfil: str, limite: int = 8, headless: bool = True, timeout: i
             _log(f"erro em @{user}: {str(e)[:150]}")
         finally:
             browser.close()
-    _log(f"{len(urls)} reels de @{user}")
-    return urls[:limite]
+
+    # ⚠️ o log dizia só `len(urls)` — o número ANTES do corte. Com `--limite 2`
+    # ele imprimia "12 reels de @x" e devolvia 2, e quem lia (o Dre, e eu)
+    # entendia que 12 tinham sido considerados. Agora diz os dois.
+    com_views = sum(1 for _, v in urls if v)
+    devolvidos = urls[:limite]
+    _log(f"{len(urls)} reels vistos de @{user} · uso {len(devolvidos)} · "
+         f"views lidas em {com_views}/{len(urls)}")
+    if urls and not com_views:
+        # silêncio aqui viraria "filtro ligado que não filtra nada" — o bug de
+        # hoje, de novo. Melhor gritar do que devolver 0 calado.
+        _log(f"   ⚠️  NENHUMA view lida na grade de @{user} — o filtro de "
+             f"viralidade fica cego. Rode: ig_playwright.py --diag-views {user}")
+    return devolvidos
 
 
 # ── TikTok: autores de uma hashtag (ALAVANCA 2) ─────────────────────────────
@@ -363,21 +438,37 @@ def autores_hashtag_tiktok(tag: str, limite: int = 30, headless: bool = True,
 
 
 def _views_para_int(v) -> int:
-    """'1.2M' / '340.5K' / '12,3 mil' → int. Devolve 0 se não der."""
+    """'1.2M' / '340.5K' / '12,3 mil' / '1.234' → int. Devolve 0 se não der.
+
+    ⚠️ O CASO SEM SUFIXO É DIFERENTE DOS OUTROS. Em pt-BR o Instagram escreve
+    mil-e-duzentos-e-trinta-e-quatro como '1.234', e o ponto ali é SEPARADOR DE
+    MILHAR, não decimal. A versão antiga fazia `replace(",", ".")` e mandava
+    tudo pro float: '1.234' virava 1.234 → **1 view**. Um reel de 1.234 views
+    seria lido como 1 e reprovado por qualquer filtro.
+
+    Regra: com sufixo (K/M/mil), o separador é decimal ('1,2 mil' = 1200). Sem
+    sufixo, é milhar ('1.234' = 1234).
+    """
     if isinstance(v, (int, float)):
         return int(v)
-    s = str(v or "").strip().upper().replace(",", ".")
+    s = str(v or "").strip().upper()
     if not s:
         return 0
     # ordem importa: MIL/MI antes de M, senão 'MIL' casa só o 'M' e vira milhão
-    m = re.match(r"([\d.]+)\s*(MIL|MI|K|M|B)?", s)
+    m = re.match(r"([\d.,]+)\s*(MIL|MI|K|M|B)?", s)
     if not m:
         return 0
+    corpo, sufixo = m.group(1), m.group(2) or ""
+    if not sufixo:
+        # sem sufixo: '.' e ',' são separador de milhar → somem
+        so_digitos = re.sub(r"[.,]", "", corpo)
+        return int(so_digitos) if so_digitos.isdigit() else 0
     try:
-        n = float(m.group(1))
+        n = float(corpo.replace(".", "").replace(",", ".")
+                  if corpo.count(",") == 1 else corpo.replace(",", ""))
     except ValueError:
         return 0
-    mult = {"K": 1e3, "MIL": 1e3, "M": 1e6, "MI": 1e6, "B": 1e9}.get(m.group(2) or "", 1)
+    mult = {"K": 1e3, "MIL": 1e3, "M": 1e6, "MI": 1e6, "B": 1e9}[sufixo]
     return int(n * mult)
 
 
@@ -460,10 +551,38 @@ if __name__ == "__main__":
         if d.get("reels_links", 0) > 0:
             print("  ✅ tem reels no DOM — sessão OK; o problema é seletor/scroll.")
         sys.exit(0)
+    # --diag-views: mostra a DISTRIBUIÇÃO de views do perfil, sem baixar nada.
+    # Serve pra escolher o MIN_VIEWS_IG olhando número real em vez de chutar —
+    # ligar um corte de 50k sem ver a distribuição pode zerar a coleta.
+    if "--diag-views" in sys.argv:
+        i = sys.argv.index("--diag-views")
+        alvo = sys.argv[i + 1] if len(sys.argv) > i + 1 else ""
+        n = int(sys.argv[i + 2]) if len(sys.argv) > i + 2 and sys.argv[i + 2].isdigit() else 24
+        if not alvo:
+            print("uso: python3 ig_playwright.py --diag-views <perfil> [quantos]")
+            sys.exit(1)
+        itens = listar_reels_detalhado(alvo, n, headless=hl, diag=True)
+        vistos = [v for _, v in itens]
+        lidas = [v for v in vistos if v]
+        print(f"\n  @{alvo}: {len(itens)} reel(s) · views lidas em {len(lidas)}")
+        if not lidas:
+            print("  ⚠️  nenhuma view lida — veja os textos dos tiles acima e me mande.")
+            sys.exit(0)
+        lidas.sort()
+        meio = lidas[len(lidas) // 2]
+        print(f"  menor {min(lidas):,} · mediana {meio:,} · maior {max(lidas):,}")
+        print("\n  quanto sobraria com cada corte:")
+        for corte in (0, 1_000, 5_000, 10_000, 25_000, 50_000, 100_000):
+            sobra = sum(1 for v in lidas if v >= corte)
+            print(f"     MIN_VIEWS_IG={corte:>7,} → {sobra:2}/{len(lidas)} reel(s)")
+        sys.exit(0)
+
     perfil = sys.argv[1] if len(sys.argv) > 1 else ""
     lim = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2].isdigit() else 8
     if not perfil:
-        print("uso: python3 ig_playwright.py <perfil> [limite]  |  --tag \"#hashtag\"")
+        print("uso: python3 ig_playwright.py <perfil> [limite]\n"
+              "     python3 ig_playwright.py --diag-views <perfil> [quantos]\n"
+              "     python3 ig_playwright.py --tag \"#hashtag\"")
         sys.exit(1)
-    for u in listar_reels(perfil, lim, headless=hl):
-        print(u)
+    for u, v in listar_reels_detalhado(perfil, lim, headless=hl):
+        print(f"{u}  {v:,} views" if v else f"{u}  (views ?)")
