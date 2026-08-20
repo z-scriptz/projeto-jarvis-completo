@@ -133,11 +133,26 @@ _CASA = (
     "pote hermético", "lixeira", "rodo", "vassoura", "esfregao", "esfregão",
     "mop", "aspirador", "varal", "cabideiro", "prateleira", "suporte de parede",
     "toalha", "jogo de cama", "lencol", "lençol", "edredom", "cortina", "tapete",
-    # ⚠️ 'roupa de cama/banho/mesa' PRECISA estar aqui explicitamente: sem elas
-    # "Jogo de Roupa de Cama Casal" não casa com "jogo de cama" (não é
-    # substring contígua), cai na lista de MODA pelo "roupa" cru e vai pro
-    # @topshopmoda_. Medido no teste de 19/08, era o único erro de 23 casos.
+    # ⚠️ TUDO QUE CUIDA DE ROUPA É CASA — A ROUPA EM SI É MODA.
+    #
+    # Esta é a segunda vez que o "roupa" cru da lista de MODA rouba um produto
+    # de casa. Em 19/08 eu consertei UMA FRASE ("roupa de cama") e achei que
+    # tinha resolvido; em 20/08 a limpeza do cache do Dre mostrou o resto da
+    # família:
+    #
+    #     'passadeira ferro a vapor com tabua de passar roupa'  → moda ✗
+    #     'maquina de lavar roupa portatil'                     → moda ✗
+    #
+    # Consertar um caso quando o problema é uma CLASSE só adia. A regra é:
+    # tábua, ferro, varal, cabide, cesto e máquina cuidam de roupa e moram na
+    # casa; vestido e camisa se vestem. CASA é checada antes de MODA, então
+    # basta a frase existir aqui.
     "roupa de cama", "roupa de banho", "roupa de mesa", "cama mesa e banho",
+    "passar roupa", "passadeira", "ferro de passar", "ferro a vapor",
+    "tabua de passar", "lavar roupa", "maquina de lavar", "lava e seca",
+    "secadora de roupa", "guarda-roupa", "guarda roupa", "arara de roupa",
+    "amaciante", "sabao em po", "sabao liquido", "tira mancha",
+    "porta-cabide", "organizador de roupa",
     "almofada", "luminaria de mesa", "luminária de mesa", "abajur",
     "descascador", "ralador", "abridor", "dispenser", "saboneteira",
     "porta-escova", "chuveiro", "ducha", "tapete de banheiro",
