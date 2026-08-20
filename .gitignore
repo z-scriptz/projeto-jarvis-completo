@@ -60,3 +60,6 @@ shared/cache_texto_queimado.json
 
 # musicas locais: arquivos de audio (licenca + tamanho) ficam fora do git
 assets/musicas/
+
+# vigia: referencias de cabecalho, recortes e historico (dado de execucao)
+shared/vigia/
