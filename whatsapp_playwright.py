@@ -155,13 +155,13 @@ SEL_ANEXO = ["input[type='file'][accept*='image']",
 # ⚠️ ESTES SELETORES SÃO INFERÊNCIA, não medição — eu não vi o DOM do menu.
 # Por isso a falha despeja os botões da tela: a próxima rodada corrige com
 # dado em vez de com outro palpite meu.
-# ⚠️ MEDIDO NO PRINT DO DRE (20/08), com o menu aberto. Esta lista não é mais
-# palpite: são os rótulos que o menu mostra, na ordem em que aparecem —
+# ⚠️ MEDIDO NO DESPEJO DE 20/08, com o menu aberto. Não é mais palpite: são os
+# botões que o menu tem, na ordem, todos com aria-label E texto —
 #   Documento · Fotos e vídeos · Câmera · Áudio · Contato · Enquete · Evento ·
-#   Nova figurinha
-# "Nova figurinha" é a ÚLTIMA, e era ela o `input[type=file][accept='image/*']`
-# solitário que aparecia antes de qualquer clique. A figurinha de seis rodadas
-# tinha esse nome no menu o tempo todo.
+#   Nova figurinha · Catálogo · Resposta rápida
+# "Nova figurinha" era o `input[type=file][accept='image/*']` solitário que
+# aparecia antes de qualquer clique. A figurinha de seis rodadas tinha esse
+# nome no menu o tempo todo, a duas linhas de 'Fotos e vídeos'.
 ROTULOS_FOTOS = ("Fotos e vídeos", "Fotos e videos", "Photos & videos",
                  "Photos and videos", "Fotos", "Photos")
 
@@ -1277,16 +1277,15 @@ def _dump_botoes(pagina, motivo: str):
               icone: e.getAttribute("data-icon") || "",
               rotulo: (e.getAttribute("aria-label") ||
                        e.getAttribute("title") || "").slice(0, 40),
-              // ⚠️ O TEXTO VISÍVEL FALTAVA, E FOI ELE QUE ME CEGOU (20/08).
-              // O menu de anexo ABRIU na tela do Dre — 'Documento', 'Fotos e
-              // vídeos', 'Câmera', 'Nova figurinha' — e o despejo listou a
-              // barra lateral do app. Porque os itens do menu não têm
-              // aria-label nem title: têm TEXTO. Eu filtrava por rótulo, então
-              // eles caíam fora e eu concluía "o menu não abriu".
+              // O texto visível, além do rótulo. Útil pra item que só tem
+              // texto — embora, MEDIDO em 20/08, os itens deste menu tenham
+              // aria-label normalmente ('Fotos e vídeos', 'Nova figurinha').
               //
-              // Foi o mesmo erro do slice(0,20): a ferramenta de diagnóstico
-              // escondendo justamente o que ela existia pra mostrar. Duas
-              // vezes seguidas, no mesmo arquivo.
+              // ⚠️ REGISTRO DE UMA TEORIA MINHA QUE O DADO DERRUBOU: eu disse
+              // que o menu sumia do despejo porque os itens não tinham
+              // aria-label. Errado. Eles têm. O que os escondia era só o corte
+              // antes do filtro (ver acima) — o menu fica no FIM do DOM, na
+              // posição ~75, e o corte parava em 60. Uma causa, não duas.
               texto: (e.innerText || "").trim().replace(/\\s+/g, " ").slice(0, 40),
             }))
             .filter(x => x.icone || x.rotulo || x.texto);
