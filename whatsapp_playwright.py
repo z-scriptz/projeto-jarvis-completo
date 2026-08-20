@@ -155,6 +155,16 @@ SEL_ANEXO = ["input[type='file'][accept*='image']",
 # ⚠️ ESTES SELETORES SÃO INFERÊNCIA, não medição — eu não vi o DOM do menu.
 # Por isso a falha despeja os botões da tela: a próxima rodada corrige com
 # dado em vez de com outro palpite meu.
+# ⚠️ MEDIDO NO PRINT DO DRE (20/08), com o menu aberto. Esta lista não é mais
+# palpite: são os rótulos que o menu mostra, na ordem em que aparecem —
+#   Documento · Fotos e vídeos · Câmera · Áudio · Contato · Enquete · Evento ·
+#   Nova figurinha
+# "Nova figurinha" é a ÚLTIMA, e era ela o `input[type=file][accept='image/*']`
+# solitário que aparecia antes de qualquer clique. A figurinha de seis rodadas
+# tinha esse nome no menu o tempo todo.
+ROTULOS_FOTOS = ("Fotos e vídeos", "Fotos e videos", "Photos & videos",
+                 "Photos and videos", "Fotos", "Photos")
+
 SEL_BOTAO_ANEXO = [
     "button[aria-label*='anexar' i]",
     "button[aria-label*='attach' i]",
@@ -1257,14 +1267,26 @@ def _dump_botoes(pagina, motivo: str):
               icone: e.getAttribute("data-icon") || "",
               rotulo: (e.getAttribute("aria-label") ||
                        e.getAttribute("title") || "").slice(0, 40),
+              // ⚠️ O TEXTO VISÍVEL FALTAVA, E FOI ELE QUE ME CEGOU (20/08).
+              // O menu de anexo ABRIU na tela do Dre — 'Documento', 'Fotos e
+              // vídeos', 'Câmera', 'Nova figurinha' — e o despejo listou a
+              // barra lateral do app. Porque os itens do menu não têm
+              // aria-label nem title: têm TEXTO. Eu filtrava por rótulo, então
+              // eles caíam fora e eu concluía "o menu não abriu".
+              //
+              // Foi o mesmo erro do slice(0,20): a ferramenta de diagnóstico
+              // escondendo justamente o que ela existia pra mostrar. Duas
+              // vezes seguidas, no mesmo arquivo.
+              texto: (e.innerText || "").trim().replace(/\\s+/g, " ").slice(0, 40),
             }))
-            .filter(x => x.icone || x.rotulo);
+            .filter(x => x.icone || x.rotulo || x.texto);
         }""")
         _log(f"   controles visíveis ({motivo}):")
         for i in itens or []:
             _log(f"     <{i['tag']}"
                  f"{(' data-icon=' + i['icone']) if i['icone'] else ''}>"
-                 f"  rótulo: {i['rotulo']!r}")
+                 f"  rótulo: {i['rotulo']!r}"
+                 + (f"  texto: {i['texto']!r}" if i.get("texto") else ""))
     except Exception as e:
         _log(f"   (não consegui listar os controles: {str(e)[:60]})")
 
@@ -1809,6 +1831,60 @@ _JS_CLICAR_ANEXO = """
 """
 
 
+_JS_OPCAO_POR_TEXTO = """
+(rotulos) => {
+  // Acha o item do menu pelo TEXTO VISÍVEL. Os itens ('Documento', 'Fotos e
+  // vídeos', 'Câmera', 'Nova figurinha') não têm aria-label nem title — só
+  // texto. Por isso seletor de atributo nunca os pegou.
+  //
+  // Pega o nó MAIS FUNDO cujo texto bate, senão o <div> do menu inteiro
+  // casaria com 'Fotos e vídeos' e o clique cairia no meio da lista — e
+  // 'Nova figurinha' está a quatro linhas de distância. Errar aqui é
+  // reproduzir a figurinha de propósito.
+  const norm = s => (s || "").trim().toLowerCase()
+      .normalize("NFD").replace(/[\\u0300-\\u036f]/g, "");
+  let melhor = null;
+  for (const e of document.querySelectorAll("li,div,span,button,[role='button']")) {
+    if (e.offsetParent === null) continue;
+    const t = norm(e.innerText);
+    if (!t) continue;
+    for (const r of rotulos) {
+      if (t === norm(r)) {
+        if (!melhor || e.contains(melhor) === false) melhor = e;
+        if (melhor && melhor.contains(e)) melhor = e;   // fica com o mais fundo
+      }
+    }
+  }
+  if (!melhor) return {ok: false};
+  const bt = melhor.closest("li,[role='button'],button,div[tabindex]") || melhor;
+  const r = bt.getBoundingClientRect();
+  if (!r.width || !r.height) return {ok: false};
+  return {ok: true, tag: bt.tagName.toLowerCase(),
+          texto: (bt.innerText || "").trim().slice(0, 40),
+          x: Math.round(r.left + r.width / 2),
+          y: Math.round(r.top + r.height / 2)};
+}
+"""
+
+
+def _clicar_opcao(pagina, rotulos) -> str:
+    """Clica num item de menu pelo TEXTO. '' se não achou."""
+    try:
+        d = pagina.evaluate(_JS_OPCAO_POR_TEXTO, list(rotulos))
+    except Exception as e:
+        _log(f"   não consegui procurar a opção: {str(e)[:60]}")
+        return ""
+    if not d or not d.get("ok"):
+        return ""
+    try:
+        pagina.mouse.click(d["x"], d["y"])
+        pagina.wait_for_timeout(1500)
+        return d.get("texto") or "?"
+    except Exception as e:
+        _log(f"   o clique na opção falhou: {str(e)[:60]}")
+        return ""
+
+
 def _clicar_anexo(pagina) -> str:
     """Clica no '+' de anexo. Devolve o que clicou, ou '' se não achou.
 
@@ -1918,32 +1994,29 @@ def diag_anexo():
             _log("   opções visíveis no menu:")
             _dump_botoes(pagina, "menu de anexo aberto")
 
-            # tenta a opção de fotos e mostra o efeito
-            for rot in ("Fotos e vídeos", "Photos & videos", "Fotos", "Photos"):
-                try:
-                    o = pagina.query_selector(
-                        f"[role='button']:has-text('{rot}'), "
-                        f"li:has-text('{rot}'), "
-                        f"div[role='menuitem']:has-text('{rot}')")
-                    if o and o.is_visible():
-                        o.click(timeout=4000)
-                        pagina.wait_for_timeout(1500)
-                        print()
-                        _log(f"=== DEPOIS de clicar em '{rot}' ===")
-                        fim = pagina.evaluate("""
-                        () => Array.from(document.querySelectorAll("input[type='file']"))
-                               .map((e,i)=>({i, accept: e.getAttribute("accept")||""}))""")
-                        for a in fim or []:
-                            marca = ("  ← ESTE" if "video" in a["accept"].lower()
-                                     else "")
-                            _log(f"   input[{a['i']}] "
-                                 f"accept={a['accept'][:70]!r}{marca}")
-                        break
-                except Exception:
-                    continue
+            # ⚠️ CLICA PELO TEXTO, não por seletor de atributo. Os itens deste
+            # menu ('Documento', 'Fotos e vídeos', 'Câmera', 'Nova figurinha')
+            # não têm aria-label nem title — foi por isso que o `:has-text`
+            # dentro de `[role=button]/li/menuitem` não achou nada enquanto o
+            # menu estava aberto na tela.
+            clicou = _clicar_opcao(pagina, ROTULOS_FOTOS)
+            if clicou:
+                print()
+                _log(f"=== DEPOIS de clicar em '{clicou}' ===")
+                fim = pagina.evaluate("""
+                () => Array.from(document.querySelectorAll("input[type='file']"))
+                       .map((e,i)=>({i, accept: e.getAttribute("accept")||""}))""")
+                for a in fim or []:
+                    marca = ("  ← ESTE é o de FOTO (aceita vídeo)"
+                             if "video" in a["accept"].lower() else
+                             "  ← este é o da FIGURINHA")
+                    _log(f"   input[{a['i']}] accept={a['accept'][:70]!r}{marca}")
+                if not any("video" in (a["accept"] or "").lower() for a in fim or []):
+                    _log("   ⚠️ nenhum input novo aceitando vídeo — clicou mas "
+                         "não montou o input de foto.")
             else:
-                _log("   ⚠️ não achei a opção de FOTOS no menu (veja a lista "
-                     "acima e me diga o rótulo certo)")
+                _log("   ⚠️ não achei a opção de FOTOS pelo texto. A lista acima "
+                     "agora mostra o TEXTO de cada item — me diga o rótulo certo.")
 
             pagina.keyboard.press("Escape")
             print()
