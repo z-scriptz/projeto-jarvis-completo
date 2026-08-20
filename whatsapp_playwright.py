@@ -240,8 +240,17 @@ _JS_PREVIA_ABERTA = """
                  (e.getAttribute("placeholder") || "")).toLowerCase();
     if (rot) {
       if (rot.includes("pesquis") || rot.includes("search")) continue;
-      if (rot.includes("digite uma mensagem") || rot.includes("type a message")) continue;
-      return rot.slice(0, 60);   // achou um campo rotulado que só existe na prévia
+      // ⚠️ NÃO EXCLUIR POR "digite uma mensagem" — MEDIDO EM 20/08.
+      // Eu excluía esse rótulo pra pular a caixa da conversa. Só que a caixa
+      // de LEGENDA tem o MESMO rótulo:
+      //
+      //   <div data-tab='undefined' rótulo='Digite uma mensagem'      y=713 ← legenda
+      //   <div data-tab='10'        rótulo='Digite uma mensagem p/…'  y=811 ← conversa
+      //
+      // Então a minha exclusão matava exatamente o campo que eu procurava, e
+      // a foto saía separada do texto. O discriminador é o `data-tab`, já
+      // tratado acima — o rótulo aqui só descreve, não decide.
+      return rot.slice(0, 60);   // campo que só existe na prévia
     }
     // ⚠️ CAMPO SEM RÓTULO TAMBÉM CONTA (20/08). A versão anterior fazia
     // `if (!rot) continue` e descartava qualquer campo sem aria-label —
@@ -1203,6 +1212,40 @@ def _focar_legenda(pagina) -> bool:
     # aparece como `<input type="text" role="textbox">`. Seletor preso em
     # `div` não acha mais nada, e o sintoma é "não consegui focar a legenda".
     # Agora casa pelo RÓTULO (que é o que descreve a função) em qualquer tag.
+    # ⚠️ PRIMEIRA TENTATIVA: PELO data-tab, que é o que MEDI (20/08).
+    # A caixa de legenda desta versão NÃO se chama "legenda" — ela se chama
+    # 'Digite uma mensagem', igual à da conversa. Os rótulos abaixo, todos
+    # procurando 'legenda'/'caption', não achariam nada, e o Tab às cegas do
+    # fim é loteria. O que separa as duas é:
+    #
+    #   legenda  → data-tab='undefined'  (y=713, dentro da prévia)
+    #   conversa → data-tab='10'         (y=811, no rodapé)
+    #
+    # Clico por coordenada, como no menu de anexo: não depende de qual nó o
+    # Playwright escolhe nem de o elemento estar coberto por outro.
+    try:
+        d = pagina.evaluate("""
+        () => {
+          const sel = "[contenteditable='true'],input,textarea,[role='textbox']";
+          for (const e of document.querySelectorAll(sel)) {
+            if (e.offsetParent === null) continue;
+            const tab = e.getAttribute("data-tab") || "";
+            if (tab === "3" || tab === "10" || tab === "6") continue;
+            const r = e.getBoundingClientRect();
+            if (!r.width || !r.height) continue;
+            return {x: Math.round(r.left + r.width / 2),
+                    y: Math.round(r.top + r.height / 2), tab: tab};
+          }
+          return null;
+        }""")
+        if d:
+            pagina.mouse.click(d["x"], d["y"])
+            pagina.wait_for_timeout(400)
+            _log(f"   foquei a legenda pelo data-tab={d['tab']!r}")
+            return True
+    except Exception as e:
+        _log(f"   (não consegui focar pelo data-tab: {str(e)[:50]})")
+
     alvos = [
         "[contenteditable='true'][aria-label*='legenda' i]",
         "[contenteditable='true'][aria-placeholder*='legenda' i]",
