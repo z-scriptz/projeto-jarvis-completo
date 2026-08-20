@@ -133,6 +133,11 @@ _CASA = (
     "pote hermético", "lixeira", "rodo", "vassoura", "esfregao", "esfregão",
     "mop", "aspirador", "varal", "cabideiro", "prateleira", "suporte de parede",
     "toalha", "jogo de cama", "lencol", "lençol", "edredom", "cortina", "tapete",
+    # ⚠️ 'roupa de cama/banho/mesa' PRECISA estar aqui explicitamente: sem elas
+    # "Jogo de Roupa de Cama Casal" não casa com "jogo de cama" (não é
+    # substring contígua), cai na lista de MODA pelo "roupa" cru e vai pro
+    # @topshopmoda_. Medido no teste de 19/08, era o único erro de 23 casos.
+    "roupa de cama", "roupa de banho", "roupa de mesa", "cama mesa e banho",
     "almofada", "luminaria de mesa", "luminária de mesa", "abajur",
     "descascador", "ralador", "abridor", "dispenser", "saboneteira",
     "porta-escova", "chuveiro", "ducha", "tapete de banheiro",
@@ -144,7 +149,62 @@ _CASA = (
     "jogo de copos", "jogo de tacas", "jogo de taças", "bandeja",
 )
 
-_NICHOS_VALIDOS = ("beleza", "tech", "casa", "geral")
+# ⚠️ PET E MODA NASCERAM AQUI EM 19/08 — AS CONTAS EXISTIAM HÁ SEMANAS.
+#
+# O vigia, na 1ª execução, mostrou 377 pacotes prontos assim:
+#     @topshop.__ 143 · @topshoptech_ 105 · @topshopbeauty._ 75 · @topshopcasa_ 54
+# ZERO pro @topshoppet_ e ZERO pro @topshopmoda_ — e as duas contas estavam no
+# contas.json, com ig_user_id e token. O buraco não era falta de fonte: era que
+# `_NICHOS_VALIDOS` tinha só ("beleza","tech","casa","geral"). Caminha de
+# cachorro e bolsa viravam 'geral'. Nada podia rotear pra lá, nunca.
+#
+# Então adicionar fonte de pet sem isto aqui pareceria progresso e não moveria
+# um vídeo sequer.
+#
+# ⚠️ A ORDEM DAS LISTAS DECIDE O EMPATE — e cada posição abaixo tem um motivo:
+#
+#   PET vem PRIMEIRO   'shampoo para cachorro' bateria em "shampoo" (beleza) e
+#                      'escova para pet' em "escova secadora". As frases de pet
+#                      são específicas, então elas não roubam nada de beleza:
+#                      "escova de cabelo" não casa com "escova para pet".
+#   TECH antes de MODA "relogio inteligente" e "pulseira inteligente" são tech,
+#                      e MODA tem "relogio"/"pulseira" genéricos.
+#   CASA antes de MODA "roupa de cama", "cesto de roupa" e "cabide" são casa;
+#                      MODA tem "roupa" cru e levaria os três.
+_PET = (
+    "cachorro", "cachorros", "cadela", "cao ", "cães", "caes", "dog", "doguinho",
+    "gato", "gatos", "gatinho", "felino", "pet", "pets", "petshop", "pet shop",
+    "coleira", "peitoral para", "guia retratil", "guia retrátil", "focinheira",
+    "racao", "ração", "comedouro", "bebedouro", "petisco", "petiscos",
+    "arranhador", "caixa de areia", "areia sanitaria", "areia sanitária",
+    "tapete higienico", "tapete higiênico", "casinha de cachorro",
+    "caminha para", "cama para pet", "aquario", "aquário", "gaiola", "viveiro",
+    "hamster", "coelho", "passaro", "pássaro", "calopsita", "periquito",
+    "antipulgas", "vermifugo", "vermífugo", "tosa", "tosador",
+    "escova para pet", "escova removedora de pelo", "removedor de pelo",
+    "cortador de unha para", "bolsa de transporte para", "caixa de transporte",
+    "fonte para gato", "brinquedo para cachorro", "brinquedo para gato",
+    "brinquedo para pet", "mordedor", "osso para cachorro",
+)
+_MODA = (
+    "roupa", "roupas", "vestido", "blusa", "camiseta", "camisa", "regata",
+    "calca", "calça", "jeans", "short", "saia", "macacao", "macacão",
+    "conjunto feminino", "conjunto masculino", "moletom", "jaqueta", "casaco",
+    "blazer", "cardiga", "sueter", "suéter", "pijama", "lingerie", "sutia",
+    "sutiã", "calcinha", "cueca", "meia", "meias", "biquini", "biquíni",
+    "maio ", "maiô", "sunga",
+    "sapato", "tenis", "tênis", "sandalia", "sandália", "chinelo", "rasteirinha",
+    "sapatilha", "bota", "botas", "salto alto", "scarpin", "mocassim",
+    "bolsa", "bolsas", "mochila", "carteira", "pochete", "necessaire de viagem",
+    "cinto", "oculos de sol", "óculos de sol", "chapeu", "chapéu", "bone",
+    "boné", "lenco", "lenço", "cachecol", "luva", "brinco", "colar", "pulseira",
+    "anel", "aneis", "anéis", "bijuteria", "bijoux", "relogio", "relógio",
+    "modelador corporal", "cinta modeladora", "body feminino", "top fitness",
+    "legging", "leggings",
+)
+
+# ⚠️ 'geral' fica FORA das listas de propósito: é o que sobra, não o que casa.
+_NICHOS_VALIDOS = ("beleza", "tech", "casa", "moda", "pet", "geral")
 
 
 def _sem_acento(s: str) -> str:
@@ -158,19 +218,29 @@ def _compilar(palavras) -> re.Pattern:
     return re.compile(r"\b(?:" + "|".join(re.escape(p) for p in alternativas) + r")")
 
 
+_RX_PET = _compilar(_PET)
 _RX_BELEZA = _compilar(_BELEZA)
 _RX_TECH = _compilar(_TECH)
 _RX_CASA = _compilar(_CASA)
+_RX_MODA = _compilar(_MODA)
 
 
 def _por_palavra_chave(texto: str) -> str:
-    """Nicho pela lista, ou "" quando nenhuma bate."""
+    """Nicho pela lista, ou "" quando nenhuma bate.
+
+    ⚠️ A ORDEM É A REGRA DE DESEMPATE, e está justificada lá em cima, junto das
+    listas. Mexer na sequência muda classificação de produto que hoje acerta —
+    'roupa de cama' vira moda se MODA subir acima de CASA."""
+    if _RX_PET.search(texto):
+        return "pet"
     if _RX_BELEZA.search(texto):
         return "beleza"
     if _RX_TECH.search(texto):
         return "tech"
     if _RX_CASA.search(texto):
         return "casa"
+    if _RX_MODA.search(texto):
+        return "moda"
     return ""
 
 
@@ -223,11 +293,19 @@ def _por_ia(texto: str) -> str:
         prompt = (
             "Classifique o produto abaixo em UM destes nichos, respondendo APENAS "
             "a palavra, em minusculas, sem pontuacao:\n"
+            "- pet     (cachorro, gato e outros animais: racao, coleira, cama, "
+            "brinquedo, higiene do animal)\n"
             "- beleza  (cuidado pessoal, cabelo, pele, unhas, maquiagem, perfume)\n"
             "- tech    (eletronicos, celular e acessorios, audio, games, gadgets)\n"
             "- casa    (cozinha, organizacao, limpeza, cama/mesa/banho, decoracao)\n"
+            "- moda    (roupa, calcado, bolsa, joia/bijuteria e acessorio de vestir)\n"
             "- geral   (qualquer outra coisa, ou se ficar em duvida)\n\n"
-            "Na duvida entre dois, escolha o uso PRINCIPAL do produto.\n\n"
+            "Na duvida entre dois, escolha o uso PRINCIPAL do produto.\n"
+            # ⚠️ estas 3 regras existem porque são os empates que a lista de
+            # palavras erra, e a IA só é chamada pro que a lista NÃO resolveu:
+            "Se for PARA ANIMAL, e pet — mesmo que seja shampoo, escova ou cama.\n"
+            "Roupa de CAMA e de BANHO e casa, nao e moda.\n"
+            "Relogio e pulseira INTELIGENTES sao tech; os comuns sao moda.\n\n"
             f"Produto: {texto[:200]}\n"
         )
         r = cli.models.generate_content(

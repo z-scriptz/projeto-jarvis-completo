@@ -43,3 +43,34 @@ insulorahomes
 recosbyanna
 buddy.pup.us
 
+
+# ── pet / moda / achadinhos BR e gringos (ADICIONADOS 19/08) ──────────────
+# O gatilho: o vigia mostrou 377 pacotes prontos e ZERO pro @topshoppet_ e
+# @topshopmoda_. Faltavam as duas pontas — nicho no roteador (feito no mesmo
+# dia) e fonte de vídeo. Estas são as fontes.
+#
+# ⚠️ SEM TAG DE NICHO, DE PROPÓSITO. O Dre: "como o seletor é por nicho, cada
+# vídeo pode ser pra uma conta diferente; se nos perfis abaixo tiver algo
+# referente a tecnologia, e não apenas moda e pet, o vídeo vai pra tecnologia".
+# Escrever '#pet' aqui mandaria TODO vídeo do descontopets pro @topshoppet_,
+# inclusive a câmera de segurança que aparecer no meio — o oposto do que ele
+# pediu. Sem tag, o `_perfis_do_arquivo` devolve nicho '' e quem decide é o
+# roteador, produto a produto.
+achadinhodeverdade
+portalsercriativa
+achadosdagrazy_
+promocaoweb26
+achadosdascar
+estiloquevale
+viciadaemachados
+descontopets
+zenlypaws
+azchpn
+supermelpets
+lovelycatonline
+nomesspupbowl
+fofocraciapet
+meupetfofooficial
+mundopetvideos
+outpaws.us
+justdodealsfinds
