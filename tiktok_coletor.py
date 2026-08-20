@@ -672,7 +672,30 @@ def _identificar_produto(desc: str):
 _STOP_REL = {"portatil", "eletrico", "eletrica", "eletronico", "eletronica",
              "automatico", "automatica", "digital", "profissional", "grande",
              "pequeno", "pequena", "completo", "completa", "casual", "facil",
-             "mini", "para", "com", "the", "and"}
+             "mini", "para", "com", "the", "and",
+             # ⚠️ MATERIAL E EMBALAGEM ENTRARAM EM 20/08 — foi o que deixou
+             # passar o pior match da rodada do Dre:
+             #
+             #   termo  'Conjunto de Panelas de Aço Inoxidável'
+             #   Shopee 'Kit De Sortimento De Arruela Plana De Aço Inoxidável'
+             #
+             # A trava pedia UMA palavra em comum de 4+ letras, e as duas
+             # dividem "inoxidavel". Só que material não identifica produto:
+             # panela e arruela são de aço inox do mesmo jeito. Com estas na
+             # lista, a coincidência precisa cair no substantivo — 'panelas'
+             # contra 'arruela' — e o link errado morre.
+             #
+             # O vídeo dizia panelas e o link vendia arruela. Isso é pior que
+             # não ter link: queima o clique e a confiança de quem clicou.
+             "inoxidavel", "inox", "aluminio", "plastico", "silicone",
+             "metal", "metalico", "vidro", "ceramica", "madeira", "couro",
+             "tecido", "algodao", "poliester", "borracha", "acrilico",
+             "kit", "conjunto", "sortimento", "pacote", "unidades", "unidade",
+             "pecas", "peca", "jogo", "combo",
+             "original", "premium", "novo", "nova", "luxo", "super", "ultra",
+             "qualidade", "resistente", "antiderrapante",
+             "preto", "preta", "branco", "branca", "azul", "rosa", "verde",
+             "vermelho", "vermelha", "dourado", "dourada", "prata", "cinza"}
 
 
 def _sem_acento(s: str) -> str:
@@ -1270,6 +1293,21 @@ def main():
         _salvar_produtos_vistos(produtos_vistos)
     _atualizar_saude_e_podar(perfis, keepers, dry)   # poda por coleta (zumbis/429)
     _relatorio_views()
+    if dry and any(f == "instagram" for _, f, _ in perfis):
+        # ⚠️ O --dry NÃO É PRÉVIA FIEL PRO INSTAGRAM, e isso enganou o Dre (e
+        # a mim) em 20/08. A visão só roda quando `not dry`:
+        #
+        #     usar_visao = _visao_ativa() and not dry and (...)
+        #
+        # e pro IG a legenda é HOOK, não produto. Sem visão, o termo cai na
+        # heurística de legenda e sai lixo — 'THRU', 'VQJN', 'amo HVSZ',
+        # 'Wait Iron Man core can'. Numa rodada de verdade esses vídeos ou
+        # ganham nome de produto pela visão, ou são descartados (`termo = ""`).
+        # Nenhum deles viraria post com esse nome.
+        _log("⚠️  --dry: a VISÃO não roda, então os nomes de produto do "
+             "Instagram vieram da legenda (que é hook) e saem tortos de "
+             "propósito. Numa rodada real a visão nomeia ou descarta. Use o "
+             "--dry pra ver VIEWS e FONTES, não pra julgar nome de produto.")
     _log(f"fim. {achados} produto(s) casado(s) na Shopee "
          f"{'(dry — nada baixado, cache intacto)' if dry else ''}")
     return 0

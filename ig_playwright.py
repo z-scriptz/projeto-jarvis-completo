@@ -469,7 +469,11 @@ def _views_para_int(v) -> int:
     except ValueError:
         return 0
     mult = {"K": 1e3, "MIL": 1e3, "M": 1e6, "MI": 1e6, "B": 1e9}[sufixo]
-    return int(n * mult)
+    # ⚠️ round, não int. `int(4.1 * 1e6)` = 4.099.999, porque 4.1 não existe
+    # exato em binário e o int() TRUNCA. Apareceu na saída do Dre em 20/08:
+    # '4,1 mi' virou 4.099.999 enquanto '20,2 mi' e '3,1 mi' saíram certos —
+    # erro que só aparece em alguns números, que é o tipo que passa batido.
+    return round(n * mult)
 
 
 if __name__ == "__main__":
