@@ -715,8 +715,39 @@ Nas três eu li "o menu não está na lista" como "o menu não abriu".
 **A regra que fica:** quando o diagnóstico e a tela discordam, **o suspeito é o
 diagnóstico**. O que destravou foi sempre print do Dre, nunca dedução minha.
 
-⚠️ **Ainda não é uma mensagem só:** a foto e o texto chegam como DUAS
-mensagens. O ideal é a legenda dentro da prévia da foto. Pendente.
+**E depois FOTO + LEGENDA NUMA MENSAGEM SÓ.** A caixa de legenda estava sendo
+morta pelo meu próprio filtro:
+
+```
+<div data-tab='undefined'  rótulo='Digite uma mensagem'          y=713  ← LEGENDA
+<div data-tab='10'         rótulo='Digite uma mensagem para o…'  y=811  ← conversa
+```
+
+Eu excluía todo campo com `"digite uma mensagem"` pra pular a caixa da
+conversa — **e a legenda tem o mesmo rótulo**. O discriminador é o `data-tab`.
+Encadeado, um segundo: o `_focar_legenda` procurava `legenda`/`caption`,
+palavras que essa caixa não tem, então nem focaria.
+
+⚠️ **O PADRÃO DE TODAS AS FALHAS DO DIA, num só lugar:** eu filtrava por um
+atributo que o elemento não tinha (menu de anexo), ou excluía por um atributo
+que ele tinha em comum com outro (legenda). Nas duas, a tela mostrava a
+verdade e o meu código dizia "não existe".
+
+### 👁️ VIGIA NO AR (cron 9h) E ENDURECIDO
+
+Ligado no cron. Ganhou no mesmo dia: idade do vídeo inspecionado (senão
+carimba ✓ em vídeo velho pra sempre), **proveniência da referência** (enquanto
+um humano não confirma, "igual à referência" sai como 🕶 e não como ✓), e o
+**vigia vigiando o vigia** — ele nota o próprio buraco quando volta, e a
+`revisao_geral` olha a idade do histórico DE FORA, porque a falha do vigia não
+pode ser invisível pelo critério do próprio vigia.
+
+⚠️ **Achado que ficou aberto:** 2 posts do `@topshopcasa_` sem legenda. O log
+prova que a legenda FOI enviada (500–950 caracteres, nenhuma linha `VAZIA`),
+então "mandamos vazio" está descartado. O Dre diz que são posts antigos; a
+janela do vigia anda pra frente e um deles apareceu só na 2ª execução do dia,
+o que não bate. O vigia agora reporta a HORA de cada um — a próxima execução
+resolve sozinha, sem investigação.
 
 ### 📱 WHATSAPP: A FOTO SAIU, FICOU SÓ O LINK
 
