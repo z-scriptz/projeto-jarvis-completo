@@ -524,6 +524,75 @@ Ex.: "O segredo pra ter um iPhone 17 sem gastar / uma fortuna ✨".
 
 ## 🗓️ Dia 2026-08-19 — o selo entrava no nome, e eu li o log em vez do vídeo
 
+### 👁️ O VIGIA NASCEU, E ACHOU COISA NA PRIMEIRA EXECUÇÃO
+
+O Dre: *"não consigo ficar observando as 6 contas todos os dias... pode
+acontecer de eu ficar 3-4-5 dias sem entrar, e nesse intervalo acontece algo
+que muda a conta totalmente"*. Nasceu o `vigia.py` — 4 camadas (pixel do
+cabeçalho · publicado via Graph API · série vs. ontem · `revisao_geral`
+reaproveitada), recado diário no Telegram, **não conserta nada**.
+
+O desenho vem do bug do selo, do mesmo dia: um vigia feito de LOG teria
+falhado igual a mim. Por isso a camada 1 abre o vídeo e olha o pixel — e
+procura **mudança**, não defeito conhecido, porque não dá pra enumerar antes o
+defeito que ainda não aconteceu.
+
+**Medido:** hook trocado inteiro = `0.000%` de diferença (não acusa) · selo
+movido 20px = `1.419%`, 4× a tolerância (acusa). A faixa é **derivada** de
+`LOGO_Y`/`LOGO_TAM` (o hook começa em `logo_y+logo_tam+20`); uma faixa fixa
+pegaria o hook e daria alarme falso diário — que é a única forma de um vigia
+morrer sem ninguém desligar.
+
+**O nível 🕶️ CEGO** distingue "conferi e está ok" de "não consegui conferir".
+Vigia 100% cego manda *"EU ESTOU CEGO"*, não *"nada mudou"*.
+
+**O que ele achou na 1ª execução (20/08, 00:09):**
+
+| achado | o que é |
+|---|---|
+| ✗ `@topshopcasa_` 1 post **SEM LEGENDA** | `instagram.com/reel/DcKBRpvDVdZ/` |
+| ⚠ `@topshoppet_` e `@topshopmoda_` | nenhum post em 3 dias |
+| 377 pacotes prontos | 143 geral · 105 tech · 75 beleza · 54 casa · **0 pet · 0 moda** |
+| `publicados.jsonl` NÃO EXISTE | o `ledger_publicados` nunca rodou |
+| `metricas_posts.jsonl` | 133 linhas, parado há **11 dias** |
+
+⚠️ **Correção minha:** eu disse que o `contas.json` tinha 4 contas — isso era o
+espelho achatado. **Na VPS tem as 6**, todas com `ig_user_id` e token.
+
+### 🐕 PET E MODA NÃO EXISTIAM NO ROTEADOR (a causa dos 0 pacotes)
+
+`_NICHOS_VALIDOS` era `("beleza","tech","casa","geral")`. Nem a lista de
+palavras nem o prompt do Gemini conheciam pet e moda — **caminha de cachorro e
+bolsa viravam 'geral'**. As contas existiam há semanas e nada podia rotear pra
+elas. Adicionar fonte de pet sem isto pareceria progresso e não moveria um
+vídeo sequer.
+
+Criados `_PET` e `_MODA`. **A ORDEM das listas é a regra de desempate**, e cada
+posição tem motivo:
+
+| posição | por quê |
+|---|---|
+| **PET primeiro** | "shampoo para cachorro" bateria em `shampoo` (beleza) |
+| **TECH antes de MODA** | "relógio **inteligente**" é tech; MODA tem `relogio` cru |
+| **CASA antes de MODA** | "cesto de **roupa**" e "**roupa** de cama" são casa |
+
+Medido em **26 casos**, os empates de propósito. O único erro da 1ª rodada:
+`"Jogo de Roupa de Cama Casal" → moda`, porque `"jogo de cama"` não é
+substring contígua de `"jogo de roupa de cama"` — CASA não casava e o `roupa`
+cru de MODA levava. Corrigido com `roupa de cama/banho/mesa` explícitos.
+**26/26.**
+
+### 📥 18 FONTES NOVAS DE IG, SEM TAG DE NICHO
+
+O Dre: *"como o seletor é por nicho, cada vídeo pode ser pra uma conta
+diferente; se nos perfis abaixo tiver algo referente a tecnologia, o vídeo vai
+pra tecnologia"*. Por isso **nenhuma leva `#nicho`**: sem tag o
+`_perfis_do_arquivo` devolve `''` e quem decide é o roteador, produto a
+produto. `#pet` mandaria todo vídeo do `descontopets` pro `@topshoppet_`,
+inclusive a câmera de segurança do meio. 19 → **37 perfis**.
+
+
+
 ### 🎯 O SELO VERIFICADO POUSAVA EM CIMA DA ÚLTIMA LETRA
 
 O Dre: *"o verificado da conta tá entrando nos nomes tudo"* e, quando eu
