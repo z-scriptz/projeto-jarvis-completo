@@ -674,6 +674,50 @@ o meu número diz o contrário, **o número é que está medindo a coisa errada*
 Log consistente não é log correto. Renderizar os dois casos e OLHAR custou 10
 minutos e resolveu o que duas rodadas de aritmética não resolveram.
 
+### ✅ 20/08 — A FOTO SAIU NO GRUPO. A CAUSA ERA A PORTA, NÃO O PACOTE.
+
+Sete rodadas. O que resolveu:
+
+```
+✅ O SELETOR DE ARQUIVO ABRIU (cliquei em 'Fotos e vídeos')
+   aceita vários arquivos: True
+```
+
+**A causa real:** clicar em "Fotos e vídeos" abre o **diálogo de arquivo do
+sistema**. O navegador cria o `input`, dispara o clique nele e **o descarta no
+mesmo instante**. O único `input[type=file]` que FICA na página é o da
+**figurinha** — então todo `set_input_files` acertava a porta errada.
+
+A correção é `pagina.expect_file_chooser()`, que intercepta o diálogo nativo.
+
+**As seis teorias que eu queimei antes, todas erradas pelo mesmo motivo** — as
+seis eram sobre *o quê* eu mandava, nenhuma sobre *por onde*:
+
+| # | teoria | como morreu |
+|---|---|---|
+| 1 | é o formato do arquivo | converti tudo pra JPEG → sticker igual |
+| 2 | é a tecla Enter | troquei pelo botão → sticker igual |
+| 3 | o input nasce sob demanda | nasce, mas some no mesmo instante |
+| 4 | o menu não abre pra automação | abre — o print provou |
+| 5 | o seletor do menu está errado | estava certo desde o início |
+| 6 | o rótulo da opção é outro | era 'Fotos e vídeos' mesmo |
+
+⚠️ **E TRÊS VEZES A MINHA PRÓPRIA FERRAMENTA DE DIAGNÓSTICO ESCONDEU A
+EVIDÊNCIA**, na mesma investigação:
+
+1. `slice(0, 20)` — a barra lateral enchia as 20 vagas
+2. ler só `aria-label` — teoria minha, e **o dado derrubou**: os itens têm
+   `aria-label` sim
+3. `slice(0, 60)` **antes** do filtro — o menu fica na posição ~75 do DOM
+
+Nas três eu li "o menu não está na lista" como "o menu não abriu".
+
+**A regra que fica:** quando o diagnóstico e a tela discordam, **o suspeito é o
+diagnóstico**. O que destravou foi sempre print do Dre, nunca dedução minha.
+
+⚠️ **Ainda não é uma mensagem só:** a foto e o texto chegam como DUAS
+mensagens. O ideal é a legenda dentro da prévia da foto. Pendente.
+
 ### 📱 WHATSAPP: A FOTO SAIU, FICOU SÓ O LINK
 
 Depois de **seis** tentativas de anexar foto (todas viraram FIGURINHA), o
