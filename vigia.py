@@ -531,13 +531,29 @@ def olhar_publicado(dias=3):
             _diz(ALERTA, A, f"{handle}: NENHUM post nos últimos {dias} dia(s)")
             continue
 
-        sem_legenda = [m for _, m in recentes
+        sem_legenda = [(q, m) for q, m in recentes
                        if not (m.get("caption") or "").strip()]
         if sem_legenda:
             # o Dre pediu isto com todas as letras: "legenda não saiu"
+            #
+            # ⚠️ REPORTA A HORA, não só o link (20/08). O `meta_uploader` grava
+            # "📝 legenda p/ Instagram: N caractere(s)" ANTES de enviar, desde
+            # 15/08. Com a hora do post dá pra cruzar as duas pontas e separar
+            # duas causas que ficam em lugares opostos:
+            #
+            #   log diz 0 caractere(s)  → a legenda não chegou a ser montada
+            #   log diz 800 e o post    → mandamos e a Meta descartou
+            #   está sem               (ou este vigia está lendo errado)
+            #
+            # Sem a hora, o achado é verdadeiro e inútil: aponta o problema e
+            # não deixa ninguém agir. Foi o que aconteceu hoje.
+            det = " · ".join(
+                f"{q:%d/%m %H:%M} {str(m.get('permalink',''))[-14:]}"
+                for q, m in sem_legenda[:4])
             _diz(FALHA, A,
                  f"{handle}: {len(sem_legenda)} post(s) SEM LEGENDA",
-                 " · ".join(str(m.get("permalink", ""))[:60] for m in sem_legenda[:3]))
+                 det + "  → cruze com: grep 'legenda p/ Instagram' "
+                       "logs/agente.log")
         else:
             _diz(OK, A, f"{handle}: {len(recentes)} post(s) em {dias}d, todos com legenda")
 
