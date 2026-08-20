@@ -1786,6 +1786,75 @@ _DIAG_JS = """
 """
 
 
+_JS_CLICAR_ANEXO = """
+() => {
+  // O '+' e um SPAN de 24x24 (medido no despejo de 20/08). Quem escuta o
+  // clique e o BOTAO em volta dele, nao o icone. Clicar no span pode nao
+  // acionar nada — foi a diferenca que nunca tinha sido testada.
+  const alvo = document.querySelector(
+      "[data-testid='plus-rounded'],span[data-icon='plus-rounded']," +
+      "span[data-icon='clip'],span[data-icon='attach-menu-plus']");
+  if (!alvo) return {ok: false, motivo: 'nao achei o icone do +'};
+  const bt = alvo.closest("button,[role='button'],div[tabindex]") || alvo;
+  const r = bt.getBoundingClientRect();
+  return {
+    ok: true,
+    tag: bt.tagName.toLowerCase(),
+    igual_ao_icone: bt === alvo,
+    rotulo: (bt.getAttribute('aria-label') || bt.getAttribute('title') || ''),
+    x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2),
+    w: Math.round(r.width), h: Math.round(r.height),
+  };
+}
+"""
+
+
+def _clicar_anexo(pagina) -> str:
+    """Clica no '+' de anexo. Devolve o que clicou, ou '' se não achou.
+
+    ⚠️ POR QUE ISTO É DIFERENTE DAS SEIS TENTATIVAS ANTERIORES (20/08).
+    Até agora eu clicava no elemento que o seletor devolvia — e o despejo do
+    rodapé finalmente mostrou o que ele é:
+
+        <span icone=plus-rounded testid=plus-rounded classe=xxk0z11 24x24>
+
+    Um SPAN de 24x24. É o ícone dentro do botão, não o botão. Playwright
+    clica no centro do elemento que você der, e o handler pode estar no
+    ancestral — então seis rodadas de "cliquei no + e o menu não abriu"
+    podem ter sido seis cliques no lugar certo da tela e no elemento errado
+    da árvore.
+
+    Isto não é certeza; é a primeira hipótese em muito tempo que nasce de
+    MEDIÇÃO e não de palpite. Por isso o clique usa coordenada real (mouse),
+    que é o que mais se parece com gente, e o log diz se o ancestral era
+    diferente do ícone — se for igual, esta teoria morre e a gente para de
+    insistir no anexo.
+    """
+    try:
+        d = pagina.evaluate(_JS_CLICAR_ANEXO)
+    except Exception as e:
+        _log(f"   não consegui localizar o '+': {str(e)[:60]}")
+        return ""
+    if not d or not d.get("ok"):
+        _log(f"   {(d or {}).get('motivo', 'não achei o +')}")
+        return ""
+    if d.get("igual_ao_icone"):
+        _log("   ⚠️ o ícone NÃO tem botão em volta — a teoria do ancestral "
+             "não se aplica aqui; se o menu não abrir, é outra coisa.")
+    else:
+        _log(f"   achei o botão em volta do ícone: <{d['tag']}> "
+             f"{d['w']}x{d['h']} rótulo={d['rotulo']!r}")
+    try:
+        # clique por COORDENADA: mais parecido com gente que element.click(),
+        # e não depende de qual nó da árvore o Playwright escolhe
+        pagina.mouse.click(d["x"], d["y"])
+        pagina.wait_for_timeout(1600)
+        return f"<{d['tag']}> em ({d['x']},{d['y']})"
+    except Exception as e:
+        _log(f"   o clique falhou: {str(e)[:60]}")
+        return ""
+
+
 def diag_anexo():
     """Abre o menu de anexo no grupo e mostra o que aparece. NÃO ENVIA NADA.
 
@@ -1832,17 +1901,7 @@ def diag_anexo():
             if not antes:
                 _log("   (nenhum input de arquivo)")
 
-            aberto = ""
-            for s in SEL_BOTAO_ANEXO:
-                try:
-                    b = pagina.query_selector(s)
-                    if b and b.is_visible():
-                        b.click(timeout=4000)
-                        pagina.wait_for_timeout(1500)
-                        aberto = s
-                        break
-                except Exception:
-                    continue
+            aberto = _clicar_anexo(pagina)
             print()
             _log(f"=== DEPOIS de clicar no anexo ({aberto or 'NÃO ACHEI O +'}) ===")
             if not aberto:
