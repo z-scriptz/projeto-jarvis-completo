@@ -288,7 +288,7 @@ def _lado_a_lado(antes: Path, depois: Path, saida: Path) -> bool:
 
 
 def _pacotes() -> list:
-    """(slug, video, conta) de cada pacote pronto, do mais novo pro mais velho."""
+    """(slug, video, conta, mtime) de cada pacote pronto, do mais novo pro velho."""
     if not PRONTO.exists():
         return []
     fora = []
@@ -303,7 +303,40 @@ def _pacotes() -> list:
         except Exception:
             continue
     fora.sort(key=lambda x: -x[3])
-    return [(s, v, c) for s, v, c, _ in fora]
+    return fora
+
+
+# Acima disto, o vídeo mais novo da conta é velho demais pra dizer alguma
+# coisa sobre o estado de HOJE.
+DIAS_PRA_VELHO = float(os.environ.get("VIGIA_DIAS_PRA_VELHO", "3"))
+
+
+def _prov(ref: Path) -> Path:
+    return ref.with_suffix(".json")
+
+
+def _gravar_proveniencia(ref: Path, slug: str, humano: bool):
+    """De ONDE veio esta referência, e se alguém de carne e osso olhou.
+
+    ⚠️ ESTE É O CALCANHAR DE AQUILES DO VIGIA e ele foi apontado antes de
+    virar problema: *"se alguma daquelas 4 estiver com o cabeçalho torto, ele
+    passa a defender o defeito como se fosse o normal"*. Uma referência criada
+    sozinha não é verdade — é só a primeira coisa que ele viu. Enquanto
+    ninguém confirmar, todo "✓ igual à referência" daquela conta vale menos, e
+    o recado tem que dizer isso em vez de exibir um check verde."""
+    agora = datetime.now().isoformat(timespec="seconds")
+    antes = _json_de(_prov(ref), {}) or {}
+    dados = {
+        "criada": antes.get("criada") or agora,
+        "video": slug,
+        "confirmada_por_humano": bool(humano),
+        "confirmada_em": agora if humano else antes.get("confirmada_em"),
+    }
+    try:
+        _prov(ref).write_text(json.dumps(dados, ensure_ascii=False, indent=2),
+                              encoding="utf-8")
+    except Exception:
+        pass
 
 
 def _slug_conta(conta: str) -> str:
@@ -331,11 +364,11 @@ def olhar_pixel(aprovar=False, quantos=1):
     # um vídeo por conta (o mais novo) — o objetivo é flagrar mudança de
     # template, e pra isso um vídeo por conta basta e é barato
     por_conta, vistos = [], set()
-    for slug, video, conta in pacotes:
+    for slug, video, conta, quando in pacotes:
         if conta in vistos:
             continue
         vistos.add(conta)
-        por_conta.append((slug, video, conta))
+        por_conta.append((slug, video, conta, quando))
         if len(por_conta) >= 12:
             break
 
@@ -343,11 +376,23 @@ def olhar_pixel(aprovar=False, quantos=1):
     (CASA / "recortes").mkdir(exist_ok=True)
     conferidos = 0
 
-    for slug, video, conta in por_conta:
+    for slug, video, conta, quando in por_conta:
         chave = _slug_conta(conta)
         tmp = CASA / "recortes" / f"_quadro_{chave}.png"
         atual = CASA / "recortes" / f"atual_{chave}.png"
         ref = CASA / f"referencia_{chave}.png"
+
+        # ⚠️ "IGUAL À REFERÊNCIA" NUM VÍDEO VELHO NÃO É NOTÍCIA DE HOJE.
+        # `_pacotes` devolve o mais novo de cada conta. Se a produção parar, o
+        # mais novo continua sendo o mesmo arquivo, e esta camada carimbaria ✓
+        # todo dia com base num vídeo de uma semana atrás. Seria o defeito que
+        # este arquivo existe pra combater — silêncio parecendo saúde — dentro
+        # do próprio vigia.
+        dias = (datetime.now().timestamp() - quando) / 86400
+        if dias > DIAS_PRA_VELHO:
+            _diz(ALERTA, A, f"{conta}: o vídeo mais novo tem {dias:.0f} dias",
+                 f"confiro o template dele mesmo assim, mas isso não diz nada "
+                 f"sobre hoje — a produção desta conta parou?")
 
         if not _quadro(ff, video, tmp):
             _diz(CEGO, A, f"{conta}: não consegui extrair quadro de '{slug[:34]}'")
@@ -368,8 +413,9 @@ def olhar_pixel(aprovar=False, quantos=1):
             except Exception as e:
                 _diz(CEGO, A, f"{conta}: não consegui gravar a referência: {str(e)[:50]}")
                 continue
+            _gravar_proveniencia(ref, slug, humano=bool(aprovar))
             _diz(INFO if aprovar else CEGO, A,
-                 f"{conta}: referência {'atualizada' if aprovar else 'criada agora'}"
+                 f"{conta}: referência {'CONFIRMADA por você' if aprovar else 'criada agora'}"
                  + ("" if aprovar else " — só comparo a partir do próximo vídeo"),
                  f"veja se está do jeito certo: {ref}")
             continue
@@ -381,10 +427,19 @@ def olhar_pixel(aprovar=False, quantos=1):
             _diz(CEGO, A, f"{conta}: comparação falhou: {str(e)[:60]}")
             continue
 
+        confirmada = bool((_json_de(_prov(ref), {}) or {}).get("confirmada_por_humano"))
         if pct < 0:
             _diz(CEGO, A, f"{conta}: não consegui comparar o cabeçalho")
         elif pct <= TOLERANCIA_PCT:
-            _diz(OK, A, f"{conta}: cabeçalho igual à referência ({pct:.2f}%)")
+            # "igual à referência" só vale o que a referência vale
+            if confirmada:
+                _diz(OK, A, f"{conta}: cabeçalho igual à referência ({pct:.2f}%)")
+            else:
+                _diz(CEGO, A,
+                     f"{conta}: igual a uma referência que ninguém conferiu",
+                     f"eu me criei sozinho a partir de um vídeo. Se ele já "
+                     f"estava torto, estou defendendo o defeito. Olhe {ref.name} "
+                     f"e rode: vigia.py --aprovar")
         else:
             comp = CASA / "recortes" / f"mudou_{chave}.png"
             tem = _lado_a_lado(ref, atual, comp)
@@ -542,6 +597,23 @@ def olhar_serie(foto: dict):
     except Exception:
         horas = 0
     desde = f"desde a última olhada ({horas:.0f}h atrás)" if horas else "desde a última olhada"
+
+    # ⚠️ O VIGIA VIGIANDO O PRÓPRIO VIGIA.
+    # O pior cenário de todos não é o vigia achar algo errado: é ele PARAR e
+    # todo mundo continuar achando que está sendo vigiado. Aí são 3, 4, 5 dias
+    # de problema sem ninguém olhar — o cenário exato que ele foi feito pra
+    # impedir, agora com uma falsa sensação de cobertura por cima.
+    #
+    # Isto aqui é o que dá pra fazer de dentro: quando ele volta a rodar,
+    # percebe o buraco e conta. Não cobre "parou e nunca mais rodou" — pra
+    # isso a `revisao_geral` ganhou um bloco que olha a idade deste arquivo de
+    # fora. Duas checagens fracas em lugares diferentes valem mais que uma
+    # forte que mora dentro do que ela deveria auditar.
+    esperado = float(os.environ.get("VIGIA_INTERVALO_H", "24"))
+    if horas > esperado * 1.5:
+        _diz(FALHA, A, f"EU FIQUEI {horas:.0f}h SEM RODAR (o normal é {esperado:.0f}h)",
+             "o cron falhou ou a máquina ficou fora. Neste intervalo ninguém "
+             "estava olhando as contas — e o silêncio parecia saúde.")
 
     prod = foto["ledger_total"] - int(ant.get("ledger_total", 0) or 0)
     if prod <= 0 and horas >= 20:

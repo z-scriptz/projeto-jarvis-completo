@@ -591,12 +591,68 @@ def bloco_logs():
         _diz(OK, B, f"{len(arqs)} log(s), nenhum erro nas últimas 24h")
 
 
+def bloco_vigia():
+    """O VIGIA AINDA ESTÁ VIVO? — checagem DE FORA, e é por isso que ela mora
+    aqui e não dentro dele.
+
+    O vigia sabe dizer "fiquei 30h sem rodar" quando volta a rodar. Não sabe
+    dizer nada quando simplesmente parou: cron quebrado, venv movido, disco
+    cheio. Nesse caso o Telegram fica quieto, e quieto é exatamente o que um
+    dia bom também parece. Quem está 5 dias fora não distingue os dois.
+
+    Então a auditoria do auditor mora em outro arquivo, que roda por outro
+    caminho. Não é redundância à toa: é a única forma de a falha do vigia não
+    ser invisível pelo próprio critério do vigia.
+    """
+    B = "vigia"
+    hist = RAIZ / "shared" / "vigia" / "historico.jsonl"
+    if not hist.exists():
+        _diz(ALERTA, B, "o vigia nunca rodou (sem historico.jsonl)",
+             "rode: .venv/bin/python vigia.py --telegram")
+        return
+    horas = (time.time() - hist.stat().st_mtime) / 3600
+    esperado = float(os.environ.get("VIGIA_INTERVALO_H", "24"))
+    if horas > esperado * 2:
+        _diz(FALHA, B, f"o vigia não roda há {horas:.0f}h "
+                       f"(devia ser a cada {esperado:.0f}h)",
+             "ninguém está olhando as contas, e o silêncio no Telegram parece "
+             "dia bom. Confira o cron e o log em logs/vigia.log")
+    elif horas > esperado * 1.25:
+        _diz(ALERTA, B, f"o vigia está atrasado ({horas:.0f}h)")
+    else:
+        _diz(INFO, B, f"vigia rodou há {horas:.0f}h")
+
+    casa = RAIZ / "shared" / "vigia"
+    refs = list(casa.glob("referencia_*.png"))
+    if not refs:
+        _diz(ALERTA, B, "nenhuma referência de cabeçalho — a camada do pixel "
+                        "não compara nada")
+        return
+    naoconf = []
+    for r in refs:
+        p = r.with_suffix(".json")
+        try:
+            d = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            d = {}
+        if not d.get("confirmada_por_humano"):
+            naoconf.append(r.stem.replace("referencia_", ""))
+    if naoconf:
+        # referência que ninguém olhou pode ser um defeito promovido a normal
+        _diz(ALERTA, B, f"{len(naoconf)} referência(s) nunca conferida(s) por "
+                        f"um humano", ", ".join(naoconf[:6])
+             + " — se alguma já estava torta, o vigia defende o defeito. "
+               "Olhe os PNG e rode: vigia.py --aprovar")
+    else:
+        _diz(INFO, B, f"{len(refs)} referência(s), todas confirmadas")
+
+
 BLOCOS = [
     ("ambiente", bloco_ambiente), ("env", bloco_env), ("git", bloco_git),
     ("fila", bloco_fila), ("esteira", bloco_esteira),
     ("render", bloco_renders), ("contas", bloco_contas), ("site", bloco_site),
     ("serviços", bloco_servicos), ("travas", bloco_travas),
-    ("logs", bloco_logs),
+    ("logs", bloco_logs), ("vigia", bloco_vigia),
 ]
 
 
