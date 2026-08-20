@@ -1261,7 +1261,17 @@ def _dump_botoes(pagina, motivo: str):
             // Perfil…) vem PRIMEIRO no DOM e já enche as 20 vagas — o menu de
             // anexo, que abre perto da caixa de mensagem, nunca aparecia na
             // lista. Eu li "só tem a barra lateral" como "o menu não abriu".
-            .slice(0, 60)
+            // ⚠️ FILTRA ANTES DE CORTAR. Antes o .slice vinha primeiro e
+            // cortava os ELEMENTOS BRUTOS: barra lateral, cabeçalho e painel
+            // do grupo enchiam as vagas, e o menu de anexo — que vem depois no
+            // DOM — nunca entrava. Eu lia a lista sem o menu e concluía que o
+            // menu não abriu, pela TERCEIRA vez nesta mesma investigação
+            // (antes: slice(0,20), depois: ler só aria-label).
+            .filter(e => (e.getAttribute("data-icon") ||
+                          e.getAttribute("aria-label") ||
+                          e.getAttribute("title") ||
+                          (e.innerText || "").trim()))
+            .slice(0, 140)
             .map(e => ({
               tag: e.tagName.toLowerCase(),
               icone: e.getAttribute("data-icon") || "",
@@ -1495,121 +1505,50 @@ def _enviar_com_foto(pagina, foto: Path, legenda: str) -> bool:
     arquivo pode ter sido anexado mas nada foi enviado — aí eu tiro o print,
     fecho a prévia com Escape e devolvo False pro texto seguir.
     """
-    def _pegar_input():
-        """O input de FOTOS E VÍDEOS — não o de figurinha.
-
-        ⚠️ A CAUSA REAL DA FIGURINHA (19/08, 4ª tentativa). O menu de anexo do
-        WhatsApp novo tem entradas separadas: *Fotos e vídeos*, *Documento*,
-        *Figurinha*. Cada uma tem o SEU `input[type=file]`, e todos casam com
-        `accept*='image'`. Pegando o primeiro, a gente caía no de FIGURINHA —
-        e isso explica os três sintomas de uma vez: o editor era o de sticker
-        (por isso 'Contorno', que é recorte de figurinha), figurinha não tem
-        campo de legenda, e o envio saía sticker com tecla OU com botão.
-        Eu culpei o formato do arquivo e depois a tecla Enter; os dois estavam
-        errados porque o arquivo entrava pela porta errada.
-
-        O discriminador é o próprio `accept`: o input de foto aceita VÍDEO
-        junto; o de figurinha, não.
-        """
-        try:
-            achados = pagina.evaluate("""
-            () => Array.from(document.querySelectorAll("input[type='file']"))
-                   .map((e, i) => ({i, accept: e.getAttribute("accept") || ""}))
-            """) or []
-        except Exception:
-            achados = []
-
-        if achados:
-            _log(f"   {len(achados)} input(s) de arquivo na página:")
-            for a in achados:
-                _log(f"     [{a['i']}] accept={a['accept'][:70]!r}")
-
-        # 1) o que aceita vídeo é o de "Fotos e vídeos"
-        for a in achados:
-            if "video" in a["accept"].lower():
-                el = pagina.query_selector_all("input[type='file']")[a["i"]]
-                _log(f"     → uso o [{a['i']}] (aceita vídeo = Fotos e vídeos)")
-                return el
-        # 2) sem nenhum com vídeo, evito ao menos o que só aceita webp/png
-        #    (cara de input de figurinha)
-        for a in achados:
-            acc = a["accept"].lower()
-            if "image" in acc and "webp" not in acc:
-                el = pagina.query_selector_all("input[type='file']")[a["i"]]
-                _log(f"     → uso o [{a['i']}] (imagem, sem cara de figurinha)")
-                return el
-
-        for s in SEL_ANEXO:
-            try:
-                el = pagina.query_selector(s)
-            except Exception:
-                el = None
-            if el:
-                _log("     → nenhum distinguível; caí no primeiro que casou "
-                     "(pode ser o de FIGURINHA)")
-                return el
-        return None
-
-    # ⚠️ O CLIQUE NO MENU É PLANO B, NÃO PLANO A — corrigido em 19/08 com o
-    # print que o Dre mandou. Eu tinha acabado de escrever que o input só é
-    # montado sob demanda; a captura de tela mostra a PRÉVIA ABERTA com a foto,
-    # ou seja, `set_input_files` no input direto FUNCIONA. Meu diagnóstico
-    # anterior estava errado, e forçar o menu antes só adicionaria um clique
-    # que pode abrir painel por cima do fluxo que já funciona.
-    # Só abro o menu se o input não estiver lá.
-    # ⚠️ ABRIR O MENU SEMPRE, E ESCOLHER "FOTOS E VÍDEOS" (19/08, 5ª volta).
-    # O log fechou o caso: a página tem UM input só, `accept='image/*'` — sem
-    # vídeo, ou seja, o de FIGURINHA. O input de fotos não está montado; ele
-    # só nasce quando se clica na opção "Fotos e vídeos" dentro do menu do
-    # `+`. Eu tinha deixado o clique no menu como plano B, e como um input É
-    # encontrado (o errado), o menu nunca abria. Plano B que nunca roda é
-    # código morto — e aqui era o código que resolvia.
-    campo = None
-    for s in SEL_BOTAO_ANEXO:
-        try:
-            b = pagina.query_selector(s)
-            if not b or not b.is_visible():
-                continue
-            b.click(timeout=4000)
-            pagina.wait_for_timeout(1200)
-            _log(f"   menu de anexo aberto ({s})")
-            break
-        except Exception:
-            continue
-    else:
+    # ⚠️ HISTÓRICO DE SEIS DIAGNÓSTICOS ERRADOS MEUS, resumido pra ninguém
+    # repetir: (1) "é o formato do arquivo" — converti tudo pra JPEG, saiu
+    # sticker igual; (2) "é o Enter" — troquei pelo botão, sticker igual;
+    # (3) "o input só nasce sob demanda"; (4) "o menu não abre pra automação";
+    # (5) "o seletor do menu está errado"; (6) "o rótulo da opção é outro".
+    #
+    # A causa real: clicar em "Fotos e vídeos" abre o DIÁLOGO DE ARQUIVO DO
+    # SISTEMA. O input é criado, clicado e descartado no mesmo instante. O
+    # único `input[type=file]` que fica na página é o da FIGURINHA — então
+    # todo `set_input_files` acertava a porta errada, e nenhuma das seis
+    # teorias acima podia consertar isso, porque nenhuma era sobre a porta.
+    if not _clicar_anexo(pagina):
         _dump_botoes(pagina, "não achei o botão '+' de anexo")
-
-    # escolhe a entrada de FOTOS (não Documento, não Figurinha)
-    _escolhido = ""
-    for rot in ("Fotos e vídeos", "Photos & videos", "Fotos", "Photos",
-                "Galeria", "Gallery"):
-        try:
-            o = pagina.query_selector(f"[role='button']:has-text('{rot}'), "
-                                      f"li:has-text('{rot}'), "
-                                      f"div[role='menuitem']:has-text('{rot}')")
-            if o and o.is_visible():
-                o.click(timeout=4000)
-                pagina.wait_for_timeout(1200)
-                _escolhido = rot
-                _log(f"   escolhi '{rot}' no menu de anexo")
-                break
-        except Exception:
-            continue
-    if not _escolhido:
-        # ⚠️ não sigo calado: sem clicar em "Fotos e vídeos", o input que
-        # sobra é o de figurinha, e a foto sai como sticker de novo.
-        _dump_botoes(pagina, "menu aberto, mas não achei a opção de FOTOS")
-
-    campo = _pegar_input()
-    if not campo:
-        _log("   não achei onde anexar arquivo — mando sem foto")
-        _dump_botoes(pagina, "nenhum input[type=file] na tela")
         return False
 
+    # ⚠️ A FOTO ENTRA PELO SELETOR DE ARQUIVO, NÃO PELO input DO DOM.
+    #
+    # Esta é a correção da saga inteira (20/08). Clicar em "Fotos e vídeos"
+    # abre o diálogo de arquivo do SISTEMA: o navegador cria o input, dispara
+    # o clique nele e o descarta no mesmo instante. Procurar
+    # `input[type=file]` depois do clique só acha o da FIGURINHA, que é o
+    # único permanente — e foi exatamente por isso que toda foto virava
+    # sticker: eu anexava no único input que sobrava.
+    #
+    # `expect_file_chooser` intercepta o diálogo nativo. É a forma canônica do
+    # Playwright e não depende de o input existir no DOM.
     try:
-        campo.set_input_files(str(foto))
+        with pagina.expect_file_chooser(timeout=12000) as espera:
+            escolhido = _clicar_opcao(pagina, ROTULOS_FOTOS)
+            if not escolhido:
+                _dump_botoes(pagina, "menu aberto, mas não achei 'Fotos e vídeos'")
+        espera.value.set_files(str(foto))
+        _log(f"   foto entregue pelo seletor de arquivo (opção {escolhido!r})")
     except Exception as e:
-        _log(f"   falhei ao anexar ({str(e)[:60]}) — mando sem foto")
+        # ⚠️ NÃO cai no input do DOM como plano B. O que sobra ali é o da
+        # figurinha, e "tentar mesmo assim" foi o que produziu seis rodadas de
+        # sticker no grupo. Sem o caminho certo, manda só o texto — que
+        # funciona e não envergonha ninguém.
+        _log(f"   o seletor de arquivo não abriu ({str(e)[:60]}) — mando sem foto")
+        _dump_botoes(pagina, "expect_file_chooser falhou")
+        try:
+            pagina.keyboard.press("Escape")
+        except Exception:
+            pass
         return False
 
     # ⚠️ ESPERA PELA CAIXA DE LEGENDA, não por uma imagem. Ver o comentário do
@@ -1999,24 +1938,33 @@ def diag_anexo():
             # não têm aria-label nem title — foi por isso que o `:has-text`
             # dentro de `[role=button]/li/menuitem` não achou nada enquanto o
             # menu estava aberto na tela.
-            clicou = _clicar_opcao(pagina, ROTULOS_FOTOS)
-            if clicou:
-                print()
-                _log(f"=== DEPOIS de clicar em '{clicou}' ===")
-                fim = pagina.evaluate("""
-                () => Array.from(document.querySelectorAll("input[type='file']"))
-                       .map((e,i)=>({i, accept: e.getAttribute("accept")||""}))""")
-                for a in fim or []:
-                    marca = ("  ← ESTE é o de FOTO (aceita vídeo)"
-                             if "video" in a["accept"].lower() else
-                             "  ← este é o da FIGURINHA")
-                    _log(f"   input[{a['i']}] accept={a['accept'][:70]!r}{marca}")
-                if not any("video" in (a["accept"] or "").lower() for a in fim or []):
-                    _log("   ⚠️ nenhum input novo aceitando vídeo — clicou mas "
-                         "não montou o input de foto.")
-            else:
-                _log("   ⚠️ não achei a opção de FOTOS pelo texto. A lista acima "
-                     "agora mostra o TEXTO de cada item — me diga o rótulo certo.")
+            # ⚠️ NÃO PROCURE O input[type=file] DEPOIS DO CLIQUE. Ele não fica.
+            #
+            # Clicar em "Fotos e vídeos" abre o SELETOR DE ARQUIVO DO SISTEMA.
+            # O navegador cria o input, dispara o clique nele e o descarta no
+            # mesmo instante — por isso `querySelectorAll("input[type=file]")`
+            # depois do clique só encontra o da figurinha, que é permanente.
+            # Eu estava procurando um elemento que já não existia e concluindo
+            # "clicou mas não montou o input".
+            #
+            # O Playwright resolve isso com `expect_file_chooser`: ele
+            # INTERCEPTA o diálogo nativo. É a forma canônica, e funciona
+            # mesmo quando o input é transitório.
+            print()
+            _log("=== clicando em 'Fotos e vídeos' com o interceptador ligado ===")
+            try:
+                with pagina.expect_file_chooser(timeout=10000) as espera:
+                    clicou = _clicar_opcao(pagina, ROTULOS_FOTOS)
+                    if not clicou:
+                        _log("   ⚠️ não achei a opção pelo texto")
+                escolhedor = espera.value
+                _log(f"   ✅ O SELETOR DE ARQUIVO ABRIU (cliquei em {clicou!r})")
+                _log(f"      aceita vários arquivos: {escolhedor.is_multiple()}")
+                _log("      → é POR AQUI que a foto entra, e não pelo input do DOM")
+            except Exception as e:
+                _log(f"   ⚠️ nenhum seletor de arquivo em 10s: {str(e)[:70]}")
+                _log("      (se o clique não achou a opção, o problema é o "
+                     "rótulo; se achou e não abriu diálogo, é outra coisa)")
 
             pagina.keyboard.press("Escape")
             print()
