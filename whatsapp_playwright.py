@@ -840,7 +840,7 @@ def _abrir_grupo(pagina, grupo: str):
         item.click()
         _log("grupo aberto direto da lista (sem busca)")
         pagina.wait_for_timeout(1800)
-        return True
+        return _confere_conversa(pagina, grupo)
 
     busca = _achar_busca(pagina)
     if not busca:
@@ -855,7 +855,56 @@ def _abrir_grupo(pagina, grupo: str):
         return False
     item.click()
     pagina.wait_for_timeout(1800)
-    return True
+    return _confere_conversa(pagina, grupo)
+
+
+_JS_TITULO_CONVERSA = """
+() => {
+  const m = document.querySelector('#main') || document;
+  const h = m.querySelector('header');
+  return h ? (h.innerText || '').trim().slice(0, 120) : '';
+}
+"""
+
+
+def _confere_conversa(pagina, grupo: str) -> bool:
+    """A conversa aberta é MESMO a do grupo? False quando é outra.
+
+    ⚠️ POR QUE ISTO EXISTE (20/08). O `_abrir_grupo` clicava num item da lista
+    e devolvia True sem olhar o que abriu. O risco não é a mensagem não sair —
+    é ela sair NO LUGAR ERRADO: um anúncio de afiliado caindo na conversa
+    privada de alguém, mandado por um robô, às 9 da manhã. Isso não dá pra
+    desfazer, e é muito pior que uma rodada perdida.
+
+    Regra: recuso quando tenho PROVA de que é outra conversa. Quando não
+    consigo ler o cabeçalho, aviso e sigo — o item da lista foi casado pelo
+    nome, então há evidência a favor, e travar tudo por um seletor que eu não
+    medi já custou seis rodadas nesta mesma tela.
+    """
+    try:
+        titulo = (pagina.evaluate(_JS_TITULO_CONVERSA) or "").strip()
+    except Exception:
+        titulo = ""
+    if not titulo:
+        _log("   ⚠️ não consegui ler o cabeçalho da conversa — sigo, mas sem "
+             "conferir. (Se aparecer sempre, é seletor a corrigir.)")
+        return True
+    alvo = _sem_emoji(grupo).strip().lower()
+    visto = _sem_emoji(titulo).strip().lower()
+    if alvo and alvo.split("\n")[0] in visto:
+        _log(f"   ✔️ conversa conferida: {titulo.splitlines()[0][:48]!r}")
+        return True
+    caminho = _print_erro(pagina, f"abri a conversa ERRADA: {titulo[:60]!r}")
+    _avisar(f"WhatsApp: cliquei e abriu '{titulo.splitlines()[0][:60]}' em vez "
+            f"de '{grupo}'. NÃO mandei nada — mensagem em conversa errada não "
+            f"tem desfazer.", caminho)
+    return False
+
+
+def _sem_emoji(s: str) -> str:
+    """Só letras/números/espaço — o nome do grupo tem emoji e o cabeçalho pode
+    renderizar como imagem, então comparar cru daria falso negativo."""
+    return re.sub(r"[^\w\s]", " ", s or "", flags=re.U)
 
 
 def _fechar_modal(pagina, voltas: int = 3) -> int:
@@ -1243,6 +1292,19 @@ def _enviar_texto(pagina, texto: str) -> bool:
         if linha:
             pagina.keyboard.type(linha, delay=random.randint(25, 70))
 
+    # ⚠️ O TEXTO CAIU MESMO NA CAIXA? Em 20/08 o script disse "✅ enviei 1
+    # mensagem" e NADA chegou no grupo. `caixa.click()` + `keyboard.type` é fé:
+    # se o clique não deu foco (modal por cima, elemento errado, caixa de
+    # busca), as teclas vão pro vazio e ninguém percebe. Ler a caixa de volta
+    # custa uma chamada e transforma "achei que digitei" em "digitei".
+    escrito = _texto_da_caixa(pagina)
+    if not escrito:
+        _dump_botoes(pagina, "digitei e a caixa continuou vazia")
+        caminho = _print_erro(pagina, "o texto não entrou na caixa")
+        _avisar("WhatsApp: digitei e a caixa ficou vazia — o clique não pegou "
+                "foco. Nada foi enviado.", caminho)
+        return False
+
     # espera pelo RELÓGIO, não pelo seletor — SEL_PREVIA_LINK é palpite e só
     # entra no log. Se um dia o log mostrar que casa, aí sim vira espera de
     # verdade e o envio fica mais rápido.
@@ -1257,9 +1319,66 @@ def _enviar_texto(pagina, texto: str) -> bool:
     else:
         pagina.wait_for_timeout(random.randint(600, 1400))
 
-    pagina.keyboard.press("Enter")
-    pagina.wait_for_timeout(1500)
-    return True
+    # ⚠️ BOTÃO ANTES DA TECLA — a lição de 19/08, que eu não apliquei aqui.
+    # O `_enviar_com_foto` já tinha aprendido isso (commit 47d0963: "era o
+    # ENTER, não o formato"), e mesmo assim eu escrevi este caminho usando
+    # `keyboard.press("Enter")` porque era mais simples. Deu no mesmo: em
+    # 20/08 o log disse "✅ enviei" e o grupo não recebeu nada.
+    enviou_por = ""
+    for s in ("span[data-icon='send']",
+              "button[aria-label*='Enviar' i]",
+              "div[role='button'][aria-label*='Enviar' i]",
+              "span[data-icon='wds-ic-send-filled']",
+              "button[data-testid='send']"):
+        try:
+            b = pagina.query_selector(s)
+            if b and b.is_visible():
+                b.click(timeout=5000)
+                enviou_por = f"botão ({s})"
+                break
+        except Exception:
+            continue
+    if not enviou_por:
+        _dump_botoes(pagina, "não achei o botão de enviar")
+        pagina.keyboard.press("Enter")
+        enviou_por = "Enter (não achei o botão)"
+    pagina.wait_for_timeout(2000)
+
+    # ⚠️ A PROVA: A CAIXA ESVAZIOU?
+    # Mensagem enviada limpa a caixa. Se o texto ainda está lá, o clique/tecla
+    # não mandou nada — e é EXATAMENTE o que aconteceu em 20/08 sem ninguém
+    # ficar sabendo, porque a função devolvia True por ter apertado teclas.
+    #
+    # "Apertei o botão" não é "a mensagem saiu". Toda a sessão foi sobre isso:
+    # o selo cuja conta fechava consigo mesma, o filtro de views que não
+    # filtrava, o vigia que carimbava vídeo velho. Função que relata sucesso
+    # sem evidência é a mesma família.
+    for _ in range(10):
+        if not _texto_da_caixa(pagina):
+            _log(f"   ✔️ mensagem saiu ({enviou_por})")
+            return True
+        pagina.wait_for_timeout(500)
+
+    caminho = _print_erro(pagina, "a caixa não esvaziou — a mensagem NÃO saiu")
+    _avisar(f"WhatsApp: escrevi mas não consegui enviar ({enviou_por}). "
+            f"O texto ficou na caixa. Nada chegou no grupo.", caminho)
+    return False
+
+
+def _texto_da_caixa(pagina) -> str:
+    """O que está escrito na caixa de mensagem agora. '' quando vazia.
+
+    Serve pra duas perguntas opostas e igualmente importantes: 'o que eu
+    digitei entrou?' (antes de enviar) e 'saiu?' (depois). As duas eram fé
+    cega até 20/08."""
+    for s in SEL_CAIXA:
+        try:
+            e = pagina.query_selector(s)
+            if e and e.is_visible():
+                return (e.inner_text() or "").strip()
+        except Exception:
+            continue
+    return ""
 
 
 def _enviar_com_foto(pagina, foto: Path, legenda: str) -> bool:
