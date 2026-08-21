@@ -84,13 +84,35 @@ def _bateu(texto: str, gatilhos: list) -> bool:
     return any(g in t for g in gatilhos)
 
 
-# ── Respostas IG: 3 estilos que rodam pra todo post/reel ───────────────────
+# ── Respostas IG ───────────────────────────────────────────────────────────
+# ⚠️ ERAM 3, E COM DM DESLIGADO SOBRAVA **UMA** (21/08). Duas das três
+# prometem direct, e o `_escolhe_ig_tmpl` corta essas quando o DM está off —
+# então todo comentário de todo post recebia a MESMA frase. O Dre: *"chega uma
+# hora que fica chato e visualmente poluído"*. Está certo: quem abre o perfil e
+# rola três Reels lê a mesma resposta três vezes, e isso denuncia robô mais que
+# qualquer outra coisa que a gente faça.
+#
+# Agora são 7 de cada lado, pra a variedade sobreviver ao filtro do DM.
 _IG_TMPLS_DEFAULT = (
-    "Feito! Verifique suas dms! 😍 ou clique no link da bio.|||"
+    "Feito! Corre ver seu direct 😍|||"
     "Te mandei no direct 🥰|||"
-    "Corre que o link tá na bio 🚀 depois me fala o que achou! 👀")
-# frase segura (não promete DM) — usada quando o DM está desligado
-_IG_TMPL_SEM_DM = "Corre que o link tá na bio 🚀 depois me fala o que achou! 👀"
+    "Mandei tudo no seu direct, dá uma olhada 👀|||"
+    "Já tá no seu direct 💛|||"
+    "Acabei de te mandar no direct, corre lá 🏃‍♀️|||"
+    "Te respondi no direct com tudo certinho ✨|||"
+    "No seu direct tem o link e o preço 😉")
+# ⚠️ ESTAS NUNCA PROMETEM DIRECT. É o que sobra quando o DM está desligado, e
+# prometer o que não vai chegar é pior que não responder: a pessoa espera,
+# não recebe, e aprende que a conta mente.
+_IG_TMPLS_SEM_DM_DEFAULT = (
+    "O link tá na bio 🚀 depois me conta o que achou!|||"
+    "Tá na bio 💛 corre que some rápido|||"
+    "Achei também! Link na bio pra você ver o preço 👀|||"
+    "Deixei na bio pra facilitar 😊|||"
+    "Bio 🔗 dá uma olhada e me fala|||"
+    "É esse mesmo! Tá tudo na bio ✨|||"
+    "Na bio tem ele e uns parecidos 👀")
+_IG_TMPL_SEM_DM = "O link tá na bio 🚀 depois me conta o que achou!"
 
 
 def _ig_tmpls() -> list:
@@ -104,26 +126,82 @@ def _menciona_dm(t: str) -> bool:
 
 
 def _escolhe_ig_tmpl(dm_ok: bool) -> str:
-    """Sorteia 1 dos 3 estilos. Sem DM confirmado, só usa os que NÃO prometem
-    direct (pra nunca mentir 'te mandei no direct' sem ter mandado)."""
-    tmpls = _ig_tmpls()
-    if not dm_ok:
-        tmpls = [t for t in tmpls if not _menciona_dm(t)] or [_IG_TMPL_SEM_DM]
-    return random.choice(tmpls)
+    """Sorteia uma resposta. Sem DM confirmado, só usa as que NÃO prometem
+    direct (pra nunca mentir 'te mandei no direct' sem ter mandado).
+
+    ⚠️ COM O DM OFF O CONJUNTO É OUTRO, não o mesmo filtrado. Antes isto
+    peneirava a lista única e sobrava 1 frase — todo comentário recebia a
+    mesma. Agora cada modo tem o seu banco, então a variedade não depende de
+    quantas frases por acaso não citam direct."""
+    if dm_ok:
+        return random.choice(_ig_tmpls())
+    raw = os.environ.get("AUTO_RESP_IG_TMPLS_SEM_DM", _IG_TMPLS_SEM_DM_DEFAULT)
+    tmpls = [t.strip() for t in raw.split("|||")
+             if t.strip() and not _menciona_dm(t)]
+    return random.choice(tmpls or [_IG_TMPL_SEM_DM])
 
 
 def _dm_ligado() -> bool:
     return os.environ.get("AUTO_RESP_DM", "0").strip().lower() in ("1", "true", "sim")
 
 
-def _enviar_dm_ig(ig: str, comment_id: str, token: str) -> bool:
+_LINKS_POR_POST = None
+
+
+def _link_do_post(permalink: str) -> str:
+    """O link de AFILIADO do produto daquele vídeo. '' se não achar.
+
+    ⚠️ O DM MANDAVA A HOME DO SITE (21/08). A pessoa perguntava de um produto
+    específico e recebia `topshopoficial.com.br` — tinha que procurar sozinha
+    o que acabou de ver. O Dre: *"se não, o vídeo estoura, mas as vendas não
+    existem"*. É o degrau mais caro do funil inteiro: quem pergunta é quem já
+    decidiu, e é justo aí que a gente devolvia trabalho em vez de link.
+
+    O dado já existia e ninguém tinha ligado as pontas: o `posts_ledger` grava
+    o `link` de afiliado por produção, o `ledger_publicados` casa esse registro
+    com o post publicado, e o `publicados.jsonl` sai com `id` (shortcode) e
+    `link` na mesma linha.
+
+    Cai pro site quando não acha — melhor a home que nada, mas o log conta,
+    porque cada queda dessas é uma venda que dependia de uma junção que falhou.
+    """
+    global _LINKS_POR_POST
+    if _LINKS_POR_POST is None:
+        _LINKS_POR_POST = {}
+        try:
+            arq = BASE_DIR / "shared" / "publicados.jsonl"
+            for ln in arq.read_text(encoding="utf-8", errors="ignore").splitlines():
+                try:
+                    r = json.loads(ln)
+                except Exception:
+                    continue
+                sc, lk = (r.get("id") or "").strip(), (r.get("link") or "").strip()
+                if sc and lk:
+                    _LINKS_POR_POST[sc] = lk
+            _log(f"   {len(_LINKS_POR_POST)} post(s) com link de produto no ledger")
+        except Exception as e:
+            _log(f"   (sem publicados.jsonl: {str(e)[:50]}) — DM vai pro site")
+    m = re.search(r"/(?:reel|p|tv)/([^/?#]+)", permalink or "")
+    return _LINKS_POR_POST.get(m.group(1), "") if m else ""
+
+
+def _enviar_dm_ig(ig: str, comment_id: str, token: str,
+                  permalink: str = "") -> bool:
     """DM (private reply) em resposta a um comentário. No direct o link CLICA.
     Precisa do escopo instagram_manage_messages. Best-effort."""
     site = os.environ.get("AUTO_RESP_SITE", "topshopoficial.com.br")
-    msg = os.environ.get(
-        "AUTO_RESP_DM_TMPL",
-        "Oiee! 😍 tá tudo aqui ó: {site} 💛 corre que as ofertas somem rápido!"
-    ).format(site=site)
+    link = _link_do_post(permalink)
+    if link:
+        msg = os.environ.get(
+            "AUTO_RESP_DM_TMPL_PRODUTO",
+            "Oiee! 😍 é esse aqui ó: {link} 💛 corre que some rápido!"
+        ).format(link=link)
+    else:
+        _log(f"   ⚠️ sem link do produto pra {permalink[-14:] or '?'} — mando o site")
+        msg = os.environ.get(
+            "AUTO_RESP_DM_TMPL",
+            "Oiee! 😍 tá tudo aqui ó: {site} 💛 corre que as ofertas somem rápido!"
+        ).format(site=site)
     r = _post(f"{GRAPH}/{ig}/messages", {
         "recipient": json.dumps({"comment_id": comment_id}),
         "message": json.dumps({"text": msg}),
@@ -241,8 +319,12 @@ def _resp_instagram(conta, token, gatilhos, respondidos, limites, teste) -> int:
 
     # SÓ comentários de cima (top-level). O /media/comments do IG já devolve os
     # parents; a gente NÃO desce em .replies, então nunca responde subcomentário.
+    # ⚠️ `permalink` entra aqui porque é ele que identifica o POST no ledger —
+    # o media_id numérico não forma a URL do Reel (o IG usa shortcode), e é
+    # pelo shortcode que o `publicados.jsonl` guarda o link do produto. Sem
+    # este campo o DM não tem como saber de qual produto o vídeo fala.
     midia = _get(f"{GRAPH}/{ig}/media",
-                 {"fields": "id,timestamp", "limit": limites["midias"],
+                 {"fields": "id,timestamp,permalink", "limit": limites["midias"],
                   "access_token": token}).get("data", [])
     for m in midia:
         if feitos >= limites["max"]:
@@ -263,13 +345,18 @@ def _resp_instagram(conta, token, gatilhos, respondidos, limites, teste) -> int:
 
             # 1) DM (private reply) com o link clicável — se ligado e com escopo
             dm_ok = True if teste and _dm_ligado() else \
-                (_enviar_dm_ig(ig, cid, token) if (_dm_ligado() and not teste) else False)
+                (_enviar_dm_ig(ig, cid, token, m.get("permalink", ""))
+                 if (_dm_ligado() and not teste) else False)
             # 2) resposta pública: sorteia 1 dos 3 estilos (só promete direct se DM foi)
             msg = _escolhe_ig_tmpl(dm_ok)
 
             if teste:
+                # no dry-run mostra QUAL link o DM levaria — é o que distingue
+                # "vai mandar o produto" de "vai mandar a home de novo"
+                _prod = _link_do_post(m.get("permalink", "")) if _dm_ligado() else ""
                 _log(f"   [DRY] IG responderia @{c.get('username')} → {msg}"
-                     + ("  (+DM)" if _dm_ligado() else ""))
+                     + (f"  (+DM: {_prod or 'SITE — sem link do produto'})"
+                        if _dm_ligado() else ""))
                 respondidos[cid] = int(time.time()); feitos += 1
                 if feitos >= limites["max"]:
                     break
