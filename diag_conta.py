@@ -126,9 +126,87 @@ def olhar(nicho: str, linhas: list):
                  f"({_m}) — não caiu, sempre foi assim")
 
 
+# Como reconhecer a FÓRMULA olhando o hook publicado. Espelha o catálogo do
+# `hook_alana.FORMULAS` — ordem importa: 'pov_melhor_compra' antes de
+# 'pov_beneficio', senão o genérico engole o específico.
+_FORMULAS = [
+    ("alerta_exclusao",   ("nao mostre isso pra quem", "não mostre isso pra quem")),
+    ("necessidade",       ("toda pessoa que",)),
+    ("eu_vs_shopee",      ("eu: ",)),
+    ("pov_melhor_compra", ("pov: a melhor compra",)),
+    ("pov_beneficio",     ("pov:",)),
+    ("cumplice_humor",    ("nao veja esse video", "não veja esse vídeo")),
+    ("segredo",           ("o segredo pra",)),
+    ("virei_fa",          ("nunca imaginei", "nunca achei")),
+    ("comprei_testei",    ("comprei sem esperar", "comprei so pra", "comprei só pra")),
+    ("desabafo_shopee",   ('"',)),          # começa com fala entre aspas
+]
+
+
+def _formula(hook: str) -> str:
+    h = (hook or "").strip().lower()
+    for nome, marcas in _FORMULAS:
+        for m in marcas:
+            if h.startswith(m) or m in h[:40]:
+                return nome
+    return "(outro)"
+
+
+def por_formula(linhas, nicho=""):
+    """Alcance mediano por FÓRMULA de hook.
+
+    ⚠️ POR QUE ISTO PRECISOU EXISTIR (21/08). Olhando a semana boa do tech,
+    quatro dos seis melhores posts usavam 'Não mostre isso pra quem…' — a
+    fórmula `alerta_exclusao`, que eu FILTREI FORA do prompt quando liguei o
+    modo amplo, por ela fechar o público. No mesmo dia, mesma conta:
+
+        1110  'Não mostre isso pra quem ama a própria privacidade'
+         110  'O segredo pra transformar seu banho em um spa'
+
+    Mesmo dia mata o argumento de que alcance acumula com o tempo. Ou a
+    fórmula importa muito, ou o produto importa muito — e com 14 posts de uma
+    conta não dá pra separar. Com 215 dá pra ao menos ver se o padrão se
+    repete fora daquela semana.
+
+    ⚠️ ISTO NÃO PROVA CAUSA. Fórmula e produto andam juntos: quem escreve
+    'não mostre isso pra quem ama privacidade' está falando de uma bolsa de
+    blindagem, que é um produto mais curioso que uma capa magnética. O que a
+    tabela responde é se vale a pena TESTAR de propósito — não se deve mudar
+    tudo agora.
+    """
+    grupos = defaultdict(list)
+    for r in linhas:
+        if nicho and (r.get("nicho") or "").lower() != nicho.lower():
+            continue
+        grupos[_formula(r.get("hook", ""))].append(r.get("reach", 0) or 0)
+    return grupos
+
+
+def olhar_formulas(linhas, minimo=3):
+    grupos = por_formula(linhas)
+    ordenado = sorted(((n, _mediana(v), len(v)) for n, v in grupos.items()
+                       if len(v) >= minimo), key=lambda x: -x[1])
+    if not ordenado:
+        _log(f"\n  nenhuma fórmula com {minimo}+ posts medidos")
+        return
+    teto = ordenado[0][1]
+    _log(f"\n  ── alcance mediano por FÓRMULA de hook (mín. {minimo} posts) ──")
+    for nome, med, n in ordenado:
+        _log(f"    {nome:20} {med:>6,}  n={n:<4} {_barra(med, teto)}"
+             .replace(",", "."))
+    fora = [(n, len(v)) for n, v in grupos.items() if len(v) < minimo]
+    if fora:
+        _log(f"    (fora: {', '.join(f'{n}={q}' for n, q in sorted(fora))} "
+             f"— amostra pequena demais)")
+    _log("    ⚠️  fórmula e produto andam juntos: isto diz o que TESTAR,")
+    _log("        não o que já está provado.")
+
+
 def main():
     p = argparse.ArgumentParser(
         description="Alcance de uma conta ao longo do tempo. Só lê.")
+    p.add_argument("--formulas", action="store_true",
+                   help="alcance mediano por fórmula de hook")
     p.add_argument("nicho", nargs="?", default="", help="tech, casa, beleza…")
     p.add_argument("--todas", action="store_true", help="todas as contas")
     args = p.parse_args()
@@ -142,6 +220,10 @@ def main():
     _log(f"  {len(linhas)} post(s) medido(s) · "
          f"de {min(r['_q'] for r in linhas):%d/%m} "
          f"a {max(r['_q'] for r in linhas):%d/%m}")
+
+    if args.formulas:
+        olhar_formulas(linhas)
+        return 0
 
     if args.todas or not args.nicho:
         nichos = sorted({(r.get("nicho") or "?") for r in linhas})
