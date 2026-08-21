@@ -718,6 +718,49 @@ def olhar_desempenho(dias=7):
                 _diz(OK, A, f"o alcance mediano SUBIU {var:.0f}% "
                             f"({med_antes:,} → {med_agora:,})".replace(",", "."))
 
+    # ── INTENÇÃO: quem QUIS GUARDAR ──────────────────────────────────────
+    # ⚠️ POR QUE ISTO ENTROU (21/08). A tabela por fórmula deu alcance mediano
+    # entre 109 e 134 em TODAS as fórmulas, contas e semanas. Essa
+    # uniformidade é o achado: o Instagram dá a cada post uma audiência de
+    # teste pequena e fixa, e nenhum dos nossos escapa dela. Otimizar hook
+    # olhando alcance é medir a régua do Instagram, não o nosso conteúdo.
+    #
+    # Salvar é o sinal mais forte pra conteúdo de compra — quem salva pretende
+    # voltar — e é ele que faz o algoritmo empurrar além do teste.
+    #
+    # SOMA ANTES DE DIVIDIR: com alcance ~112 e 1-2 salvos, a taxa de um post
+    # é ruído (2 em 100 = 2,0%; 1 em 112 = 0,9% — um salvo de diferença vira
+    # "o dobro"). Agrupado, cada post entra com o peso do alcance dele.
+    def _taxa(rs, campo):
+        alc = sum(int(r.get("reach", 0) or 0) for r in rs)
+        return (1000.0 * sum(int(r.get(campo, 0) or 0) for r in rs) / alc,
+                alc) if alc else (0.0, 0)
+
+    sv_agora, alc_agora = _taxa(recentes, "saved")
+    if alc_agora >= 400:
+        sh_agora, _ = _taxa(recentes, "shares")
+        msg = (f"intenção: {sv_agora:.1f} salvos/mil · {sh_agora:.1f} "
+               f"compart./mil ({alc_agora:,} impressões)".replace(",", "."))
+        if len(antigos) >= 4:
+            sv_antes, alc_antes = _taxa(antigos, "saved")
+            if alc_antes >= 400 and sv_antes:
+                var = 100.0 * (sv_agora - sv_antes) / sv_antes
+                if var <= -30:
+                    _diz(ALERTA, A, msg + f" — CAIU {abs(var):.0f}%",
+                         f"antes {sv_antes:.1f}/mil. Menos gente querendo "
+                         f"guardar é o sinal que some antes da venda")
+                elif var >= 30:
+                    _diz(OK, A, msg + f" — SUBIU {var:.0f}%")
+                else:
+                    _diz(INFO, A, msg)
+            else:
+                _diz(INFO, A, msg)
+        else:
+            _diz(INFO, A, msg)
+    else:
+        _diz(CEGO, A, f"só {alc_agora} impressões em {dias}d — pouco pra "
+                      f"calcular taxa de salvamento")
+
     # ⚠️ RANKING POR POST, NÃO POR HOOK REPETIDO. Os hooks gerados são únicos
     # por construção (cada vídeo ganha o seu), então agrupar por hook e exigir
     # n>=5 seleciona SÓ as frases de reserva — que se repetem — e dá a

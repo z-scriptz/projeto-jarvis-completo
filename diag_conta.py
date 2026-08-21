@@ -202,11 +202,100 @@ def olhar_formulas(linhas, minimo=3):
     _log("        não o que já está provado.")
 
 
+def _taxa_agrupada(linhas, chave, campo="saved", minimo=400):
+    """Taxa POR MIL IMPRESSÕES, somando antes de dividir.
+
+    ⚠️ POR QUE SOMAR ANTES DE DIVIDIR (21/08). Com alcance ~112 e 1 a 2
+    salvamentos por post, a taxa de um post isolado é ruído: 2 salvos em 100
+    dá 2,0%; 1 salvo em 112 dá 0,9%. UM salvamento de diferença vira "o dobro
+    de desempenho", e aí qualquer ranking por post vira sorteio com cara de
+    análise.
+
+    Taxa agrupada (Σ salvos ÷ Σ alcance) não tem esse problema: cada post
+    entra com o peso do alcance dele, e um grupo de 20 posts com 2 mil de
+    alcance somado dá um número que significa algo.
+
+    `minimo` é alcance somado, não número de posts — 3 posts de 800 dizem mais
+    que 10 de 90.
+    """
+    grupos = defaultdict(lambda: [0, 0, 0])   # [soma_campo, soma_reach, posts]
+    for r in linhas:
+        k = chave(r)
+        if not k:
+            continue
+        g = grupos[k]
+        g[0] += int(r.get(campo, 0) or 0)
+        g[1] += int(r.get("reach", 0) or 0)
+        g[2] += 1
+    fora = []
+    for k, (soma, alc, n) in grupos.items():
+        if alc >= minimo:
+            fora.append((k, 1000.0 * soma / alc, soma, alc, n))
+    return sorted(fora, key=lambda x: -x[1])
+
+
+def olhar_intencao(linhas):
+    """O que faz alguém QUERER GUARDAR — mais perto de 'o que vende' que alcance.
+
+    ⚠️ POR QUE ISTO E NÃO ALCANCE. A tabela de fórmulas mostrou alcance
+    mediano entre 109 e 134 em TODAS as fórmulas, TODAS as contas, TODAS as
+    semanas. Essa uniformidade é o achado: o Instagram dá a cada post uma
+    audiência de teste pequena e fixa, e nenhum dos nossos escapa dela. O hook
+    não é a alavanca do alcance — ele decide o que acontece DEPOIS da
+    impressão.
+
+    Salvar é o sinal mais forte pra conteúdo de compra: quem salva pretende
+    voltar. Compartilhar vem logo atrás. E são esses sinais que fazem o
+    algoritmo empurrar além da audiência de teste.
+    """
+    total_s = sum(int(r.get("saved", 0) or 0) for r in linhas)
+    total_c = sum(int(r.get("shares", 0) or 0) for r in linhas)
+    total_a = sum(int(r.get("reach", 0) or 0) for r in linhas)
+    if not total_a:
+        _log("\n  sem alcance somado — nada a dividir")
+        return
+    _log(f"\n  ── INTENÇÃO (por mil impressões) ──")
+    _log(f"    geral: {1000.0 * total_s / total_a:.1f} salvos/mil · "
+         f"{1000.0 * total_c / total_a:.1f} compart./mil · "
+         f"{total_s} salvos em {total_a:,} impressões".replace(",", "."))
+
+    for titulo, chave in (("por FÓRMULA", lambda r: _formula(r.get("hook", ""))),
+                          ("por NICHO", lambda r: r.get("nicho") or ""),
+                          ("por CONTA", lambda r: r.get("conta") or "")):
+        tab = _taxa_agrupada(linhas, chave)
+        if not tab:
+            continue
+        _log(f"\n    {titulo}:")
+        teto = tab[0][1]
+        for k, taxa, soma, alc, n in tab:
+            _log(f"      {str(k)[:20]:20} {taxa:>5.1f}/mil  "
+                 f"({soma} salvos · {alc:,} alcance · {n} posts) "
+                 f"{_barra(taxa, teto, 16)}".replace(",", "."))
+
+    # ⚠️ post individual só entra com alcance que sustente a conta. Sem esse
+    # piso, o "melhor post" seria sempre um com 40 de alcance e 1 salvo.
+    bons = [r for r in linhas if (r.get("reach", 0) or 0) >= 200
+            and int(r.get("saved", 0) or 0) >= 2]
+    bons.sort(key=lambda r: -(1000.0 * (r.get("saved", 0) or 0) / (r.get("reach") or 1)))
+    if bons:
+        _log(f"\n    posts que mais fizeram guardar (alcance 200+, 2+ salvos):")
+        for r in bons[:5]:
+            taxa = 1000.0 * (r.get("saved", 0) or 0) / (r.get("reach") or 1)
+            hook = (r.get("hook") or "").replace("\n", " / ")[:56]
+            _log(f"      {taxa:>5.1f}/mil  {r.get('reach'):>5} alc · "
+                 f"{r.get('saved')} salvos  {hook}")
+    else:
+        _log("\n    nenhum post com alcance 200+ e 2+ salvos — "
+             "a amostra ainda não sustenta ranking por post")
+
+
 def main():
     p = argparse.ArgumentParser(
         description="Alcance de uma conta ao longo do tempo. Só lê.")
     p.add_argument("--formulas", action="store_true",
                    help="alcance mediano por fórmula de hook")
+    p.add_argument("--salvos", action="store_true",
+                   help="o que faz GUARDAR (salvos/compart. por mil impressões)")
     p.add_argument("nicho", nargs="?", default="", help="tech, casa, beleza…")
     p.add_argument("--todas", action="store_true", help="todas as contas")
     args = p.parse_args()
@@ -223,6 +312,10 @@ def main():
 
     if args.formulas:
         olhar_formulas(linhas)
+        return 0
+
+    if args.salvos:
+        olhar_intencao(linhas)
         return 0
 
     if args.todas or not args.nicho:
