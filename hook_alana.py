@@ -110,128 +110,125 @@ FORMULAS = [
 # Frases PRONTAS por nicho (reserva quando o Gemini cai). Ja no formato final
 # (com "\n" onde tem 2 partes). Cresca a vontade — sao 100% suas.
 HOOKS_RESERVA = {
+    # ⚠️ REESCRITO EM 21/08. O banco anterior era publicidade disfarçada de
+    # gancho — 'Corre ver isso antes que acabe, tá baratinho demais', 'Pov: a
+    # comprinha baratinha que transformou a minha casa'. O Dre: *"'corre ver
+    # isso' é gramaticalmente errado, e não traz nenhum tipo de interesse na
+    # pessoa, só é um anúncio"*. Ele estava certo, e a régua da Ava condena
+    # isso: o gancho tem que ser AMPLO, e amplo não é vago nem é anúncio.
+    #
+    # O molde novo é: SITUAÇÃO RECONHECÍVEL → QUEBRA DE EXPECTATIVA.
+    #   'A bagunça nunca foi preguiça, era falta de lugar'
+    #   'O celular fica lento por motivo que não é o celular'
+    # Nenhuma fecha público, nenhuma cita produto, nenhuma manda fazer nada.
+    #
+    # SAÍRAM AS ASPAS DE FALA e os emojis: '"Minha casa vivia uma bagunça" 😩'
+    # vira depoimento, e depoimento já é um filtro de quem se identifica.
+    # Afirmação direta alcança mais.
+    #
+    # ⚠️ ISTO É REDE DE SEGURANÇA, NÃO O PLANO. Frase fixa se repete, e hook
+    # repetido perde força por melhor que seja. O certo é o Gemini gerar único
+    # por vídeo — se estas aqui começarem a aparecer muito nos posts, o
+    # problema é a geração estar caindo, não a reserva estar curta.
     "casa": [
-        '"Minha casa vivia uma bagunça sem fim" 😩\n{tag}',
-        '"Queria uma casa mais aconchegante" 🥺\n{tag}',
-        '"Cansei de viver no meio da zona" 😮‍💨\n{tag}',
-        '"Achava que casa arrumada era só pra rico" 😳\n{tag}',
-        'Sua casa pode ficar organizada sem tomar o seu fim de semana 👀',
-        'A bagunça de casa some bem mais rápido do que você imagina 🙌',
-        'Pov: a comprinha baratinha que transformou a minha casa inteira 😍',
-        'Eu não sabia que precisava disso até deixar minha casa impecável 🤯',
-        'O segredo pra deixar a casa sempre cheirosa que ninguém te conta 🤫',
-        'Comprei sem esperar nada e resolveu um problema que eu tinha há anos 😱',
-        'Corre ver isso antes que acabe, tá baratinho demais na promoção 🏃‍♀️',
-        'Você organizando a sua casa do jeito difícil esse tempo todo 😅',
-        'O presente que salva uma casa nova e ninguém lembra de dar 🏡',
-        'Isso deixou minha casa com cara de apartamento de revista 😍',
-        'Parei de gastar à toa depois que achei esse achadinho pra casa 💸',
+        'A bagunça nunca foi preguiça, era falta de lugar\n{tag}',
+        'O problema não é a casa pequena, é o espaço morto\n{tag}',
+        'A casa fica maior sem ninguém mexer uma parede\n{tag}',
+        'Descobri tarde que arrumar não precisa doer tanto\n{tag}',
+        'Existe um jeito da casa parar de dar tanto trabalho',
+        'Passei anos achando que casa arrumada dava trabalho',
+        'Tem uma hora que a casa cansa a gente sem avisar',
+        'Reparei que o cansaço de casa vem de detalhe bobo',
+        'Levei anos pra entender por que a sala nunca rendia',
+        'Tem coisa que resolve num dia o que incomoda há anos',
+        'O que mais suja a casa é o que ninguém enxerga',
+        'A casa muda quando uma coisa simples entra nela',
     ],
     "cozinha": [
-        '"Passo horas na cozinha à toa" 😮‍💨\n{tag}',
-        '"Odiava perder tempo cozinhando" 😩\n{tag}',
-        '"Minha cozinha vivia um caos na hora do almoço" 😫\n{tag}',
-        'Dá pra passar menos tempo na cozinha e comer igual de bem 👀',
-        'Cozinhar todo dia deixa de ser sacrifício com um detalhe barato 😍',
-        'Pov: a melhor compra que fiz pra facilitar a minha cozinha 🍳',
-        'Eu não sabia viver sem isso depois que testei aqui em casa 🤯',
-        'O truque de cozinha que a minha avó queria ter conhecido antes 👵',
-        'Comprei achando que era bobeira e virou meu queridinho da cozinha 😅',
-        'Pare de perder tempo cozinhando do jeito mais difícil de todos 🛑',
-        'Isso me economiza uns 30 minutos toda vez que eu vou cozinhar ⏱️',
-        'Corre que esse achadinho de cozinha tá saindo baratinho demais 🏃‍♀️',
-        'O presente de cozinha que resolve a pior parte: a bagunça 🎁',
-        'Ninguém me contou que existia isso e mudou minha cozinha inteira 🤫',
+        'A louça acumula porque a cozinha não ajuda\n{tag}',
+        'Existe um motivo pra sempre faltar espaço na pia\n{tag}',
+        'A gaveta de talher é onde a cozinha se perde\n{tag}',
+        'A bancada vira uma bagunça sem ninguém perceber\n{tag}',
+        'Cozinhar cansa mais pela bagunça do que pelo fogão',
+        'Metade do tempo na cozinha a gente passa procurando',
+        'A cozinha pequena rende quando para de brigar comigo',
+        'Tem gente que cozinha rápido e não é por talento',
+        'Comida boa começa antes da panela, na organização',
+        'Passei a gostar de cozinhar quando parei de procurar',
+        'Guardar comida errado estraga mais que cozinhar mal',
     ],
     "beleza": [
-        '"Minha make vivia um caos total" 😩\n{tag}',
-        '"Queria me sentir mais bonita" 🥺\n{tag}',
-        '"Achava que pele linda era só de filtro" 😳\n{tag}',
-        'Toda mulher que ama se cuidar e ficar linda precisa ter isso 😍',
-        'A pele muda de um jeito que maquiagem nenhuma consegue imitar 👀',
-        'Pov: o achadinho que mudou a minha rotina de beleza inteira ✨',
-        'Eu não sabia que precisava disso até ver o resultado na minha pele 🤯',
-        'O segredo de beleza que as famosas não te contam de jeito nenhum 🤫',
-        'Comprei baratinho e substituiu meia dúzia de produtos caros 💸',
-        'Corre ver isso antes que viralize e suma das prateleiras 🏃‍♀️',
-        'Você cuidando da sua pele do jeito errado esse tempo todo 😬',
-        'Presente perfeito pra você que ama um bom autocuidado em casa 🎁',
-        'Isso me deixou pronta em 5 minutos e ainda durou o dia todo 😍',
-        'Ninguém acredita que esse resultado veio de um achadinho barato 🤭',
+        'O que estraga o cabelo é a pressa do dia a dia\n{tag}',
+        'Ninguém avisa que a pressa é a maior inimiga da pele\n{tag}',
+        'A unha quebra por um motivo que ninguém investiga\n{tag}',
+        'O perfume some rápido por causa de um detalhe bobo\n{tag}',
+        'A pele muda mais com constância do que com produto novo',
+        'Descobri tarde que cabelo bom é rotina, não sorte',
+        'Tem um erro de rotina que quase todo mundo comete',
+        'Minha pele mudou quando parei de fazer uma coisa',
+        'Existe uma ordem certa e ela muda o resultado todo',
+        'Cabelo bonito de vídeo tem mais preparo que produto',
+        'Gastei anos com produto quando o problema era o método',
     ],
     "tech": [
-        '"Meu setup vivia um caos de fios" 😩\n{tag}',
-        '"Vivia sem espaço nenhum no meu setup" 😮‍💨\n{tag}',
-        '"Meu celular vivia descarregando na pior hora" 😫\n{tag}',
-        'Esse gadget resolve em segundos o que te irrita há meses 👀',
-        'Toda pessoa viciada em tecnologia precisa ter esse gadget agora 🔌',
-        'Pov: o gadget que parece coisa do futuro bem na sua mão 🤯',
-        'Eu não sabia que precisava disso até deixar meu setup impecável 😍',
-        'O gadget que resolveu um problema que eu tinha há muito tempo 😱',
-        'Comprei achando que era firula e hoje não vivo mais sem 😅',
-        'Corre ver isso antes que esgote, tá baratinho demais pra função 🏃',
-        'Você usando seu celular sem esse acessório ainda em 2026? 😬',
-        'O presente de tecnologia que arranca um "onde achou isso?" 🎁',
-        'Isso deixou meu setup com cara de gamer profissional na hora 🎮',
-        'Parece caro mas foi um dos achadinhos mais baratos que já fiz 🤫',
+        'O celular fica lento por motivo que não é o celular\n{tag}',
+        'A bateria não acaba, ela é gasta sem a gente ver\n{tag}',
+        'Ninguém conta que o carregador certo muda tudo\n{tag}',
+        'O que trava o wifi normalmente está do lado dele\n{tag}',
+        'Metade dos cabos que eu tinha em casa não servia',
+        'Tem gadget que parece bobo até você usar uma semana',
+        'O som ruim quase nunca é culpa do fone de ouvido',
+        'Existe um jeito da mesa parar de virar ninho de fio',
+        'Passei anos com a tela quebrando pelo mesmo motivo',
+        'A tecnologia que resolve é a que some do caminho',
     ],
     "pets": [
-        '"Meu pet merecia muito mais" 🥺\n{tag}',
-        '"Vivia sofrendo pra dar banho no meu cachorro" 😩\n{tag}',
-        'Dá pra ter cachorro em casa sem a casa inteira cheirar mal 😱',
-        'Seu pet fica bem mais tranquilo com uma coisinha barata 🐶',
-        'Pov: a comprinha barata que deixou o meu pet muito mais feliz 🐾',
-        'Eu não sabia que precisava disso até ver a alegria do meu pet 🥹',
-        'O segredo pra acabar com o pelo espalhado pela casa toda 🐕',
-        'Comprei sem esperar nada e virou o brinquedo favorito dele 🎾',
-        'Corre ver isso antes que acabe, resolve a maior chatice do pet 🏃‍♀️',
-        'O presente que transforma o cachorro no bicho mais mimado da rua 🎁',
-        'Isso salvou minha casa dos estragos do meu pet quando fico fora 😅',
-        'Ninguém me contou que existia isso e facilitou a vida com o pet 🤫',
+        'O pelo espalha porque a casa não ajuda a recolher\n{tag}',
+        'A comida do bicho estraga antes do que diz o pacote\n{tag}',
+        'Cachorro ansioso quase sempre está entediado\n{tag}',
+        'A unha do bicho é o que mais estraga o sofá\n{tag}',
+        'Cachorro não faz bagunça por teimosia, é energia sobrando',
+        'Descobri que meu gato dormia mal e eu nem via',
+        'Bicho em apartamento precisa de rotina, não de espaço',
+        'Tem um jeito de passear que cansa menos os dois',
+        'O banho em casa deixou de ser guerra por um motivo',
+        'Gato foge da água até descobrir que o problema era outro',
     ],
     "moda": [
-        '"Nunca me sentia bem vestida" 🥲\n{tag}',
-        '"Achava que roupa boa custava uma fortuna" 😳\n{tag}',
-        'Dá pra se arrumar em 5 minutos e parecer que levou uma hora 👀',
-        'Toda mulher que quer se vestir bem sem gastar muito precisa ver 😍',
-        'Pov: a peça que me devolveu a autoestima na hora de me arrumar 😍',
-        'Eu não sabia que precisava disso até receber um monte de elogio 🥰',
-        'O segredo pra montar look caro gastando pouquinho na Shopee 🤫',
-        'Comprei sem fé e virou a peça que eu mais uso no guarda-roupa 😅',
-        'Corre ver isso antes que acabe o estoque, tá voando na promoção 🏃‍♀️',
-        'Você se vestindo bem sem gastar rios de dinheiro finalmente 💸',
-        'O presente que parece caro e custou menos que um lanche 🎁',
-        'Isso valoriza qualquer corpo e disfarça o que a gente não gosta 😍',
+        'A calça marca por um motivo que não é o seu corpo\n{tag}',
+        'O sapato machuca por detalhe que dá pra resolver\n{tag}',
+        'A camiseta perde a forma antes do tempo por descuido\n{tag}',
+        'A roupa não fica ruim no corpo, fica ruim na medida',
+        'Guarda-roupa cheio é o mais difícil de usar de manhã',
+        'Existe uma peça que arruma o corpo inteiro sozinha',
+        'Roupa boa é a que você não lembra que está usando',
+        'Passei anos comprando roupa e usando as mesmas cinco',
+        'Vestir bem é menos sobre peça e mais sobre encaixe',
+        'O que envelhece um look não é a roupa, é o acabamento',
     ],
     "academia": [
-        '"Minhas costas vivem doendo o dia todo" 😩\n{tag}',
-        '"Cansei de acordar todo travado de manhã" 😮‍💨\n{tag}',
-        'A dor depois do treino passa bem mais rápido com esse truque 💪',
-        'Dá pra treinar em casa e sentir o mesmo peso da academia 👀',
-        'Pov: o alívio que o meu corpo todo estava precisando há tempos 😮‍💨',
-        'Eu não sabia que precisava disso até aliviar a dor na hora 😌',
-        'O segredo pra recuperar o corpo mais rápido depois do treino 🤫',
-        'Comprei achando que não ia funcionar e me arrependi de não ter antes 😅',
-        'Corre ver isso antes que suma, muda o treino em casa inteiro 🏃',
-        'O presente que alivia a dor do treino e custa quase nada 🎁',
-        'Isso substituiu a massagem cara que eu pagava toda semana 💸',
+        'Água sozinha não dá conta e ninguém explica direito\n{tag}',
+        'A postura estraga o exercício antes dele começar\n{tag}',
+        'O tênis errado desfaz o treino inteiro sem avisar\n{tag}',
+        'O treino não rende quando o corpo não está pronto',
+        'Descobri que a dor depois do treino tinha explicação',
+        'Tem gente que treina menos e evolui mais, e não é sorte',
+        'Passei a gostar de treinar quando parei de sofrer',
+        'Recuperar é parte do treino e quase todo mundo pula',
+        'Treinar em casa falha por falta de canto, não de vontade',
+        'Levantar peso errado cansa mais e entrega menos',
     ],
     "geral": [
-        '"Nunca imaginei precisar disso na vida" 😳\n{tag}',
-        '"Vivia com um probleminha que ninguém resolvia" 😩\n{tag}',
-        '"Achava que isso não ia funcionar de jeito nenhum" 🤨\n{tag}',
-        'Economizar de verdade não é achar promoção, é achar isso aqui 👀',
-        'Esse achadinho baratinho resolve um problema que todo mundo tem 🤫',
-        'Pov: a melhor comprinha que eu fiz nesse mês inteiro 😍',
-        'Comprei sem esperar nada e me surpreendeu demais com o resultado 🤯',
-        'Eu não sabia que precisava disso até resolver de vez o meu problema 😱',
-        'O segredo que ninguém te conta pra facilitar a vida gastando pouco 🤫',
-        'Corre ver isso antes que viralize e o preço suba na Shopee 🏃‍♀️',
-        'Você fazendo isso do jeito difícil esse tempo todo sem saber 😅',
-        'Presente perfeito e baratinho pra dar pra qualquer pessoa 🎁',
-        'Isso resolveu num segundo um problema que me incomodava há anos ⏱️',
-        'Ninguém acredita quando eu falo o preço desse achadinho 🤭',
-        'Parece caro mas é um dos achadinhos mais baratos da Shopee 💸',
+        'Ninguém repara nas coisas que funcionam bem\n{tag}',
+        'O melhor conserto é o que você faz uma vez só\n{tag}',
+        'O que parece frescura costuma ser o que resolve\n{tag}',
+        'Tem coisa que a gente aguenta anos e resolve num dia',
+        'Descobri que o incômodo pequeno é o que mais cansa',
+        'Existe solução simples pro que parece problema grande',
+        'A gente se acostuma com o que dá trabalho todo dia',
+        'Passei anos improvisando o que já tinha jeito certo',
+        'Tem detalhe que muda o dia inteiro e ninguém conta',
+        'A pressa cria os problemas que a gente reclama depois',
     ],
 }
 
@@ -349,6 +346,44 @@ def _conflita(frase: str, produto: str, nicho: str = "") -> bool:
         if palavra in f and not any(r in p for r in parentes):
             return True
     return False
+
+
+def _bloco_nao_repita(quantos: int = 12) -> str:
+    """Os últimos hooks que já foram ao ar, pro modelo não repetir.
+
+    ⚠️ SEM ISTO O MODELO NÃO TEM COMO SABER (21/08). Cada chamada é
+    independente: ele não lembra do que escreveu ontem, então converge
+    naturalmente pras mesmas construções — foi assim que saíram dois hooks
+    quase idênticos no mesmo dia ('Ninguém acredita que esse resultado veio de
+    um achadinho' e 'Ninguém acredita quando eu falo o preço'). Não é falha do
+    modelo: é falta de memória, e a memória está no `posts_ledger.jsonl`.
+
+    Silencioso de propósito: se o ledger não existir ou vier ilegível, o
+    prompt sai sem o bloco em vez de derrubar a geração. Hook repetido é
+    ruim; hook nenhum é pior.
+    """
+    try:
+        arq = BASE_DIR / "shared" / "posts_ledger.jsonl"
+        linhas = arq.read_text(encoding="utf-8", errors="ignore").splitlines()
+    except Exception:
+        return ""
+    vistos, fora = set(), []
+    for ln in reversed(linhas):
+        if len(fora) >= quantos:
+            break
+        try:
+            h = (json.loads(ln).get("hook") or "").split("\n")[0].strip()
+        except Exception:
+            continue
+        chave = h.lower()[:40]
+        if h and chave not in vistos:
+            vistos.add(chave)
+            fora.append(h)
+    if not fora:
+        return ""
+    lista = "\n".join(f"  - {h[:70]}" for h in fora)
+    return ("JA FORAM AO AR (nao repita nem faca variacao destes):\n"
+            f"{lista}\n\n")
 
 
 def _teto_l1() -> int:
@@ -646,34 +681,61 @@ def _via_gemini(produto: str, descricao: str, nicho: str) -> Optional[str]:
         # degrau. Por isso agora o modelo ve PARES de transformacao, nao uma
         # lista de proibicoes: exemplo negativo ensina o que nao fazer, exemplo
         # PAREADO ensina o que fazer no lugar.
+        # ⚠️ DEFINICAO OPERACIONAL, NAO O ADJETIVO (21/08, pedido do Dre).
+        # A versao anterior mandava "escreva um gancho amplo" e mostrava
+        # transformacoes. Faltava dizer O QUE E amplo — e o Dre acertou o risco
+        # em cheio: sem definicao, o modelo produz "Pequenas mudancas podem
+        # transformar sua rotina". Isso e amplo, nao fecha porta nenhuma, e nao
+        # vale nada. Amplitude sem concretude e so vagueza com boa reputacao.
+        #
+        # Tambem some daqui a instrucao antiga de "feche com promessa de metodo
+        # ('siga esses passos')": aquilo e CTA, e CTA no gancho e anuncio. O
+        # que prende nao e o convite, e a pergunta que fica na cabeca.
         regra_ava = (
-            "COMO ESCREVER UM GANCHO AMPLO (a regra que importa)\n"
-            "Nao e 'tirar a palavra pra quem'. E REESCREVER A FRASE INTEIRA em\n"
-            "outro vocabulario. Faca estes 3 movimentos:\n\n"
-            "  (1) Troque QUEM A PESSOA E  ->  pelo QUE ELA QUER.\n"
+            "O QUE E UM GANCHO AMPLO (definicao, nao adjetivo)\n"
+            "Gancho amplo = uma frase que descreve uma SITUACAO, COMPORTAMENTO,\n"
+            "INCOMODO, DESCOBERTA ou DESEJO reconhecivel por muita gente, SEM\n"
+            "exigir que a pessoa pertenca a um subgrupo pra sentir curiosidade.\n\n"
+            "PRECISA TER (as tres, juntas):\n"
+            "  (1) CONCRETO: uma cena ou fato que da pra visualizar. Nada de\n"
+            "      filosofia generica.\n"
+            "  (2) PERGUNTA MENTAL: depois de ler, a pessoa quer saber 'como\n"
+            "      assim?' ou 'e ai?'. Se nao abre pergunta, nao e gancho.\n"
+            "  (3) LIGACAO REAL com o que o video mostra. Curiosidade que o\n"
+            "      video nao cumpre vira decepcao e a pessoa sai.\n\n"
+            "NAO PODE (cada uma destas reprova o gancho):\n"
+            "  - comecar com 'Se voce...' ou qualquer recorte de publico;\n"
+            "  - exigir raca, idade, profissao, tipo de cabelo, raca do animal;\n"
+            "  - citar o produto pelo nome;\n"
+            "  - parecer anuncio ('corre', 'aproveite', 'promocao', 'baratinho');\n"
+            "  - trazer CTA ('clica', 'arrasta', 'siga esses passos', 'olha o\n"
+            "    link'). O gancho prende pela pergunta, nao pelo convite;\n"
+            "  - frase vazia de suspense ('voce nao vai acreditar', 'olha isso');\n"
+            "  - ser generico a ponto de servir pra qualquer video.\n\n"
+            "⚠️ AMPLO E VAGO NAO SAO A MESMA COISA. Este exemplo e amplo, nao\n"
+            "fecha porta nenhuma, e mesmo assim e um gancho RUIM:\n"
+            "     'Pequenas mudancas podem transformar sua rotina'\n"
+            "Ruim porque nao mostra cena, nao abre pergunta e serviria pra\n"
+            "qualquer video do mundo. Amplitude sem concretude nao vale nada.\n\n"
+            "COMO CHEGAR LA — 2 movimentos:\n"
+            "  (1) Troque QUEM A PESSOA E  ->  pelo QUE ELA VIVE.\n"
             "  (2) Suba o substantivo UM DEGRAU (golden -> cachorro; base ->\n"
-            "      maquiagem; air fryer -> jantar). Um degrau, nao ate 'todo\n"
-            "      mundo': continua sendo do mesmo assunto.\n"
-            "  (3) Feche com promessa de metodo ou resultado ('siga esses\n"
-            "      passos', 'em 5 minutos', 'sem gastar quase nada').\n\n"
+            "      maquiagem; air fryer -> jantar). UM degrau, nao ate 'todo\n"
+            "      mundo': continua sendo do mesmo assunto.\n\n"
             "VEJA A FRASE INTEIRA MUDAR:\n"
-            "  ESTREITO: 'se voce tem um golden que come tudo, ensino isso'\n"
-            "  AMPLO   : 'quer um cachorro que nao come nada do chao sem a sua\n"
-            "             permissao? siga esses passos'\n\n"
+            "  ESTREITO: 'se voce tem um golden que come tudo do chao'\n"
+            "  AMPLO   : 'Cachorro que come tudo do chao nao esta com fome'\n\n"
             "  ESTREITO: 'pra quem tem cabelo cacheado que vive embaracado'\n"
-            "  AMPLO   : 'da pra desembaracar o cabelo em 5 minutos sem brigar\n"
-            "             com ele todo santo dia'\n\n"
+            "  AMPLO   : 'O cabelo embaraca mais pelo que a gente faz de noite'\n\n"
             "  ESTREITO: 'toda pessoa que cozinha todo dia precisa disso'\n"
-            "  AMPLO   : 'o jantar de todo dia pode sujar metade da louca'\n\n"
-            "Repare: nenhuma palavra da versao estreita sobrevive. Nao e a\n"
-            "mesma frase sem o recorte -- e OUTRA frase, sobre o RESULTADO.\n\n"
-            "VAGO NAO E AMPLO. 'meu setup vivia um caos de fios' nao fecha porta\n"
-            "e tambem nao chama ninguem: nao promete nada. Amplo = alcanca muita\n"
-            "gente E da um motivo pra ficar.\n\n"
-            "1a pessoa e BEM-VINDA como TOM, se cumprir os 3 movimentos:\n"
-            "  'Nunca imaginei que aplicar base fosse tao rapido e sem sujeira'\n\n"
-            "PROIBIDO: 'pra quem', 'para quem', 'quem tem', 'quem ama',\n"
-            "'se voce tem', 'se voce e', 'toda pessoa que', 'todo mundo que'.\n\n")
+            "  AMPLO   : 'Metade da louca do jantar nasce antes de cozinhar'\n\n"
+            "Repare: nenhuma palavra da versao estreita sobrevive, e a versao\n"
+            "ampla AFIRMA algo concreto que da vontade de conferir.\n\n"
+            "1a pessoa e BEM-VINDA como TOM, se cumprir a definicao:\n"
+            "  'Passei anos achando que casa arrumada dava trabalho'\n\n"
+            "PROIBIDO LITERAL: 'pra quem', 'para quem', 'quem tem', 'quem ama',\n"
+            "'se voce tem', 'se voce e', 'toda pessoa que', 'todo mundo que'.\n\n"
+            f"{_bloco_nao_repita()}")
         prompt = (
             "Voce e copywriter de videos virais de afiliado (Shopee), estilo das "
             "criadoras que mais vendem no Reels/TikTok. Crie UM gancho (hook) "
