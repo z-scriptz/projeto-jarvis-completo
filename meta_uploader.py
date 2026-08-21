@@ -380,8 +380,20 @@ def postar_instagram(video_path: str, legenda: str = "") -> dict:
     # Uma linha de log responde na próxima postagem o que quatro rodadas de
     # inferência não responderam. Registra tamanho e começo — nunca o texto
     # inteiro, que polui o log e não acrescenta.
+    # ⚠️ E DIZ QUAL CONTA (21/08). A linha acima provou que a legenda SEMPRE é
+    # enviada — 500 a 950 caracteres, nenhuma vazia. E mesmo assim o
+    # @topshopcasa_ publicou 2 Reels recentes sem legenda, enquanto as outras
+    # 3 contas saíram certas. Ou seja: o problema é DE UMA CONTA, e o log não
+    # dizia de qual conta era cada linha — então não dava pra separar "a casa
+    # mandou e a Meta descartou" de "a casa nem passou por aqui".
+    #
+    # `_CTX` é o contexto que o daemon monta por conta antes de postar; se ele
+    # vier vazio, o upload cai nas env vars globais — e aí TODA postagem iria
+    # pro mesmo perfil, o que é outro problema e este log também revela.
     _corte = (legenda or "").strip()
-    log.info(f"   📝 legenda p/ Instagram: {len(_corte)} caractere(s)"
+    _quem = (_CTX.get("handle") or _CTX.get("nicho")
+             or f"ig_user_id={_ig_user_id()[-6:] or '?'}")
+    log.info(f"   📝 legenda p/ Instagram [{_quem}]: {len(_corte)} caractere(s)"
              + (f" · começa com {_corte.splitlines()[0][:60]!r}" if _corte
                 else "  ⚠️ VAZIA — o Reel vai sair sem legenda"))
 
