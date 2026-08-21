@@ -546,6 +546,41 @@ bermuda e pijama. **O motivo do desligamento sumiu**, então religou.
 ⚠️ **Cadastrar a conta e ligar a produção dela são duas decisões diferentes** —
 e o `contas.json` sabe dizer isso. Quem desligar de novo, escreva por quê.
 
+### 🚪 A PRODUÇÃO POR FILA DE PRODUTOS ESTAVA PARADA HÁ 10 DIAS
+
+Religar `ativa` não bastou, e o log mostrou por quê: a última linha
+`📦 estoque por conta` era de **11/08**. Duas trancas em série, não uma.
+
+```python
+if prontos > cfg["repor_quando_sobrar"]:      # 400 > 2 → sempre verdade
+    falta = _falta_do_piso(cfg)
+    if falta <= 0:
+        return                                 # pula a produção inteira
+
+def _falta_do_piso(cfg):
+    piso = max(0, int(cfg.get("producao_minima_por_conta", 0) or 0))
+    if piso <= 0:
+        return 0                               # ← a tranca de verdade
+```
+
+⚠️ **O padrão da FUNÇÃO é 0; o do dicionário de DEFAULTS é 1.** Com
+`producao_minima_por_conta: 0` no config (zerado um dia pra drenar a esteira),
+o piso morre antes de olhar conta nenhuma. Dez dias sem produzir pela fila
+curada — e ninguém percebeu porque o **repurpose** é outro caminho, não passa
+por esse portão, e sozinho manteve a esteira crescendo (377 → 400).
+
+**Os dois caminhos produzem coisas diferentes:** repurpose refaz vídeo viral
+coletado; a fila de produtos usa curadoria com dado de comissão. Ficou 10 dias
+só no primeiro — por acidente, não por escolha.
+
+Com `producao_minima_por_conta = 1`: `🔁 400 prontos, mas faltam 2 pro piso`.
+O alvo por conta é **3** (`estoque_alvo_dias` ausente → padrão 3), então a
+rajada pra pet/moda é de ~6 pacotes. Pequena e limitada.
+
+**Lição:** eu previ que religar `ativa` reabriria o portão, e errei. Li a
+função pela chamada e pelo comentário sem abrir o corpo — o `if piso <= 0`
+estava na terceira linha.
+
 ### 📊 ALCANCE SEM SEGUIDORES É NÚMERO SEM DENOMINADOR
 
 A 1ª medição deu alcance mediano **113** e eu concluí *"é problema de
