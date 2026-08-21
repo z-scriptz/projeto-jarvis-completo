@@ -974,6 +974,8 @@ def main():
                    help="mostra o que ele CONSEGUE ver, sem julgar")
     p.add_argument("--aprovar", action="store_true",
                    help="abençoa o cabeçalho atual como referência")
+    p.add_argument("--mandar-referencias", dest="mandar_ref", action="store_true",
+                   help="manda os PNG de referência pro seu Telegram")
     p.add_argument("--dias", type=int, default=3,
                    help="janela do que foi publicado (padrão 3)")
     p.add_argument("--sem-sistema", dest="sem_sistema", action="store_true",
@@ -983,6 +985,28 @@ def main():
 
     if args.inventario:
         inventario()
+        return 0
+
+    if args.mandar_ref:
+        # ⚠️ A REFERÊNCIA SÓ VALE SE ALGUÉM OLHAR, e ela mora numa VPS sem
+        # tela. Aprovar sem ver é abençoar o que estiver lá — inclusive um
+        # defeito. O caminho mais curto entre o arquivo e o olho do Dre é o
+        # mesmo Telegram por onde já chegam os erros.
+        refs = sorted(CASA.glob("referencia_*.png")) if CASA.exists() else []
+        if not refs:
+            _log("nenhuma referência ainda — rode o vigia uma vez primeiro")
+            return 1
+        for r in refs:
+            conta = r.stem.replace("referencia_", "")
+            prov = _json_de(_prov(r), {}) or {}
+            selo = ("CONFIRMADA" if prov.get("confirmada_por_humano")
+                    else "ainda não conferida")
+            ok = _avisar(f"🕶️ referência de {conta} ({selo})\n"
+                         f"criada em {str(prov.get('criada'))[:16]} "
+                         f"do vídeo {str(prov.get('video'))[:40]}\n\n"
+                         f"O selo azul tem que estar FORA do nome, com um vão "
+                         f"visível. Se estiver colado, é o selo velho.", r)
+            _log(f"{'enviei' if ok else 'FALHEI ao enviar'} {r.name}")
         return 0
 
     # cada camada é independente: uma que exploda não pode levar as outras —
