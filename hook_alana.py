@@ -351,6 +351,48 @@ def _conflita(frase: str, produto: str, nicho: str = "") -> bool:
     return False
 
 
+def _teto_l1() -> int:
+    """Quantos caracteres cabem na 1ª linha do hook. DERIVADO, não cravado.
+
+    ⚠️ O TETO DE 40 ESTAVA MATANDO TODO HOOK GERADO (medido em 21/08).
+    O log de 18 a 20/08 tem uma rejeição atrás da outra, todas pela MESMA
+    regra e todas por margem ridícula:
+
+        a 1ª linha tinha 41 caracteres e o teto e 40 — vai pra reserva
+        a 1ª linha tinha 42 … 43 … 44 … 45 … 46 … 50 … 51 …
+
+    Nenhum hook do Gemini chegava ao vídeo. Todos caíam na reserva, que é o
+    banco de frases prontas — e é por isso que o Dre olhou os posts novos e
+    disse *"ainda é estilo Alana"*. Estava, literalmente: eram as frases do
+    `HOOKS_RESERVA`, uma delas cópia exata.
+
+    DE ONDE VINHA O 40. Medido: na largura útil de 970px (1080 − 2×55 de
+    margem), no corpo 48, cabem ~40 caracteres. O número estava certo — pro
+    corpo MÁXIMO.
+
+    POR QUE ESTAVA ERRADO. O render NÃO usa corpo fixo: ele encolhe de
+    `HK_FONT` (48) até `HK_FONT_MIN` (34) pra fazer caber. No corpo 34 cabem
+    ~56 caracteres. Ou seja, a regra reprovava por não caber num tamanho que o
+    render nem teria usado — ele teria diminuído a fonte e coberto tudo.
+
+    Uma frase boa de 41 caracteres virava frase pronta de anúncio. Trocar
+    conteúdo gerado por reserva genérica é o pior desfecho possível, e era o
+    desfecho de TODOS os hooks desde 18/08.
+
+    Agora sai da mesma conta que o render faz. 0.54 é a largura média de um
+    caractere em fração do corpo, com folga sobre os 0.51 medidos — texto com
+    muitas letras largas (M, W) não pode estourar.
+    """
+    try:
+        larg = int(os.environ.get("HOOK_LARGURA_VIDEO", 1080))
+        margem = int(os.environ.get("HK_MARGEM", 55))
+        corpo = int(os.environ.get("HK_FONT_MIN", 34))   # o render encolhe até aqui
+        cabe = int((larg - 2 * margem) / (corpo * 0.54))
+    except Exception:
+        cabe = 52
+    return int(os.environ.get("HOOK_MAX_L1", cabe))
+
+
 def _cabe_no_formato(h: str) -> bool:
     """A mesma regra que o _limpar_saida aplica na saída do Gemini.
 
@@ -360,8 +402,7 @@ def _cabe_no_formato(h: str) -> bool:
     """
     if "{tag}" in h or "\n" in h:
         frase = h.split("{tag}")[0].split("\n")[0]
-        return len(_EMOJI_RX.sub("", frase).strip()) <= int(
-            os.environ.get("HOOK_MAX_L1", 40))
+        return len(_EMOJI_RX.sub("", frase).strip()) <= _teto_l1()
     return len(_EMOJI_RX.sub("", h).strip()) >= int(
         os.environ.get("HOOK_MIN_CHARS", 44))
 
@@ -467,7 +508,7 @@ def _limpar_saida(txt: str, motivos: Optional[list] = None) -> Optional[str]:
     #   • frase UNICA (1 linha): precisa ser LONGA o bastante pra QUEBRAR em 2.
     #   • frase + TAG (2 linhas): a frase precisa CABER em 1 linha (senao vira 3L).
     _min  = int(os.environ.get("HOOK_MIN_CHARS", 44))   # piso da frase unica
-    _maxL1 = int(os.environ.get("HOOK_MAX_L1", 40))     # teto da frase antes da tag
+    _maxL1 = _teto_l1()      # teto DERIVADO do que o render aguenta (ver _teto_l1)
     _vis0 = len(_EMOJI_RX.sub("", linhas[0]).strip())
     # ⚠️ `motivos` existe pra REJEIÇÃO PODER VIRAR PEDIDO. Antes isto só
     # devolvia None, e None caía direto na reserva — o modelo tinha escrito
