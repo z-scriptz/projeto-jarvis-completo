@@ -517,6 +517,25 @@ def olhar_publicado(dias=3):
             continue
         olhadas += 1
 
+        # ⚠️ O ALCANCE SOZINHO NÃO SIGNIFICA NADA (21/08).
+        # A 1ª medição deu alcance mediano de 113 e eu disse "isso é problema
+        # de distribuição". Era chute: 113 numa conta de 150 seguidores é 75%
+        # de alcance, que é ótimo; numa de 5.000 é grave. O número que importa
+        # é a RAZÃO, e ninguém no projeto media seguidores.
+        #
+        # É a mesma lição do dia inteiro num lugar novo: número sem
+        # denominador convence sem informar.
+        try:
+            rp = MP._get(f"{MP.GRAPH}/{ig}",
+                         {"fields": "followers_count,media_count",
+                          "access_token": token})
+            if not rp.get("error"):
+                n = int(rp.get("followers_count") or 0)
+                if n:
+                    _seguidores[nicho] = (handle, n)
+        except Exception:
+            pass
+
         recentes = []
         for m in r.get("data", []):
             try:
@@ -572,6 +591,13 @@ def olhar_publicado(dias=3):
 #  o vigia antes de ontem.
 # ══════════════════════════════════════════════════════════════════════════
 
+# Preenchido pela camada do PUBLICADO (que já tem token e id na mão) e lido
+# pela do DESEMPENHO. A ordem é explícita no `main`: publicado roda antes.
+# Vazio = não consegui medir, e aí o desempenho fala em números absolutos e
+# diz que está sem denominador — nunca inventa a razão.
+_seguidores = {}
+
+
 def _mediana(ns):
     ns = sorted(n for n in ns if isinstance(n, (int, float)))
     return ns[len(ns) // 2] if ns else 0
@@ -616,6 +642,38 @@ def olhar_desempenho(dias=7):
     med_agora = _mediana(alc)
     _diz(INFO, A, f"{len(recentes)} post(s) medidos em {dias}d · "
                   f"alcance mediano {med_agora:,}".replace(",", "."))
+
+    # ── ALCANCE POR SEGUIDOR: é isto que diz se o número é bom ou ruim ──
+    if not _seguidores:
+        _diz(CEGO, A, "não sei quantos seguidores as contas têm",
+             "sem esse denominador, alcance alto ou baixo é palpite")
+    else:
+        # ⚠️ casa pelo NICHO, que é a chave que os dois lados já usam.
+        # A 1ª versão comparava strings (`"@topshopcasa_".endswith("casa")`),
+        # que é sempre falso por causa do `_` no fim — a razão sairia sempre da
+        # mediana global e pareceria certa. Chave existente vale mais que
+        # ginástica de texto.
+        for nicho, (handle, segs) in sorted(_seguidores.items()):
+            do_perfil = [r.get("reach", 0) or 0 for r in recentes
+                         if (r.get("nicho") or "").lower() == nicho.lower()]
+            base = _mediana(do_perfil) if do_perfil else med_agora
+            razao = base / segs if segs else 0
+            # 1.0 = alcançou tanta gente quanto o número de seguidores. Reels
+            # saudável passa disso (o IG entrega pra não-seguidor); muito
+            # abaixo significa que nem os seguidores estão vendo.
+            if razao >= 1.0:
+                _diz(OK, A, f"{handle}: {base:,} de alcance com {segs:,} "
+                            f"seguidor(es) — {razao:.1f}× a base"
+                     .replace(",", "."))
+            elif razao >= 0.3:
+                _diz(INFO, A, f"{handle}: {base:,} de alcance com {segs:,} "
+                              f"seguidor(es) — {razao * 100:.0f}% da base"
+                     .replace(",", "."))
+            else:
+                _diz(ALERTA, A, f"{handle}: {base:,} de alcance com {segs:,} "
+                                f"seguidor(es) — só {razao * 100:.0f}% da base"
+                     .replace(",", ""),
+                     "nem os próprios seguidores estão vendo os posts")
 
     # tendência: só fala quando a amostra dos DOIS lados é suficiente pra
     # significar algo. Comparar 2 posts com 40 é ruído com cara de conclusão.
