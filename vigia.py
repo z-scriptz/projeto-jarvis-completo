@@ -563,6 +563,101 @@ def olhar_publicado(dias=3):
 
 
 # ══════════════════════════════════════════════════════════════════════════
+#  CAMADA 2.5 — O DESEMPENHO ("qual hook está segurando")
+#
+#  Era o pedido original do Dre — *"hooks novos em altas, legendas novas em
+#  altas"* — e ficou de fora até 21/08 por falta de matéria-prima, não de
+#  código: o `metricas_posts.jsonl` estava parado havia 11 dias porque
+#  **ninguém agendou a coleta**. Não estava quebrado; estava sem cron, igual
+#  o vigia antes de ontem.
+# ══════════════════════════════════════════════════════════════════════════
+
+def _mediana(ns):
+    ns = sorted(n for n in ns if isinstance(n, (int, float)))
+    return ns[len(ns) // 2] if ns else 0
+
+
+def olhar_desempenho(dias=7):
+    """O que os números dizem sobre o CONTEÚDO, não sobre defeito."""
+    A = "desempenho"
+    linhas = _linhas_jsonl(METRICAS)
+    if not linhas:
+        _diz(CEGO, A, "sem métricas de post — a cadeia nunca rodou",
+             "ligue com: .venv/bin/python metricas_posts.py")
+        return
+
+    # ⚠️ MÉTRICA VELHA É PIOR QUE MÉTRICA NENHUMA: ela responde com confiança
+    # sobre um mundo que já mudou. Os hooks novos entraram em 19/08; ranking
+    # feito com dado de 11 dias atrás falaria só dos velhos e pareceria atual.
+    try:
+        idade = (datetime.now()
+                 - datetime.fromtimestamp(METRICAS.stat().st_mtime)).days
+    except Exception:
+        idade = 0
+    if idade > 3:
+        _diz(ALERTA, A, f"as métricas estão paradas há {idade} dias",
+             "o ranking abaixo fala do passado. Rode: metricas_posts.py")
+
+    corte = datetime.now() - timedelta(days=dias)
+    recentes, antigos = [], []
+    for r in linhas:
+        try:
+            q = datetime.strptime(f"{r.get('data')} {r.get('hora')}",
+                                  "%Y-%m-%d %H:%M:%S")
+        except Exception:
+            continue
+        (recentes if q >= corte else antigos).append(r)
+
+    if not recentes:
+        _diz(CEGO, A, f"nenhum post medido nos últimos {dias} dias")
+        return
+
+    alc = [r.get("reach", 0) or 0 for r in recentes]
+    med_agora = _mediana(alc)
+    _diz(INFO, A, f"{len(recentes)} post(s) medidos em {dias}d · "
+                  f"alcance mediano {med_agora:,}".replace(",", "."))
+
+    # tendência: só fala quando a amostra dos DOIS lados é suficiente pra
+    # significar algo. Comparar 2 posts com 40 é ruído com cara de conclusão.
+    janela_antes = [r for r in antigos]
+    if len(recentes) >= 4 and len(janela_antes) >= 4:
+        med_antes = _mediana([r.get("reach", 0) or 0 for r in janela_antes])
+        if med_antes:
+            var = 100.0 * (med_agora - med_antes) / med_antes
+            if var <= -30:
+                _diz(ALERTA, A, f"o alcance mediano CAIU {abs(var):.0f}% "
+                                f"({med_antes:,} → {med_agora:,})".replace(",", "."))
+            elif var >= 30:
+                _diz(OK, A, f"o alcance mediano SUBIU {var:.0f}% "
+                            f"({med_antes:,} → {med_agora:,})".replace(",", "."))
+
+    # ⚠️ RANKING POR POST, NÃO POR HOOK REPETIDO. Os hooks gerados são únicos
+    # por construção (cada vídeo ganha o seu), então agrupar por hook e exigir
+    # n>=5 seleciona SÓ as frases de reserva — que se repetem — e dá a
+    # impressão de que a reserva é o que funciona. Foi um erro que eu já
+    # cometi neste projeto. O que responde "qual hook segurou" é o hook dos
+    # posts que mais alcançaram.
+    campeoes = sorted(recentes, key=lambda r: -(r.get("reach", 0) or 0))[:3]
+    for r in campeoes:
+        hook = (r.get("hook") or "").strip().replace("\n", " / ")
+        if not hook:
+            continue
+        _diz(INFO, A,
+             f"🔥 {(r.get('reach', 0) or 0):,}".replace(",", ".")
+             + f" · {r.get('nicho') or '?'} · {hook[:70]}",
+             f"salvos {r.get('saved', 0)} · curtidas {r.get('likes', 0)} · "
+             f"{r.get('url', '')[:52]}")
+
+    # o pior serve tanto quanto o melhor: é ele que diz o que parar de fazer
+    piores = [r for r in sorted(recentes, key=lambda r: (r.get("reach", 0) or 0))
+              if (r.get("hook") or "").strip()][:1]
+    for r in piores:
+        hook = (r.get("hook") or "").strip().replace("\n", " / ")
+        _diz(INFO, A, f"🥶 {(r.get('reach', 0) or 0):,}".replace(",", ".")
+                      + f" · {r.get('nicho') or '?'} · {hook[:70]}")
+
+
+# ══════════════════════════════════════════════════════════════════════════
 #  CAMADA 3 — A SÉRIE (o que MUDOU desde a última olhada)
 # ══════════════════════════════════════════════════════════════════════════
 
@@ -894,6 +989,7 @@ def main():
     # o dia em que tudo está ruim é o dia em que o vigia mais importa
     for nome, fn in (("pixel", lambda: olhar_pixel(aprovar=args.aprovar)),
                      ("publicado", lambda: olhar_publicado(dias=args.dias)),
+                     ("desempenho", olhar_desempenho),
                      ("sistema", (lambda: None) if args.sem_sistema else olhar_sistema)):
         try:
             fn()

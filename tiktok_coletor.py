@@ -695,7 +695,21 @@ _STOP_REL = {"portatil", "eletrico", "eletrica", "eletronico", "eletronica",
              "original", "premium", "novo", "nova", "luxo", "super", "ultra",
              "qualidade", "resistente", "antiderrapante",
              "preto", "preta", "branco", "branca", "azul", "rosa", "verde",
-             "vermelho", "vermelha", "dourado", "dourada", "prata", "cinza"}
+             "vermelho", "vermelha", "dourado", "dourada", "prata", "cinza",
+             # ⚠️ MODO DE FIXAÇÃO E DE FUNCIONAMENTO (21/08) — mesma família do
+             # material. O log passou a dizer QUAL palavra aprovou cada match e
+             # entregou o caso:
+             #
+             #   'organizador de cabos adesivo' ↳ casou por: adesivo
+             #     → Shopee devolveu 'Suporte Secador De Cabelo Parede Adesivo'
+             #
+             # 'adesivo' descreve COMO gruda, não O QUE é. Organizador de cabo
+             # e suporte de secador são adesivos do mesmo jeito, como panela e
+             # arruela eram de aço inox. Comparar: os matches CERTOS da mesma
+             # rodada casaram pelo substantivo — 'coleira', 'cama'.
+             "adesivo", "adesiva", "magnetico", "magnetica", "retratil",
+             "giratorio", "giratoria", "dobravel", "ajustavel", "recarregavel",
+             "universal", "multiuso", "antiaderente", "impermeavel"}
 
 
 def _sem_acento(s: str) -> str:
@@ -704,18 +718,40 @@ def _sem_acento(s: str) -> str:
                    if unicodedata.category(c) != "Mn")
 
 
+def _palavras_rel(s):
+    s = _sem_acento((s or "").lower())
+    return {p for p in re.findall(r"[a-z0-9]{4,}", s)} - _STOP_REL
+
+
 def _match_relevante(termo: str, nome_produto: str) -> bool:
     """O produto que a Shopee devolveu tem que COMPARTILHAR pelo menos uma
     palavra significativa com o termo buscado. Mata o match falso ('silence' ->
     Camiseta, 'maravilhosa' -> Sandália): a Shopee sempre devolve ALGO, e sem
     essa trava o link vai pro produto errado."""
-    def palavras(s):
-        s = _sem_acento((s or "").lower())
-        return {p for p in re.findall(r"[a-z0-9]{4,}", s)} - _STOP_REL
-    t, n = palavras(termo), palavras(nome_produto)
+    t = _palavras_rel(termo)
     if not t:
         return False
-    return bool(t & n)
+    return bool(t & _palavras_rel(nome_produto))
+
+
+def _ponte_do_match(termo: str, nome_produto: str) -> str:
+    """QUAL palavra aprovou este match. '' quando nenhuma.
+
+    ⚠️ EXISTE PRA PARAR DE ADIVINHAR (21/08). A coleta de hoje aprovou coisas
+    assim:
+
+        'varinha mágica'                 → 'Kit 3 Blusas Infantil Menina…'
+        'Suporte para banho de cachorro' → 'Naninha Para Bebê Antialérgica…'
+        'focinheira de pato'             → 'Corrente P/Papagaio/Arara/Pato…'
+
+    O vídeo mostra uma coisa e o link vende outra — pior que não ter link,
+    porque queima o clique de quem confiou. Eu poderia inventar a próxima
+    regra (substantivo-cabeça? posição? tamanho?), mas hoje três teorias minhas
+    morreram contra dado, e nenhuma delas era sobre o que o log podia dizer.
+    Então o log passa a dizer QUAL palavra fez a ponte, e a regra nasce da
+    lista de pontes ruins em vez de sair da minha cabeça."""
+    comuns = _palavras_rel(termo) & _palavras_rel(nome_produto)
+    return ", ".join(sorted(comuns)[:4])
 
 
 def _baixar(url: str, destino: Path) -> Path | None:
@@ -1226,8 +1262,12 @@ def main():
                 produto_nome = camp.get("nome", termo)
                 imagem = camp.get("imagem", "")
                 comissao = camp.get("comissao_valor", 0)
+                _ponte = _ponte_do_match(termo, produto_nome)
                 _log(f"     ✓ Shopee: '{produto_nome[:45]}' | "
                      f"comissão R$ {comissao} | link: {link or '(falhou)'}")
+                # a palavra que aprovou o match, sempre — é ela que vai
+                # mostrar qual regra falta, sem eu ter que adivinhar
+                _log(f"       ↳ casou por: {_ponte or '(?)'}")
             elif _amazon_ativo() and termo_com_juizo and _produto_pra_amazon(termo):
                 # Shopee não tem → Amazon (link de busca afiliado, só a tag)
                 plataforma = "amazon"
