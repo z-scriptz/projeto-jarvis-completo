@@ -522,6 +522,58 @@ Ex.: "O segredo pra ter um iPhone 17 sem gastar / uma fortuna ✨".
 
 ---
 
+## 🗓️ Dia 2026-08-21 — pet e moda estavam DESLIGADAS, e o alcance tinha denominador
+
+### 🔌 `ativa: false` — a resposta pras duas contas mudas
+
+Elas não postavam porque **não produziam**, e não produziam porque estavam
+desligadas na mão, em 11/08:
+
+```python
+if isinstance(conta, dict) and conta.get("ativa") is False:
+    continue        # pet e moda caíam aqui
+```
+
+A decisão daquele dia estava **certa**: recém-cadastradas, estoque 0, elas
+tinham o maior déficit e furariam a fila de todas as outras — a produção
+inteira serviria duas contas que não publicavam, enchendo a esteira de pacotes
+que venceriam sem sair.
+
+O que mudou até 21/08: o roteador aprendeu pet/moda (19/08), o cache foi limpo
+(244 entradas) e a coleta real trouxe coleira, cama de gato, bebedouro pet,
+bermuda e pijama. **O motivo do desligamento sumiu**, então religou.
+
+⚠️ **Cadastrar a conta e ligar a produção dela são duas decisões diferentes** —
+e o `contas.json` sabe dizer isso. Quem desligar de novo, escreva por quê.
+
+### 📊 ALCANCE SEM SEGUIDORES É NÚMERO SEM DENOMINADOR
+
+A 1ª medição deu alcance mediano **113** e eu concluí *"é problema de
+distribuição"*. Era chute — ninguém no projeto media seguidores. Com o
+denominador:
+
+| conta | seguidores | alcance | leitura |
+|---|---|---|---|
+| `@topshoptech_` | **413** | 117 | **28% da base** ⚠ |
+| `@topshop.__` | 52 | 112 | 2,2× |
+| `@topshopbeauty._` | 36 | 120 | 3,3× |
+
+**Eu estava errado.** Alcançar 112 com 36 seguidores é o Instagram entregando
+**3× além da base** — o algoritmo está funcionando. As contas não estão
+sufocadas: têm menos de 550 seguidores somando as seis. É conta nova, não
+entrega travada.
+
+**A exceção real é o `@topshoptech_`:** única conta com audiência de verdade e
+única abaixo de 1×. A conta grande performando pior que as pequenas. Aberto.
+
+⚠️ **E o meu próprio código mentiu na 1ª execução:** sem post medido, a razão
+caía na mediana global, e `@topshoppet_` (zero publicações) apareceu como
+*"112 de alcance — 12,4× a base"*, com ✓ verde. Número fabricado com cara de
+medido — o defeito do dia inteiro, agora no código novo. Conta sem post não
+tem alcance: tem ausência, e ausência se relata.
+
+---
+
 ## 🗓️ Dia 2026-08-19 — o selo entrava no nome, e eu li o log em vez do vídeo
 
 ### 👁️ O VIGIA NASCEU, E ACHOU COISA NA PRIMEIRA EXECUÇÃO
