@@ -656,7 +656,22 @@ def olhar_desempenho(dias=7):
         for nicho, (handle, segs) in sorted(_seguidores.items()):
             do_perfil = [r.get("reach", 0) or 0 for r in recentes
                          if (r.get("nicho") or "").lower() == nicho.lower()]
-            base = _mediana(do_perfil) if do_perfil else med_agora
+            # ⚠️ SEM POST MEDIDO, NÃO INVENTA UM NÚMERO (21/08).
+            # A 1ª versão caía na mediana GLOBAL quando a conta não tinha post
+            # próprio. Resultado na 1ª execução real: @topshoppet_ e
+            # @topshopmoda_, que têm ZERO publicações, apareceram com "112 de
+            # alcance — 12.4× a base". Alcance fabricado, com cara de medido, e
+            # ainda por cima como ✓ verde.
+            #
+            # É o mesmo defeito do dia todo, agora no meu código novo: um
+            # número que parece específico e não é. Conta sem post não tem
+            # alcance — tem ausência, e ausência se relata.
+            if not do_perfil:
+                _diz(INFO, A, f"{handle}: {segs:,} seguidor(es), nenhum post "
+                              f"medido em {dias}d".replace(",", "."),
+                     "sem post não há alcance a comparar")
+                continue
+            base = _mediana(do_perfil)
             razao = base / segs if segs else 0
             # 1.0 = alcançou tanta gente quanto o número de seguidores. Reels
             # saudável passa disso (o IG entrega pra não-seguidor); muito
