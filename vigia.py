@@ -654,8 +654,22 @@ def olhar_desempenho(dias=7):
         # mediana global e pareceria certa. Chave existente vale mais que
         # ginástica de texto.
         for nicho, (handle, segs) in sorted(_seguidores.items()):
+            # ⚠️ CASA PELA CONTA QUE PUBLICOU, não pela categoria do produto.
+            # Até 21/08 eu comparava `r["nicho"]` (categoria) com a conta, como
+            # se fossem a mesma chave. Não são: produto de categoria pet
+            # publicado no @topshop.__ contava como alcance do @topshoppet_ —
+            # conta que nunca publicou. O `metricas_posts` passou a gravar
+            # `conta`; linhas antigas não têm, e essas ficam de fora em vez de
+            # entrar pela chave errada. Amostra menor e certa vale mais que
+            # amostra cheia e torta.
             do_perfil = [r.get("reach", 0) or 0 for r in recentes
-                         if (r.get("nicho") or "").lower() == nicho.lower()]
+                         if (r.get("conta") or "").lower() == handle.lower()]
+            antigas = sum(1 for r in recentes if not r.get("conta"))
+            if not do_perfil and antigas:
+                _diz(CEGO, A, f"{handle}: {antigas} medição(ões) sem a conta "
+                              f"gravada — não sei de quem são",
+                     "linhas anteriores a 21/08; some sozinho conforme mede")
+                continue
             # ⚠️ SEM POST MEDIDO, NÃO INVENTA UM NÚMERO (21/08).
             # A 1ª versão caía na mediana GLOBAL quando a conta não tinha post
             # próprio. Resultado na 1ª execução real: @topshoppet_ e

@@ -224,9 +224,24 @@ def coletar(horas_min=24, refazer=False, teste=False, limite=0, novos=False):
         for p in fila:
             sc = p["id"]
             media_id = tk = None
+            # ⚠️ GUARDA QUAL CONTA PUBLICOU (21/08). O registro tinha `nicho`,
+            # que vem da CATEGORIA DO PRODUTO — e categoria não é conta.
+            # Produto de categoria "pet" publicado no @topshop.__ (antes do
+            # roteador conhecer pet) ficava gravado como nicho "pet", e
+            # qualquer análise por conta somava esse post ao @topshoppet_ —
+            # que nunca publicou nada.
+            #
+            # Foi assim que o vigia mostrou "@topshoppet_: 112 de alcance com
+            # 9 seguidores" pra uma conta com ZERO publicações. O dado estava
+            # certo; a chave é que estava errada.
+            #
+            # Aqui a conta é sabida de graça: o laço já encontra a mídia
+            # varrendo conta por conta. Só faltava anotar.
+            conta_pub = ""
             for chave, m in mapas.items():
                 if sc in m:
                     media_id, tk = m[sc], tokens[chave]
+                    conta_pub = (contas.get(chave, {}) or {}).get("handle") or chave
                     break
             if not media_id:
                 semid += 1
@@ -242,7 +257,10 @@ def coletar(horas_min=24, refazer=False, teste=False, limite=0, novos=False):
                 "data": p["data"], "hora": p["hora"],
                 "hook": p["hook"], "produto": p["produto"],
                 "categoria": p["categoria"],
+                # nicho = categoria DO PRODUTO · conta = quem PUBLICOU.
+                # São coisas diferentes e agora o arquivo diz as duas.
                 "nicho": normalizar(p["categoria"]),
+                "conta": conta_pub,
                 "url": p["url"], **dados,
                 "medido_em": int(time.time()),
             }, ensure_ascii=False) + "\n")
