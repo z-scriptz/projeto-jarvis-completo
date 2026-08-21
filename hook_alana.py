@@ -691,6 +691,23 @@ def _via_gemini(produto: str, descricao: str, nicho: str) -> Optional[str]:
         # Tambem some daqui a instrucao antiga de "feche com promessa de metodo
         # ('siga esses passos')": aquilo e CTA, e CTA no gancho e anuncio. O
         # que prende nao e o convite, e a pergunta que fica na cabeca.
+        # ⚠️ CTA NO GANCHO É KNOB, NÃO OPINIÃO (21/08).
+        # O Dre disse que eu podia manter o 'siga esses passos' e que tinha se
+        # confundido na própria regra. Só que a primeira intuição dele estava
+        # certa pela régua da Ava — gancho amplo → valor estreito → CTA DE
+        # NICHO: o CTA mora no fim, não no começo.
+        #
+        # O argumento que me convence é orçamento, não estilo: o gancho tem 52
+        # caracteres. 'siga esses passos' come 17 — um terço — com palavras que
+        # serviriam em qualquer vídeo do mundo. Trocar um terço do espaço por
+        # algo genérico, em vez de uma cena concreta, é troca ruim.
+        #
+        # MAS ISSO É JULGAMENTO MEU, NÃO MEDIÇÃO. E desde 21/08 existe cadeia
+        # de métricas por hook rodando (metricas_posts + a camada do vigia).
+        # Então vira interruptor: HOOK_CTA=1 religa a promessa de método, e a
+        # comparação passa a ser feita com alcance real em vez de gosto.
+        _cta_ok = os.environ.get("HOOK_CTA", "0").strip().lower() in (
+            "1", "true", "sim")
         regra_ava = (
             "O QUE E UM GANCHO AMPLO (definicao, nao adjetivo)\n"
             "Gancho amplo = uma frase que descreve uma SITUACAO, COMPORTAMENTO,\n"
@@ -708,8 +725,13 @@ def _via_gemini(produto: str, descricao: str, nicho: str) -> Optional[str]:
             "  - exigir raca, idade, profissao, tipo de cabelo, raca do animal;\n"
             "  - citar o produto pelo nome;\n"
             "  - parecer anuncio ('corre', 'aproveite', 'promocao', 'baratinho');\n"
-            "  - trazer CTA ('clica', 'arrasta', 'siga esses passos', 'olha o\n"
-            "    link'). O gancho prende pela pergunta, nao pelo convite;\n"
+            + ("  - trazer CTA de compra ('clica', 'arrasta', 'olha o link');\n"
+               "    promessa de metodo ('siga esses passos', 'em 5 minutos') e\n"
+               "    PERMITIDA, se sobrar espaco pra cena concreta antes dela;\n"
+               if _cta_ok else
+               "  - trazer CTA ('clica', 'arrasta', 'siga esses passos', 'olha o\n"
+               "    link'). O gancho prende pela pergunta, nao pelo convite;\n")
+            +
             "  - frase vazia de suspense ('voce nao vai acreditar', 'olha isso');\n"
             "  - ser generico a ponto de servir pra qualquer video.\n\n"
             "⚠️ AMPLO E VAGO NAO SAO A MESMA COISA. Este exemplo e amplo, nao\n"
