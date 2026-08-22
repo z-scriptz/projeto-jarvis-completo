@@ -4932,6 +4932,64 @@ O conserto, em quatro camadas:
    (`preencher_fotos.py`), em vez de montar um carrossel que o uploader
    recusaria de qualquer jeito (mínimo de 2 filhos).
 
+#### 🎬 A CAPA DRAMÁTICA E A SEQUÊNCIA NARRATIVA (22/08, 3ª rodada)
+
+O Dre mandou 10 capas de referência e a estrutura narrativa do ChatGPT. As
+referências fazem quatro coisas que a minha capa limpa não fazia: **foto como
+fundo do slide inteiro** (escurecida, não numa caixa), **CAIXA ALTA**, **parte
+da frase em COR**, e o `1/8` numa pílula no rodapé.
+
+**⚠️ A MARCAÇÃO DE DESTAQUE TEM QUE SER POR PALAVRA, NÃO POR TRECHO.** Primeira
+tentativa: procurar o par de `*asteriscos*` depois de quebrar a linha. A quebra
+partia a marca ao meio — `*ACABANDO COM` numa linha, `SUA BATERIA*` na outra —
+e aí nenhuma das duas tem par: nada pintava e **os asteriscos saíam literais no
+slide**. Agora `_marcacao()` devolve o texto limpo + o ÍNDICE das palavras
+destacadas, e a quebra pode cair onde quiser. De quebra conserta a medição:
+quem é quebrado é o texto sem os asteriscos que não seriam desenhados.
+
+**⚠️ O VÉU É GRADIENTE, NÃO CHAPADO.** Chapado em 170 o produto sumia junto com
+o texto e a foto virava uma mancha de cor. O texto mora no terço superior, então
+é lá que o véu é forte; embaixo ele quase some e o produto aparece. É o que
+separa "foto de fundo" de "fundo colorido". E o véu é o que dispensa contorno —
+a regra do Dre é contorno só branco, que sobre texto branco não serve.
+
+**⚠️ A CAPA DRAMÁTICA EXIGE FOTO.** Sem foto ela seria um retângulo preto com
+texto, pior que a capa limpa. A escolha é pelo material que existe, não por
+preferência: tem foto → dramática, não tem → limpa. `CARR_CAPA=limpa` desliga.
+
+**Cor de destaque por nicho** (`tech` verde-limão · `casa` laranja · `beleza`
+roxo · `pet` azul · `moda` rosa · `geral` ouro) — é o pedido de "identidade
+visual de cada TopShop mantida": duas contas nossas lado a lado no explorar
+têm que se distinguir sem ler o @.
+
+**⚠️ FALTA A FONTE, E ISSO É COMPRA, NÃO CÓDIGO.** As referências usam
+condensada pesada (Anton, Archivo Black); a Montserrat é larga. Largura de letra
+é desenho, não configuração — não dá pra simular. `fonte_titulo()` já procura
+`Anton-Regular.ttf`, `ArchivoBlack-Regular.ttf`, `Oswald-Bold.ttf` ou
+`BebasNeue-Regular.ttf` em `assets/brand` e usa a primeira que achar; sem
+nenhuma, cai na Montserrat e funciona. Baixar o `.ttf` é o que falta.
+
+**A SEQUÊNCIA NARRATIVA** — a regra que o Dre chamou de ouro: *"cada slide deve
+responder uma pergunta criada pelo slide anterior ou criar uma nova que o
+próximo responde"*. Entraram dois slides no meio de todo formato:
+- **QUEBRA (slide 2)** — ⚠️ NÃO ENTREGA A RESPOSTA. Ele aumenta a tensão ("e
+  você provavelmente faz 2 deles todo dia"). É o slide que decide se a pessoa
+  continua arrastando; sem ele o carrossel é capa + informação, que é
+  apresentação de PowerPoint.
+- **RESUMO (penúltimo)** — a lista do que foi dito, `_slide_resumo`, com a
+  pílula "SALVA ISSO". ⚠️ **É o slide que ataca o nosso pior número**: 47.202
+  impressões deram 48 salvamentos. Ninguém salva uma capa; salva-se a página que
+  resume. Vem antes do CTA de propósito — depois dele ainda vem o pedido.
+  A fonte encolhe pela QUANTIDADE de itens (54 → 46 → 40), porque 7 itens em
+  corpo 54 estouram o slide e quem descobriria isso seria o leitor, não o log.
+- O tamanho é variável (5 a 10 slides), como o Dre pediu — quem manda é quantos
+  `passos` o formato tem, não um número fixo.
+
+**Sobre o tom, decisão do Dre: MANTER.** *"apesar de soar meio anúncio, a gente
+é afiliado... é mais um CTA e uma chantagenzinha do que anúncio — só não pode
+parecer muitooo anúncio"*. Eu tinha marcado "Preço de outro mundo!" como
+defeito; não é.
+
 #### Ainda falta
 1. **Rota no Caddy** — sem ela, carrossel e story de imagem não saem do lugar.
    O 404 do `--teste` de 22/08 é o módulo funcionando, não um defeito.

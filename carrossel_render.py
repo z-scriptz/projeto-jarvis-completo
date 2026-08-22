@@ -109,6 +109,64 @@ CTA_FONT, CTA_LINHA_FONT = 76, 44
 COR_MARCA = (245, 197, 66)           # #F5C542 — o mesmo ouro do COR_OURO do Reel
 JPEG_Q = 92
 
+# ══════════════════════════════════════════════════════════════════════════
+# CAPA DRAMÁTICA — o modelo das referências que o Dre mandou (22/08)
+#
+# O que aquelas capas fazem e a minha capa limpa não fazia:
+#   · a FOTO é o fundo do slide inteiro, escurecida, não uma caixa com margem
+#   · texto em CAIXA ALTA, branco, ocupando o topo
+#   · UMA PARTE da frase em COR — é a marca visual desses posts; o olho pousa
+#     ali primeiro e é o que separa "capa de vídeo" de "arte de anúncio"
+#   · subtexto menor embaixo, e o `1/8` numa pílula no rodapé
+#
+# ⚠️ A COR DE DESTAQUE É POR NICHO, e isso não é enfeite: é o pedido de
+# "identidade visual de cada TopShop mantida". Duas contas nossas lado a lado
+# no explorar têm que se distinguir sem ler o @.
+_DESTAQUE = {
+    "tech":   (163, 255, 79),      # verde-limão
+    "casa":   (255, 138, 51),      # laranja
+    "beleza": (214, 122, 255),     # roxo
+    "pet":    (94, 200, 255),      # azul
+    "moda":   (255, 122, 176),     # rosa
+    "geral":  (245, 197, 66),      # o ouro da marca
+}
+
+CAPA_TITULO_FONT, CAPA_TITULO_MIN = 118, 62
+CAPA_SUB_FONT = 40
+CAPA_ESCURO = int(os.environ.get("CARR_CAPA_ESCURO", "170"))   # 0-255 do véu
+
+
+# ⚠️ AS REFERÊNCIAS USAM FONTE CONDENSADA, E A MONTSERRAT NÃO É.
+# É a última diferença visual entre a nossa capa e as delas: a condensada
+# empilha mais letra por linha, e é ela que dá aquele peso de cartaz. Não dá
+# pra simular com a Montserrat — largura de letra é desenho, não configuração.
+# Então: SE existir uma condensada em assets/brand, a capa usa; se não, cai na
+# Montserrat e continua funcionando. Baixar o .ttf é a única coisa que falta,
+# e é uma decisão de marca, não de código.
+_CONDENSADAS = ("Anton-Regular.ttf", "ArchivoBlack-Regular.ttf",
+                "Oswald-Bold.ttf", "BebasNeue-Regular.ttf")
+
+
+def fonte_titulo(tam: int):
+    """Fonte dos títulos de capa: condensada se houver, Montserrat se não."""
+    from PIL import ImageFont
+    for nome in _CONDENSADAS:
+        arq = R.BRAND_DIR / nome
+        if arq.exists():
+            try:
+                return ImageFont.truetype(str(arq), tam)
+            except Exception:
+                continue
+    return R._fonte(tam)
+
+
+def _cor_destaque(nicho: str) -> tuple:
+    return _DESTAQUE.get((nicho or "geral").lower(), _DESTAQUE["geral"])
+
+
+def _capa_dramatica_ligada() -> bool:
+    return os.environ.get("CARR_CAPA", "dramatica").strip().lower() != "limpa"
+
 
 def _px(v) -> int:
     return int(round(v * SUPER))
@@ -194,18 +252,19 @@ def _cabecalho(img, d, nicho: str, handle: str, claro: bool, avisos: list):
 
 
 def _texto_que_cabe(d, texto: str, corpo: int, corpo_min: int, larg: int,
-                    max_linhas: int) -> tuple:
+                    max_linhas: int, titulo: bool = False) -> tuple:
     """Encolhe a fonte até o texto caber em `max_linhas`. Devolve (linhas, fonte).
 
     ⚠️ ENCOLHER É O CAMINHO, CORTAR NÃO É. O teto fixo de 40 caracteres do
     `hook_alana` matava todo hook de duas linhas e ninguém via — o vídeo saía
     com a frase reserva. Aqui a fonte cede antes de a frase ceder."""
+    escolhe = fonte_titulo if titulo else R._fonte
     for tam in range(corpo, corpo_min - 1, -2):
-        f = R._fonte(_px(tam))
+        f = escolhe(_px(tam))
         linhas = R._quebrar(d, texto, f, larg, max_linhas + 1)
         if len(linhas) <= max_linhas:
             return linhas, f
-    f = R._fonte(_px(corpo_min))
+    f = escolhe(_px(corpo_min))
     return R._quebrar(d, texto, f, larg, max_linhas), f
 
 
@@ -296,7 +355,7 @@ def _slide_capa(plano: dict, total: int, claro: bool, cor_fundo: tuple,
     # faz a pessoa começar a arrastar em vez de passar.
     _numero_do_slide(img, d, 1, total, claro)
 
-    hook = (capa.get("hook") or "").strip()
+    hook = _limpa_marcas((capa.get("hook") or "").strip())
     if not hook:
         avisos.append("a capa veio SEM hook — é o único slide que o feed mostra")
     _vigiar_palavras(avisos, 1, hook)
@@ -340,7 +399,7 @@ def _slide_produto(item: dict, i: int, n: int, plano: dict, claro: bool,
     # com um resultado errado que só aparece quando alguém muda o SUPER.
     y_s = _px(FOTO_Y + FOTO_H + 46)
 
-    titulo = (item.get("titulo") or "").strip()
+    titulo = _limpa_marcas((item.get("titulo") or "").strip())
     linhas, f = _texto_que_cabe(d, titulo, TITULO_FONT, TITULO_MIN,
                                 _px(LARG - 2 * MARGEM), 2)
     alt_linha = int(getattr(f, "size", 40) * 1.18)
@@ -357,6 +416,122 @@ def _slide_produto(item: dict, i: int, n: int, plano: dict, claro: bool,
         _pilula(d, _px(MARGEM), topo, larg + 2 * pad, altp, COR_MARCA)
         R._texto_rico(img, d, _px(MARGEM) + pad, topo + altp // 2, preco, fp,
                       (0, 0, 0, 255))
+    return img
+
+
+_RX_MARCA = re.compile(r"\*([^*]+)\*")
+
+
+def _limpa_marcas(t: str) -> str:
+    return _RX_MARCA.sub(r"\1", t or "")
+
+
+def _marcacao(texto: str) -> tuple:
+    """`"5 ERROS *QUE ACABAM*"` → `("5 ERROS QUE ACABAM", {2, 3})`.
+
+    ⚠️ A MARCAÇÃO É POR PALAVRA, NÃO POR TRECHO — e isso não é preferência, é
+    a única coisa que funciona. Na 1ª tentativa eu procurava o par de
+    asteriscos DEPOIS da quebra de linha, e a quebra partia a marca ao meio:
+    `*ACABANDO COM` numa linha, `SUA BATERIA*` na outra. Nenhuma das duas tem
+    par, então nada pintava e os asteriscos saíam literais no slide.
+    Guardando o ÍNDICE das palavras destacadas, a quebra pode cair onde quiser.
+    De quebra resolve a medição: quem é quebrado é o texto limpo, sem os
+    asteriscos que não seriam desenhados."""
+    palavras, destaque, pos = [], set(), 0
+    for m in _RX_MARCA.finditer(texto or ""):
+        palavras.extend((texto[pos:m.start()]).split())
+        for w in m.group(1).split():
+            destaque.add(len(palavras))
+            palavras.append(w)
+        pos = m.end()
+    palavras.extend((texto[pos:]).split())
+    return " ".join(palavras), destaque
+
+
+def _escreve_marcado(img, d, x: int, y_meio: int, linha: str, fonte, cor,
+                     cor_destaque, i0: int, destaque: set) -> int:
+    """Escreve uma linha palavra a palavra. Devolve o índice da próxima."""
+    espaco = d.textlength(" ", font=fonte)
+    cur, i = float(x), i0
+    for w in (linha or "").split():
+        cur += R._texto_rico(img, d, int(cur), y_meio, w, fonte,
+                             cor_destaque if i in destaque else cor)
+        cur += espaco
+        i += 1
+    return i
+
+
+def _foto_de_fundo(img, caminho: Path, escuro: int):
+    """A foto COBRE o slide inteiro, com um véu escuro por cima.
+
+    ⚠️ O VÉU NÃO É ESTÉTICA, É LEGIBILIDADE. Texto branco sobre foto de produto
+    sem véu some em qualquer região clara — e a regra do Dre é contorno só
+    branco, que aqui não serve (o texto já é branco). O véu resolve sem
+    contorno nenhum, que é o que aquelas referências fazem."""
+    from PIL import Image
+    _foto_arredondada(img, caminho, 0, 0, _px(LARG), _px(ALT))
+
+    # ⚠️ VÉU EM GRADIENTE, NÃO CHAPADO. Chapado em 170 o produto sumia junto
+    # com o texto — a foto virava uma mancha de cor. O texto mora no TERÇO
+    # SUPERIOR; então é lá que o véu é forte e embaixo ele quase some, deixando
+    # o produto aparecer. É o que as referências fazem, e é o que separa
+    # "foto de fundo" de "fundo colorido".
+    alt, larg = _px(ALT), _px(LARG)
+    topo = max(0, min(255, escuro))
+    pe = int(topo * 0.35)
+    faixa = Image.new("L", (1, alt))
+    faixa.putdata([int(topo + (pe - topo) * (y / max(1, alt - 1)))
+                   for y in range(alt)])
+    veu = Image.new("RGBA", (larg, alt), (0, 0, 0, 255))
+    veu.putalpha(faixa.resize((larg, alt)))
+    img.alpha_composite(veu, (0, 0))
+
+
+def _slide_capa_dramatica(plano: dict, total: int, foto: Path, avisos: list):
+    """A capa das referências: foto de fundo, CAIXA ALTA, destaque em cor."""
+    from PIL import Image, ImageDraw
+    nicho = plano.get("nicho", "geral")
+    img = Image.new("RGBA", (_px(LARG), _px(ALT)), (12, 12, 12, 255))
+    d = ImageDraw.Draw(img)
+    _foto_de_fundo(img, foto, CAPA_ESCURO)
+
+    branco = (255, 255, 255, 255)
+    cor_dest = (*_cor_destaque(nicho), 255)
+    capa = plano.get("capa") or {}
+
+    _cabecalho(img, d, nicho, plano.get("handle", ""), False, avisos)
+
+    hook, destaque = _marcacao((capa.get("hook") or "").strip().upper())
+    _vigiar_palavras(avisos, 1, hook)
+    linhas, f = _texto_que_cabe(d, hook, CAPA_TITULO_FONT, CAPA_TITULO_MIN,
+                                _px(LARG - 2 * MARGEM), 4, titulo=True)
+    alt_linha = int(getattr(f, "size", 40) * 1.06)   # condensado: linhas juntas
+    y, i = _px(290), 0
+    for ln in linhas:
+        i = _escreve_marcado(img, d, _px(MARGEM), y + alt_linha // 2, ln, f,
+                             branco, cor_dest, i, destaque)
+        y += alt_linha
+
+    sub, dsub = _marcacao((capa.get("sub") or "").strip().upper())
+    if sub:
+        y += _px(26)
+        fs = R._fonte(_px(CAPA_SUB_FONT))
+        j = 0
+        for ln in R._quebrar(d, sub, fs, _px(LARG - 2 * MARGEM), 3):
+            j = _escreve_marcado(img, d, _px(MARGEM), y + _px(30), ln, fs,
+                                 branco, cor_dest, j, dsub)
+            y += _px(58)
+
+    # o "1/8" numa pílula no rodapé, como nas referências — no alto ele
+    # competia com o hook, que é o que tem que ser visto primeiro
+    txt = f"1/{total}"
+    fp = R._fonte(_px(30))
+    larg = R._texto_rico(None, d, 0, 0, txt, fp, None, desenhar=False)
+    pad, altp = _px(22), _px(56)
+    x0, y0 = _px(MARGEM), _px(ALT - 118)
+    d.rounded_rectangle((x0, y0, x0 + larg + 2 * pad, y0 + altp),
+                        radius=_px(14), outline=cor_dest, width=_px(3))
+    R._texto_rico(img, d, x0 + pad, y0 + altp // 2, txt, fp, branco)
     return img
 
 
@@ -385,7 +560,7 @@ def _slide_texto(item: dict, i: int, n: int, plano: dict, claro: bool,
     fr, pad, altp = R._fonte(_px(38)), _px(26), _px(66)
     alt_rot = (altp + _px(56)) if rotulo else 0
 
-    titulo = (item.get("titulo") or "").strip()
+    titulo, destaque = _marcacao((item.get("titulo") or "").strip())
     linhas, f = _texto_que_cabe(d, titulo, 84, 52, largura, 4)
     alt_linha = int(getattr(f, "size", 40) * CAPA_ALT_LINHA)
 
@@ -407,8 +582,11 @@ def _slide_texto(item: dict, i: int, n: int, plano: dict, claro: bool,
                       (0, 0, 0, 255))
         y_s += alt_rot
 
+    cor_dest = (*_cor_destaque(plano.get("nicho", "geral")), 255)
+    i = 0
     for ln in linhas:
-        R._texto_rico(img, d, _px(MARGEM), y_s + alt_linha // 2, ln, f, tinta)
+        i = _escreve_marcado(img, d, _px(MARGEM), y_s + alt_linha // 2, ln, f,
+                             tinta, cor_dest, i, destaque)
         y_s += alt_linha
 
     if linhas_apoio:
@@ -425,6 +603,48 @@ def _slide_texto(item: dict, i: int, n: int, plano: dict, claro: bool,
             larg_f = int(alt_f * 1.15)
             _foto_arredondada(img, Path(foto), _px(MARGEM), y_s + _px(40),
                               larg_f, alt_f)
+    return img
+
+
+def _slide_resumo(item: dict, i: int, n: int, plano: dict, claro: bool,
+                  cor_fundo: tuple, avisos: list):
+    """A lista do que foi dito — o slide feito pra ser SALVO.
+
+    ⚠️ ESTE É O SLIDE QUE ATACA O NOSSO PIOR NÚMERO. 47.202 impressões deram 48
+    salvamentos (1 a cada mil), e salvamento é o sinal que faz o Instagram
+    entregar pra quem não segue. Ninguém salva uma capa; salva-se a página que
+    resume. Por isso ele é o penúltimo, e não o último: depois dele ainda vem o
+    pedido."""
+    img, d = _tela(claro, cor_fundo)
+    tinta, cinza = _tintas(claro)
+    _cabecalho(img, d, plano.get("nicho", "geral"), plano.get("handle", ""),
+               claro, avisos)
+    _numero_do_slide(img, d, i, n, claro)
+    cor_dest = (*_cor_destaque(plano.get("nicho", "geral")), 255)
+
+    itens = [str(x) for x in (item.get("itens") or []) if str(x).strip()]
+    y_s = _px(300)
+    rotulo = (item.get("rotulo") or "SALVA ISSO").strip().upper()
+    fr = R._fonte(_px(38))
+    larg = R._texto_rico(None, d, 0, 0, rotulo, fr, None, desenhar=False)
+    pad, altp = _px(26), _px(66)
+    _pilula(d, _px(MARGEM), y_s, larg + 2 * pad, altp, COR_MARCA)
+    R._texto_rico(img, d, _px(MARGEM) + pad, y_s + altp // 2, rotulo, fr,
+                  (0, 0, 0, 255))
+    y_s += altp + _px(60)
+
+    # ⚠️ a fonte encolhe com a QUANTIDADE de itens, não com o comprimento de
+    # cada um: 7 itens em corpo 54 estouram o slide, e quem descobriria isso
+    # seria o leitor, não o log.
+    corpo = 54 if len(itens) <= 4 else (46 if len(itens) <= 6 else 40)
+    f = R._fonte(_px(corpo))
+    passo = _px(int(corpo * 1.85))
+    for k, txt in enumerate(itens[:7], 1):
+        n_larg = R._texto_rico(img, d, _px(MARGEM), y_s + passo // 2,
+                               f"{k}", f, cor_dest)
+        R._texto_rico(img, d, _px(MARGEM) + n_larg + _px(22), y_s + passo // 2,
+                      _limpa_marcas(txt), f, tinta)
+        y_s += passo
     return img
 
 
@@ -487,14 +707,25 @@ def renderizar(plano: dict, saida) -> list:
                     f"{sobra} produto(s) de fora")
 
     avisos, telas = [], []
-    telas.append(_slide_capa(plano, total, claro, cor_fundo, avisos))
+    # ⚠️ A CAPA DRAMÁTICA EXIGE FOTO. Sem foto ela seria um retângulo preto com
+    # texto — pior que a capa limpa. Então a escolha é pelo material que existe,
+    # não por preferência: tem foto → dramática; não tem → limpa.
+    foto_capa = (plano.get("capa") or {}).get("foto") or next(
+        (s.get("foto") for s in itens if s.get("foto")), "")
+    if _capa_dramatica_ligada() and foto_capa and Path(foto_capa).exists():
+        telas.append(_slide_capa_dramatica(plano, total, Path(foto_capa), avisos))
+    else:
+        if _capa_dramatica_ligada() and not foto_capa:
+            avisos.append("capa limpa: nenhum slide trouxe foto pra usar de fundo")
+        telas.append(_slide_capa(plano, total, claro, cor_fundo, avisos))
     for k, item in enumerate(itens, start=2):
         # `tipo` manda; sem ele, o slide é de PRODUTO só quando tem o que uma
         # vitrine precisa (preço). Assim um plano antigo, sem `tipo`, continua
         # desenhando igual, e um slide de frase nunca ganha moldura de foto
         # vazia por omissão de campo.
         tipo = (item.get("tipo") or ("produto" if item.get("preco") else "texto"))
-        desenha = _slide_produto if tipo == "produto" else _slide_texto
+        desenha = {"produto": _slide_produto,
+                   "resumo": _slide_resumo}.get(tipo, _slide_texto)
         telas.append(desenha(item, k, total, plano, claro, cor_fundo, avisos))
     if plano.get("cta") is not False:
         telas.append(_slide_cta(plano, total, claro, cor_fundo, avisos))

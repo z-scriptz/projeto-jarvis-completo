@@ -531,15 +531,39 @@ REGRAS DURAS:
 4. Nao invente preco, marca, medida nem promessa de resultado.
 5. Nada de "corre ver", "arrasta que eu te mostro", "voce nao vai acreditar".
 
+A REGRA DE OURO DA SEQUENCIA:
+Cada slide responde uma pergunta que o slide anterior criou, OU cria uma
+pergunta que o proximo responde. Voce nao esta escrevendo N legendas soltas —
+esta escrevendo uma sequencia que faz a pessoa chegar ate o fim.
+
+Por isso a ordem e:
+  · CAPA      o gancho. Ela promete, nao entrega.
+  · QUEBRA    o 2o slide NAO entrega a resposta ainda. Ele aumenta a
+              tensao ("e voce provavelmente faz 2 deles todo dia"). E o
+              slide que decide se a pessoa continua arrastando.
+  · CORPO     {passos} slides de entrega, um assunto por slide. O MAIS FORTE
+              vai por ULTIMO, nao primeiro.
+  · RESUMO    a lista do que foi dito, curta, feita pra ser SALVA.
+  · CTA       contextual, nunca generico. Nada de "siga para mais dicas".
+              Puxe do assunto: "voce fazia algum desses?".
+
+DESTAQUE EM COR: marque com *asteriscos* a parte da CAPA que deve sair
+colorida — 1 a 3 palavras, o miolo da frase, nunca a frase toda.
+Ex: "5 ERROS QUE ESTAO *ACABANDO COM SUA BATERIA*"
+
 RESPONDA SO COM JSON, sem cerca de codigo, neste formato exato:
-{{"capa": "<a frase da capa>",
+{{"capa": "<o gancho, com *destaque* marcado>",
+  "capa_sub": "<uma linha menor embaixo do gancho, pode ser vazia>",
+  "quebra": {{"titulo": "<aumenta a tensao, NAO entrega a resposta>",
+             "linha": "<uma linha de apoio, pode ser vazia>"}},
   "slides": [{{"rotulo": "<curto, ex ERRO 1 — pode ser vazio>",
                "titulo": "<a frase do slide>",
                "linha": "<uma linha de apoio, pode ser vazia>"}}],
-  "cta": "<a frase do ultimo slide>",
+  "resumo": ["<item 1, curtissimo>", "<item 2>", "..."],
+  "cta": "<a frase do ultimo slide, contextual>",
   "legenda": "<2 a 4 linhas pra legenda do post>"}}
 
-Gere exatamente {passos} objeto(s) em "slides"."""
+Gere exatamente {passos} objeto(s) em "slides" e {passos} item(ns) em "resumo"."""
 
 
 def _via_gemini(formato: str, nicho: str, produtos: list, angulo: str):
@@ -671,6 +695,23 @@ def montar_plano(nicho: str, formato: str = "", fotos_em: Path = None) -> dict:
             item["tipo"] = item.get("tipo") or "texto"
         slides.append(item)
 
+    # ⚠️ QUEBRA E RESUMO SÃO A SEQUÊNCIA, NÃO ENFEITE (regra do Dre, 22/08):
+    # "cada slide responde uma pergunta criada pelo anterior ou cria uma que o
+    # próximo responde". O slide 2 é o que decide se a pessoa continua
+    # arrastando — ele aumenta a tensão e NÃO entrega a resposta. O resumo é o
+    # slide feito pra ser SALVO, e salvamento é o sinal que a gente está com
+    # 1 a cada mil.
+    q = d.get("quebra") or {}
+    if q.get("titulo"):
+        tit, apoio = _orcamento(q["titulo"], q.get("linha") or "")
+        slides.insert(0, {"rotulo": "", "titulo": tit, "linha": apoio,
+                          "tipo": "texto"})
+
+    resumo = [_cortar(str(x), 8) for x in (d.get("resumo") or []) if str(x).strip()]
+    if len(resumo) >= 2:
+        slides.append({"rotulo": "SALVA ISSO", "titulo": "", "linha": "",
+                       "tipo": "resumo", "itens": resumo[:7]})
+
     cta = dict(CTA_PADRAO)
     if d.get("cta"):
         cta["titulo"] = _cortar(d["cta"])
@@ -678,7 +719,9 @@ def montar_plano(nicho: str, formato: str = "", fotos_em: Path = None) -> dict:
     return {
         "nicho": nicho, "handle": conta, "formato": formato,
         "motivo_do_formato": motivo, "reserva": bool(d.get("reserva")),
-        "capa": {"hook": _cortar(d.get("capa") or angulo)},
+        "capa": {"hook": _cortar(d.get("capa") or angulo),
+                 "sub": _cortar(d.get("capa_sub") or "", 10),
+                 "foto": next((p["foto"] for p in produtos if p.get("foto")), "")},
         "slides": slides, "cta": cta,
         "legenda": (d.get("legenda") or "").strip(),
         "links": [p["link"] for p in produtos if p.get("link")],
