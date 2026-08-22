@@ -4792,18 +4792,82 @@ um comando. Então o cérebro tem duas fases e **diz em qual está**:
   mão. ⚠️ Isso importa porque `_texto_que_cabe` **obedece calado**: um slide de
   20 palavras vira parágrafo em corpo 56 e ninguém reclama.
 
+#### 🔧 COMO OPERAR O CARROSSEL — os comandos, na ordem (22/08)
+
+⚠️ **TUDO RODA DE DENTRO DE `~/jarvis`, NUNCA DE `~`.** Registrado porque
+aconteceu: mandei os comandos sem o `cd` e a saída foi `fatal: not a git
+repository` três vezes seguidas + `.venv/bin/python: No such file or
+directory`. Os dois erros são a MESMA causa (diretório errado), e nenhum dos
+dois diz isso. O `pjc` é um remote de `~/jarvis`; o venv também mora lá.
+
+**1. Trazer os arquivos** (todos são de RAIZ — nenhum vai em `agents/`):
+
+    cd ~/jarvis
+    git fetch pjc claude/opa-clau-dgs591
+    for f in carrossel_brain.py carrossel_render.py midia_publica.py \
+             patch_carrossel_uploader.py; do
+        git show FETCH_HEAD:$f > $f
+    done
+
+**2. Patchar o uploader** (o `deploy_seguro` recusa: DIVERGENTE):
+
+    cd ~/jarvis && python3 patch_carrossel_uploader.py
+    systemctl restart jarvis.service
+
+**3. Abrir o host público** — sem isso o carrossel renderiza mas não publica:
+
+    cd ~/jarvis && python3 midia_publica.py --caddy    # imprime a rota
+    # cola no /etc/caddy/Caddyfile, dentro do bloco jarvis.topshopoficial.com.br
+    caddy validate --config /etc/caddy/Caddyfile && systemctl reload caddy
+    .venv/bin/python midia_publica.py --teste          # tem que dar 200
+
+**4. Usar:**
+
+    cd ~/jarvis
+    .venv/bin/python carrossel_brain.py --formatos               # pesos e feitos
+    .venv/bin/python carrossel_brain.py --nicho casa --render pronto_carrossel/teste
+    .venv/bin/python carrossel_render.py --exemplo casa          # só o layout
+
+**Knobs no `.env`** (nenhum obrigatório): `CARR_PALAVRAS_MAX` (12) ·
+`CARR_COBERTURA` (3) · `CARR_PESO_<FORMATO>` · `CARR_MODELO` ·
+`MIDIA_PUBLICA_DIR` · `MIDIA_PUBLICA_URL` · `MIDIA_PUBLICA_HORAS` (6).
+
+#### 🔌 O CICLO FECHOU: `--postar` (22/08)
+
+`preparar_pasta()` escreve na pasta o mesmo contrato que o vídeo já usa —
+`conta.json`, `engajamento.json`, `legenda.txt` — e `publicar()` chama o
+uploader. `carrossel_brain.py --nicho X --render PASTA --postar` faz o caminho
+inteiro: escolhe formato → escreve texto → baixa fotos → desenha → publica →
+anota a URL no ledger.
+
+⚠️ **SEM `conta.json` A PASTA POSTA NA CONTA ERRADA, E EM SILÊNCIO.** O
+`_ativar_conta` do uploader procura esse arquivo ao lado do 1º slide; **não
+achando, ele não falha** — cai nas env vars globais e publica no `@topshop.__`.
+Um carrossel de pet sairia na conta geral sem uma linha de log. Por isso
+`preparar_pasta` levanta exceção em vez de seguir: é melhor não postar do que
+postar no lugar errado. E é o MESMO contrato de pasta do vídeo de propósito —
+formato novo não é motivo pra inventar convenção nova.
+
+⚠️ **Legenda vazia é preenchida com hook + CTA.** A reserva (sem Gemini) não
+escreve legenda, e legenda vazia já custou 11 Reels da @topshopcasa_ em 15/08.
+
+Sem `--postar`, ele registra o carrossel MONTADO assim mesmo: a cobertura da
+fase 1 conta produção, e ensaio também consome produto da fila.
+
+⚠️ `shared/carrosseis_ledger.jsonl` entrou no `.gitignore` — é **estado da
+VPS**, não código. Ele foi versionado por engano num `git add -A` meu e os
+registros dos meus testes locais teriam poluído a contagem de cobertura da VPS.
+
 #### Ainda falta
 1. **Rota no Caddy** — sem ela, carrossel e story de imagem não saem do lugar.
    O 404 do `--teste` de 22/08 é o módulo funcionando, não um defeito.
-2. **Ligar o brain ao publicador** — hoje `--render` gera a pasta, mas falta
-   escrever o `conta.json` nela e chamar o uploader.
-3. **Ciclos e horários no `daemon_maestro`** — hoje ele só tem `horarios` +
+2. **Ciclos e horários no `daemon_maestro`** — hoje ele só tem `horarios` +
    `posts_por_dia_semana` pro Reel. Precisa de `carrossel_horarios` separado,
    senão os dois formatos disputam o mesmo slot.
-4. **Cruzar o ledger com as métricas** — o `carrosseis_ledger.jsonl` guarda o
+3. **Cruzar o ledger com as métricas** — o `carrosseis_ledger.jsonl` guarda o
    formato, mas quem mede alcance/salvamento é o `metricas_posts`. Falta juntar
    os dois pelo shortcode pra fase 2 ligar sozinha.
-5. **Story (depois do carrossel, decisão do Dre)** — e o mais barato já está
+4. **Story (depois do carrossel, decisão do Dre)** — e o mais barato já está
    pronto: o `.mp4` do Reel que a conta acabou de postar está no disco e tem
    menos de 60s, então `--story` o republica com **zero** render e **zero**
    infra nova.

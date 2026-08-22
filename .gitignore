@@ -63,3 +63,6 @@ assets/musicas/
 
 # vigia: referencias de cabecalho, recortes e historico (dado de execucao)
 shared/vigia/
+
+# ledger de carrosseis: e ESTADO DA VPS, nao codigo — cada maquina tem o seu
+shared/carrosseis_ledger.jsonl

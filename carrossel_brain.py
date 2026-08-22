@@ -576,6 +576,59 @@ def montar_plano(nicho: str, formato: str = "", fotos_em: Path = None) -> dict:
     }
 
 
+def preparar_pasta(plano: dict, pasta: Path) -> None:
+    """Escreve na pasta o que o uploader espera encontrar ao lado dos slides.
+
+    ⚠️ SEM `conta.json` A PASTA POSTA NA CONTA ERRADA, E EM SILÊNCIO. O
+    `meta_uploader._ativar_conta` procura esse arquivo ao lado do 1º slide; se
+    não acha, ele NÃO falha — cai nas env vars globais e publica tudo no
+    @topshop.__. Um carrossel de pet sairia na conta geral sem uma linha de
+    log dizendo isso. É o mesmo contrato de pasta do vídeo, de propósito: um
+    formato novo não é motivo pra inventar convenção nova."""
+    pasta.mkdir(parents=True, exist_ok=True)
+    nicho = plano.get("nicho") or "geral"
+    try:
+        from roteador_contas import carregar_contas, conta_para_json
+        contas = carregar_contas()
+        conta = dict(contas.get(nicho) or contas.get("_default") or {})
+        conta.setdefault("nicho", nicho)
+        (pasta / "conta.json").write_text(
+            json.dumps(conta_para_json(conta), ensure_ascii=False, indent=2),
+            encoding="utf-8")
+    except Exception as e:
+        log.error(f"   ❌ não escrevi conta.json ({e}) — NÃO poste esta pasta: "
+                  "ela publicaria na conta geral")
+        raise
+
+    links = plano.get("links") or []
+    (pasta / "engajamento.json").write_text(json.dumps({
+        "link": links[0] if links else "",
+        "handle": plano.get("handle", ""),
+        "produto": (plano.get("slides") or [{}])[0].get("titulo", ""),
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    # legenda: o render só grava quando o plano tem uma. Vazia (reserva sem
+    # Gemini) o post sairia mudo — e legenda vazia já custou 11 Reels em 15/08.
+    arq = pasta / "legenda.txt"
+    if not arq.exists() or not arq.read_text(encoding="utf-8").strip():
+        hook = (plano.get("capa") or {}).get("hook", "")
+        cta = (plano.get("cta") or {}).get("titulo", "")
+        arq.write_text("\n\n".join(x for x in (hook, cta) if x), encoding="utf-8")
+
+
+def publicar(plano: dict, pasta: Path, arquivos: list) -> dict:
+    """Renderizado → publicado. Devolve o resultado do uploader."""
+    preparar_pasta(plano, pasta)
+    try:
+        from agents.meta_uploader import postar_instagram_carrossel
+    except Exception:
+        from meta_uploader import postar_instagram_carrossel
+    legenda = (pasta / "legenda.txt").read_text(encoding="utf-8").strip()
+    r = postar_instagram_carrossel([str(a) for a in arquivos], legenda)
+    registrar(plano, slug=pasta.name, url=r.get("url", "") if r.get("sucesso") else "")
+    return r
+
+
 def registrar(plano: dict, slug: str = "", url: str = "") -> None:
     """Anota o formato usado. ⚠️ É ISTO que faz a fase 2 existir um dia — sem
     o registro, daqui a um mês a pergunta 'qual formato segura?' não tem
@@ -607,6 +660,8 @@ def main() -> int:
     p.add_argument("--formato", default="", help=f"força: {', '.join(FORMATOS)}")
     p.add_argument("--render", metavar="PASTA",
                    help="além de montar, renderiza os slides nessa pasta")
+    p.add_argument("--postar", action="store_true",
+                   help="depois de renderizar, PUBLICA no Instagram (exige --render)")
     p.add_argument("--plano", action="store_true", help="imprime só o JSON")
     p.add_argument("--formatos", action="store_true",
                    help="mostra os formatos, pesos e o que já foi feito")
@@ -645,17 +700,36 @@ def main() -> int:
     if plano["legenda"]:
         print(f"\n  legenda: {plano['legenda'][:160]}")
 
-    if pasta:
-        import carrossel_render
-        arquivos = carrossel_render.renderizar(plano, pasta)
-        (pasta / "plano.json").write_text(
-            json.dumps(plano, ensure_ascii=False, indent=2), encoding="utf-8")
+    if not pasta:
+        if a.postar:
+            print("\n⚠️  --postar precisa de --render (o que se publica é a pasta)")
+            return 1
+        return 0
+
+    import carrossel_render
+    arquivos = carrossel_render.renderizar(plano, pasta)
+    (pasta / "plano.json").write_text(
+        json.dumps(plano, ensure_ascii=False, indent=2), encoding="utf-8")
+    print("\n" + "\n".join(str(x) for x in arquivos))
+
+    if not a.postar:
+        # registra o que foi MONTADO mesmo sem publicar: a cobertura da fase 1
+        # conta carrossel produzido, e ensaio também consome produto da fila
+        preparar_pasta(plano, pasta)
         registrar(plano, slug=pasta.name)
-        print("\n" + "\n".join(str(x) for x in arquivos))
-        print(f"\nPra postar:  .venv/bin/python -m agents.meta_uploader "
-              f"--carrossel {pasta}/*.jpg --legenda \"$(cat {pasta}/legenda.txt)\"")
-        print("(o conta.json precisa estar na MESMA pasta)")
-    return 0
+        print(f"\nPra postar:  .venv/bin/python carrossel_brain.py --nicho "
+              f"{a.nicho} --render {pasta} --postar")
+        print(f"   (ou direto:  .venv/bin/python -m agents.meta_uploader "
+              f"--carrossel {pasta}/*.jpg --legenda \"$(cat {pasta}/legenda.txt)\")")
+        return 0
+
+    print(f"\n📤 publicando em {plano['handle'] or '(conta do nicho)'}...")
+    r = publicar(plano, pasta, arquivos)
+    if r.get("sucesso"):
+        print(f"✅ no ar: {r['url']}")
+        return 0
+    print(f"❌ não publicou: {r.get('erro')}")
+    return 1
 
 
 if __name__ == "__main__":
