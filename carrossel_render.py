@@ -249,6 +249,28 @@ def _foto_arredondada(img, caminho: Path, x: int, y: int, larg: int, alt: int):
     img.alpha_composite(foto, (x, y))
 
 
+PALAVRAS_MAX = int(os.environ.get("CARR_PALAVRAS_MAX", "12"))
+
+
+def _conta_palavras(*textos) -> int:
+    return sum(len(re.findall(r"\S+", t or "")) for t in textos)
+
+
+def _vigiar_palavras(avisos: list, i: int, *textos):
+    """⚠️ 8-12 PALAVRAS POR SLIDE É REGRA, NÃO ESTILO. Acima disso o slide vira
+    parágrafo, a fonte encolhe pra caber (`_texto_que_cabe` obedece calado) e o
+    que era uma capa de vídeo vira uma arte publicitária — que é exatamente o
+    que o carrossel não pode parecer.
+
+    Aqui só AVISA: este módulo desenha o que recebe. Quem corta é o
+    `carrossel_brain`, que escreve o texto. O aviso pega inclusive plano
+    escrito à mão, que não passa pelo brain nenhum."""
+    n = _conta_palavras(*textos)
+    if n > PALAVRAS_MAX:
+        avisos.append(f"slide {i}: {n} palavras (o teto é {PALAVRAS_MAX}) — "
+                      "a fonte vai encolher e o slide vira parágrafo")
+
+
 def _numero_do_slide(img, d, i: int, n: int, claro: bool):
     """"3/6" no alto à direita — diz que tem mais, e quanto falta."""
     _, cinza = _tintas(claro)
@@ -262,16 +284,22 @@ def _numero_do_slide(img, d, i: int, n: int, claro: bool):
 # ══════════════════════════════════════════════════════════════════════════
 # OS TRÊS TIPOS DE SLIDE
 # ══════════════════════════════════════════════════════════════════════════
-def _slide_capa(plano: dict, claro: bool, cor_fundo: tuple, avisos: list):
+def _slide_capa(plano: dict, total: int, claro: bool, cor_fundo: tuple,
+                avisos: list):
     img, d = _tela(claro, cor_fundo)
     tinta, cinza = _tintas(claro)
     capa = plano.get("capa") or {}
     _cabecalho(img, d, plano.get("nicho", "geral"), plano.get("handle", ""),
                claro, avisos)
+    # a capa também é numerada (1/8). Antes eu tinha deixado sem, achando que
+    # poluía; numerada ela ANUNCIA o tamanho do post logo no feed, e é isso que
+    # faz a pessoa começar a arrastar em vez de passar.
+    _numero_do_slide(img, d, 1, total, claro)
 
     hook = (capa.get("hook") or "").strip()
     if not hook:
         avisos.append("a capa veio SEM hook — é o único slide que o feed mostra")
+    _vigiar_palavras(avisos, 1, hook)
     linhas, f = _texto_que_cabe(d, hook, CAPA_FONT, CAPA_FONT_MIN,
                                 _px(LARG - 2 * MARGEM), CAPA_MAX_LINHAS)
     _bloco_centrado(img, d, linhas, f, tinta, CAPA_Y_TOPO, CAPA_Y_BASE)
@@ -294,6 +322,7 @@ def _slide_produto(item: dict, i: int, n: int, plano: dict, claro: bool,
     _cabecalho(img, d, plano.get("nicho", "geral"), plano.get("handle", ""),
                claro, avisos)
     _numero_do_slide(img, d, i, n, claro)
+    _vigiar_palavras(avisos, i, item.get("titulo"), item.get("linha"))
 
     foto = item.get("foto")
     if foto and Path(foto).exists():
@@ -328,6 +357,74 @@ def _slide_produto(item: dict, i: int, n: int, plano: dict, claro: bool,
         _pilula(d, _px(MARGEM), topo, larg + 2 * pad, altp, COR_MARCA)
         R._texto_rico(img, d, _px(MARGEM) + pad, topo + altp // 2, preco, fp,
                       (0, 0, 0, 255))
+    return img
+
+
+def _slide_texto(item: dict, i: int, n: int, plano: dict, claro: bool,
+                 cor_fundo: tuple, avisos: list):
+    """Slide de TEXTO: rótulo em pílula + frase grande. Foto é opcional.
+
+    ⚠️ SEM ESTE TIPO, METADE DOS FORMATOS NÃO EXISTE. "Erros", "Passo a passo",
+    "História" e "Mitos" são slides de frase, não de vitrine — mandá-los pelo
+    `_slide_produto` desenhava uma moldura de foto vazia embaixo de cada erro.
+    A pílula ("ERRO 1", "PASSO 2", "ANTES") é o que dá ritmo ao arrasto: a
+    pessoa sabe onde está na sequência sem ler."""
+    img, d = _tela(claro, cor_fundo)
+    tinta, cinza = _tintas(claro)
+    _cabecalho(img, d, plano.get("nicho", "geral"), plano.get("handle", ""),
+               claro, avisos)
+    _numero_do_slide(img, d, i, n, claro)
+    _vigiar_palavras(avisos, i, item.get("titulo"), item.get("linha"))
+
+    # ⚠️ MEDE ANTES DE DESENHAR. Começando sempre no mesmo y, um slide de uma
+    # frase curta ficava com meia tela de branco no pé — parece slide que
+    # faltou carregar, e a pessoa para de arrastar. Com foto o bloco encosta no
+    # topo (a foto ocupa o resto); sem foto, ele é centrado na faixa livre.
+    largura = _px(LARG - 2 * MARGEM)
+    rotulo = (item.get("rotulo") or "").strip().upper()
+    fr, pad, altp = R._fonte(_px(38)), _px(26), _px(66)
+    alt_rot = (altp + _px(56)) if rotulo else 0
+
+    titulo = (item.get("titulo") or "").strip()
+    linhas, f = _texto_que_cabe(d, titulo, 84, 52, largura, 4)
+    alt_linha = int(getattr(f, "size", 40) * CAPA_ALT_LINHA)
+
+    apoio = (item.get("linha") or "").strip()
+    fa = R._fonte(_px(40), negrito=False)
+    linhas_apoio = R._quebrar(d, apoio, fa, largura, 3) if apoio else []
+    alt_apoio = (_px(30) + len(linhas_apoio) * _px(58)) if linhas_apoio else 0
+
+    foto = item.get("foto")
+    tem_foto = bool(foto and Path(foto).exists())
+    total = alt_rot + len(linhas) * alt_linha + alt_apoio
+    y_s = _px(300) if tem_foto else max(_px(280),
+                                        _px((300 + 1240) / 2) - total // 2)
+
+    if rotulo:
+        larg = R._texto_rico(None, d, 0, 0, rotulo, fr, None, desenhar=False)
+        _pilula(d, _px(MARGEM), y_s, larg + 2 * pad, altp, COR_MARCA)
+        R._texto_rico(img, d, _px(MARGEM) + pad, y_s + altp // 2, rotulo, fr,
+                      (0, 0, 0, 255))
+        y_s += alt_rot
+
+    for ln in linhas:
+        R._texto_rico(img, d, _px(MARGEM), y_s + alt_linha // 2, ln, f, tinta)
+        y_s += alt_linha
+
+    if linhas_apoio:
+        y_s += _px(30)
+        for ln in linhas_apoio:
+            R._texto_rico(img, d, _px(MARGEM), y_s + _px(28), ln, fa, cinza)
+            y_s += _px(58)
+
+    # foto opcional, no que sobrou do pé — só entra se couber inteira
+    if tem_foto:
+        sobra = _px(ALT - 70) - y_s
+        if sobra > _px(240):
+            alt_f = min(sobra - _px(40), _px(420))
+            larg_f = int(alt_f * 1.15)
+            _foto_arredondada(img, Path(foto), _px(MARGEM), y_s + _px(40),
+                              larg_f, alt_f)
     return img
 
 
@@ -390,9 +487,15 @@ def renderizar(plano: dict, saida) -> list:
                     f"{sobra} produto(s) de fora")
 
     avisos, telas = [], []
-    telas.append(_slide_capa(plano, claro, cor_fundo, avisos))
+    telas.append(_slide_capa(plano, total, claro, cor_fundo, avisos))
     for k, item in enumerate(itens, start=2):
-        telas.append(_slide_produto(item, k, total, plano, claro, cor_fundo, avisos))
+        # `tipo` manda; sem ele, o slide é de PRODUTO só quando tem o que uma
+        # vitrine precisa (preço). Assim um plano antigo, sem `tipo`, continua
+        # desenhando igual, e um slide de frase nunca ganha moldura de foto
+        # vazia por omissão de campo.
+        tipo = (item.get("tipo") or ("produto" if item.get("preco") else "texto"))
+        desenha = _slide_produto if tipo == "produto" else _slide_texto
+        telas.append(desenha(item, k, total, plano, claro, cor_fundo, avisos))
     if plano.get("cta") is not False:
         telas.append(_slide_cta(plano, total, claro, cor_fundo, avisos))
 

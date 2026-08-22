@@ -4730,16 +4730,80 @@ falhar" — ali as funções ficariam depois do `if __name__`, existindo mas
 inalcançáveis pelo CLI que as chama. Conserto que parece ter funcionado é pior
 que erro.
 
+#### 🧠 CAROUSEL BRAIN (22/08) — e as duas coisas que eu recusei fingir
+
+O Dre aprovou o template ("tá ótimo e aprovado") e trouxe o ranking de
+formatos + a distribuição-alvo: **40% Lista · 20% Erros · 15% Antes/Depois ·
+10% Comparação · 10% Passo a passo · 5% História**, pelo motivo que ele deu:
+*"você é afiliado. O objetivo não é apenas viralizar, mas fazer a pessoa chegar
+no produto."* Mais: 8-12 palavras por slide, numeração `1/8` inclusive na capa,
+e o slide 1 tem que parecer **capa de vídeo viral, não arte publicitária**.
+
+**⚠️ 7 ESTRUTURAS, NÃO 10 FORMATOS.** "Lista rápida", "Produtos que parecem
+mentira" e "Checklist" desenham exatamente os mesmos slides — muda o ângulo do
+hook, não a arquitetura. Tratá-los como formatos distintos criaria três
+geradores quase idênticos e **três entradas de métrica medindo a mesma coisa
+com nomes diferentes**, e aí nenhuma delas junta amostra suficiente pra decidir
+nada. Então os ângulos viram variação de hook DENTRO da lista. Mesma coisa com
+"Segredo revelado", que é `historia` com outro ângulo. `mitos` ficou com peso 0:
+estrutura pronta, entra na roda com `CARR_PESO_MITOS=8` no `.env`, sem código.
+
+**⚠️⚠️ O "DESEMPENHO HISTÓRICO POR CONTA" NÃO EXISTE PRA CARROSSEL.** O Dre
+pediu que o cérebro escolhesse "com base no nicho, produto e desempenho
+histórico de cada conta". Os dois primeiros existem. O terceiro não:
+`metricas_posts.jsonl` tem 215 registros e **todos são de Reel**, e o arquivo
+nem tem campo `formato`. Escolher formato de carrossel por desempenho de Reel é
+transferir aprendizado entre duas coisas que o algoritmo distribui de forma
+diferente — é o mesmo erro do "hook campeão" que a medição de 21/08 desmentiu em
+um comando. Então o cérebro tem duas fases e **diz em qual está**:
+
+- **FASE 1 (agora)** — sorteio pela distribuição-alvo com **cobertura
+  garantida**: enquanto uma conta não tiver `CARR_COBERTURA` (3) carrosséis de
+  um formato, esse formato fura a fila. Sem isso, o sorteio de 40% pra Lista
+  levaria semanas até a conta ver um "Erros" — e nunca haveria o que comparar.
+- **FASE 2 (depois)** — a distribuição é inclinada pelo **salvamento medido**
+  por formato naquela conta, *pooled* (Σ salvos ÷ Σ alcance), com fator preso
+  entre 0,5× e 2×. ⚠️ O teto existe porque sem ele um formato com 2 posts de
+  sorte comeria a distribuição inteira e a medição pararia de existir.
+- Cada carrossel montado é anotado em `shared/carrosseis_ledger.jsonl` com o
+  formato. **É esse arquivo que faz a fase 2 existir um dia** — sem ele, daqui a
+  um mês "qual formato segura?" não tem resposta, igual a "qual legenda foi
+  enviada?" não tinha em 15/08.
+
+**O que entrou:**
+- `carrossel_brain.py` (novo) — escolhe o formato (e **imprime o motivo**:
+  decisão que não se explica não se corrige), busca os produtos do nicho pelo
+  `roteador_contas`, baixa as fotos, pede o texto ao Gemini em JSON com retry, e
+  **une o texto do modelo com os FATOS** (preço, foto, link) que nunca vêm dele.
+  Reserva honesta quando não há chave: usa só nome e preço, sem fingir conteúdo
+  editorial que ela não tem como escrever. `--formatos` mostra pesos, alvo e o
+  que já foi feito.
+- `carrossel_render`: **slide de TEXTO** (`_slide_texto`) — rótulo em pílula
+  ("ERRO 1", "PASSO 2") + frase grande. ⚠️ Sem ele metade dos formatos não
+  existia: Erros, Passo a passo, História e Mitos são slides de frase, e pelo
+  `_slide_produto` saíam com uma moldura de foto vazia embaixo de cada erro. O
+  bloco é **medido antes de desenhar** e centrado quando não há foto — começando
+  sempre no mesmo y, uma frase curta deixava meia tela branca no pé, que parece
+  slide que faltou carregar.
+- Capa numerada (`1/8`): numerada ela **anuncia o tamanho do post** no feed, e é
+  isso que faz começar o arrasto.
+- `_vigiar_palavras`: avisa acima de 12 palavras. O render só avisa (ele desenha
+  o que recebe); quem corta é o brain. Assim o aviso pega até plano escrito à
+  mão. ⚠️ Isso importa porque `_texto_que_cabe` **obedece calado**: um slide de
+  20 palavras vira parágrafo em corpo 56 e ninguém reclama.
+
 #### Ainda falta
 1. **Rota no Caddy** — sem ela, carrossel e story de imagem não saem do lugar.
    O 404 do `--teste` de 22/08 é o módulo funcionando, não um defeito.
-2. **Quem escreve o plano** — hoje o `carrossel_render` recebe um JSON pronto.
-   Falta o agente que escolhe os produtos (`produtos_fila.json` + o que já tem
-   foto baixada), pede o hook ao `hook_alana` e monta a legenda.
+2. **Ligar o brain ao publicador** — hoje `--render` gera a pasta, mas falta
+   escrever o `conta.json` nela e chamar o uploader.
 3. **Ciclos e horários no `daemon_maestro`** — hoje ele só tem `horarios` +
    `posts_por_dia_semana` pro Reel. Precisa de `carrossel_horarios` separado,
    senão os dois formatos disputam o mesmo slot.
-4. **Story (depois do carrossel, decisão do Dre)** — e o mais barato já está
+4. **Cruzar o ledger com as métricas** — o `carrosseis_ledger.jsonl` guarda o
+   formato, mas quem mede alcance/salvamento é o `metricas_posts`. Falta juntar
+   os dois pelo shortcode pra fase 2 ligar sozinha.
+5. **Story (depois do carrossel, decisão do Dre)** — e o mais barato já está
    pronto: o `.mp4` do Reel que a conta acabou de postar está no disco e tem
    menos de 60s, então `--story` o republica com **zero** render e **zero**
    infra nova.
