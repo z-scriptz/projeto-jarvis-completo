@@ -412,6 +412,28 @@ def _cortar(frase: str, teto: int = None) -> str:
     return " ".join(ps[:teto])
 
 
+def _orcamento(titulo: str, linha: str, teto: int = None) -> tuple:
+    """Ajusta título+linha pra caberem JUNTOS no teto do slide.
+
+    ⚠️ AQUI ESTAVA O DEFEITO (visto na 1ª rodada real, 22/08): eu cortava
+    CADA CAMPO em 12 palavras e o render contava o SLIDE INTEIRO. Título de 12
+    + linha de 12 = 24 palavras num slide, e o aviso disparava em 3 dos 4
+    slides — com o brain achando que tinha obedecido. Duas definições da mesma
+    regra em dois módulos é sempre isso: uma delas está errada e as duas se
+    acham certas.
+
+    O título tem prioridade porque é o que o slide diz. A linha de apoio entra
+    INTEIRA ou não entra: cortada no meio ela sai como "Preço de outro mundo e
+    ainda vem" — pior que ausente, porque parece defeito de carregamento em vez
+    de escolha. Título é diferente: cortar um título longo ainda deixa uma
+    frase que se lê."""
+    teto = teto or PALAVRAS_MAX
+    tit = _cortar(titulo, teto)
+    sobra = teto - len(re.findall(r"\S+", tit))
+    apoio = (linha or "").strip()
+    return (tit, apoio if 0 < len(re.findall(r"\S+", apoio)) <= sobra else "")
+
+
 def _prompt(formato: str, nicho: str, produtos: list, angulo: str) -> str:
     cfg = FORMATOS[formato]
     nomes = "\n".join(f"- {p['nome']}" + (f" ({p['preco']})" if p["preco"] else "")
@@ -428,8 +450,10 @@ PRODUTOS DISPONIVEIS:
 {nomes}
 
 REGRAS DURAS:
-1. NO MAXIMO {PALAVRAS_MAX} PALAVRAS POR CAMPO. Slide que vira paragrafo mata
-   o carrossel — a fonte encolhe e o post parece anuncio.
+1. NO MAXIMO {PALAVRAS_MAX} PALAVRAS POR SLIDE — o "titulo" e a "linha"
+   SOMADOS. O ideal e 8. Slide que vira paragrafo mata o carrossel: a fonte
+   encolhe pra caber e o post deixa de parecer conteudo. Se nao couber
+   apoio, deixe "linha" vazia — e melhor um slide limpo.
 2. Sem emoji, sem aspas, sem hashtag, sem CAIXA ALTA gritada.
 3. A capa nao pode fechar porta: nada de "se voce tem X" ou "quem sofre com
    Y". Ela descreve uma situacao reconhecivel por muita gente.
@@ -546,11 +570,15 @@ def montar_plano(nicho: str, formato: str = "", fotos_em: Path = None) -> dict:
     slides = []
     for i, s in enumerate(d.get("slides") or []):
         prod = produtos[i] if i < len(produtos) else None
-        item = {
-            "rotulo": _cortar(s.get("rotulo") or "", 4),
-            "titulo": _cortar(s.get("titulo") or (prod["nome"] if prod else "")),
-            "linha": _cortar(s.get("linha") or ""),
-        }
+        tit, apoio = _orcamento(s.get("titulo") or (prod["nome"] if prod else ""),
+                                s.get("linha") or "")
+        # ⚠️ NO FORMATO LISTA O RÓTULO É IGNORADO PELO DESENHO (`_slide_produto`
+        # não tem pílula), então deixá-lo passar só enganava o print do CLI —
+        # a 1ª rodada mostrou "[R$ 299,90]" e "[Bizarro!]" como se fossem sair
+        # no slide. Melhor o terminal mostrar o que o feed vai mostrar.
+        rotulo = "" if formato in ("lista", "comparacao") \
+            else _cortar(s.get("rotulo") or "", 4)
+        item = {"rotulo": rotulo, "titulo": tit, "linha": apoio}
         if s.get("tipo"):
             item["tipo"] = s["tipo"]
         if formato in ("lista", "comparacao") and prod:
@@ -574,6 +602,41 @@ def montar_plano(nicho: str, formato: str = "", fotos_em: Path = None) -> dict:
         "legenda": (d.get("legenda") or "").strip(),
         "links": [p["link"] for p in produtos if p.get("link")],
     }
+
+
+def _legenda_reserva(plano: dict) -> str:
+    """A legenda quando o brain não escreveu uma.
+
+    ⚠️ TRÊS DEGRAUS, NESTA ORDEM — e o degrau do meio existe porque o Dre
+    reclamou do fundo do poço, com razão: "hook + CTA" não é legenda, é o
+    título repetido embaixo da foto. O projeto JÁ TEM um gerador de legenda
+    rodando nos Reels (`hook_alana.gerar_legenda_curiosidade`), com banco de
+    reserva por nicho — usar outra coisa aqui seria construir um segundo
+    gerador pior do que o que já está no ar.
+
+      1. a legenda que o próprio brain escreveu (conhece o carrossel inteiro)
+      2. `gerar_legenda_curiosidade` — o mesmo gerador dos Reels
+      3. hook + CTA — só se os dois falharem; nunca legenda vazia, que já
+         custou 11 Reels da @topshopcasa_ em 15/08
+    """
+    if (plano.get("legenda") or "").strip():
+        return plano["legenda"].strip()
+
+    slides = plano.get("slides") or []
+    produto = next((s.get("titulo") for s in slides if s.get("titulo")), "")
+    hook = (plano.get("capa") or {}).get("hook", "")
+    try:
+        from hook_alana import gerar_legenda_curiosidade
+        txt = (gerar_legenda_curiosidade(produto, hook,
+                                         plano.get("nicho", "")) or "").strip()
+        if txt:
+            cta = (plano.get("cta") or {}).get("titulo", "")
+            return "\n\n".join(x for x in (txt, cta) if x)
+    except Exception as e:
+        log.warning(f"   ⚠️  legenda de curiosidade indisponível ({str(e)[:60]})")
+
+    cta = (plano.get("cta") or {}).get("titulo", "")
+    return "\n\n".join(x for x in (hook, cta) if x)
 
 
 def preparar_pasta(plano: dict, pasta: Path) -> None:
@@ -607,13 +670,9 @@ def preparar_pasta(plano: dict, pasta: Path) -> None:
         "produto": (plano.get("slides") or [{}])[0].get("titulo", ""),
     }, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    # legenda: o render só grava quando o plano tem uma. Vazia (reserva sem
-    # Gemini) o post sairia mudo — e legenda vazia já custou 11 Reels em 15/08.
     arq = pasta / "legenda.txt"
     if not arq.exists() or not arq.read_text(encoding="utf-8").strip():
-        hook = (plano.get("capa") or {}).get("hook", "")
-        cta = (plano.get("cta") or {}).get("titulo", "")
-        arq.write_text("\n\n".join(x for x in (hook, cta) if x), encoding="utf-8")
+        arq.write_text(_legenda_reserva(plano), encoding="utf-8")
 
 
 def publicar(plano: dict, pasta: Path, arquivos: list) -> dict:

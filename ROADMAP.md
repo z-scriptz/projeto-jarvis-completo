@@ -4858,6 +4858,51 @@ fase 1 conta produção, e ensaio também consome produto da fila.
 VPS**, não código. Ele foi versionado por engano num `git add -A` meu e os
 registros dos meus testes locais teriam poluído a contagem de cobertura da VPS.
 
+#### 🔎 A PRIMEIRA RODADA REAL, E OS TRÊS DEFEITOS QUE ELA MOSTROU (22/08)
+
+O Dre rodou na VPS com o Gemini de verdade. O carrossel saiu; o `--postar`
+morreu com `ImportError: cannot import name 'postar_instagram_carrossel'` —
+**o `patch_carrossel_uploader.py` foi baixado e não foi executado**. Fica
+anotado que o passo 2 do roteiro de operação é fácil de pular justamente por
+ser o único que não é um `git show`.
+
+**1. ⚠️ DUAS DEFINIÇÕES DA MESMA REGRA, EM DOIS MÓDULOS — e as duas se achando
+certas.** O aviso de palavras disparou em 3 dos 4 slides com o brain
+convencido de ter obedecido. Causa: o brain cortava **cada campo** em 12
+palavras e o render contava o **slide inteiro**. Título de 12 + linha de 12 =
+24. Agora existe `_orcamento(titulo, linha)`: o teto é do SLIDE, o título tem
+prioridade, e **a linha de apoio entra inteira ou não entra** — cortada no meio
+ela sai como *"Preço de outro mundo e ainda vem"*, que é pior que ausente
+porque parece defeito de carregamento em vez de escolha. Título é diferente:
+cortado, ainda deixa uma frase que se lê. O prompt também passou a dizer
+"por SLIDE, título e linha SOMADOS", em vez de "por campo".
+
+**2. Rótulo que o desenho ignora não deve aparecer no terminal.** No formato
+`lista` o `_slide_produto` não tem pílula, então o rótulo era descartado — mas
+o print do CLI mostrava `[R$ 299,90]` e `[Bizarro!]` como se fossem sair no
+slide. O terminal tem que mostrar o que o feed vai mostrar; agora o rótulo é
+zerado em `lista` e `comparacao`.
+
+**3. A legenda de reserva era ruim, e o Dre pegou.** *"tem como colocar outro
+tipo de legenda?"* — tem, e a resposta estava dentro de casa: o projeto **já
+tem** um gerador de legenda rodando nos Reels (`gerar_legenda_curiosidade`, com
+banco de reserva por nicho). "hook + CTA" não é legenda, é o título repetido
+embaixo da foto. Agora são três degraus: (1) a legenda que o brain escreveu,
+que conhece o carrossel inteiro; (2) `gerar_legenda_curiosidade`, o mesmo
+gerador dos Reels; (3) hook + CTA, só se os dois falharem. Nunca vazia.
+
+**Falso alarme meu, registrado pra não confundir de novo:** escrevi o aviso do
+`conta.json` de um jeito que soou como problema existente, e o Dre perguntou
+*"como assim sem conta.json? achei que já estavam todas resolvidas"*. Estão. O
+`preparar_pasta` escreve o arquivo; o aviso descreve o que aconteceria SE
+faltasse, e é por isso que a função levanta exceção em vez de seguir.
+
+**O que ainda não está bom (e o Dre não reclamou, mas eu vi):** o Gemini
+escreveu *"Preço de outro mundo!"* e *"Não tem como não amar essa ideia"* —
+isso é voz de anúncio, exatamente o que o carrossel não pode ter. E 2 dos 3
+produtos vieram **sem foto** (`preencher_fotos.py` existe pra isso e não roda
+antes do carrossel). Os dois são pro próximo ajuste, sobre texto real.
+
 #### Ainda falta
 1. **Rota no Caddy** — sem ela, carrossel e story de imagem não saem do lugar.
    O 404 do `--teste` de 22/08 é o módulo funcionando, não um defeito.
