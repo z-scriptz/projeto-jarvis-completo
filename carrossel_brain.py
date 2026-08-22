@@ -342,25 +342,60 @@ def _foto_url(p: dict) -> str:
 
 
 def _baixar_foto(url: str, destino: Path) -> str:
-    """Baixa a foto do produto. "" quando não dá — o render desenha sem ela e
-    avisa, em vez de o carrossel inteiro falhar por uma imagem."""
+    """Baixa a foto do produto. "" quando não dá.
+
+    ⚠️ ELE DIZ POR QUE FALHOU, EM WARNING, NÃO EM DEBUG. Na 1ª rodada real 2
+    de 3 produtos saíram "sem foto" e eu não conseguia dizer se era produto sem
+    URL na fila ou URL que não baixou — porque este `except` engolia o motivo
+    num `log.debug` que ninguém lê. É a quarta vez neste projeto que a minha
+    própria ferramenta de diagnóstico esconde a evidência que ela existia pra
+    mostrar. Causa diferente, remédio diferente: sem URL se resolve com a API
+    de afiliado, download falhando se resolve com outra coisa."""
     if not url:
         return ""
     try:
         import requests
         r = requests.get(url, timeout=25, headers={"User-Agent": "Mozilla/5.0"})
-        if r.status_code != 200 or not r.content:
+        if r.status_code != 200:
+            log.warning(f"   ⚠️  foto respondeu HTTP {r.status_code}: {url[:70]}")
+            return ""
+        if not r.content:
+            log.warning(f"   ⚠️  foto veio vazia (0 byte): {url[:70]}")
             return ""
         destino.parent.mkdir(parents=True, exist_ok=True)
         destino.write_bytes(r.content)
         return str(destino)
     except Exception as e:
-        log.debug(f"   foto não baixou ({e})")
+        log.warning(f"   ⚠️  foto não baixou ({str(e)[:60]}): {url[:70]}")
         return ""
 
 
-def _produtos_do_nicho(nicho: str, quantos: int, fotos_em: Path = None) -> list:
-    """Produtos daquele nicho, com nome/preço/foto local quando houver."""
+def _resgatar_foto(produto: dict) -> str:
+    """Produto sem `imagem` na fila mas COM link: pergunta à API de afiliado.
+
+    ⚠️ REUSA `preencher_fotos._foto`, não reimplementa. Aquela função já sabe
+    resolver o redirect até o itemId, usar o cache do health-check e tratar o
+    `shop_id` ausente — três armadilhas já pagas. Uma segunda implementação
+    aqui divergiria dela na primeira mudança da Shopee."""
+    link = (produto.get("link") or "").strip()
+    if not link:
+        return ""
+    try:
+        import preencher_fotos as PF
+        return PF._foto(link, item_guardado=str(produto.get("item_id") or "").strip(),
+                        cache=PF._cache_ler()) or ""
+    except Exception as e:
+        log.warning(f"   ⚠️  resgate de foto indisponível ({str(e)[:60]})")
+        return ""
+
+
+def _candidatos_do_nicho(nicho: str) -> list:
+    """TODOS os produtos do nicho, sem cortar em `quantos`.
+
+    ⚠️ SEPARADO DA ESCOLHA DE PROPÓSITO. Antes eu pegava os `quantos`
+    PRIMEIROS que batiam o nicho e ia embora — numa fila de 153, isso é
+    escolher 5 por ordem de arquivo. Se os 5 primeiros estivessem sem foto (foi
+    o que aconteceu), o carrossel saía sem foto com 148 produtos ali atrás."""
     fila = _fila_de_produtos()
     if not fila:
         return []
@@ -369,7 +404,7 @@ def _produtos_do_nicho(nicho: str, quantos: int, fotos_em: Path = None) -> list:
     except Exception:
         nicho_do_produto = None
 
-    escolhidos, vistos = [], set()
+    saida, vistos = [], set()
     for p in fila:
         nome = _nome(p)
         if not nome or nome.lower() in vistos:
@@ -381,22 +416,58 @@ def _produtos_do_nicho(nicho: str, quantos: int, fotos_em: Path = None) -> list:
             except Exception:
                 pass
         vistos.add(nome.lower())
-        escolhidos.append(p)
-        if len(escolhidos) >= quantos:
-            break
-    # sem produto do nicho, é melhor um carrossel com produto de outro nicho
-    # do que nenhum carrossel — mas isso É um aviso, não um detalhe
-    if len(escolhidos) < quantos:
-        log.warning(f"   ⚠️  só {len(escolhidos)} produto(s) do nicho "
-                    f"'{nicho}' na fila (pedi {quantos})")
+        saida.append(p)
+    return saida
 
-    saida = []
-    for i, p in enumerate(escolhidos, 1):
+
+def _produtos_do_nicho(nicho: str, quantos: int, fotos_em: Path = None,
+                       exige_foto: bool = False) -> list:
+    """Produtos do nicho, com nome/preço/foto local quando houver.
+
+    ⚠️ QUEM JÁ TEM FOTO NA FILA VEM PRIMEIRO. É o conserto de maior efeito e
+    custo zero do problema "2 de 3 produtos sem foto": não faltava foto no
+    acervo, faltava ESCOLHER quem tem. Num formato de vitrine (lista,
+    comparação) um slide sem foto é meia peça — ali o produto sem foto nem
+    entra, e é melhor um carrossel de 4 com foto do que de 5 com buraco."""
+    candidatos = _candidatos_do_nicho(nicho)
+    if not candidatos:
+        log.warning(f"   ⚠️  nenhum produto do nicho '{nicho}' na fila")
+        return []
+
+    com, sem = [], []
+    for p in candidatos:
+        (com if _foto_url(p) else sem).append(p)
+    if sem:
+        log.info(f"   📷 {len(com)} com foto na fila · {len(sem)} sem "
+                 f"(rode `preencher_fotos.py` pra converter os de baixo)")
+    ordenados = com + sem
+
+    saida, i = [], 0
+    for p in ordenados:
+        if len(saida) >= quantos:
+            break
+        i += 1
         foto = ""
         if fotos_em is not None:
-            foto = _baixar_foto(_foto_url(p), fotos_em / f"produto_{i}.jpg")
+            url = _foto_url(p)
+            if not url:
+                # ⚠️ resgate SOB DEMANDA, não esperando o cron do
+                # `preencher_fotos`. Uma chamada de API vale mais que um slide
+                # vazio — e o resultado volta pro fluxo na mesma rodada.
+                url = _resgatar_foto(p)
+                if url:
+                    log.info(f"   📷 foto resgatada pela API: {_nome(p)[:44]}")
+            foto = _baixar_foto(url, fotos_em / f"produto_{i}.jpg")
+        if exige_foto and not foto and fotos_em is not None:
+            log.info(f"   ⏭️  sem foto, fora da vitrine: {_nome(p)[:44]}")
+            continue
         saida.append({"nome": _nome(p), "preco": _preco(p), "foto": foto,
                       "link": p.get("link", "")})
+
+    if len(saida) < quantos:
+        log.warning(f"   ⚠️  {len(saida)} produto(s) de '{nicho}' pro carrossel "
+                    f"(pedi {quantos}"
+                    + (" · com foto obrigatória)" if exige_foto else ")"))
     return saida
 
 
@@ -557,7 +628,17 @@ def montar_plano(nicho: str, formato: str = "", fotos_em: Path = None) -> dict:
     log.info(f"   🧠 formato '{formato}' — {motivo}")
 
     quantos = int(cfg.get("produtos", 1))
-    produtos = _produtos_do_nicho(nicho, quantos, fotos_em)
+    # em vitrine a foto não é enfeite, é o slide: `lista` e `comparacao` só
+    # aceitam produto com foto. Nos formatos de frase ela é opcional.
+    vitrine = formato in ("lista", "comparacao")
+    produtos = _produtos_do_nicho(nicho, quantos, fotos_em, exige_foto=vitrine)
+    if vitrine and len(produtos) < 2:
+        # 1 slide de produto não é lista nem comparação — e o uploader recusa
+        # carrossel com menos de 2 filhos de qualquer jeito
+        raise SystemExit(
+            f"❌ '{formato}' precisa de ao menos 2 produtos COM FOTO do nicho "
+            f"'{nicho}', e achei {len(produtos)}.\n"
+            f"   Rode:  .venv/bin/python preencher_fotos.py")
     angulo = random.choice(cfg["angulos"]).format(
         n=max(quantos, int(cfg.get("passos", 3))),
         contexto=f"com {nicho}" if nicho and nicho != "geral" else "")

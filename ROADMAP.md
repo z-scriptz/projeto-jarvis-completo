@@ -4897,11 +4897,40 @@ gerador dos Reels; (3) hook + CTA, só se os dois falharem. Nunca vazia.
 `preparar_pasta` escreve o arquivo; o aviso descreve o que aconteceria SE
 faltasse, e é por isso que a função levanta exceção em vez de seguir.
 
-**O que ainda não está bom (e o Dre não reclamou, mas eu vi):** o Gemini
-escreveu *"Preço de outro mundo!"* e *"Não tem como não amar essa ideia"* —
-isso é voz de anúncio, exatamente o que o carrossel não pode ter. E 2 dos 3
-produtos vieram **sem foto** (`preencher_fotos.py` existe pra isso e não roda
-antes do carrossel). Os dois são pro próximo ajuste, sobre texto real.
+**Sobre o tom, o Dre decidiu MANTER** — e a decisão é dele com razão: *"apesar
+de soar meio anúncio, a gente é afiliado, de toda forma precisamos vender, e
+isso é mais um CTA e uma chantagenzinha do que anúncio... só não pode parecer
+muitooo anúncio"*. Eu tinha marcado *"Preço de outro mundo!"* como defeito; não
+é. O prompt fica como está.
+
+#### 📷 AS FOTOS: não faltava foto no acervo, faltava ESCOLHER quem tem (22/08)
+
+2 de 3 produtos saíram sem foto. Antes de consertar, três causas possíveis, e
+eu não conseguia dizer qual — porque **o meu próprio `_baixar_foto` engolia o
+motivo num `log.debug` que ninguém lê**. É a quarta vez neste projeto que a
+ferramenta de diagnóstico esconde a evidência que ela existe pra mostrar
+(`slice(0,20)`, `aria-label`, `slice(0,60)` antes do filtro, e agora este).
+Causa diferente pede remédio diferente: "sem URL na fila" se resolve com a API
+de afiliado; "URL que não baixa" não.
+
+O conserto, em quatro camadas:
+1. **`_baixar_foto` diz o porquê em WARNING** — `HTTP 404`, `veio vazia (0
+   byte)`, ou a exceção, sempre com a URL.
+2. ⚠️ **QUEM JÁ TEM FOTO NA FILA VEM PRIMEIRO** — o conserto de maior efeito e
+   custo zero. Eu pegava os `quantos` PRIMEIROS que batiam o nicho e ia embora:
+   numa fila de 153, isso é escolher 5 por ordem de arquivo. Os 5 primeiros
+   estavam sem foto e havia 148 produtos ali atrás. Agora `_candidatos_do_nicho`
+   junta TODOS e a escolha ordena por "tem imagem".
+3. **Resgate sob demanda** via `preencher_fotos._foto` — reusada, não
+   reimplementada: aquela função já sabe resolver o redirect até o `itemId`,
+   usar o cache do health-check e tratar `shop_id` ausente. Três armadilhas já
+   pagas; uma segunda implementação divergiria dela na primeira mudança da
+   Shopee.
+4. **Em vitrine, produto sem foto não entra.** Em `lista` e `comparacao` o
+   slide É a foto — melhor um carrossel de 4 com foto do que de 5 com buraco. E
+   se sobrar menos de 2, o brain **recusa e diz o comando**
+   (`preencher_fotos.py`), em vez de montar um carrossel que o uploader
+   recusaria de qualquer jeito (mínimo de 2 filhos).
 
 #### Ainda falta
 1. **Rota no Caddy** — sem ela, carrossel e story de imagem não saem do lugar.
