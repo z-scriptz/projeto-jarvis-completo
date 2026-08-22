@@ -516,13 +516,52 @@ def postar_instagram(video_path: str, legenda: str = "") -> dict:
 #   · story de vídeo: até 60s
 #   · 100 posts publicados por API em 24h por conta (o carrossel conta como 1)
 # ══════════════════════════════════════════════════════════════════════════
-_IMAGENS = (".jpg", ".jpeg", ".png")
+_IMAGENS = (".jpg", ".jpeg", ".png", ".webp")
 _VIDEOS = (".mp4", ".mov")
 STORY_MAX_SEG = 60
 
 
 def _e_imagem(p) -> bool:
     return Path(p).suffix.lower() in _IMAGENS
+
+
+def _garantir_jpeg(origem: Path) -> Path:
+    """Devolve um caminho JPEG. Converte se vier PNG/WEBP.
+
+    ⚠️ A DOC É CATEGÓRICA E ISTO NÃO DÁ AVISO NENHUM SE FOR IGNORADO:
+    "JPEG is the only image format supported. Extended JPEG formats such as
+    MPO and JPS are not supported."  Mandar um PNG não devolve "formato
+    inválido" — devolve o mesmo `ERROR` genérico de container que qualquer
+    outro problema devolve. Converter aqui é mais barato que descobrir isso
+    olhando log.
+
+    O PNG do render tem canal alfa; achatar contra BRANCO é a escolha certa
+    porque o template das contas novas já é branco — sobre preto apareceria
+    uma borda clara em volta do texto."""
+    if origem.suffix.lower() in (".jpg", ".jpeg"):
+        return origem
+    try:
+        from PIL import Image
+    except Exception:
+        log.warning(f"   ⚠️  {origem.name} não é JPEG e o Pillow não está aqui "
+                    "pra converter — a Meta provavelmente vai recusar")
+        return origem
+    destino = origem.with_suffix(".jpg")
+    try:
+        img = Image.open(origem)
+        if img.mode in ("RGBA", "LA", "P"):
+            img = img.convert("RGBA")
+            fundo = Image.new("RGB", img.size, (255, 255, 255))
+            fundo.paste(img, mask=img.split()[-1])
+            img = fundo
+        else:
+            img = img.convert("RGB")
+        img.save(destino, "JPEG", quality=92, optimize=True)
+        log.info(f"   🔄 {origem.name} → JPEG (único formato que a Meta aceita)")
+        return destino
+    except Exception as e:
+        log.warning(f"   ⚠️  não converti {origem.name} pra JPEG ({e})")
+        return origem
 
 
 def _dur_segundos(arquivo) -> float:
@@ -641,7 +680,7 @@ def postar_instagram_story(arquivo: str) -> dict:
         except Exception as e:
             return {"sucesso": False, "erro": f"midia_publica indisponível: {e}"}
         try:
-            url_img = publicar(midia)
+            url_img = publicar(_garantir_jpeg(midia))
         except MidiaPublicaErro as e:
             return {"sucesso": False, "erro": str(e)}
         log.info(f"   🖼️  Story (imagem) [{quem}]: {midia.name}")
@@ -725,7 +764,7 @@ def postar_instagram_carrossel(imagens: list, legenda: str = "") -> dict:
     filhos = []
     for i, slide in enumerate(slides, 1):
         try:
-            url_img = publicar(slide)
+            url_img = publicar(_garantir_jpeg(slide))
         except MidiaPublicaErro as e:
             return {"sucesso": False, "erro": f"slide {i}: {e}"}
         cid, err = _criar_container(ig, tok, {"image_url": url_img,

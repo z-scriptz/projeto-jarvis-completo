@@ -4674,18 +4674,75 @@ público de 9 pessoas.
   story de vídeo até 60s · 100 posts por API / 24h por conta (carrossel conta
   como 1 — nosso volume nem chega perto).
 
-#### Ainda falta (a próxima etapa)
+#### Segunda rodada (22/08, mesmo dia) — o desenho dos slides
+
+**O Dre decidiu a ordem, e a decisão dele é melhor que a minha proposta:** *"os
+stories é exatamente para os seguidores que já nos seguem, certo? fazendo esse
+plano e chegando aos +1000 seguidores, o nosso plano de stories já estaria
+sendo executado... podemos focar nos carrosséis até ficar excelente/perfeito, e
+depois ir pros stories."* Ou seja — o mesmo sequenciamento a que a medição
+chegou, mas pelo motivo certo: story não é uma etapa que se pula, é uma etapa
+cujo público ainda está sendo construído. O roteiro dele pro story já está
+anotado pra quando chegar a hora: **reel publicado no início → CTA pro grupo do
+WhatsApp → 2 posts de curiosidade**.
+
+**⚠️ JPEG É O ÚNICO FORMATO QUE A META ACEITA EM IMAGEM.** Doc, literal: *"JPEG
+is the only image format supported. Extended JPEG formats such as MPO and JPS
+are not supported."* PNG não devolve "formato inválido" — devolve o mesmo
+`ERROR` genérico de container que qualquer outro problema devolve. O
+`_garantir_jpeg()` converte antes de subir (achatando o alfa contra BRANCO, que
+é o fundo do template das contas novas), e o renderizador já grava `.jpg`.
+
+**`carrossel_render.py`** (novo) — desenha os slides. Não escolhe produto, não
+escreve hook, não decide conta: recebe um plano e desenha.
+- **1080×1350 (4:5)**, não 1080×1080: é a maior área que o feed cede, e o
+  quadrado joga 25% da tela fora.
+- **Todos os slides do mesmo tamanho** — *"Carousel images are all cropped based
+  on the first image"*. Slide de proporção diferente não é reescalado, é
+  **cortado**, e o corte come o texto de baixo sem avisar.
+- **O cabeçalho é o do Reel** (logo redonda, "TopShop", selo aparado, @handle) e
+  o fundo sai do mesmo `_cor_fundo(nicho)` — senão o carrossel entra no grid com
+  outra cara e a conta parece de duas pessoas.
+- Os primitivos vêm do `render.py` por **import**, não copiados: `_texto_rico`
+  (emoji colorido com ZWJ), `_quebrar` (largura real), `_fonte`,
+  `_logo_circular`. Duplicar garantiria divergência.
+- `CAPA_FONT=112` com encolhimento automático até 56. **Encolher é o caminho,
+  cortar não é** — foi o teto fixo de 40 caracteres do `hook_alana` que matou
+  todo hook de duas linhas sem ninguém ver.
+- Foto **coberta com corte central**, nunca esticada: produto deformado é a
+  diferença entre "achadinho" e "anúncio suspeito".
+- ⚠️ `👉` e não `→`: a seta U+2192 não existe na Montserrat nem na Liberation e
+  sai como espaço vazio; o emoji passa pelo caminho colorido, que não depende de
+  a fonte de texto ter o glifo.
+- `--exemplo <nicho>` renderiza um carrossel de demonstração sem plano nenhum,
+  pra ver o layout antes de gastar produto.
+
+**`patch_carrossel_uploader.py`** (novo) — porque o `deploy_seguro` recusou o
+`meta_uploader.py` com **DIVERGENTE** (8 commits acompanhados, conteúdo da VPS
+não bate com nenhum; alguém editou de um lado só e ninguém sabe o quê).
+`--forcar` apagaria essa edição num arquivo que publica em 6 contas todo dia — e
+**não precisa**, porque todo o código novo é aditivo. O patch insere, é
+idempotente, compila antes de gravar, guarda `.bak` e tem `--desfazer`.
+Testado contra uma cópia real do arquivo com uma edição local simulada: as
+funções novas entram, as antigas ficam, **a edição da VPS sobrevive**.
+⚠️ Ele **recusa** quando não acha âncora, em vez de anexar no fim "pra não
+falhar" — ali as funções ficariam depois do `if __name__`, existindo mas
+inalcançáveis pelo CLI que as chama. Conserto que parece ter funcionado é pior
+que erro.
+
+#### Ainda falta
 1. **Rota no Caddy** — sem ela, carrossel e story de imagem não saem do lugar.
-   `--teste` responde se está de pé em um comando.
-2. **Renderizador de slides** — o `render.py` já tem tudo (`_placa`, `_fonte`,
-   `_quebrar`, `_texto_rico`, `_cor_fundo(nicho)`, `_logo_circular`); falta a
-   casca que gera N PNGs 1080×1350 a partir de um plano.
-3. **Story de graça, hoje**: o `.mp4` do Reel que a conta acabou de postar já
-   está no disco e já tem menos de 60s — repostar como story custa **zero**
-   render e **zero** infra. É por onde dá pra começar na @topshoptech_.
-4. **Ciclos e horários no `daemon_maestro`** — hoje ele só tem `horarios` +
-   `posts_por_dia_semana` pro Reel. Precisa de `carrossel_horarios` /
-   `stories_horarios` separados, senão os três formatos disputam o mesmo slot.
+   O 404 do `--teste` de 22/08 é o módulo funcionando, não um defeito.
+2. **Quem escreve o plano** — hoje o `carrossel_render` recebe um JSON pronto.
+   Falta o agente que escolhe os produtos (`produtos_fila.json` + o que já tem
+   foto baixada), pede o hook ao `hook_alana` e monta a legenda.
+3. **Ciclos e horários no `daemon_maestro`** — hoje ele só tem `horarios` +
+   `posts_por_dia_semana` pro Reel. Precisa de `carrossel_horarios` separado,
+   senão os dois formatos disputam o mesmo slot.
+4. **Story (depois do carrossel, decisão do Dre)** — e o mais barato já está
+   pronto: o `.mp4` do Reel que a conta acabou de postar está no disco e tem
+   menos de 60s, então `--story` o republica com **zero** render e **zero**
+   infra nova.
 
 ---
 
