@@ -4586,6 +4586,109 @@ mandando. Escrito pra degradar em texto, não quebrar. **Testar com
 
 ---
 
+### 🎠 CARROSSEL E STORY: o transporte, e o que a API NÃO faz (22/08)
+
+Objetivo do Dre: **+1.000 seguidores em todas as contas** — é o portão da Shopee
+(programa de afiliados dentro do Reels) e ele já provou na conta pessoal (1.200
+seguidores → o programa aparece). O plano dele: além da pirâmide de Reels
+(3-2-1/dia por conta, 72/semana), somar **1-2 carrosséis e 5-6 stories por dia**,
+em horários fixos e diferentes dos Reels.
+
+**Antes de propor qualquer coisa, revisei o que já existe. Três achados mudam o
+plano — nenhum deles é opinião, os três são regra da Meta ou número nosso.**
+
+#### 1. Imagem NÃO tem caminho binário. Carrossel exige host público.
+A Graph API tem dois caminhos pra mídia entrar num container:
+
+| formato | binário direto (rupload) | precisa de URL pública |
+|---|---|---|
+| REELS | ✅ (é o que a gente já faz) | não |
+| STORIES **vídeo** | ✅ (`media_type=STORIES`, `upload_type=resumable`) | não |
+| STORIES **imagem** | ❌ | **sim** (`image_url`) |
+| CAROUSEL (filhos) | ❌ | **sim** (`image_url`) |
+
+Doc oficial, literal: *"We cURL media used in publishing attempts, so the media
+must be hosted on a publicly accessible server."*
+
+**E o host já existe**: o Caddy do `jarvis.topshopoficial.com.br` (que subiu pro
+painel do TikTok, §4.6, e ficou de pé mesmo com a review reprovada) tem
+certificado válido. Falta uma rota de arquivo estático — 4 linhas.
+`python3 midia_publica.py --caddy` imprime elas.
+
+#### 2. Story por API não carrega figurinha NENHUMA.
+Nem enquete, nem caixa de pergunta, nem link, nem contagem regressiva. Menção a
+`@perfil` sem figurinha funciona; o resto, não. **Isso tira do story exatamente
+a parte que gera interação** — o que sobra é conteúdo, não conversa. Não é
+limitação nossa e não tem contorno pela API oficial. Se um dia a enquete valer o
+risco, o caminho é Playwright na sessão logada, e aí é outra conversa
+(a mesma que já decidimos não ter pra curtir/comentar).
+
+#### 3. Story não traz seguidor. Carrossel traz. **A ordem importa.**
+Story é entregue pra **quem já te segue**. O estado das contas hoje:
+
+| conta | seguidores | 5-6 stories/dia alcançariam |
+|---|---|---|
+| @topshoptech_ | 413 | uma audiência de verdade |
+| @topshop.__ | 52 | ~50 pessoas |
+| @topshopbeauty._ | 36 | ~36 |
+| @topshopmoda_ | 21 | ~21 |
+| @topshoppet_ | 9 | **9** |
+| @topshopcasa_ | 9 | **9** |
+
+5-6 stories × 6 contas = **36 stories/dia** de produção, sendo que em 4 contas
+eles chegam a menos de 40 pessoas. Carrossel, ao contrário, é distribuído pra
+não-seguidor via salvamento/compartilhamento — é o formato que **traz** gente.
+E o nosso número mais feio hoje é justamente esse: **47.202 impressões → 48
+salvamentos (1 a cada mil)**. Carrossel é o formato que ataca esse número.
+
+**Decisão: carrossel primeiro em todas as contas; story primeiro SÓ na
+@topshoptech_**, e nas outras conforme cruzam ~100 seguidores. O plano do Dre
+não muda — muda a ordem em que ele entra, pra não gastar 36 renders/dia num
+público de 9 pessoas.
+
+#### O que foi construído nesta etapa (transporte, não conteúdo)
+- **`midia_publica.py`** (novo) — publica um arquivo local numa URL HTTPS
+  temporária, com nome tokenizado (a pasta é servida inteira; sem token dava
+  pra listar o que a gente ia postar antes de postar), hardlink quando dá, e
+  **coleta de lixo por idade a cada publicação** (6h) — sem cron, sem mais um
+  serviço pra lembrar de ligar.
+  ⚠️ **`publicar()` confere que a URL responde 200 antes de devolver.** É o
+  ponto do módulo: sem isso, rota errada no Caddy chega na gente como
+  *"container deu ERROR no processamento"* — a mensagem mais inútil da Graph
+  API — e a gente procura o dia inteiro no lugar errado.
+  `--caddy` (imprime a rota) · `--teste` (prova ponta a ponta) · `--limpar`.
+- **`meta_uploader.postar_instagram_story(arquivo)`** — vídeo pelo binário
+  (zero infra nova), imagem pelo `midia_publica`. Recusa vídeo > 60s **com a
+  frase certa**, porque a Meta recusaria com "ERROR" sem dizer que é a duração.
+- **`meta_uploader.postar_instagram_carrossel(imagens, legenda)`** — 2 a 10
+  slides, legenda no container **PAI** (nos filhos ela é ignorada em silêncio),
+  1º comentário e permalink iguais aos do Reel.
+  ⚠️ Os slides publicados **não são apagados logo após o publish** de propósito
+  — a Meta pode rebuscar a imagem depois. A coleta por idade resolve sem risco.
+- ⚠️ **`postar_instagram` (Reels) ficou byte a byte igual.** É a única função
+  deste arquivo publicando em 6 contas todo dia; extrair helpers dela deixaria
+  um arquivo de produção DIVERGENTE no `deploy_seguro`. Os helpers novos são
+  novos, e só o código novo os usa. Custa ~20 linhas parecidas, e vale.
+- Limites respeitados no código: carrossel 2-10 filhos · todos os slides são
+  cortados pela proporção do **primeiro** (renderizar todos no mesmo tamanho) ·
+  story de vídeo até 60s · 100 posts por API / 24h por conta (carrossel conta
+  como 1 — nosso volume nem chega perto).
+
+#### Ainda falta (a próxima etapa)
+1. **Rota no Caddy** — sem ela, carrossel e story de imagem não saem do lugar.
+   `--teste` responde se está de pé em um comando.
+2. **Renderizador de slides** — o `render.py` já tem tudo (`_placa`, `_fonte`,
+   `_quebrar`, `_texto_rico`, `_cor_fundo(nicho)`, `_logo_circular`); falta a
+   casca que gera N PNGs 1080×1350 a partir de um plano.
+3. **Story de graça, hoje**: o `.mp4` do Reel que a conta acabou de postar já
+   está no disco e já tem menos de 60s — repostar como story custa **zero**
+   render e **zero** infra. É por onde dá pra começar na @topshoptech_.
+4. **Ciclos e horários no `daemon_maestro`** — hoje ele só tem `horarios` +
+   `posts_por_dia_semana` pro Reel. Precisa de `carrossel_horarios` /
+   `stories_horarios` separados, senão os três formatos disputam o mesmo slot.
+
+---
+
 ## 📌 Referência rápida (infra)
 
 - **VPS:** Contabo · daemon `jarvis.service` (`python -m agents.daemon_maestro`)
