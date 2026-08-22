@@ -533,6 +533,16 @@ def olhar_publicado(dias=3):
                 n = int(rp.get("followers_count") or 0)
                 if n:
                     _seguidores[nicho] = (handle, n)
+                    # ⚠️ 1.000 SEGUIDORES É UM PORTÃO, NÃO UMA VAIDADE (21/08).
+                    # A Shopee exige conta profissional, pública e com 1.000+
+                    # seguidores pra liberar a MARCAÇÃO DE PRODUTO no Reel —
+                    # o caminho de compra mais curto que existe: a pessoa toca
+                    # no produto dentro do vídeo, sem bio, sem DM, sem link.
+                    #
+                    # Enquanto nenhuma conta passa disso, todo o funil que a
+                    # gente otimiza (legenda, DM, comentário) é desvio. Por
+                    # isso a distância aparece todo dia: é a única meta do
+                    # projeto hoje com número e recompensa definidos.
         except Exception:
             pass
 
@@ -576,6 +586,33 @@ def olhar_publicado(dias=3):
         else:
             _diz(OK, A, f"{handle}: {len(recentes)} post(s) em {dias}d, todos com legenda")
 
+    # ── O PORTÃO DA SHOPEE ────────────────────────────────────────────────
+    # ⚠️ SEMPRE MOSTRA A CONTA MAIS PERTO, não importa a distância. A 1ª
+    # versão só falava quando faltavam menos de 300 — e com a líder em 413 ela
+    # ficava MUDA justamente sobre a única conta que interessa. Meta que só
+    # aparece quando já está quase alcançada não serve de meta.
+    if _seguidores:
+        handle, n = max(((h, q) for h, q in _seguidores.values()),
+                        key=lambda x: x[1])
+        falta = _PORTAO_SHOPEE - n
+        # ⚠️ formata o NÚMERO, não a frase — pela SEGUNDA vez hoje eu escrevi
+        # `f"…({handle}, {n:,})".replace(",", ".")` e a vírgula do texto virou
+        # ponto: "(@topshoptech_. 413)". Consertei igual no diag_conta e
+        # reintroduzi aqui. O jeito de não repetir é não deixar o replace
+        # encostar na frase.
+        _n = f"{n:,}".replace(",", ".")
+        _f = f"{falta:,}".replace(",", ".")
+        if falta <= 0:
+            _diz(OK, A, f"🎯 {handle} PASSOU do portão: {_n} seguidores",
+                 "dá pra marcar produto Shopee no Reel — Painel Profissional › "
+                 "Monetização › Parceria de Afiliados. É o caminho de compra "
+                 "mais curto que existe.")
+        else:
+            _diz(INFO, A, f"🎯 portão da Shopee: faltam {_f} seguidores na "
+                          f"conta mais perto ({handle}, {_n})",
+                 "com 1.000 dá pra marcar o produto DENTRO do Reel; "
+                 "até lá todo caminho de compra é desvio")
+
     if not olhadas:
         _diz(CEGO, A, "não consegui ler NENHUMA conta pelo Graph — "
                       "a camada do publicado está cega inteira")
@@ -596,6 +633,11 @@ def olhar_publicado(dias=3):
 # Vazio = não consegui medir, e aí o desempenho fala em números absolutos e
 # diz que está sem denominador — nunca inventa a razão.
 _seguidores = {}
+
+# Mínimo de seguidores que a Shopee exige pra liberar a marcação de produto no
+# Instagram (conta profissional + pública + 1.000 seguidores). Medido no
+# material oficial que o Dre mandou em 21/08.
+_PORTAO_SHOPEE = int(os.environ.get("VIGIA_PORTAO_SEGUIDORES", "1000"))
 
 
 def _mediana(ns):
