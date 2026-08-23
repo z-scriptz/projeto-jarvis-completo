@@ -5471,6 +5471,33 @@ erro — os dois só saem errados. Um seletor que exclui por classe resolve, mas
 lição é outra: **conserto que muda regra global cria o próximo defeito em outro
 lugar**, e o outro lugar não avisa.
 
+#### ✍️ DOIS TETOS DE TEXTO, NÃO UM (23/08)
+
+O layout novo comporta um parágrafo e o brain continuava escrevendo pra 12
+palavras por slide — o carrossel real ia sair com o design bom e o conteúdo
+raquítico, com um vão embaixo de cada slide.
+
+⚠️ **O TETO ÚNICO ERA HERANÇA DO PIL.** Lá tudo era título: frase grande sobre
+fundo liso, e 12 palavras já viravam parágrafo. O sistema em HTML tem
+HIERARQUIA — manchete display em cima, corpo em cinza embaixo. Papéis
+diferentes com teto igual empobrece os dois: título de 12 palavras é longo pra
+manchete, corpo de 12 é curto pra valer um salvamento. **E o salvamento é o
+número que a gente está tentando mover** (48 em 47.202).
+
+    PALAVRAS_TITULO = 9      manchete
+    PALAVRAS_CORPO  = 38     2-3 frases inteiras — é aqui que mora o valor
+
+⚠️ **E ELES NÃO DISPUTAM MAIS O MESMO ORÇAMENTO.** Antes o corpo comia o que
+sobrasse do título, porque no PIL os dois pousavam na mesma faixa da imagem. No
+HTML moram em blocos diferentes: o corpo caber não depende do título ser curto.
+O corte do corpo agora é **na última frase completa** — parágrafo cortado no
+meio de uma oração parece defeito de carregamento, e é a mesma lição da linha
+de apoio de ontem.
+
+**`conclusao` (a etiqueta verde do rodapé)**: o layout sempre teve o lugar e o
+brain nunca preenchia — saía um slide com um vão embaixo. Agora o prompt pede,
+com teto de 5 palavras.
+
 #### Ainda falta
 1. **Ciclos e horários no `daemon_maestro`** — hoje ele só tem `horarios` +
    `posts_por_dia_semana` pro Reel. Precisa de `carrossel_horarios` separado,

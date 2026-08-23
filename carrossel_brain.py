@@ -83,7 +83,17 @@ def _carregar_env():
 
 _carregar_env()
 
-PALAVRAS_MAX = int(os.environ.get("CARR_PALAVRAS_MAX", "12"))
+# ⚠️ DOIS TETOS, NÃO UM — E ISSO MUDOU COM O LAYOUT (23/08).
+# O teto único de 12 palavras nasceu do desenho em PIL, onde tudo era título:
+# frase grande sobre fundo liso, e 12 palavras já viravam parágrafo. O sistema
+# em HTML tem HIERARQUIA: título display curto EM CIMA, corpo em cinza EMBAIXO.
+# São papéis diferentes e teto igual pra ambos empobrece os dois — título de
+# 12 palavras é longo demais pra manchete, e corpo de 12 é curto demais pra
+# valer um salvamento. O slide de exemplo do sistema tem 8 no título e 28 no
+# corpo; era esse o alvo que o brain não sabia mirar.
+PALAVRAS_TITULO = int(os.environ.get("CARR_PALAVRAS_TITULO", "9"))
+PALAVRAS_CORPO = int(os.environ.get("CARR_PALAVRAS_CORPO", "38"))
+PALAVRAS_MAX = int(os.environ.get("CARR_PALAVRAS_MAX", "12"))   # legado (PIL)
 COBERTURA = int(os.environ.get("CARR_COBERTURA", "3"))
 
 
@@ -484,25 +494,28 @@ def _cortar(frase: str, teto: int = None) -> str:
 
 
 def _orcamento(titulo: str, linha: str, teto: int = None) -> tuple:
-    """Ajusta título+linha pra caberem JUNTOS no teto do slide.
+    """Ajusta título e corpo aos tetos de CADA UM. Devolve (titulo, corpo).
 
-    ⚠️ AQUI ESTAVA O DEFEITO (visto na 1ª rodada real, 22/08): eu cortava
-    CADA CAMPO em 12 palavras e o render contava o SLIDE INTEIRO. Título de 12
-    + linha de 12 = 24 palavras num slide, e o aviso disparava em 3 dos 4
-    slides — com o brain achando que tinha obedecido. Duas definições da mesma
-    regra em dois módulos é sempre isso: uma delas está errada e as duas se
-    acham certas.
-
-    O título tem prioridade porque é o que o slide diz. A linha de apoio entra
-    INTEIRA ou não entra: cortada no meio ela sai como "Preço de outro mundo e
-    ainda vem" — pior que ausente, porque parece defeito de carregamento em vez
-    de escolha. Título é diferente: cortar um título longo ainda deixa uma
-    frase que se lê."""
-    teto = teto or PALAVRAS_MAX
-    tit = _cortar(titulo, teto)
-    sobra = teto - len(re.findall(r"\S+", tit))
-    apoio = (linha or "").strip()
-    return (tit, apoio if 0 < len(re.findall(r"\S+", apoio)) <= sobra else "")
+    ⚠️ ELES NÃO DISPUTAM MAIS O MESMO ORÇAMENTO. Na versão anterior o corpo
+    comia o que sobrasse do título, porque no PIL os dois pousavam na mesma
+    faixa da imagem. No layout HTML eles moram em blocos diferentes, com
+    tamanhos diferentes — o corpo caber não depende do título ser curto.
+    O que sobrou da regra antiga é o corte: título longo, cortado, ainda deixa
+    uma frase que se lê; corpo é cortado na frase inteira mais próxima, porque
+    parágrafo cortado no meio de uma oração parece defeito de carregamento."""
+    tit = _cortar(titulo, teto or PALAVRAS_TITULO)
+    corpo = (linha or "").strip()
+    if len(re.findall(r"\S+", corpo)) > PALAVRAS_CORPO:
+        # corta na última frase completa que ainda cabe
+        frases = re.split(r"(?<=[.!?])\s+", corpo)
+        junto = ""
+        for f in frases:
+            teste = (junto + " " + f).strip()
+            if len(re.findall(r"\S+", teste)) > PALAVRAS_CORPO:
+                break
+            junto = teste
+        corpo = junto or _cortar(corpo, PALAVRAS_CORPO)
+    return (tit, corpo)
 
 
 def _prompt(formato: str, nicho: str, produtos: list, angulo: str) -> str:
@@ -521,10 +534,13 @@ PRODUTOS DISPONIVEIS:
 {nomes}
 
 REGRAS DURAS:
-1. NO MAXIMO {PALAVRAS_MAX} PALAVRAS POR SLIDE — o "titulo" e a "linha"
-   SOMADOS. O ideal e 8. Slide que vira paragrafo mata o carrossel: a fonte
-   encolhe pra caber e o post deixa de parecer conteudo. Se nao couber
-   apoio, deixe "linha" vazia — e melhor um slide limpo.
+1. TITULO E CORPO TEM TAMANHOS DIFERENTES, e isso e a hierarquia do slide:
+   · "titulo": ate {PALAVRAS_TITULO} palavras. E manchete, nao frase.
+   · "linha": 2 a 3 FRASES INTEIRAS, ate {PALAVRAS_CORPO} palavras. E aqui
+     que mora o valor do post — e o que faz alguem SALVAR. Slide com titulo
+     e mais nada nao vale um salvamento.
+   · "conclusao": ate 5 palavras, o fecho pratico do slide (ex: "Descarta
+     antes de organizar"). Vira uma etiqueta verde no rodape.
 2. Sem emoji, sem aspas, sem hashtag, sem CAIXA ALTA gritada.
 3. A capa nao pode fechar porta: nada de "se voce tem X" ou "quem sofre com
    Y". Ela descreve uma situacao reconhecivel por muita gente.
@@ -557,8 +573,9 @@ RESPONDA SO COM JSON, sem cerca de codigo, neste formato exato:
   "quebra": {{"titulo": "<aumenta a tensao, NAO entrega a resposta>",
              "linha": "<uma linha de apoio, pode ser vazia>"}},
   "slides": [{{"rotulo": "<curto, ex ERRO 1 — pode ser vazio>",
-               "titulo": "<a frase do slide>",
-               "linha": "<uma linha de apoio, pode ser vazia>"}}],
+               "titulo": "<a manchete do slide, curta>",
+               "linha": "<2 a 3 frases explicando de verdade>",
+               "conclusao": "<ate 5 palavras, o fecho pratico>"}}],
   "resumo": ["<item 1, curtissimo>", "<item 2>", "..."],
   "cta": "<a frase do ultimo slide, contextual>",
   "legenda": "<2 a 4 linhas pra legenda do post>"}}
@@ -683,7 +700,10 @@ def montar_plano(nicho: str, formato: str = "", fotos_em: Path = None) -> dict:
         # no slide. Melhor o terminal mostrar o que o feed vai mostrar.
         rotulo = "" if formato in ("lista", "comparacao") \
             else _cortar(s.get("rotulo") or "", 4)
-        item = {"rotulo": rotulo, "titulo": tit, "linha": apoio}
+        item = {"rotulo": rotulo, "titulo": tit, "linha": apoio,
+                # a etiqueta verde do rodapé — o layout sempre teve o lugar,
+                # e o brain nunca preenchia: saía um slide com um vão embaixo
+                "conclusao": _cortar(s.get("conclusao") or "", 5)}
         if s.get("tipo"):
             item["tipo"] = s["tipo"]
         if formato in ("lista", "comparacao") and prod:
