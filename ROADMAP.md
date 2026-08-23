@@ -5132,6 +5132,68 @@ e aceita vários de uma vez. ATRASADO é exatamente este caso.
 (`patch_carrossel_uploader.py` é à parte: `agents/meta_uploader.py` está
 DIVERGENTE e se atualiza pelo patch, não pelo deploy.)
 
+#### 💬 O 1º COMENTÁRIO ERA UMA FRASE SÓ, EM 6 CONTAS, TODO DIA (22/08)
+
+Reclamação do Dre: *"o primeiro comentário em todos os posts, reels, carrossel,
+é sempre o mesmo... todo mundo que acompanha enjoa de ver o mesmo comentário
+robotizado toda vez. Pra carrossel isso nem faz sentido."* Ele está certo nas
+duas, e a segunda é a séria:
+
+1. `meta_uploader._TMPL_IG` era uma **constante**: *"🛒 O link tá na BIO, corre
+   pegar o seu! 😍 / 💬 comenta EU QUERO..."* em toda postagem, das 6 contas.
+   Quem segue duas das nossas contas via a mesma frase duas vezes por dia.
+2. ⚠️ **O COMENTÁRIO NÃO SABIA O QUE ESTAVA COMENTANDO.** Num carrossel de
+   *"3 erros que quase todo mundo comete"*, pedir "corre pegar o seu" é resposta
+   pra uma pergunta que ninguém fez — não tem "o seu" ali, tem conteúdo.
+   Comentário desconexo denuncia a automação mais do que o repetido cansa.
+
+`comentarios.py` (novo): bancos por **formato** (reel · carrossel · lista) e por
+**plataforma** (no FB o link é clicável e o pedido é clique; no IG não é, e o
+pedido é salvar/comentar). ⚠️ **Rotação com memória**, não sorteio: com 8 frases
+o sorteio puro repete a anterior 1 vez em 8 — umas 9 vezes por mês no nosso
+volume, e é essa repetição que faz parecer robô. As últimas 4 por conta saem do
+bolo primeiro. Frase que pede `{link}` sem link não é sorteada.
+
+`patch_comentarios.py` (novo, cirúrgico como o do carrossel): troca só
+`_montar_comentario` e acrescenta `_formato_do_pacote`. ⚠️ **O formato é
+deduzido da PASTA** — pacote de carrossel tem `plano.json` ao lado dos slides, o
+de vídeo não tem. Assim as duas chamadas que já existiam continuam idênticas, e
+nada mais do arquivo DIVERGENTE é tocado. `ENGAJAR_IG_TMPL` no `.env` ainda
+manda, pra controle manual.
+
+#### 🎨 A CAPA vs. A REFERÊNCIA: o que faltava, item a item (22/08)
+
+O Dre comparou as capas que ele fez no ChatGPT com o que saiu: *"tá muito ruim
+clauzinho"*. Comparando lado a lado, o que a referência tinha e a nossa não:
+
+| referência | nossa | resolvido |
+|---|---|---|
+| bloco de cor atrás da palavra | letra colorida | ✅ `[palavra]` |
+| sombra dando profundidade | texto chapado | ✅ |
+| `1/5` em pílula no TOPO | rodapé, sozinho | ✅ |
+| "ARRASTA PRO LADO" em pílula | texto solto | ✅ |
+| fonte condensada pesada | Montserrat | ⚠️ ver abaixo |
+| foto de AMBIENTE | foto de produto | ❌ ver abaixo |
+
+⚠️ **A TARJA É O QUE MAIS SEPARA AS DUAS.** Na referência, "NA CASA" não é texto
+laranja — é texto PRETO sobre um bloco laranja. Letra colorida some no meio da
+foto; bloco sólido não some, e é ele que o olho encontra primeiro no feed. Agora
+são dois níveis: `*palavra*` = letra na cor do nicho, `[palavra]` = bloco.
+
+⚠️ **A FONTE NÃO ENTROU NA VPS, E EU NÃO SEI POR QUÊ — então fiz como saber.**
+Aqui, com a Anton em `assets/brand`, a capa sai condensada; lá saiu Montserrat
+com a Anton instalada. Três hipóteses (arquivo, pasta, versão do módulo) e
+nenhum jeito de separar. `carrossel_render.py --diag` imprime `BRAND_DIR`, cada
+condensada procurada com o caminho completo, e **qual fonte o Pillow devolveu**.
+Uma linha de log fecha o buraco que três hipóteses não fechavam.
+
+⚠️ **E TEM UMA DIFERENÇA QUE NÃO É CÓDIGO: A MATÉRIA-PRIMA DA IMAGEM.** As capas
+do ChatGPT usam foto de AMBIENTE gerada por IA — sala com sofá, setup com
+profundidade. A nossa usa foto de PRODUTO da Shopee, fundo branco de catálogo.
+Escurecida, foto de catálogo vira mancha; foto de ambiente vira capa. Isso não
+se resolve com layout, e é onde o "conteúdo 100% autoral" que o Dre quer fazer
+depois entra de verdade.
+
 #### Ainda falta
 1. **Ciclos e horários no `daemon_maestro`** — hoje ele só tem `horarios` +
    `posts_por_dia_semana` pro Reel. Precisa de `carrossel_horarios` separado,

@@ -426,6 +426,30 @@ def _limpa_marcas(t: str) -> str:
     return _RX_MARCA.sub(r"\1", t or "")
 
 
+_RX_TARJA = re.compile(r"\[([^\]]+)\]")
+
+
+def _marcacao_tarja(texto: str) -> tuple:
+    """`"3 ERROS [NA CASA]"` → `("3 ERROS NA CASA", {2, 3})`.
+
+    ⚠️ A TARJA É O QUE MAIS SEPARA A NOSSA CAPA DA REFERÊNCIA. Nas capas que o
+    Dre mandou, "NA CASA" não é texto laranja — é texto PRETO sobre um bloco
+    laranja. Letra colorida some no meio da foto; bloco sólido não some, e é
+    ele que o olho encontra primeiro no feed. São dois níveis de ênfase:
+        *palavra*   → letra na cor do nicho
+        [palavra]   → bloco na cor do nicho, letra preta
+    """
+    palavras, tarja, pos = [], set(), 0
+    for m in _RX_TARJA.finditer(texto or ""):
+        palavras.extend((texto[pos:m.start()]).split())
+        for w in m.group(1).split():
+            tarja.add(len(palavras))
+            palavras.append(w)
+        pos = m.end()
+    palavras.extend((texto[pos:]).split())
+    return " ".join(palavras), tarja
+
+
 def _marcacao(texto: str) -> tuple:
     """`"5 ERROS *QUE ACABAM*"` → `("5 ERROS QUE ACABAM", {2, 3})`.
 
@@ -449,14 +473,33 @@ def _marcacao(texto: str) -> tuple:
 
 
 def _escreve_marcado(img, d, x: int, y_meio: int, linha: str, fonte, cor,
-                     cor_destaque, i0: int, destaque: set) -> int:
-    """Escreve uma linha palavra a palavra. Devolve o índice da próxima."""
+                     cor_destaque, i0: int, destaque: set, tarja: set = None,
+                     sombra: int = 0) -> int:
+    """Escreve uma linha palavra a palavra. Devolve o índice da próxima.
+
+    `sombra` > 0 desenha o texto deslocado em preto por baixo. ⚠️ SOBRE FOTO
+    ISSO NÃO É ENFEITE: mesmo com o véu, letra branca sobre uma região clara da
+    imagem perde a borda. A regra do Dre é contorno só branco — que aqui não
+    serve, porque a letra JÁ é branca. Sombra resolve sem contornar."""
+    tarja = tarja or set()
     espaco = d.textlength(" ", font=fonte)
+    alt = int(getattr(fonte, "size", 40))
     cur, i = float(x), i0
     for w in (linha or "").split():
-        cur += R._texto_rico(img, d, int(cur), y_meio, w, fonte,
-                             cor_destaque if i in destaque else cor)
-        cur += espaco
+        larg = R._texto_rico(None, d, 0, 0, w, fonte, None, desenhar=False)
+        if i in tarja:
+            pad = int(alt * 0.16)
+            d.rectangle((int(cur) - pad, y_meio - int(alt * 0.62),
+                         int(cur) + larg + pad, y_meio + int(alt * 0.48)),
+                        fill=cor_destaque)
+            R._texto_rico(img, d, int(cur), y_meio, w, fonte, (0, 0, 0, 255))
+        else:
+            if sombra:
+                R._texto_rico(img, d, int(cur) + sombra, y_meio + sombra, w,
+                              fonte, (0, 0, 0, 190))
+            R._texto_rico(img, d, int(cur), y_meio, w, fonte,
+                          cor_destaque if i in destaque else cor)
+        cur += larg + espaco
         i += 1
     return i
 
@@ -501,7 +544,11 @@ def _slide_capa_dramatica(plano: dict, total: int, foto: Path, avisos: list):
 
     _cabecalho(img, d, nicho, plano.get("handle", ""), False, avisos)
 
-    hook, destaque = _marcacao((capa.get("hook") or "").strip().upper())
+    # duas marcações no mesmo texto: [tarja] e *cor*. A tarja é extraída
+    # primeiro porque ela some do texto; a cor roda sobre o que sobrou.
+    bruto = (capa.get("hook") or "").strip().upper()
+    sem_tarja, tarja = _marcacao_tarja(bruto)
+    hook, destaque = _marcacao(sem_tarja)
     _vigiar_palavras(avisos, 1, hook)
     linhas, f = _texto_que_cabe(d, hook, CAPA_TITULO_FONT, CAPA_TITULO_MIN,
                                 _px(LARG - 2 * MARGEM), 4, titulo=True)
@@ -509,7 +556,8 @@ def _slide_capa_dramatica(plano: dict, total: int, foto: Path, avisos: list):
     y, i = _px(290), 0
     for ln in linhas:
         i = _escreve_marcado(img, d, _px(MARGEM), y + alt_linha // 2, ln, f,
-                             branco, cor_dest, i, destaque)
+                             branco, cor_dest, i, destaque, tarja,
+                             sombra=_px(4))
         y += alt_linha
 
     sub, dsub = _marcacao((capa.get("sub") or "").strip().upper())
@@ -522,16 +570,31 @@ def _slide_capa_dramatica(plano: dict, total: int, foto: Path, avisos: list):
                                  branco, cor_dest, j, dsub)
             y += _px(58)
 
-    # o "1/8" numa pílula no rodapé, como nas referências — no alto ele
-    # competia com o hook, que é o que tem que ser visto primeiro
+    # ⚠️ O "1/8" VAI PRO TOPO DIREITO, na altura do @handle — é onde ele está
+    # nas referências, e faz sentido: ali ele é lido junto com a marca, sem
+    # disputar espaço com o hook. No rodapé eu o tinha posto sozinho, longe de
+    # tudo, e ele sumia.
     txt = f"1/{total}"
-    fp = R._fonte(_px(30))
+    fp = R._fonte(_px(32))
     larg = R._texto_rico(None, d, 0, 0, txt, fp, None, desenhar=False)
-    pad, altp = _px(22), _px(56)
-    x0, y0 = _px(MARGEM), _px(ALT - 118)
-    d.rounded_rectangle((x0, y0, x0 + larg + 2 * pad, y0 + altp),
-                        radius=_px(14), outline=cor_dest, width=_px(3))
-    R._texto_rico(img, d, x0 + pad, y0 + altp // 2, txt, fp, branco)
+    pad, altp = _px(20), _px(52)
+    x1, ymeio = _px(LARG - MARGEM), _px(LOGO_Y + NOME_DY)
+    d.rounded_rectangle((x1 - larg - 2 * pad, ymeio - altp // 2, x1,
+                         ymeio + altp // 2),
+                        radius=_px(16), outline=cor_dest, width=_px(3))
+    R._texto_rico(img, d, x1 - larg - pad, ymeio, txt, fp, branco)
+
+    # badge "ARRASTA PRO LADO" — nas referências ele é uma peça com contorno,
+    # não texto solto. O arrasto é o sinal que decide a entrega do carrossel;
+    # pedir de um jeito que se vê custa 6 linhas.
+    arrasta = (capa.get("arrasta") or "ARRASTA PRO LADO").strip().upper()
+    fa = R._fonte(_px(34))
+    larg = R._texto_rico(None, d, 0, 0, arrasta, fa, None, desenhar=False)
+    pad, altb = _px(30), _px(74)
+    x0, y0 = _px(MARGEM), _px(ALT - 132)
+    d.rounded_rectangle((x0, y0, x0 + larg + 2 * pad, y0 + altb),
+                        radius=altb // 2, outline=cor_dest, width=_px(3))
+    R._texto_rico(img, d, x0 + pad, y0 + altb // 2, arrasta, fa, branco)
     return img
 
 
@@ -778,7 +841,35 @@ def main() -> int:
                    help="pasta onde os slides são gravados")
     p.add_argument("--exemplo", metavar="NICHO", nargs="?", const="casa",
                    help="renderiza um carrossel de demonstração (sem plano)")
+    p.add_argument("--diag", action="store_true",
+                   help="diz de ONDE vêm a fonte e a logo, e o que achou")
     a = p.parse_args()
+
+    if a.diag:
+        # ⚠️ ISTO EXISTE PORQUE A CAPA SAIU EM MONTSERRAT NA VPS COM A ANTON
+        # INSTALADA, e não havia como saber se o problema era o arquivo, a
+        # pasta ou a versão do módulo. Três hipóteses, nenhum jeito de separar
+        # — que é exatamente o buraco que uma linha de log fecha.
+        from PIL import ImageFont
+        print(f"render.py         {Path(R.__file__).resolve()}")
+        print(f"BRAND_DIR         {R.BRAND_DIR}  (existe: {R.BRAND_DIR.exists()})")
+        print(f"capa dramática    {'ligada' if _capa_dramatica_ligada() else 'DESLIGADA (CARR_CAPA=limpa)'}")
+        print("\ncondensadas procuradas, na ordem:")
+        achou = ""
+        for nome in _CONDENSADAS:
+            arq = R.BRAND_DIR / nome
+            ok = arq.exists()
+            print(f"  {'✅' if ok else '⬜'} {nome:<28} {arq}")
+            if ok and not achou:
+                achou = nome
+        f = fonte_titulo(80)
+        nome_real = getattr(f, "path", "?")
+        print(f"\nfonte de título em uso: {nome_real}")
+        if not achou:
+            print("  ⚠️  nenhuma condensada em BRAND_DIR — a capa sai em Montserrat.")
+            print(f"  Se o baixar_fontes.py gravou em OUTRA pasta, é ESSA a causa.")
+            print(f"  Rode:  .venv/bin/python baixar_fontes.py --listar")
+        return 0
 
     if a.exemplo:
         plano = dict(_EXEMPLO, nicho=a.exemplo)
