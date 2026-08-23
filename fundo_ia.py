@@ -88,38 +88,88 @@ _COMUM = ("photorealistic, cinematic lighting, shallow depth of field, "
           "no text, no words, no letters, no logos, no watermark, "
           "vertical composition")
 
+# ⚠️ DEZ CENAS POR NICHO, NÃO TRÊS. Eram 3, e o Dre perguntou se devia gerar
+# 10 fundos — com 3 prompts, 10 imagens seriam 3 cenários repetidos. O acervo
+# ideal é 10-12 por nicho (fundo em TODO slide agora), então a lista de cenas
+# tem que comportar isso sem repetir.
+#
+# ⚠️ E TODAS SÃO AMBIENTE, NUNCA PRODUTO. Foto de produto a gente já tem, da
+# Shopee, e ela vive no slide de produto. O que falta é o LUGAR onde o produto
+# viveria — sala, bancada, banheiro. É isso que transforma um retângulo de cor
+# em capa, e é a única coisa que a gente não tem como conseguir de outro jeito.
 CENARIOS = {
     "casa": [
         "modern cozy living room at dusk, dark grey sofa, warm lamp light, "
         "wooden coffee table with a small plant",
         "tidy minimalist kitchen counter at night, dark cabinets, soft warm light",
         "organized bedroom corner, neutral bedding, warm side lamp, dark walls",
+        "clean laundry area at night, folded towels on a dark shelf, soft light",
+        "entryway with a wooden bench and hooks, warm evening light, dark tones",
+        "dining table set for two, dark wood, single pendant lamp above",
+        "bathroom shelf with folded towels and a plant, moody warm light",
+        "home office corner with a lamp and books, dark walls, evening",
+        "balcony with plants and a chair at dusk, warm string lights",
+        "open shelving with organized jars and baskets, dark kitchen, warm light",
     ],
     "tech": [
         "dark desk setup with subtle green accent lighting, keyboard out of focus",
-        "close view of a dark workspace at night, screens glowing softly, "
-        "cables neatly arranged",
+        "close view of a dark workspace at night, screens glowing softly",
         "black desk with soft neon rim light, abstract circuit bokeh background",
+        "gaming corner at night, dark walls, green accent light, chair silhouette",
+        "cables and adapters neatly arranged on a dark surface, moody light",
+        "smartphone charging on a dark nightstand, warm lamp behind",
+        "headphones and laptop on a dark table, cinematic side light",
+        "home theater corner at night, dark room, screen glow on the wall",
+        "car dashboard at night with soft ambient lighting, blurred",
+        "workbench with small tools and gadgets, dark tones, focused light",
     ],
     "beleza": [
         "elegant bathroom vanity at night, marble counter, soft purple accent light",
         "dark dressing table with a mirror, warm bulbs out of focus",
         "moody close view of a skincare shelf, soft violet lighting",
+        "bathroom counter with folded towels and a candle, warm dark tones",
+        "makeup brushes in a holder on a dark surface, soft pink light",
+        "shower shelf with bottles, steam, moody lighting",
+        "hair styling corner with a mirror and warm bulbs, dark walls",
+        "nail care setup on a dark table, soft violet rim light",
+        "perfume bottles on a dark shelf, cinematic light",
+        "spa-like corner with a plant and a towel, dark tones, warm light",
     ],
     "pet": [
         "cozy living room floor with a dog bed, warm evening light, dark tones",
         "dark kitchen corner with pet bowls, soft blue accent light",
         "living room with a cat resting on a dark sofa, warm lamp",
+        "dog toys on a wooden floor, evening light, dark background",
+        "pet grooming corner with towels and brushes, moody light",
+        "cat tree by a window at dusk, dark room, soft light",
+        "leash and collar hanging by the door, warm dark entryway",
+        "pet food storage in a dark pantry, soft warm light",
+        "dog resting on a rug near a lamp, cozy dark living room",
+        "window seat with a blanket where a pet sleeps, evening light",
     ],
     "moda": [
         "open wardrobe with hanging clothes, dark tones, soft pink rim light",
         "dark dressing room corner, mirror, warm moody lighting",
         "folded clothes on a dark shelf, soft pink accent lighting",
+        "shoes lined up on a dark rack, cinematic side light",
+        "accessories on a dark tray, soft pink light, shallow depth",
+        "coat rack by a dark wall, warm evening light",
+        "mirror selfie corner without people, dark room, soft light",
+        "handbags on a shelf, dark tones, moody lighting",
+        "jewelry on a dark surface, soft pink rim light",
+        "neatly folded jeans and knitwear on a dark bench, warm light",
     ],
     "geral": [
         "dark modern interior with warm golden accent light, blurred background",
         "moody minimal room, dark walls, single warm lamp",
         "dark tabletop scene with warm golden rim light",
+        "shopping bags on a dark floor by a door, warm light",
+        "cozy corner with a chair and a lamp, dark tones",
+        "desk with everyday objects out of focus, warm dark light",
+        "shelf with assorted boxes and baskets, moody warm lighting",
+        "kitchen counter at night, dark, single warm light source",
+        "hallway with a plant and warm lamp, dark walls",
+        "living room at dusk seen from the doorway, warm lamps on",
     ],
 }
 
@@ -356,8 +406,18 @@ def main() -> int:
     a = p.parse_args()
 
     if a.prompt:
-        for i in range(len(CENARIOS.get(a.prompt, CENARIOS["geral"]))):
-            print(f"\n[{i}] {prompt_do_nicho(a.prompt, i)}")
+        cenas = CENARIOS.get(a.prompt, CENARIOS["geral"])
+        n = min(a.quantos, len(cenas))
+        print(f"🎨 {n} prompts pro nicho '{a.prompt}' — cole um por vez no "
+              f"ChatGPT/Gemini/Fal.\n"
+              f"   Formato: 1080x1350 (vertical 4:5). Salve em "
+              f"{_pasta(a.prompt)}/\n"
+              f"   ⚠️ São FUNDOS, não slides: sem texto, sem logo. O texto e a "
+              f"marca entram por cima, no render.\n")
+        for i in range(n):
+            print(f"── {i + 1}/{n} " + "─" * 58)
+            print(prompt_do_nicho(a.prompt, i))
+            print()
         return 0
     if a.listar:
         print(f"📁 {FUNDOS}\n")

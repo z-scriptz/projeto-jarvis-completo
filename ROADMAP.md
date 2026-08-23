@@ -5617,6 +5617,25 @@ cor da conta), slides de texto com foto **só no topo**, com fade pro creme.
 **Com fundo em todo slide, o acervo ideal sobe de 6-8 para 10-12 por nicho** —
 ainda uma vez só, e ainda ~2-3 de reposição por mês.
 
+#### 🎨 "10 FUNDOS OU 10 SLIDES?" — fundos avulsos (23/08)
+
+⚠️ **O CHATGPT FAZ SÓ A FOTO, NUNCA O SLIDE.** As capas que o Dre mandou eram
+slides prontos, então a confusão é justa — mas no nosso sistema o papel é
+outro: a IA entrega o AMBIENTE, e o texto, a logo, o `@` e a cor da conta
+entram por cima no render. É isso que garante que o `R$ 29,90` está certo e que
+o `@topshopcasa_` não vira `@topshopcaza_`. Slide pronto de IA seria bonito e
+infiel.
+
+⚠️ **E EU TINHA DADO UM CONSELHO IMPOSSÍVEL:** mandei gerar 10 fundos por nicho
+quando o `--prompt` só tinha **3 cenários**. Pedir 10 daria 3 cenas repetidas
+— exatamente o problema que o acervo grande existe pra evitar. Agora são **10
+cenas por nicho**, todas de ambiente (sala, bancada, entrada, varanda...):
+nenhuma é foto de produto, porque foto de produto a gente já tem da Shopee e
+ela vive no slide de produto. O que falta é o LUGAR onde o produto viveria.
+
+`--prompt <nicho> --quantos 10` imprime os 10 numerados, com o tamanho
+(1080×1350), a pasta de destino e o aviso de que são fundos e não slides.
+
 #### Ainda falta
 1. ~~Ciclos e horários no `daemon_maestro`~~ ✅ feito
 2. **Ligar** (`carrossel_ligado: true`) depois de olhar alguns prontos.
