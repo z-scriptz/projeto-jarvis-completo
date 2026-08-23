@@ -5582,6 +5582,41 @@ diz a causa: não é biblioteca faltando, é o interpretador errado.
 os argumentos que a pessoa acabou de digitar**. Erro de ambiente tem que falhar
 antes do trabalho, não depois.
 
+#### ⚠️ FALSO ALARME MEU: O DOMINGO SEMPRE ESTEVE CERTO (23/08)
+
+Eu disse ao Dre que *"domingo tem 4 Reels e zero carrossel"* e sugeri olhar
+depois. Ele: **"domingo não há posts, cuidado em!!"**. Ele está certo, e o
+daemon também: `_slots_de_hoje` tem `if n <= 0: return []  # dia de descanso`
+desde sempre.
+
+⚠️ **QUEM INVENTOU O DOMINGO CHEIO FOI O MEU RELATÓRIO.** No `--agenda` eu
+escrevi `reels_vol.get(str(n)) or (cfg.get("horarios") or [])` — no domingo
+`n=0`, `get("0")` devolve None, o `or` caiu na lista genérica e a tabela
+imprimiu `09:00, 14:00, 17:00, 21:00`. **Ferramenta de diagnóstico que mente é
+pior que ferramenta nenhuma**: eu quase mandei consertar o que não estava
+quebrado, num arquivo que posta em 6 contas há meses. Um `if n <= 0` ANTES do
+`or` resolve — e a lição é a de sempre neste projeto: conferir o relatório
+contra o código antes de tratar o relatório como fato.
+
+#### 🖼️ FUNDO EM TODOS OS SLIDES (23/08)
+
+*"posso criar quantas imagens eu quiser, então aproveita"* — então o fundo
+deixou de ser só da capa. Agora **cada slide do carrossel recebe um fundo
+diferente**, e o "diferente" é dentro DAQUELE post: não adianta o acervo ter 8
+fotos se as 7 páginas sortearem a mesma sala. A lista é embaralhada e consumida
+em ordem; quando acaba, reinicia (3 fundos e 7 slides = cada um aparece 2-3
+vezes, nunca em sequência).
+
+⚠️ **O SLIDE DE PRODUTO FICA DE FORA.** Ali a foto É o produto, e um cenário
+atrás dele brigaria com a única coisa que a pessoa precisa ver pra querer
+comprar.
+
+Onde cada uma aparece: capa e fecho com foto **cheia** (escurecida / tingida na
+cor da conta), slides de texto com foto **só no topo**, com fade pro creme.
+
+**Com fundo em todo slide, o acervo ideal sobe de 6-8 para 10-12 por nicho** —
+ainda uma vez só, e ainda ~2-3 de reposição por mês.
+
 #### Ainda falta
 1. ~~Ciclos e horários no `daemon_maestro`~~ ✅ feito
 2. **Ligar** (`carrossel_ligado: true`) depois de olhar alguns prontos.

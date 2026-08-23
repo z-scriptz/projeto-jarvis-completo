@@ -732,6 +732,28 @@ def montar_plano(nicho: str, formato: str = "", fotos_em: Path = None) -> dict:
         slides.append({"rotulo": "SALVA ISSO", "titulo": "", "linha": "",
                        "tipo": "resumo", "itens": resumo[:7]})
 
+    # ⚠️ CADA SLIDE GANHA UM FUNDO DIFERENTE, e o "diferente" é dentro DESTE
+    # carrossel — não adianta o acervo ter 8 fotos se as 7 páginas do post
+    # sortearem a mesma sala. Aqui a lista é embaralhada e consumida em ordem;
+    # acabando, ela reinicia (com 3 fundos e 7 slides, cada um aparece 2-3
+    # vezes, mas nunca em sequência).
+    # O slide de PRODUTO fica de fora: ali a foto é o produto, e um cenário
+    # atrás dele brigaria com a coisa que a pessoa precisa ver.
+    try:
+        from fundo_ia import existentes
+        acervo = [str(x) for x in existentes(nicho)]
+    except Exception:
+        acervo = []
+    if acervo:
+        random.shuffle(acervo)
+        fila = list(acervo)
+        for s in slides:
+            if s.get("tipo") == "produto":
+                continue
+            if not fila:
+                fila = list(acervo)
+            s["fundo"] = fila.pop(0)
+
     cta = dict(CTA_PADRAO)
     if d.get("cta"):
         cta["titulo"] = _cortar(d["cta"])

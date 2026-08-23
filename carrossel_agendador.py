@@ -253,7 +253,15 @@ def _agenda(cfg: dict) -> int:
     print("─" * 62)
     for i, nome in enumerate(_DIAS):
         n = piramide[i] if i < len(piramide) else 0
-        rh = reels_vol.get(str(n)) or (cfg.get("horarios") or [])
+        # ⚠️ VOLUME 0 = DIA DE DESCANSO, E ISSO PRECISA VIR ANTES DO `or`.
+        # Eu escrevia `reels_vol.get(str(n)) or horarios`, e no domingo (n=0)
+        # o `get("0")` devolve None, o `or` caía na lista genérica e a agenda
+        # mostrava "domingo: 09:00, 14:00, 17:00, 21:00". O daemon SEMPRE
+        # esteve certo (`if n <= 0: return []`); quem inventou o domingo cheio
+        # foi este relatório — e eu quase mandei o Dre consertar o que não
+        # estava quebrado. Ferramenta de diagnóstico que mente é pior que
+        # ferramenta nenhuma.
+        rh = [] if n <= 0 else (reels_vol.get(str(n)) or (cfg.get("horarios") or []))
         ch = _horarios(cfg)[:_quantos_hoje(cfg, date.fromordinal(
             date.today().toordinal() - date.today().weekday() + i))]
         print(f"{nome:<9} {', '.join(rh) if rh else '—':<26} "
