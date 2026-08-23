@@ -794,7 +794,24 @@ def renderizar(plano: dict, saida) -> list:
     if not foto_capa:
         foto_capa = ((plano.get("capa") or {}).get("foto")
                      or next((s.get("foto") for s in itens if s.get("foto")), ""))
-    if _capa_dramatica_ligada() and foto_capa and Path(foto_capa).exists():
+    # ⚠️ A CAPA VAI PELO NAVEGADOR QUANDO DÁ, E PELO PIL QUANDO NÃO DÁ.
+    # HTML/CSS faz `letter-spacing` negativo, sombra em camadas e tarja
+    # inclinada — coisas que no Pillow são um algoritmo à mão cada uma. O PIL
+    # fica de rede: sem Chromium, sem Playwright, ou se der qualquer erro, a
+    # capa continua saindo. Nenhum post depende do navegador estar bem.
+    capa_pronta = ""
+    if _capa_dramatica_ligada():
+        try:
+            from capa_html import renderizar_capa
+            capa_pronta = renderizar_capa(plano, Path(saida) / "01.jpg")
+            if capa_pronta:
+                log.info("   🎨 capa pelo navegador (HTML/CSS)")
+        except Exception as e:
+            log.debug(f"   capa HTML indisponível: {e}")
+
+    if capa_pronta:
+        telas.append(None)          # o lugar da capa; ela já está em disco
+    elif _capa_dramatica_ligada() and foto_capa and Path(foto_capa).exists():
         telas.append(_slide_capa_dramatica(plano, total, Path(foto_capa), avisos))
     else:
         if _capa_dramatica_ligada() and not foto_capa:
@@ -816,10 +833,13 @@ def renderizar(plano: dict, saida) -> list:
     pasta.mkdir(parents=True, exist_ok=True)
     arquivos = []
     for k, tela in enumerate(telas, start=1):
+        arq = pasta / f"{k:02d}.jpg"     # JPEG: único formato que a Meta aceita
+        if tela is None:                 # capa já gravada pelo navegador
+            arquivos.append(arq)
+            continue
         # reduz do 2x pro tamanho final: é aqui que a sobra de pixel vira borda
         # limpa na letra, do mesmo jeito que o Reel faz
         final = tela.convert("RGB").resize((LARG, ALT), Image.LANCZOS)
-        arq = pasta / f"{k:02d}.jpg"     # JPEG: único formato que a Meta aceita
         final.save(arq, "JPEG", quality=JPEG_Q, optimize=True)
         arquivos.append(arq)
 

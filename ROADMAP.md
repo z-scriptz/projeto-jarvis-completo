@@ -5302,6 +5302,56 @@ documentada. Reimplementar seria criar uma segunda versão pra divergir depois.
 
 **Custo zero e disponível agora** — não depende de recarga nenhuma.
 
+#### 🖥️ A CAPA VAI PELO NAVEGADOR (22/08) — e duas correções minhas
+
+**Correção 1 — inventei uma consequência.** Escrevi que o saldo esgotado da Fal
+tinha parado a esteira de Reels. O Dre: *"a gente não usa o Fal a não sei
+quantos meses"*. Eu vi `fal_provider.py` no repo, vi "Exhausted balance" e
+DEDUZI o resto — sem abrir um log, sem olhar a fila. É exatamente o erro que
+este ROADMAP documenta em quatro lugares diferentes: **deduzir de artefato em
+vez de medir**. O saldo zerado da Fal não significa nada aqui.
+
+**Correção 2 — ofereci um retrocesso.** Com a Fal travada, propus fundo do
+Pexels. *"como assim usar o pexels? pelo amor de deus"* — e ele tem razão: é
+foto genérica de banco, que mil contas usam. Duas respostas erradas pra mesma
+pergunta ("por que a nossa capa é pior que a do ChatGPT?"), porque eu insistia
+que a diferença era a FOTO.
+
+**A diferença é TIPOGRAFIA E ACABAMENTO, e o PIL não faz isso:**
+`letter-spacing` negativo (o aperto das manchetes), sombra em DUAS camadas (uma
+dura que recorta a letra do fundo, uma difusa que dá profundidade), tarja
+INCLINADA com folga em volta da palavra, vinheta, brilho de cor no canto. No
+Pillow cada um desses é um algoritmo à mão. Em CSS é uma linha.
+
+⚠️ **E O CHROMIUM JÁ ESTÁ NA VPS.** `ig_playwright`, `whatsapp_playwright`,
+`coletor_assets` e outros já rodam Playwright ali. Isto não acrescenta
+dependência: acrescenta um uso novo pra uma que já é paga. E **não é IA** — é
+determinístico, custa zero, roda offline, e a marca sai EXATA (logo, @handle,
+preço), que imagem gerada não garante.
+
+`capa_html.py` (novo) — monta HTML/CSS e fotografa com o Chromium headless.
+Três coisas que custaram tentativa:
+- ⚠️ **`z-index:-1` na tarja só funciona com `z-index:1` no `.hook`.** Sem o
+  contexto de empilhamento, o bloco de cor vai parar ATRÁS do véu e some
+  inteiro — sobrando texto preto ilegível no escuro.
+- ⚠️ **O bloco EXTRAVASA a caixa da letra.** Justo, ele fica do tamanho do
+  texto e some atrás das próprias letras: laranja aparecendo só nas frestas.
+- ⚠️ **Posição é trabalho do CSS, não de JS.** Eu tinha o subtítulo em
+  `position:absolute` com o `top` calculado do `offsetHeight` do hook, e ele
+  pousava **250px abaixo do lugar** (o `inline-block` da tarja inflava a
+  altura da linha). Hook e sub agora vivem no mesmo bloco em fluxo, separados
+  por `margin-top` — não há conta pra errar. O JS ficou só com o que o Python
+  não sabe fazer sem chutar: **medir** se o texto cabe.
+- ⚠️ `_chromium()`: o Playwright procura o navegador pela versão DELE, e quando
+  lib e binários não batem o erro é `Executable doesn't exist at
+  .../chromium_headless_shell-1` — com o `-1194` na mesma pasta. Não é
+  navegador faltando, é número que não bate. 6 linhas evitam um
+  `playwright install` de 150 MB.
+
+**No `carrossel_render` a capa vai pelo navegador quando dá e pelo PIL quando
+não dá.** Sem Chromium, sem Playwright, ou qualquer erro: a capa continua
+saindo. Nenhum post depende do navegador estar bem.
+
 #### Ainda falta
 1. **Ciclos e horários no `daemon_maestro`** — hoje ele só tem `horarios` +
    `posts_por_dia_semana` pro Reel. Precisa de `carrossel_horarios` separado,
