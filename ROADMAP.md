@@ -5396,6 +5396,40 @@ a cor da conta saem exatos, de graça, em 2 segundos, sem fila e sem crédito.
 sem Chromium, sem Playwright, sem as fontes, ou qualquer erro, o post sai do
 mesmo jeito. O desenho em PIL continua inteiro; ele só deixou de ser o padrão.
 
+#### 🎬 O FECHO: CINCO MODELOS EM RODÍZIO (22/08)
+
+O Dre: *"o CTA no final do slide tá muito simples... da pra diferenciar todo
+dia o CTA"*, e mandou 5 carrosséis reais. Lendo os cinco, o padrão não é "um
+CTA bonito" — é que **cada um pede UMA coisa, de um jeito**, e o jeito muda:
+
+| referência | o pedido | o jeito |
+|---|---|---|
+| thaleslaray | comentar | palavra-chave em cor, dentro de caixa com borda |
+| detalhesdaminhacasa | comentar | "Comenta AULA aqui embaixo ↓" |
+| bettydiarista | **seguir** | **mockup do card de perfil** com o botão azul |
+| carlamarquete | seguir | texto gigante, sem enfeite |
+| mariffernandesdaily | seguir | "se você gosta de X, achou o perfil certo" |
+
+Os cinco viraram modelos, em **rodízio com memória** (`shared/fechos_recentes
+.json`) — mesmo remédio do 1º comentário: com 5 peças, sorteio puro repete a
+anterior 1 vez em 5, e fecho repetido é o que faz quem segue duas contas
+nossas ver a mesma peça duas vezes por dia. `CARR_FECHO=perfil` força um.
+
+⚠️ **O MOCKUP DE PERFIL NÃO ESTAMPA NÚMERO DE SEGUIDORES.** O do bettydiarista
+mostra "100k". Se a gente imprimir um número, ou é o real — que hoje é **9** em
+duas contas, e aí a peça trabalha contra a gente — ou é mentira impressa na
+arte. O card mostra avatar, @ e o botão azul, que é o que faz o pedido.
+
+⚠️ **CADA MODELO ESCREVE O PRÓPRIO TÍTULO.** Deixando o `cta.titulo` do plano
+mandar em todos, o fecho de PERFIL saiu com o botão **"Seguir"** e a frase
+**"Salva pra não perder"** logo abaixo — a peça pedindo uma coisa e o texto
+pedindo outra. Título e pedido são a mesma decisão, então moram juntos; só o
+modelo `salva` usa o texto do plano.
+
+**A palavra-chave do comentário sai do FORMATO** (`erros` → "EU FAÇO", `lista`
+→ "QUERO", `comparacao` → "QUAL"), ou de `cta.palavra` no plano. Pedir "comenta
+QUERO" num carrossel de erros é o mesmo desencontro que o 1º comentário tinha.
+
 #### Ainda falta
 1. **Ciclos e horários no `daemon_maestro`** — hoje ele só tem `horarios` +
    `posts_por_dia_semana` pro Reel. Precisa de `carrossel_horarios` separado,

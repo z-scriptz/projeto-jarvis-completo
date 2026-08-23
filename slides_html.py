@@ -290,14 +290,146 @@ def _html_conteudo(item: dict, i: int, total: int, plano: dict) -> str:
 </div>"""
 
 
-def _html_fecho(plano: dict, total: int) -> str:
-    import html as _h
-    p = _paleta(plano.get("nicho", "geral"))
-    cta = plano.get("cta") or {}
-    titulo = (cta.get("titulo") or "Salva pra não perder").strip()
-    linhas = " ".join(str(x) for x in (cta.get("linhas") or []))
-    handle = _h.escape(plano.get("handle") or "")
+# ══════════════════════════════════════════════════════════════════════════
+# O FECHO — CINCO MODELOS, EM RODÍZIO
+#
+# ⚠️ O Dre: *"o CTA no final do slide tá muito simples"*, e mandou 5 carrosséis
+# reais. Lendo os cinco, o padrão não é "um CTA bonito" — é que **cada um pede
+# UMA coisa, de um jeito**, e o jeito muda:
+#
+#   thaleslaray        "Comenta BASTIDORES que eu te mando o link"  → palavra
+#                      -chave em destaque, dentro de caixa com borda
+#   carlamarquete      "se esse post te ajudou, aproveita e me segue"
+#   mariffernandes     "se você gosta de X: você encontrou o perfil certo"
+#   detalhesdaminhacasa "Comenta AULA aqui embaixo ↓"
+#   bettydiarista      **mockup do card de perfil** + "segue ou você nunca
+#                      mais verá essa página"
+#
+# ⚠️ E ELE PEDIU O QUE FALTAVA: *"da pra diferenciar todo dia o CTA"*. Um fecho
+# fixo é o mesmo problema do 1º comentário que a gente acabou de consertar —
+# quem segue duas contas nossas vê a mesma peça duas vezes por dia. Então são
+# cinco modelos em RODÍZIO COM MEMÓRIA, não sorteio: com 5 peças, o sorteio
+# puro repete a anterior 1 vez em 5.
+#
+# ⚠️ O MOCKUP DE PERFIL NÃO INVENTA NÚMERO. O do bettydiarista mostra
+# "100k seguidores". Se a gente estampar um número, ou ele é o real (que hoje
+# é 9 em duas contas, e aí o CTA trabalha contra a gente) ou é mentira impressa
+# na peça. Então o card mostra avatar, @ e o botão — que é o que faz o pedido.
+# ══════════════════════════════════════════════════════════════════════════
+FECHO_MEMORIA = BASE_DIR / "shared" / "fechos_recentes.json"
 
+
+def _palavra_chave(plano: dict) -> str:
+    """A palavra que o post pede no comentário. Sai do plano ou do formato."""
+    cta = plano.get("cta") or {}
+    p = (cta.get("palavra") or "").strip().upper()
+    if p:
+        return p[:14]
+    return {"lista": "QUERO", "comparacao": "QUAL",
+            "erros": "EU FAÇO", "passo_a_passo": "PASSO",
+            "antes_depois": "ANTES", "historia": "CONTA",
+            }.get(plano.get("formato", ""), "QUERO")
+
+
+# ⚠️ CADA MODELO ESCREVE O PRÓPRIO TÍTULO — o `cta.titulo` do plano só vale no
+# modelo `salva`. Deixando o plano mandar em todos, o fecho de PERFIL saía com
+# o botão azul "Seguir" e o texto "Salva pra não perder" logo abaixo: a peça
+# pedindo uma coisa e a frase pedindo outra. Título e pedido são a mesma
+# decisão, então moram juntos.
+def _fecho_comente(plano, p, cta, handle, total):
+    """thaleslaray/detalhesdaminhacasa: pede COMENTÁRIO com palavra-chave."""
+    import html as _h
+    chave = _palavra_chave(plano)
+    linhas = _h.escape(" ".join(str(x) for x in (cta.get("linhas") or []))[:120])
+    return f"""<div class="slide" style="background:{p['creme']};color:#1C1A18">
+  <div class="mancha" style="width:700px;height:700px;left:-240px;
+       bottom:-260px;background:{p['sombra']}"></div>
+  <h1 id="titulo" style="margin-top:auto;font-size:92px">Quer o link
+    desses achadinhos?</h1>
+  <div style="margin-top:52px;border:5px solid {p['acento']};border-radius:34px;
+       padding:44px 46px;font-size:52px;line-height:1.3;font-weight:600">
+    Comenta <b style="color:{p['acento']}">{_h.escape(chave)}</b>
+    <span style="display:block;margin-top:10px">que eu te mando o link</span>
+  </div>
+  <div style="font-size:74px;margin-top:26px;color:{p['acento']}">&darr;</div>
+  <div class="rodape"><div class="arroba">{handle}</div>
+    <div class="pag">{total:02d} / {total:02d}</div></div>
+</div>"""
+
+
+def _fecho_perfil(plano, p, cta, handle, total):
+    """bettydiarista: o card de perfil mockado. O pedido mais direto de SEGUIR
+    que existe — a pessoa vê o botão e entende o que fazer sem ler."""
+    import html as _h
+    logo = _logo(plano.get("nicho", "geral"))
+    return f"""<div class="slide" style="background:{p['escuro']};
+     color:{p['clarinho']}">
+  <div class="mancha" style="width:760px;height:760px;right:-250px;top:-240px;
+       background:{p['acento']};opacity:.16"></div>
+  <div style="margin-top:auto;background:{p['clarinho']};color:#14120F;
+       border-radius:34px;padding:46px 44px">
+    <div style="display:flex;align-items:center;gap:26px">
+      {'<img src="' + logo + '" style="width:118px;height:118px;border-radius:50%">'
+       if logo else '<div style="width:118px;height:118px;border-radius:50%;'
+                    'background:' + p['acento'] + '"></div>'}
+      <div>
+        <div style="font-size:44px;font-weight:700">{handle}</div>
+        <div style="font-size:32px;opacity:.6;margin-top:6px">
+          achadinhos todo dia</div>
+      </div>
+    </div>
+    <div style="margin-top:34px;background:#1877F2;color:#fff;border-radius:16px;
+         padding:24px;text-align:center;font-size:40px;font-weight:700">
+      Seguir</div>
+  </div>
+  <h1 id="titulo" style="margin-top:44px;font-size:78px">Segue pra não
+    perder o próximo</h1>
+  <div class="rodape"><div></div>
+    <div class="pag" style="opacity:.6">{total:02d} / {total:02d}</div></div>
+</div>"""
+
+
+def _fecho_ajudou(plano, p, cta, handle, total):
+    """carlamarquete: texto gigante, sem enfeite. Funciona porque é direto."""
+    import html as _h
+    return f"""<div class="slide" style="background:{p['acento']};
+     color:{p['clarinho']};justify-content:center">
+  <div class="mancha" style="width:900px;height:900px;left:-320px;top:-260px;
+       background:rgba(255,255,255,.08)"></div>
+  <h1 id="titulo" style="font-size:118px">se esse post te ajudou,
+    <span style="opacity:.75">aproveita e me segue</span></h1>
+  <div class="rodape"><div class="arroba">{handle}</div>
+    <div class="pag" style="opacity:.6">{total:02d} / {total:02d}</div></div>
+</div>"""
+
+
+def _fecho_perfil_certo(plano, p, cta, handle, total):
+    """mariffernandesdaily: fala com quem gosta DO TEMA, não com todo mundo."""
+    import html as _h
+    tema = {"casa": "casa organizada e achadinhos",
+            "tech": "tecnologia e achadinhos",
+            "beleza": "beleza e autocuidado",
+            "pet": "pets e achadinhos",
+            "moda": "moda e look do dia",
+            }.get(plano.get("nicho", ""), "achadinhos que valem a pena")
+    return f"""<div class="slide" style="background:{p['creme']};color:#1C1A18;
+     justify-content:center">
+  <div class="mancha" style="width:820px;height:820px;right:-280px;
+       bottom:-300px;background:{p['sombra']}"></div>
+  <p class="corpo" style="font-size:44px;opacity:.72">
+    se você gosta de conteúdo sobre</p>
+  <h1 id="titulo" style="font-size:96px;margin-top:18px">{_h.escape(tema)}</h1>
+  <p class="corpo" style="font-size:48px;margin-top:40px;
+     color:{p['acento']};font-weight:700">você achou o perfil certo</p>
+  <div class="rodape"><div class="arroba">{handle}</div>
+    <div class="pag">{total:02d} / {total:02d}</div></div>
+</div>"""
+
+
+def _fecho_salva(plano, p, cta, handle, total):
+    """O clássico. Fica na roda porque salvamento é o sinal que a gente mede."""
+    import html as _h
+    linhas = _h.escape(" ".join(str(x) for x in (cta.get("linhas") or [])))
     return f"""<div class="slide" style="background:{p['acento']};
      color:{p['clarinho']}">
   <div class="mancha" style="width:820px;height:820px;right:-210px;
@@ -305,13 +437,51 @@ def _html_fecho(plano: dict, total: int) -> str:
   <div class="rotulo" style="color:{p['clarinho']};opacity:.8">
     {_h.escape((plano.get('nicho') or '').upper())}</div>
   <h1 id="titulo" style="margin-top:auto;font-size:106px">
-    {_h.escape(_limpo(titulo))}</h1>
-  <p class="corpo" style="margin-top:38px;opacity:.9">{_h.escape(linhas)}</p>
-  <div class="rodape">
-    <div class="arroba">{handle}</div>
-    <div class="pag" style="opacity:.62">{total:02d} / {total:02d}</div>
-  </div>
+    {_h.escape(_limpo(cta.get('titulo') or 'Salva pra não perder'))}</h1>
+  <p class="corpo" style="margin-top:38px;opacity:.9">{linhas}</p>
+  <div class="rodape"><div class="arroba">{handle}</div>
+    <div class="pag" style="opacity:.62">{total:02d} / {total:02d}</div></div>
 </div>"""
+
+
+MODELOS_FECHO = {
+    "comente": _fecho_comente, "perfil": _fecho_perfil,
+    "ajudou": _fecho_ajudou, "perfil_certo": _fecho_perfil_certo,
+    "salva": _fecho_salva,
+}
+
+
+def _escolher_fecho(conta: str) -> str:
+    """Rodízio com memória — nunca o mesmo da vez anterior naquela conta."""
+    import random
+    forcado = os.environ.get("CARR_FECHO", "").strip()
+    if forcado in MODELOS_FECHO:
+        return forcado
+    try:
+        mem = json.loads(FECHO_MEMORIA.read_text(encoding="utf-8"))
+    except Exception:
+        mem = {}
+    recentes = mem.get(conta or "?", [])
+    novos = [m for m in MODELOS_FECHO if m not in recentes]
+    escolha = random.choice(novos or list(MODELOS_FECHO))
+    try:
+        mem[conta or "?"] = ([escolha] + recentes)[:3]
+        FECHO_MEMORIA.parent.mkdir(parents=True, exist_ok=True)
+        FECHO_MEMORIA.write_text(json.dumps(mem, ensure_ascii=False, indent=2),
+                                 encoding="utf-8")
+    except Exception:
+        pass          # memória é conforto: nunca trava um post
+    return escolha
+
+
+def _html_fecho(plano: dict, total: int) -> str:
+    import html as _h
+    p = _paleta(plano.get("nicho", "geral"))
+    cta = plano.get("cta") or {}
+    handle = _h.escape(plano.get("handle") or "")
+    modelo = _escolher_fecho(plano.get("handle", ""))
+    log.info(f"   🎬 fecho '{modelo}'")
+    return MODELOS_FECHO[modelo](plano, p, cta, handle, total)
 
 
 # ⚠️ O AJUSTE DE TAMANHO RODA NO NAVEGADOR, e é a única coisa que o JS faz.
