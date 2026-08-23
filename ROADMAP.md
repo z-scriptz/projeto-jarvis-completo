@@ -5036,6 +5036,46 @@ ausente cai na Montserrat e o carrossel sai.
 **Sobre o template: o Dre confirmou que pode ser FIXO por conta.** Já é: cor de
 destaque por nicho + logo por nicho + fundo por nicho. Nada varia por post.
 
+#### 🔐 403 ≠ 404: A PASTA PÚBLICA NÃO PODE MORAR EM /root (22/08)
+
+O `--instalar-caddy` funcionou — a rota entrou, validou, recarregou. E o
+`--teste` mudou de **404 para 403**, que é progresso disfarçado de erro: 404
+era "a rota não existe"; 403 é "a rota existe e o Caddy não pode LER a pasta".
+
+Causa: o default era `~/jarvis/midia_publica`, e **`/root` é modo 700**. O Caddy
+roda como usuário `caddy` e não atravessa. ⚠️ `chmod 755 /root` resolveria o 403
+e abriria a casa inteira — **o `.env` com todos os tokens mora ali**. A solução
+certa é a pasta sair de `/root`: `PASTA_PADRAO = /var/www/jarvis-midia`, que é
+exatamente pra que `/var/www` existe.
+
+**⚠️ 403 E 404 MANDAM PRA ARQUIVOS DIFERENTES.** 404 → Caddyfile (rota).
+403 → permissão no caminho. A mensagem antiga dizia "rode --caddy" nos dois
+casos, mandando procurar no lugar errado metade das vezes. Agora ela separa, e
+no 403 `_pasta_alcancavel()` percorre o caminho e aponta **qual diretório** está
+sem bit de entrada.
+
+O instalador também ganhou o que faltava:
+- **cria a pasta com 755 ANTES de mexer no Caddyfile** — rota certa apontando
+  pra pasta ilegível é 403, e é melhor recusar antes de editar nada;
+- ⚠️ **idempotente não é "não mexer"**: a 1ª instalação gravou
+  `root * /root/jarvis/midia_publica`, e sair calado na 2ª deixaria a rota
+  apontando pro caminho velho pra sempre — 403 sem explicação. Agora ele compara
+  o `root` e **corrige** quando diverge.
+
+#### 🐛 O SCRIPT BAIXOU AS FONTES E APAGOU (22/08) — bug meu
+
+Saída na VPS: `⬇️ Anton-Regular.ttf ... ❌ No module named 'PIL'`. As duas fontes
+**baixaram certinho e foram apagadas em seguida**. O Dre rodou com o python do
+sistema; o Pillow mora no `.venv`.
+
+⚠️ **EU TRATAVA "NÃO CONSEGUI VALIDAR" COMO "INVÁLIDO", E APAGAVA.** Ausência de
+prova não é prova de defeito. `_valida()` agora tem TRÊS estados — `ok`,
+`quebrada`, `nao_deu` — e só apaga em `quebrada`. Sem Pillow a fonte fica, com
+um aviso de que não deu pra conferir.
+
+Reproduzido em sandbox com um `python3` sem PIL antes do conserto e depois: as
+fontes sobrevivem. (Mesmo assim, o comando certo é `.venv/bin/python`.)
+
 #### Ainda falta
 1. **Rota no Caddy** — sem ela, carrossel e story de imagem não saem do lugar.
    O 404 do `--teste` de 22/08 é o módulo funcionando, não um defeito.

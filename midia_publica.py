@@ -68,8 +68,39 @@ except Exception:
 BASE_DIR = Path(__file__).resolve().parent
 
 
+# ⚠️ FORA DE /root, E ISSO NÃO É ARRUMAÇÃO — É A ÚNICA COISA QUE FUNCIONA.
+# O default era `~/jarvis/midia_publica`, e o Caddy respondeu **403** nos
+# arquivos: ele roda como usuário `caddy`, `/root` é modo 700, e ninguém
+# atravessa isso. Dar `chmod 755 /root` resolveria o 403 e abriria a casa
+# inteira — o `.env` com todos os tokens mora lá.
+# `/var/www` existe justamente pra conteúdo que um servidor web serve.
+# Um `MIDIA_PUBLICA_DIR` no .env continua mandando, se um dia precisar.
+PASTA_PADRAO = "/var/www/jarvis-midia"
+
+
 def _pasta() -> Path:
-    return Path(os.environ.get("MIDIA_PUBLICA_DIR", str(BASE_DIR / "midia_publica")))
+    return Path(os.environ.get("MIDIA_PUBLICA_DIR", PASTA_PADRAO))
+
+
+def _pasta_alcancavel() -> str:
+    """Diz por que o Caddy não conseguiria ler a pasta. "" se estiver tudo bem.
+
+    ⚠️ 403 e 404 têm causas OPOSTAS e a mesma cara pra quem só vê "não abriu":
+    404 é rota errada no Caddyfile, 403 é permissão no caminho. Errar de qual
+    se trata custa a tarde inteira no arquivo errado."""
+    p = _pasta().resolve()
+    for pai in [p] + list(p.parents):
+        if str(pai) == "/":
+            break
+        if not pai.exists():
+            continue
+        modo = pai.stat().st_mode & 0o777
+        # o Caddy é "outro" usuário: precisa de x (atravessar) em cada nível
+        if not modo & 0o001:
+            return (f"{pai} está em modo {modo:o} — sem permissão de entrada "
+                    f"pra quem não é o dono. O Caddy roda como outro usuário e "
+                    f"vai devolver 403.")
+    return ""
 
 
 def _base_url() -> str:
@@ -150,11 +181,27 @@ def _conferir(url: str) -> None:
             f"{_pasta()} em {_base_url()}? Rode: python3 midia_publica.py --caddy"
         )
     if r.status_code != 200:
+        # ⚠️ 403 E 404 MANDAM PRA ARQUIVOS DIFERENTES, e mandar pro errado
+        # custou uma rodada: com o 404 o problema é a ROTA (Caddyfile); com o
+        # 403 a rota está certa e o problema é PERMISSÃO no caminho. Dizer
+        # "rode --caddy" nos dois casos manda procurar no lugar errado metade
+        # das vezes.
+        if r.status_code == 403:
+            porque = _pasta_alcancavel() or (
+                f"a rota existe, mas o Caddy não pode LER {_pasta()}. "
+                f"Confira o dono e o modo da pasta e dos arquivos.")
+            dica = (f"403 = permissão, não rota. {porque}\n   "
+                    f"Rode: python3 midia_publica.py --instalar-caddy")
+        elif r.status_code == 404:
+            dica = ("404 = a rota /midia não está no Caddyfile (ou está DEPOIS "
+                    "do reverse_proxy).\n   "
+                    "Rode: python3 midia_publica.py --instalar-caddy")
+        else:
+            dica = "Rode: python3 midia_publica.py --instalar-caddy"
         raise MidiaPublicaErro(
             f"{url} respondeu HTTP {r.status_code} (esperado 200). A Meta vai "
-            f"receber o mesmo e o container vai falhar sem dizer o porquê. "
-            f"Rode: python3 midia_publica.py --caddy"
-        )
+            f"receber o mesmo e o container vai falhar sem dizer o porquê.\n   "
+            + dica)
     log.debug(f"   🌐 publicado e conferido: {url} ({tam} bytes)")
 
 
@@ -230,71 +277,15 @@ _CADDY = """\
 """
 
 
-def _cli_instalar_caddy(aplicar: bool) -> int:
-    """Insere a rota /midia no Caddyfile, com rede de segurança.
+def _gravar_caddy(cf, novo: str) -> int:
+    """Grava, valida e recarrega — restaurando o original se não validar.
 
-    ⚠️ ISTO EXISTE PORQUE O PASSO MANUAL FALHOU DUAS VEZES SEGUIDAS (22/08).
-    Eu mandava `--caddy` imprimir a rota e pedia pra colar no arquivo. O Dre
-    colou o BLOCO DE COMANDOS inteiro no terminal — e a linha "# cola no
-    /etc/caddy/Caddyfile" virou comentário do bash. O `caddy validate` então
-    respondeu "Valid configuration", porque o arquivo ESTÁ válido: ele só não
-    tem a rota. Dois sinais verdes e o 404 continuou.
-
-    Instrução no meio de uma sequência de comandos não é instrução, é um
-    comando que não roda. Então vira comando.
-
-    A rede: backup com timestamp → escreve → `caddy validate` → se falhar,
-    RESTAURA e sai. Nunca deixa o Caddy com config quebrada."""
+    Extraída porque DOIS caminhos precisam dela (inserir a rota e corrigir o
+    root de uma rota antiga), e uma rede de segurança duplicada é uma rede de
+    segurança que um dia diverge da outra."""
     import shutil
     import subprocess
     from datetime import datetime
-
-    cf = Path(os.environ.get("CADDYFILE", "/etc/caddy/Caddyfile"))
-    if not cf.exists():
-        print(f"❌ não achei {cf}. Se o Caddy está noutro lugar: "
-              f"CADDYFILE=/caminho/Caddyfile python3 midia_publica.py --instalar-caddy")
-        return 1
-
-    texto = cf.read_text(encoding="utf-8")
-    if "/midia" in texto:
-        print(f"✅ {cf} já tem uma rota /midia — nada a fazer.")
-        print("   Se o --teste ainda dá 404, o problema é outro: confira se a "
-              "rota está ANTES do reverse_proxy e se o Caddy foi recarregado.")
-        return 0
-
-    # acha o bloco do host e a chave que o abre
-    host = _base_url().split("//", 1)[-1].split("/", 1)[0]
-    pos = texto.find(host)
-    if pos < 0:
-        print(f"❌ não achei um bloco de '{host}' em {cf}.")
-        print("   Cole a rota à mão (python3 midia_publica.py --caddy) ou me "
-              "mande a saída de:  cat /etc/caddy/Caddyfile")
-        return 1
-    abre = texto.find("{", pos)
-    if abre < 0:
-        print(f"❌ achei '{host}' mas não a chave '{{' que abre o bloco.")
-        return 1
-    fim_linha = texto.find("\n", abre)
-    if fim_linha < 0:
-        fim_linha = len(texto)
-
-    # ⚠️ ENTRA LOGO NA PRIMEIRA LINHA DO BLOCO, e isso é o ponto: se entrasse
-    # depois do `reverse_proxy` solto, o Caddy mandaria /midia/... pro Flask do
-    # painel do TikTok e a Meta receberia um 404 de HTML — que é EXATAMENTE o
-    # sintoma que a gente está tentando resolver.
-    rota = (f"\n\thandle_path /midia/* {{\n"
-            f"\t\troot * {_pasta()}\n"
-            f"\t\tfile_server\n"
-            f"\t}}\n")
-    novo = texto[:fim_linha + 1] + rota + texto[fim_linha + 1:]
-
-    print(f"📄 {cf}")
-    print(f"📍 inserindo a rota como PRIMEIRA regra do bloco '{host}':")
-    print("".join(f"      {l}\n" for l in rota.strip().splitlines()))
-
-    if not aplicar:
-        print("🧪 conferência: nada foi gravado. Rode sem --conferir pra aplicar.")
-        return 0
 
     bak = cf.with_name(cf.name + f".bak-{datetime.now():%Y%m%d-%H%M%S}")
     shutil.copy2(cf, bak)
@@ -333,6 +324,111 @@ def _cli_instalar_caddy(aplicar: bool) -> int:
         return 1
     print("🔄 Caddy recarregado.\n")
     return _cli_teste()
+
+
+def _cli_instalar_caddy(aplicar: bool) -> int:
+    """Insere a rota /midia no Caddyfile, com rede de segurança.
+
+    ⚠️ ISTO EXISTE PORQUE O PASSO MANUAL FALHOU DUAS VEZES SEGUIDAS (22/08).
+    Eu mandava `--caddy` imprimir a rota e pedia pra colar no arquivo. O Dre
+    colou o BLOCO DE COMANDOS inteiro no terminal — e a linha "# cola no
+    /etc/caddy/Caddyfile" virou comentário do bash. O `caddy validate` então
+    respondeu "Valid configuration", porque o arquivo ESTÁ válido: ele só não
+    tem a rota. Dois sinais verdes e o 404 continuou.
+
+    Instrução no meio de uma sequência de comandos não é instrução, é um
+    comando que não roda. Então vira comando.
+
+    A rede: backup com timestamp → escreve → `caddy validate` → se falhar,
+    RESTAURA e sai. Nunca deixa o Caddy com config quebrada."""
+    import shutil
+    import subprocess
+    from datetime import datetime
+
+    cf = Path(os.environ.get("CADDYFILE", "/etc/caddy/Caddyfile"))
+    if not cf.exists():
+        print(f"❌ não achei {cf}. Se o Caddy está noutro lugar: "
+              f"CADDYFILE=/caminho/Caddyfile python3 midia_publica.py --instalar-caddy")
+        return 1
+
+    # ── a pasta primeiro: rota certa apontando pra pasta ilegível = 403 ──
+    pasta = _pasta()
+    try:
+        pasta.mkdir(parents=True, exist_ok=True)
+        os.chmod(pasta, 0o755)
+        print(f"📁 {pasta} (modo 755)")
+    except Exception as e:
+        print(f"❌ não consegui preparar {pasta}: {e}")
+        return 1
+    problema = _pasta_alcancavel()
+    if problema:
+        print(f"❌ {problema}")
+        print(f"   Mude a pasta pra fora dali:  "
+              f"python3 env_set.py MIDIA_PUBLICA_DIR {PASTA_PADRAO}")
+        return 1
+
+    texto = cf.read_text(encoding="utf-8")
+    if "/midia" in texto:
+        # ⚠️ IDEMPOTENTE NÃO É "NÃO MEXER". A primeira instalação gravou
+        # `root * /root/jarvis/midia_publica`, que virou 403 quando a pasta
+        # mudou de lugar; sair calado aqui deixaria a rota apontando pro
+        # caminho velho para sempre, e o sintoma seria um 403 sem explicação.
+        import re as _re
+        m = _re.search(r"handle_path\s+/midia/\*\s*\{[^}]*?root\s+\*\s+(\S+)",
+                       texto, _re.S)
+        atual = m.group(1) if m else ""
+        if atual == str(pasta):
+            print(f"✅ {cf} já serve /midia em {pasta} — nada a fazer.")
+            print("   Se o --teste ainda falha, o Caddy foi recarregado?")
+            return 0
+        if not m:
+            print(f"⚠️  {cf} já menciona /midia mas não no formato que eu "
+                  f"escrevo — não vou mexer. Confira à mão se o root é {pasta}.")
+            return 1
+        print(f"🔧 a rota /midia aponta pra {atual}, e a pasta agora é {pasta} "
+              f"— corrigindo.")
+        texto = texto[:m.start(1)] + str(pasta) + texto[m.end(1):]
+        if not aplicar:
+            print("🧪 conferência: nada foi gravado.")
+            return 0
+        return _gravar_caddy(cf, texto)
+
+    # acha o bloco do host e a chave que o abre
+    host = _base_url().split("//", 1)[-1].split("/", 1)[0]
+    pos = texto.find(host)
+    if pos < 0:
+        print(f"❌ não achei um bloco de '{host}' em {cf}.")
+        print("   Cole a rota à mão (python3 midia_publica.py --caddy) ou me "
+              "mande a saída de:  cat /etc/caddy/Caddyfile")
+        return 1
+    abre = texto.find("{", pos)
+    if abre < 0:
+        print(f"❌ achei '{host}' mas não a chave '{{' que abre o bloco.")
+        return 1
+    fim_linha = texto.find("\n", abre)
+    if fim_linha < 0:
+        fim_linha = len(texto)
+
+    # ⚠️ ENTRA LOGO NA PRIMEIRA LINHA DO BLOCO, e isso é o ponto: se entrasse
+    # depois do `reverse_proxy` solto, o Caddy mandaria /midia/... pro Flask do
+    # painel do TikTok e a Meta receberia um 404 de HTML — que é EXATAMENTE o
+    # sintoma que a gente está tentando resolver.
+    rota = (f"\n\thandle_path /midia/* {{\n"
+            f"\t\troot * {_pasta()}\n"
+            f"\t\tfile_server\n"
+            f"\t}}\n")
+    novo = texto[:fim_linha + 1] + rota + texto[fim_linha + 1:]
+
+    print(f"📄 {cf}")
+    print(f"📍 inserindo a rota como PRIMEIRA regra do bloco '{host}':")
+    print("".join(f"      {l}\n" for l in rota.strip().splitlines()))
+
+    if not aplicar:
+        print("🧪 conferência: nada foi gravado. Rode sem --conferir pra aplicar.")
+        return 0
+
+    return _gravar_caddy(cf, novo)
+
 
 
 def _cli_teste() -> int:

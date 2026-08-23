@@ -72,15 +72,26 @@ def _baixar(url: str, destino: Path, minimo: int = 0) -> str:
     return ""
 
 
-def _valida(arq: Path) -> str:
-    """Abre a fonte de verdade. Um .ttf que o Pillow não lê não serve de nada,
-    e é melhor descobrir aqui do que no meio de um render."""
+def _valida(arq: Path) -> tuple:
+    """Abre a fonte de verdade. Devolve (estado, detalhe).
+
+    estado: "ok" · "quebrada" · "nao_deu" (não foi possível checar)
+
+    ⚠️ TRÊS ESTADOS, NÃO DOIS — e o bug que isto conserta foi meu, medido na
+    VPS em 22/08. Eu tratava "não consegui validar" como "fonte inválida" e
+    APAGAVA o arquivo. O Dre rodou com o python do sistema, que não tem Pillow
+    (ele mora no `.venv`), e as duas fontes **baixaram certinho e foram
+    apagadas em seguida**, com a mensagem `❌ No module named 'PIL'`.
+    Ausência de prova não é prova de defeito. Sem Pillow, a fonte fica."""
     try:
         from PIL import ImageFont
-        ImageFont.truetype(str(arq), 40)
-        return ""
     except Exception as e:
-        return str(e)[:80]
+        return ("nao_deu", str(e)[:60])
+    try:
+        ImageFont.truetype(str(arq), 40)
+        return ("ok", "")
+    except Exception as e:
+        return ("quebrada", str(e)[:80])
 
 
 def main() -> int:
@@ -93,12 +104,16 @@ def main() -> int:
     for nome, url, ofl, desc in FONTES:
         arq = DESTINO / nome
         if arq.exists():
-            erro = _valida(arq)
-            if erro:
-                print(f"  ⚠️  {nome:<26} existe mas NÃO ABRE ({erro}) — rebaixando")
+            estado, detalhe = _valida(arq)
+            kb = arq.stat().st_size // 1024
+            if estado == "quebrada":
+                print(f"  ⚠️  {nome:<26} existe mas NÃO ABRE ({detalhe}) — rebaixando")
                 faltando.append((nome, url, ofl, desc))
+            elif estado == "nao_deu":
+                print(f"  ✅ {nome:<26} {kb} KB · {desc}")
+                print(f"      (sem Pillow aqui pra conferir — use .venv/bin/python)")
             else:
-                print(f"  ✅ {nome:<26} {arq.stat().st_size // 1024} KB · {desc}")
+                print(f"  ✅ {nome:<26} {kb} KB · {desc}")
         else:
             print(f"  ⬜ {nome:<26} falta · {desc}")
             faltando.append((nome, url, ofl, desc))
@@ -115,15 +130,21 @@ def main() -> int:
         arq = DESTINO / nome
         print(f"⬇️  {nome} ...", end=" ", flush=True)
         erro = _baixar(url, arq, TAM_MINIMO)
+        aviso = ""
         if not erro:
-            erro = _valida(arq)
-            if erro:
-                arq.unlink(missing_ok=True)   # fonte quebrada é pior que ausente
+            estado, detalhe = _valida(arq)
+            if estado == "quebrada":
+                # fonte que não abre é pior que ausente: a ausente cai na
+                # Montserrat e o carrossel sai
+                arq.unlink(missing_ok=True)
+                erro = detalhe
+            elif estado == "nao_deu":
+                aviso = "  (não validei: sem Pillow neste python)"
         if erro:
             print(f"❌ {erro}")
             erros += 1
             continue
-        print(f"OK ({arq.stat().st_size // 1024} KB)")
+        print(f"OK ({arq.stat().st_size // 1024} KB){aviso}")
         # a licença acompanha a fonte — obrigação da OFL, e cabe num arquivo
         lic = LICENCAS / f"{arq.stem}-OFL.txt"
         if _baixar(ofl, lic):
