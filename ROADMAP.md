@@ -5233,6 +5233,44 @@ Montserrat. O `--diag` mostrou `fonte de título em uso:
 julguei pelo screenshot reduzido. O `--diag` continua valendo: ele é a resposta
 pra uma pergunta que eu não tinha como responder de outro jeito.
 
+#### 🤖 A CAPA INTEIRA POR IA — eu estava desatualizado de novo (22/08)
+
+O Dre: *"vimos nas duas capas do chatgpt que ele montou a capa perfeitamente,
+com o texto exato, isso só depende de prompt"*. **Ele está certo e eu estava
+errado.** Escrevi no `fundo_ia.py` que "a IA erra texto em português" — isso
+valia para modelos de um/dois anos atrás e vale para o `flux/schnell` que eu
+mesmo escolhi, que é o modelo RÁPIDO E BARATO da família e o pior em
+tipografia. Modelos feitos pra peça gráfica (Recraft V3, Ideogram, gpt-image)
+escrevem certo. ⚠️ **É a segunda vez nesta semana que meu conhecimento sobre IA
+generativa está atrás do que o Dre já viu funcionando** — a primeira foi vídeo
+de produto. O padrão é claro o bastante pra virar regra: quando ele diz que uma
+IA já faz algo, o default é acreditar e testar, não argumentar a partir do que
+eu lembro.
+
+`capa_ia.py` (novo) — capa inteira, texto incluso, default `fal-ai/recraft-v3`
+(trocável por `CAPA_MODELO`). ⚠️ **O texto vai LITERAL e entre aspas**: modelo
+de imagem renderiza o que lê como texto; *descrever* ("uma manchete sobre erros
+de limpeza") faz ele INVENTAR a frase.
+
+**O que o teste tem que medir — não é teimosia, é o que decide:**
+1. ⚠️ **A LOGO.** Nas capas de referência, a "TS TOPSHOP CASA" é uma invenção
+   parecida com a nossa, não a nossa. A IA não reproduz o arquivo da marca.
+   Duas capas seguidas com logos ligeiramente diferentes é pior que capa
+   simples com a logo certa.
+2. **O PREÇO.** "R$ 29,90" virando "R$ 28,90" é problema comercial, não
+   estético.
+3. **O CUSTO.** Recraft/Ideogram custam ~10-60× o schnell por imagem. Só a capa
+   (1 por post) é sustentável; 9 slides por post, não.
+4. **CORRIGIR.** Texto errado na IA só se conserta regerando a imagem inteira.
+
+Por isso o módulo **não substitui** o híbrido — fica ao lado. `--comparar`
+gera as duas versões do MESMO hook. **Quem decide é o Dre olhando, não eu
+argumentando** — foi exatamente assim que o vídeo de IA e o Shopee Vídeos
+foram resolvidos.
+
+**Bloqueio na VPS:** `fal_client` não estava instalado. `.venv/bin/pip install
+fal-client`.
+
 #### Ainda falta
 1. **Ciclos e horários no `daemon_maestro`** — hoje ele só tem `horarios` +
    `posts_por_dia_semana` pro Reel. Precisa de `carrossel_horarios` separado,
