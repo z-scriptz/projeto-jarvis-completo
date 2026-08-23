@@ -11,13 +11,18 @@
 # catálogo em fundo branco. Escurecida, foto de catálogo vira mancha; foto de
 # ambiente vira capa. Nenhum ajuste de tipografia resolve isso.
 #
-# ⚠️ POR QUE A IA GERA SÓ O FUNDO, E NÃO A CAPA INTEIRA COMO O CHATGPT FAZ:
-# porque a IA erra texto. Em português, com acento, ela troca letra, deforma
-# glifo e inventa palavra — e quando erra não dá pra consertar, só regerar. A
-# divisão que funciona é:
-#       IA  → o ambiente (onde ela é ótima e a gente não tem como fazer)
-#       PIL → o texto    (onde ela é ruim e a gente já é exato)
-# É o melhor dos dois, e é reversível: fundo ruim se troca sem tocar no texto.
+# ⚠️ CORREÇÃO (22/08): eu escrevi aqui que "a IA erra texto em português" pra
+# justificar gerar só o fundo. O Dre me corrigiu e tem razão — isso vale pros
+# modelos de um/dois anos atrás e pro `flux/schnell` que este módulo usa, que é
+# o RÁPIDO E BARATO da família e o pior em tipografia. Recraft V3 e Ideogram
+# escrevem certo. A capa inteira por IA vive no `capa_ia.py` e o `--comparar`
+# de lá põe as duas lado a lado.
+#
+# Este módulo continua valendo por OUTRO motivo, que não é qualidade de letra:
+#       IA/foto → o ambiente (custa 1 imagem por NICHO, reusada o mês inteiro)
+#       PIL     → o texto    (custa zero, e a marca sai EXATA: logo, @, selo)
+# Ou seja, é o caminho barato e fiel à marca. O outro é o caminho bonito e caro.
+# Quem decide entre os dois é o teste, não este comentário.
 #
 # ⚠️ E O FUNDO É REUSADO, NÃO GERADO POR POST. Um fundo por carrossel seriam
 # ~60 imagens/mês por conta. O fundo é CENÁRIO, não conteúdo: 6 por nicho, bem
@@ -146,6 +151,103 @@ def fundo_do_nicho(nicho: str) -> str:
 # ══════════════════════════════════════════════════════════════════════════
 # GERAÇÃO
 # ══════════════════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════════════════
+# FUNDO DE GRAÇA — Pexels
+#
+# ⚠️ ISTO EXISTE PORQUE A FAL TRANCOU (22/08): `User is locked. Reason:
+# Exhausted balance.` Um fundo é CENÁRIO — sofá, bancada, mesa. Isso não
+# precisa ser inventado por IA; existe aos milhares em banco de foto, de graça
+# e com uso comercial liberado. Gastar crédito de geração pra ter uma sala de
+# estar é gastar no lugar errado, e a fila de vídeo precisa desse crédito.
+#
+# O projeto JÁ TEM `asset_autopilot_agent.buscar_pexels`, com orientação
+# retrato e tudo. Reusar em vez de reimplementar: é a mesma chave, o mesmo
+# tratamento de erro e a mesma licença já documentada lá.
+# ══════════════════════════════════════════════════════════════════════════
+BUSCAS = {
+    "casa": ["cozy dark living room", "modern kitchen counter night",
+             "minimal bedroom dark", "home interior warm light"],
+    "tech": ["dark desk setup", "gaming setup neon", "workspace night computer",
+             "technology dark background"],
+    "beleza": ["bathroom vanity marble", "skincare products dark",
+               "makeup table mirror", "cosmetics flat lay dark"],
+    "pet": ["dog resting living room", "cat on sofa dark", "pet bed home",
+            "puppy indoor warm light"],
+    "moda": ["clothing rack wardrobe", "folded clothes shelf",
+             "fashion closet dark", "boutique interior"],
+    "geral": ["dark modern interior", "moody home decor", "warm dark room",
+              "minimal dark background"],
+}
+
+
+def _do_pexels(nicho: str, quantos: int) -> int:
+    """Baixa fundos do Pexels. Devolve quantos vieram."""
+    if not os.environ.get("PEXELS_API_KEY", "").strip():
+        print("❌ PEXELS_API_KEY não está no .env — é grátis em "
+              "pexels.com/api, e é o caminho sem custo pro fundo.")
+        return 0
+    try:
+        try:
+            from agents.asset_autopilot_agent import buscar_pexels
+        except Exception:
+            from asset_autopilot_agent import buscar_pexels
+    except Exception as e:
+        print(f"❌ não consegui usar o buscador do projeto: {str(e)[:90]}")
+        return 0
+
+    import requests
+    pasta = _pasta(nicho)
+    pasta.mkdir(parents=True, exist_ok=True)
+    buscas = BUSCAS.get((nicho or "geral").lower(), BUSCAS["geral"])
+    feitos, vistos = 0, set()
+    for termo in buscas:
+        if feitos >= quantos:
+            break
+        try:
+            cands = buscar_pexels(termo, tipo="photo", limite=6) or []
+        except Exception as e:
+            print(f"  ⚠️  '{termo}': {str(e)[:70]}")
+            continue
+        for c in cands:
+            if feitos >= quantos:
+                break
+            url = (c or {}).get("url", "")
+            if not url or url in vistos:
+                continue
+            vistos.add(url)
+            nome = hashlib.sha1(url.encode()).hexdigest()[:10]
+            destino = pasta / f"pexels_{nome}.jpg"
+            if destino.exists():
+                continue
+            try:
+                b = requests.get(url, timeout=60).content
+                if len(b) < 20 * 1024:
+                    continue
+                destino.write_bytes(b)
+            except Exception:
+                continue
+            feitos += 1
+            print(f"  ✅ {destino.name} ({len(b)// 1024} KB)  ← {termo}")
+    return feitos
+
+
+def _traduzir_fal(e) -> str:
+    """⚠️ SALDO ESGOTADO NÃO É "A FAL RECUSOU" — E A DIFERENÇA É CARA.
+    Em 22/08 a Fal respondeu `User is locked. Reason: Exhausted balance` e a
+    mensagem genérica esconderia o que isso significa: a MESMA conta paga a
+    geração de VÍDEO. Se ela travou aqui, a esteira de Reels travou junto, e
+    ninguém foi avisado — é o tipo de coisa que só aparece dois dias depois,
+    quando a fila esvazia."""
+    txt = str(e)
+    if "balance" in txt.lower() or "locked" in txt.lower():
+        return ("SALDO DA FAL ESGOTADO (a conta está travada).\n"
+                "   ⚠️ ATENÇÃO: é a MESMA conta que gera os VÍDEOS — a esteira\n"
+                "   de Reels para junto, sem avisar. Confira a fila hoje.\n"
+                "   Recarregue em fal.ai/dashboard/billing, ou use o fundo de\n"
+                "   graça:  python3 fundo_ia.py --pexels " + "<nicho>")
+    return f"Fal recusou: {txt[:120]}"
+
+
 def _gerar_um(prompt: str, destino: Path) -> str:
     """Gera 1 fundo. "" se OK, senão a mensagem de erro."""
     chave = os.environ.get("FAL_KEY", "") or os.environ.get("FAL_API_KEY", "")
@@ -166,7 +268,7 @@ def _gerar_um(prompt: str, destino: Path) -> str:
             "num_images": 1,
         }, with_logs=False)
     except Exception as e:
-        return f"Fal recusou: {str(e)[:120]}"
+        return _traduzir_fal(e)
 
     url = ""
     try:
@@ -222,6 +324,8 @@ def main() -> int:
     p.add_argument("--gerar", metavar="NICHO", help="gera fundos pro nicho")
     p.add_argument("--quantos", type=int, default=6)
     p.add_argument("--seco", action="store_true", help="mostra sem gastar crédito")
+    p.add_argument("--pexels", metavar="NICHO",
+                   help="baixa fundos do Pexels (GRATIS, sem gastar credito)")
     p.add_argument("--listar", action="store_true")
     p.add_argument("--prompt", metavar="NICHO", help="imprime o prompt e sai")
     a = p.parse_args()
@@ -238,6 +342,15 @@ def main() -> int:
             print(f"  {marca} {nicho:<8} {len(arqs)} fundo(s)")
         print("\nGerar:  python3 fundo_ia.py --gerar casa --quantos 6")
         return 0
+    if a.pexels:
+        print(f"📁 {_pasta(a.pexels)}\n🆓 Pexels (uso comercial liberado)\n")
+        n = _do_pexels(a.pexels, a.quantos)
+        if n:
+            print(f"\n✅ {n} fundo(s) em {_pasta(a.pexels)}")
+            print(f"   O carrossel de '{a.pexels}' já usa eles na próxima rodada.")
+            return 0
+        print("\n⚠️  nenhum fundo veio.")
+        return 1
     if a.gerar:
         return gerar(a.gerar, a.quantos, a.seco)
     p.print_help()

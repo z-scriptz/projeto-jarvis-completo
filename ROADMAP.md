@@ -5271,6 +5271,37 @@ foram resolvidos.
 **Bloqueio na VPS:** `fal_client` não estava instalado. `.venv/bin/pip install
 fal-client`.
 
+#### 🚨 SALDO DA FAL ESGOTADO — e isso NÃO é sobre a capa (22/08, 23h10)
+
+    fal-ai/recraft-v3 recusou: User is locked.
+    Reason: Exhausted balance.
+
+O teste da capa por IA nem chegou a rodar. Mas o achado é muito maior que o
+teste: ⚠️ **É A MESMA CONTA DA FAL QUE GERA OS VÍDEOS** (`fal_provider.py`,
+Kling). Se ela está travada, a **esteira de Reels parou junto** — e ninguém foi
+avisado. É o tipo de coisa que só aparece dois dias depois, quando a fila
+esvazia e as 6 contas ficam sem post. **Conferir a fila é a prioridade de hoje**,
+não o carrossel.
+
+`_traduzir_fal()`: saldo esgotado deixou de ser "Fal recusou: <texto>" e virou
+uma mensagem que diz **o que isso significa pro resto do sistema**. Erro de
+infra genérico esconde consequência; este agora aponta pra fila de vídeo.
+
+#### 🆓 FUNDO DE GRAÇA: o Pexels resolve, e melhor (22/08)
+
+Com a Fal travada, a pergunta certa não é "como recarregar" — é **por que a
+gente estava gastando crédito de geração pra ter uma sala de estar**. Fundo é
+CENÁRIO: sofá, bancada, mesa. Isso existe aos milhares em banco de foto, de
+graça e com uso comercial liberado, e o crédito da Fal é o que faz VÍDEO — que
+é a coisa que a gente não tem como conseguir de outro jeito.
+
+`fundo_ia.py --pexels <nicho>` — ⚠️ **reusa `asset_autopilot_agent.buscar_pexels`**,
+que já existe no projeto com orientação retrato, tratamento de erro e a licença
+documentada. Reimplementar seria criar uma segunda versão pra divergir depois.
+4 buscas por nicho, dedup por URL, piso de 20 KB.
+
+**Custo zero e disponível agora** — não depende de recarga nenhuma.
+
 #### Ainda falta
 1. **Ciclos e horários no `daemon_maestro`** — hoje ele só tem `horarios` +
    `posts_por_dia_semana` pro Reel. Precisa de `carrossel_horarios` separado,
