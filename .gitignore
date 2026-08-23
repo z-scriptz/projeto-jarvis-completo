@@ -70,3 +70,4 @@ shared/carrosseis_ledger.jsonl
 # rodizio de fechos: estado da VPS, nao codigo
 shared/fechos_recentes.json
 shared/comentarios_recentes.json
+shared/carrossel_historico.json

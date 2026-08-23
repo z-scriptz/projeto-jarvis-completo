@@ -5498,10 +5498,49 @@ de apoio de ontem.
 brain nunca preenchia — saía um slide com um vão embaixo. Agora o prompt pede,
 com teto de 5 palavras.
 
+#### ⏰ O SLOT DO CARROSSEL: 15:30 e 20:30 (23/08)
+
+Pergunta do Dre: *"quais são os horários de cada reels? podemos postar um
+carrossel de tarde e um de noite"*.
+
+⚠️ **OS HORÁRIOS DO REEL NÃO SÃO FIXOS** — eles mudam com o volume do dia
+(`horarios_por_volume` cruzado com a pirâmide `posts_por_dia_semana`):
+
+| dia | Reels | horários |
+|---|---|---|
+| seg / qui | 3 | 09:00 · 13:00 · 18:30 |
+| ter / sex | 2 | 09:00 · 18:00 |
+| qua / sáb | 1 | 09:00 |
+| domingo | 0 | — |
+
+Por isso o default é **15:30 e 20:30**: são os dois buracos que sobram em TODOS
+os dias, não só nos de volume baixo. ⚠️ Um horário "de tarde" às 17h pareceria
+livre olhando quarta-feira e **colidiria com o Reel das 18:30 em metade da
+semana** — e dois posts nossos na mesma janela disputam a mesma entrega, que é
+exatamente o que a pirâmide existe pra evitar.
+
+`carrossel_agendador.py --agenda` imprime a semana com Reel e carrossel lado a
+lado e **avisa se houver colisão** — a conta que eu acabei de fazer à mão fica
+disponível pra quando os horários mudarem.
+
+`carrossel_agendador.py` (novo) — ⚠️ **MÓDULO SEPARADO, DE PROPÓSITO.** O
+`daemon_maestro` posta em 6 contas, todo dia, há meses. Enfiar 80 linhas novas
+nele por um formato que nasceu ontem é apostar o que funciona no que ainda não.
+O patch no daemon são **3 linhas dentro de um try/except**: se o carrossel
+explodir, os Reels continuam saindo.
+
+⚠️ **E NASCE DESLIGADO** (`carrossel_ligado: false`). Um formato novo que começa
+publicando sozinho em 6 contas é um jeito rápido de descobrir um defeito em
+público.
+
+Config: `carrossel_horarios` · `carrosseis_por_dia_semana` ([2,1,1,2,1,1,0],
+espelhando a pirâmide mais baixa) · `carrossel_contas` · `carrossel_ligado` ·
+`carrossel_intervalo_seg` (90s entre contas — seis contas publicando no mesmo
+minuto todo dia é padrão mais evidente que o horário cravado).
+
 #### Ainda falta
-1. **Ciclos e horários no `daemon_maestro`** — hoje ele só tem `horarios` +
-   `posts_por_dia_semana` pro Reel. Precisa de `carrossel_horarios` separado,
-   senão os dois formatos disputam o mesmo slot.
+1. ~~Ciclos e horários no `daemon_maestro`~~ ✅ feito
+2. **Ligar** (`carrossel_ligado: true`) depois de olhar alguns prontos.
 2. **Cruzar o ledger com as métricas** — o `carrosseis_ledger.jsonl` guarda o
    formato, mas quem mede alcance/salvamento é o `metricas_posts`. Falta juntar
    os dois pelo shortcode pra fase 2 ligar sozinha.
