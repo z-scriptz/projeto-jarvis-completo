@@ -347,6 +347,8 @@ h1 {{ font-family:'Disp',Georgia,serif; font-variation-settings:'wght' 900,
 .lista {{ list-style:none; }}
 .lista li {{ display:flex; gap:26px; align-items:flex-start; font-size:40px;
              line-height:1.34; margin-bottom:30px; }}
+.cartao {{ border-radius:34px; padding:46px 44px; }}
+.cartao li:last-child {{ margin-bottom:0; }}
 .lista i {{ font-style:normal; font-family:'Disp',serif;
             font-variation-settings:'wght' 900,'SOFT' 100;
             color:{p['acento']}; min-width:46px; }}
@@ -354,10 +356,15 @@ h1 {{ font-family:'Disp',Georgia,serif; font-variation-settings:'wght' 900,
 /* ─── cabeçalho fixo: a âncora de identidade ────────────────────────────── */
 .cabeca {{ display:flex; align-items:center; justify-content:space-between; }}
 .marca {{ display:flex; align-items:center; gap:22px; }}
-.selo {{ width:92px; height:92px; border-radius:50%; border:3px solid;
-         display:flex; align-items:center; justify-content:center;
-         flex:0 0 92px; overflow:hidden; }}
-.selo img {{ width:70%; height:70%; object-fit:contain; }}
+/* ⚠️ COMO O AVATAR DO INSTAGRAM: o PNG PREENCHE o círculo. Antes o `img` ia a
+   70% com `contain`, e como a logo da conta já é um quadrado escuro com o TS
+   dentro, o resultado era "um quadrado dentro de um círculo maior" — com um
+   anel branco de fundo aparecendo em volta nos slides escuros. O Dre viu isso
+   de primeira. Com `cover` a 100%, logo opaca preenche a moldura e o fundo
+   nunca aparece; logo com transparência continua apoiada nele. */
+.selo {{ width:96px; height:96px; border-radius:50%; border:3px solid;
+         flex:0 0 96px; overflow:hidden; display:block; }}
+.selo img {{ width:100%; height:100%; object-fit:cover; display:block; }}
 .nome {{ font-family:'Disp',serif; font-variation-settings:'wght' 800,
          'SOFT' 100,'WONK' 1; font-size:46px; line-height:1; }}
 .arr {{ font-size:27px; opacity:.66; margin-top:5px; }}
@@ -476,12 +483,24 @@ def _numero_do_item(ctx: dict) -> int:
     return int(m.group(1)) if m else ctx["ordem"]
 
 
+def _numerado(ctx: dict) -> bool:
+    """Este slide É um item numerado da narrativa?
+
+    ⚠️ `numero_semantico != numero_slide`, e essa confusão sobreviveu ao 1º
+    conserto. O slide de ABERTURA — "Muita gente faz 3 coisas que só atrapalham"
+    — ganhou uma bola com "1", porque a bola vinha do índice do slide. Ele não é
+    a dica 1; ele é a promessa das três. Um "1" ali contradiz o "3" da própria
+    frase, na mesma linha de visão. **Só o rótulo diz se o slide é um item.**"""
+    return bool(_RX_NUM.search(ctx.get("rotulo") or ""))
+
+
 def _marca_de_ordem(ctx: dict, p: dict) -> str:
-    """UMA marca de ordem por slide, nunca duas. O rótulo ganha da bola porque
-    ele diz o que é ("ERRO Nº 2"), e a bola só diz um algarismo solto."""
+    """UMA marca de ordem por slide, nunca duas — e NENHUMA quando o slide não
+    é um item numerado. O rótulo ganha da bola porque diz o que é ("ERRO Nº 2");
+    a bola só diz um algarismo solto."""
     if ctx["rotulo"]:
         return f'<div class="rotulo">{ctx["rotulo"]}</div>'
-    return f'<div class="num">{_numero_do_item(ctx)}</div>'
+    return ""
 
 
 def _comp_cheia(item, i, total, plano, p, ctx) -> str:
@@ -598,10 +617,14 @@ def _comp_meio(item, i, total, plano, p, ctx) -> str:
     A composição antiga — mantida porque É BOA. O defeito nunca foi ela; foi
     ela ser a ÚNICA."""
     return f"""<div class="slide" style="background:{p['creme']};color:#1C1A18">
-  {'<div class="fototopo" style="height:640px;background-image:url('
-   + ctx['fundo'] + ')"></div><div class="fade" style="top:0;height:640px;'
-   'background:linear-gradient(180deg,rgba(0,0,0,.44) 0%,rgba(0,0,0,.10) 18%,'
-   + p['creme'] + '00 40%,' + p['creme'] + 'e6 78%,' + p['creme']
+  <!-- ⚠️ 62% DA ALTURA, NÃO 47%. Com a faixa em 640px sobrava uma área creme
+       maior que a foto e o slide lia como "cortado no meio" — e ficava mais
+       fraco que os slides escuros do mesmo carrossel, como se tivesse faltado
+       imagem. A quebra clara é boa; a PROPORÇÃO é que estava errada. -->
+  {'<div class="fototopo" style="height:840px;background-image:url('
+   + ctx['fundo'] + ')"></div><div class="fade" style="top:0;height:840px;'
+   'background:linear-gradient(180deg,rgba(0,0,0,.44) 0%,rgba(0,0,0,.06) 20%,'
+   + p['creme'] + '00 52%,' + p['creme'] + 'e0 84%,' + p['creme']
    + ' 100%)"></div>' if ctx['fundo'] else ''}
   {_cabecalho(plano, i, total, bool(ctx['fundo']))}
   <div style="margin-top:auto">
@@ -622,15 +645,28 @@ def _comp_checklist(item, i, total, plano, p, ctx) -> str:
     linhas = "".join(
         f'<li><i>✓</i><span>{_h.escape(_limpo(t))}</span></li>'
         for t in itens[:7])
-    return f"""<div class="slide" style="background:{p['clarinho']};
-     color:#1C1A18">
-  <div class="mancha" style="width:700px;height:700px;right:-230px;
-       bottom:-260px;background:{p['sombra']}"></div>
-  {_cabecalho(plano, i, total, False)}
+    # ⚠️ ELE ERA CREME VAZIO, E VINHA COLADO NO FECHO, QUE TAMBÉM É CLARO. O
+    # carrossel terminava foto → creme vazio → creme vazio: justo o clímax
+    # perdendo energia. Agora ele é foto cheia com véu e a lista num cartão —
+    # continua sendo o slide de salvar, mas parece parte do mesmo carrossel.
+    foto = ctx["fundo"] or _fundo(plano)
+    escuro = bool(foto)
+    return f"""<div class="slide" style="background:{p['escuro'] if escuro
+     else p['clarinho']};color:{p['clarinho'] if escuro else '#1C1A18'}">
+  {'<div class="fotocheia" style="background-image:url(' + foto + ');'
+   'filter:saturate(1.05) contrast(1.04) brightness(.46)"></div>'
+   '<div class="fade" style="inset:0;background:linear-gradient(180deg,'
+   + p['escuro'] + 'b3 0%,' + p['escuro'] + '59 40%,' + p['escuro']
+   + 'd9 100%)"></div>' if escuro else
+   '<div class="mancha" style="width:700px;height:700px;right:-230px;'
+   'bottom:-260px;background:' + p['sombra'] + '"></div>'}
+  {_cabecalho(plano, i, total, escuro)}
   <div style="margin-top:52px">
     <h1 style="font-size:78px">{_marcar(ctx['titulo'], p['acento'])}</h1>
   </div>
-  <ul class="lista" style="margin-top:auto;margin-bottom:auto">{linhas}</ul>
+  <ul class="lista cartao" style="margin-top:auto;margin-bottom:auto;
+      {'background:rgba(0,0,0,.42);border:2px solid rgba(255,255,255,.16)'
+       if escuro else ''}">{linhas}</ul>
 </div>"""
 
 
@@ -641,8 +677,16 @@ COMPOSICOES = {
     "respiro":   {"fn": _comp_respiro,   "tom": "escuro", "quer": "curto"},
     "produto":   {"fn": _comp_produto,   "tom": "claro",  "quer": "foto"},
     "meio":      {"fn": _comp_meio,      "tom": "claro",  "quer": "titulo"},
-    "checklist": {"fn": _comp_checklist, "tom": "claro",  "quer": "itens"},
+    # "ambos" porque ele fica ESCURO quando há foto e claro quando não há —
+    # e o tom precisa ser verdade, senão a alternância decide com base numa
+    # informação errada e o log imprime um "c" onde saiu um slide escuro.
+    "checklist": {"fn": _comp_checklist, "tom": "ambos",  "quer": "itens"},
 }
+
+
+# composições que nunca mostram foto (a `numero` escura mostra; a clara ganhou
+# faixa; o `checklist` só fica sem quando o acervo do nicho está vazio)
+_SEM_FOTO = {"respiro"}
 
 
 def _elegiveis(ctx: dict) -> list:
@@ -661,6 +705,9 @@ def _elegiveis(ctx: dict) -> list:
             continue
         # `cheia` sem foto é retângulo escuro com texto — pior que `meio`.
         if nome == "cheia" and not (ctx["fundo"] or ctx["fotoitem"]):
+            continue
+        # a `numero` só serve pra slide que É um item numerado — ver `_numerado`
+        if nome == "numero" and not _numerado(ctx):
             continue
         fora.append(nome)
     return fora or ["meio"]
@@ -695,6 +742,17 @@ def _escolher_comp(ctx: dict, recentes: list, tom_ant: str = "") -> tuple:
     elif len(op) > 1 and janela:            # a janela apagou tudo: cede o
         op = [o for o in op if o != janela[-1]] or op   # último, não os dois
 
+    # ⚠️ NUNCA DOIS SLIDES SEM FOTO SEGUIDOS. A `respiro` é chapada por
+    # definição e o `checklist` sem acervo também; colados, o carrossel abre um
+    # buraco visual no meio de uma sequência fotográfica e parece que faltou
+    # imagem. Vale só quando há foto disponível — sem acervo isto não inventa
+    # nada, só não tem o que preferir.
+    if recentes and recentes[-1] in _SEM_FOTO and (ctx["fundo"]
+                                                   or ctx["fotoitem"]):
+        com = [o for o in op if o not in _SEM_FOTO]
+        if com:
+            op = com
+
     if tom_ant:
         oposto = "claro" if tom_ant == "escuro" else "escuro"
         opostas = [o for o in op
@@ -704,7 +762,9 @@ def _escolher_comp(ctx: dict, recentes: list, tom_ant: str = "") -> tuple:
     nome = op[0] if len(op) == 1 else random.choice(op)
 
     tom = COMPOSICOES[nome]["tom"]
-    if tom == "ambos":
+    if nome == "checklist":
+        tom = "escuro" if ctx.get("tem_foto") else "claro"
+    elif tom == "ambos":
         tom = ("claro" if tom_ant == "escuro" else "escuro") if tom_ant \
             else random.choice(["claro", "escuro"])
     ctx["claro"] = (tom == "claro")
@@ -727,6 +787,9 @@ def _html_conteudo(item: dict, i: int, total: int, plano: dict,
                      and Path(item["foto"]).exists() else ""),
         "fundo": _fundo(plano, item) if item.get("fundo") else "",
     }
+    # o `checklist` cai no acervo do nicho mesmo sem `fundo` no item, então
+    # "tem foto" aqui é mais amplo que `ctx["fundo"]`
+    ctx["tem_foto"] = bool(ctx["fundo"] or ctx["fotoitem"] or _fundo(plano))
     nome, tom = _escolher_comp(ctx, recentes or [], tom_ant)
     return COMPOSICOES[nome]["fn"](item, i, total, plano, p, ctx), nome, tom
 

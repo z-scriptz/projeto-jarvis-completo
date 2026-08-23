@@ -5830,6 +5830,35 @@ tem 8 slides e termina no CTA. Agora o `--ver` só lista `\d{2,3}.jpg`.
    esponja e cantinhos. É o `CARR_PALAVRAS_CORPO=38` sendo generoso demais pra
    celular. **Não mexido ainda** — é ajuste de brain, e mexer sem medir é chute.
 
+#### 🔁 3ª RODADA — logo redonda, proporção e numeração semântica (23/08, noite)
+
+- **A logo era "um quadrado dentro de um círculo maior"** (o Dre viu de
+  primeira). O `img` ia a 70% com `contain` dentro do `.selo`, e como a logo da
+  conta JÁ É um quadrado escuro com o TS, sobrava um anel branco de fundo em
+  volta nos slides escuros. Agora é **como o avatar do Instagram**: `cover` a
+  100%, o PNG preenche o círculo. Logo opaca esconde o fundo; logo com
+  transparência continua apoiada nele.
+- **`meio`: faixa de foto de 640px → 840px** (47% → 62% da altura). Com a
+  proporção antiga sobrava área creme MAIOR que a foto: o slide lia como
+  "cortado no meio" e ficava mais fraco que os escuros do mesmo carrossel, como
+  se tivesse faltado imagem. **A quebra clara é boa; a proporção é que estava
+  errada.**
+- **`checklist` ganhou foto cheia + véu + cartão.** Ele era creme vazio e vinha
+  colado no fecho, que também é claro: o carrossel terminava
+  `foto → creme vazio → creme vazio`, justo o clímax perdendo energia.
+- **Regra nova: nunca dois slides sem foto seguidos** (`_SEM_FOTO`). Só vale
+  quando há foto disponível — sem acervo a regra não inventa nada.
+- ⚠️ **`numero_semantico != numero_slide`, e isso sobreviveu ao 1º conserto.** O
+  slide de ABERTURA — *"Muita gente faz 3 coisas que só atrapalham"* — ganhou
+  uma bola com **"1"**, porque a bola vinha do índice do slide. Ele não é a dica
+  1; é a promessa das três, e o "1" contradizia o "3" na mesma linha de visão.
+  Agora **só o rótulo diz se o slide é um item**: sem rótulo, nenhuma marca de
+  ordem, e a composição `numero` nem entra na disputa.
+- **O tom do `checklist` virou `ambos`** porque ele fica escuro com foto e claro
+  sem. Deixar `claro` fixo fazia a alternância decidir com base em informação
+  falsa **e o log imprimir "(c)" onde saiu um slide escuro** — diagnóstico que
+  mente, de novo.
+
 #### 🎯 DOUTRINA DE FORMATOS — o que o Dre trouxe (23/08)
 
 Ficam registrados aqui porque são decisão de produto, não de código, e a próxima
