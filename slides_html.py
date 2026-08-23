@@ -38,6 +38,7 @@ import re
 import sys
 import json
 import base64
+import random
 import argparse
 from pathlib import Path
 
@@ -117,9 +118,15 @@ def _paleta(nicho: str) -> dict:
 def _fundo(plano: dict, item: dict = None) -> str:
     """data: URI da foto de fundo, ou "" — nessa ordem: a do slide, a do
     plano, uma do acervo do nicho."""
+    # ⚠️ `isinstance(cand, str)` NÃO É PARANOIA. O plano vem de JSON escrito
+    # pelo Gemini e por três módulos diferentes; um `fundo: true` (em vez do
+    # caminho) fez `Path(True)` levantar TypeError aqui dentro. E o estrago não
+    # foi o erro: foi que o `renderizar_slides` engole exceção, devolve [] e o
+    # carrossel cai no desenho em PIL — ou seja, o post sai FEIO, sai
+    # publicado, e o log não diz que houve um erro de tipo num campo.
     for cand in ((item or {}).get("fundo"), (item or {}).get("foto"),
                  (plano.get("capa") or {}).get("fundo")):
-        if cand and Path(cand).exists():
+        if isinstance(cand, str) and cand and Path(cand).exists():
             return _b64(cand)
     try:
         from fundo_ia import fundo_do_nicho
@@ -166,6 +173,71 @@ def _logo(nicho: str) -> str:
         return _b64(_brand() / str(nome))
     except Exception:
         return ""
+
+
+def _logo_claro(nicho: str) -> bool:
+    """A logo é clara (some em fundo claro) ou escura (some em fundo escuro)?
+
+    ⚠️ ISTO EXISTE PORQUE O DEFEITO É INVISÍVEL PRO CÓDIGO. No carrossel de
+    23/08 a logo saiu como um quadrado preto ilegível sobre marrom escuro — e
+    nada falhou: o arquivo existe, o `<img>` carrega, o slide renderiza. Só um
+    humano olhando percebe. Medir o brilho médio custa milissegundos e troca um
+    palpite por um fato; sem isso eu teria que ESCOLHER um fundo de círculo e
+    estar errado em metade das contas."""
+    try:
+        from PIL import Image
+        from shared.marca import logo_do_nicho
+        nome = logo_do_nicho(nicho, log)
+        nome = nome[0] if isinstance(nome, (tuple, list)) else nome
+        img = Image.open(_brand() / str(nome)).convert("RGBA")
+        img.thumbnail((64, 64))
+        somaL = somaA = 0
+        for r, g, b, a in img.getdata():
+            if a < 32:        # pixel transparente não é a logo, é o vazio
+                continue
+            somaL += (r * 299 + g * 587 + b * 114) // 1000
+            somaA += 1
+        return (somaL / somaA) > 128 if somaA else False
+    except Exception:
+        return False
+
+
+def _cabecalho(plano: dict, i: int, total: int, escuro: bool,
+               sobre_acento: bool = False) -> str:
+    """Logo + marca + @ à esquerda, contador à direita. Em TODOS os slides.
+
+    ⚠️ É ISTO QUE FAZ UM CARROSSEL PARECER DE UMA MARCA. Nas referências que o
+    Dre mandou, o cabeçalho é idêntico nos 6 slides — é a âncora que deixa a
+    composição variar embaixo sem o conjunto virar seis posts avulsos. O nosso
+    tinha logo só na capa, e minúscula."""
+    import html as _h
+    p = _paleta(plano.get("nicho", "geral"))
+    handle = _h.escape(plano.get("handle") or "")
+    logo = _logo(plano.get("nicho", "geral"))
+    cor = p["clarinho"] if escuro else "#1C1A18"
+
+    # ⚠️ NO SLIDE `respiro` O FUNDO É A PRÓPRIA COR DE ACENTO, e o "Shop" saía
+    # laranja sobre laranja: a marca virava "Top". Nada falhou — a cor existe,
+    # o texto está lá, o contraste é que é zero. Peguei olhando o JPEG, não
+    # lendo o código, e é o terceiro defeito desta família hoje (a logo escura
+    # sobre escuro e o fundo .jpg que ninguém via são os outros dois).
+    realce = p["escuro"] if sobre_acento else p["acento"]
+    borda = p["clarinho"] if sobre_acento else p["acento"]
+
+    # o círculo ganha fundo só quando a logo sumiria sem ele
+    claro = _logo_claro(plano.get("nicho", "geral"))
+    fundo = ("rgba(255,255,255,.92)" if (claro is False and escuro)
+             else "rgba(0,0,0,.30)" if (claro and not escuro) else "transparent")
+    selo = (f'<span class="selo" style="border-color:{borda};'
+            f'background:{fundo}"><img src="{logo}"></span>') if logo else ""
+
+    return f"""<header class="cabeca">
+  <div class="marca">{selo}
+    <div><div class="nome" style="color:{cor}">Top<em
+      style="color:{realce};font-style:normal">Shop</em></div>
+      <div class="arr" style="color:{cor}">{handle}</div></div></div>
+  <div class="cont" style="color:{cor};border-color:{cor}55">{i}/{total}</div>
+</header>"""
 
 
 def _marcar(txt: str, cor: str) -> str:
@@ -229,7 +301,14 @@ body {{ width:{LARG}px; height:{ALT}px; overflow:hidden; font-family:'Corpo',
    aparecia; a `fototopo` do conteúdo caía no fluxo e passava a respeitar o
    padding do slide, ganhando uma margem branca dos lados que denunciava a
    montagem. Nenhum dos dois dá erro — os dois só saem errados. */
-.slide > *:not(.mancha):not(.fototopo):not(.fotocheia):not(.fade)
+/* ⚠️ E EU CAÍ NELA DE NOVO, 23/08, com o `.gigante`. Ele nasceu `absolute`;
+   esta regra o converteu em `relative`, ele caiu no fluxo como primeiro filho
+   do flex e o "02" foi parar EM CIMA do cabeçalho, empurrando o resto. O
+   comentário acima já avisava e mesmo assim aconteceu — porque a lista de
+   exceções é o tipo de coisa que ninguém lembra de atualizar ao criar um
+   elemento novo. **Toda camada `position:absolute` filha direta de `.slide`
+   PRECISA entrar nesta lista.** */
+.slide > *:not(.mancha):not(.fototopo):not(.fotocheia):not(.fade):not(.gigante)
   {{ position:relative; z-index:1; }}
 
 /* título: a serifada, com peso e SOFT altos. `wonk` liga as formas
@@ -271,6 +350,52 @@ h1 {{ font-family:'Disp',Georgia,serif; font-variation-settings:'wght' 900,
 .lista i {{ font-style:normal; font-family:'Disp',serif;
             font-variation-settings:'wght' 900,'SOFT' 100;
             color:{p['acento']}; min-width:46px; }}
+
+/* ─── cabeçalho fixo: a âncora de identidade ────────────────────────────── */
+.cabeca {{ display:flex; align-items:center; justify-content:space-between; }}
+.marca {{ display:flex; align-items:center; gap:22px; }}
+.selo {{ width:92px; height:92px; border-radius:50%; border:3px solid;
+         display:flex; align-items:center; justify-content:center;
+         flex:0 0 92px; overflow:hidden; }}
+.selo img {{ width:70%; height:70%; object-fit:contain; }}
+.nome {{ font-family:'Disp',serif; font-variation-settings:'wght' 800,
+         'SOFT' 100,'WONK' 1; font-size:46px; line-height:1; }}
+.arr {{ font-size:27px; opacity:.66; margin-top:5px; }}
+.cont {{ border:3px solid; border-radius:40px; padding:11px 30px;
+         font-size:31px; font-weight:700; }}
+
+/* ─── composições ───────────────────────────────────────────────────────── */
+/* o número como ELEMENTO GRÁFICO, não como rótulo: sangra pela borda e é
+   grande o bastante pra ser lido como forma antes de ser lido como número */
+/* ⚠️ ELE MORA NO MEIO-ALTO, E ISSO É O PONTO. Na 1ª versão eu ancorei em
+   `bottom:-96px`: o número saía cortado pela borda de baixo E por trás do
+   parágrafo, virando mancha suja em vez de forma — e o miolo do slide ficava
+   VAZIO, que é exatamente a crítica do Dre aos nossos slides ("metade de baixo
+   vazia"). Ancorado abaixo do cabeçalho e sangrando pela direita, ele ocupa o
+   vazio e o texto continua com a base livre. */
+.gigante {{ position:absolute; font-family:'Disp',serif;
+            font-variation-settings:'wght' 900,'SOFT' 100,'WONK' 1;
+            font-size:540px; line-height:.72; right:-56px; top:186px;
+            opacity:.16; pointer-events:none; letter-spacing:-18px; }}
+.punch {{ font-family:'Disp',serif; font-variation-settings:'wght' 900,
+          'SOFT' 100,'WONK' 1; line-height:1.02; letter-spacing:-2px; }}
+/* ⚠️ O CONSERTO DO "PARECE QUE PEGOU DA SHOPEE". A foto de catálogo vem em
+   fundo BRANCO. Recortada num card creme, o branco vaza e denuncia. Com
+   `multiply` sobre superfície clara o branco vira a própria superfície e só o
+   produto sobra — sem remover fundo, sem API, sem pagar nada. Por isso este
+   slide é obrigatoriamente CLARO: em fundo escuro o multiply comeria o
+   produto junto. */
+.recorte {{ mix-blend-mode:multiply; filter:contrast(1.08) saturate(1.06);
+            width:100%; object-fit:contain; }}
+.metade {{ display:flex; gap:34px; align-items:stretch; }}
+.metade > div {{ flex:1; display:flex; flex-direction:column;
+                 justify-content:flex-end; }}
+.versal {{ font-size:26px; letter-spacing:5px; text-transform:uppercase;
+           font-weight:700; opacity:.6; }}
+.caixa {{ border:3px solid {p['acento']}88; border-radius:26px;
+          padding:26px 32px; display:flex; align-items:center; gap:24px;
+          font-family:'Disp',serif; font-style:italic; font-size:34px;
+          font-variation-settings:'wght' 600,'SOFT' 100; line-height:1.28; }}
 """
 
 
@@ -283,9 +408,8 @@ def _html_capa(plano: dict, total: int) -> str:
     capa = plano.get("capa") or {}
     hook = (capa.get("hook") or "").strip()
     sub = _h.escape((capa.get("sub") or "").strip())
-    handle = _h.escape(plano.get("handle") or "")
     tag = _h.escape((plano.get("nicho") or "geral").upper())
-    logo = _logo(plano.get("nicho", "geral"))
+    # a logo e o @ agora saem no `_cabecalho`, em TODOS os slides
 
     foto = _fundo(plano)
     camada = (f'<div class="fotocheia" style="background-image:url({foto})"></div>'
@@ -298,14 +422,12 @@ def _html_capa(plano: dict, total: int) -> str:
   {camada}
   <div class="mancha" style="width:760px;height:760px;right:-260px;top:-230px;
        background:{p['acento']};opacity:{'.07' if foto else '.13'}"></div>
-  <div class="tag"><b>{tag}</b><span>{sub}</span></div>
-  <h1 id="titulo" style="margin-top:auto;margin-bottom:44px;font-size:118px">
+  {_cabecalho(plano, 1, total, True)}
+  <h1 id="titulo" style="margin-top:auto;margin-bottom:38px;font-size:118px">
     {_marcar(hook, p['acento'])}</h1>
   <div class="rodape" style="margin-top:0">
-    <div style="display:flex;align-items:center;gap:22px">
-      {'<img src="' + logo + '" style="width:78px;height:78px;border-radius:50%">' if logo else ''}
-      <div class="arroba">{handle}</div>
-    </div>
+    <div class="versal" style="color:{p['acento']};opacity:1;max-width:58%">
+      {sub or tag}</div>
     <div class="pilula" style="background:rgba(255,255,255,.10);
          color:{p['clarinho']};font-size:30px;padding:18px 34px">
       arrasta &rarr;</div>
@@ -313,7 +435,254 @@ def _html_capa(plano: dict, total: int) -> str:
 </div>"""
 
 
-def _html_conteudo(item: dict, i: int, total: int, plano: dict) -> str:
+# ══════════════════════════════════════════════════════════════════════════
+# BIBLIOTECA DE COMPOSIÇÕES
+#
+# ⚠️ O PEDIDO DO DRE, LITERAL (23/08): *"os slides não podem parecer variações
+# do mesmo template... identidade consistente + composição variável"*. E ele
+# nomeou o erro exato que a gente estava cometendo:
+#
+#       título à esquerda + foto à direita
+#       título à esquerda + foto à direita
+#       título à esquerda + foto à direita...
+#       "isso fica bonito, mas visualmente cansa rápido"
+#
+# Era exatamente o `_html_conteudo` antigo: UMA composição (tag em cima, h1,
+# miolo, rodapé) com três variações de MIOLO. Trocar a foto por uma lista não
+# muda a composição — muda o recheio. O olho lê a estrutura, não o recheio.
+#
+# ⚠️ E A REGRA QUE VALE MAIS QUE AS COMPOSIÇÕES: **nunca a mesma duas vezes
+# seguidas**, e sempre que der, alternando claro/escuro. Ter 6 composições e
+# sortear cada slide daria repetição colada em 1/6 dos pares — e repetição
+# colada é justamente o que se vê. É o mesmo raciocínio do rodízio dos fundos e
+# dos fechos: memória do anterior vale mais que quantidade de opções.
+#
+# O que NÃO dá pra fazer aqui, e é honesto registrar: o ChatGPT põe a foto
+# CERTA pra cada tópico (abajur em "iluminação quente", cesto em "cestos"). O
+# acervo é de ambiente genérico do nicho — casa a estética, não o assunto.
+# ══════════════════════════════════════════════════════════════════════════
+def _comp_cheia(item, i, total, plano, p, ctx) -> str:
+    """Foto dominante, texto mínimo. ~80% imagem. O slide que dá impacto."""
+    import html as _h
+    foto = ctx["fundo"] or ctx["fotoitem"]
+    rotulo = ctx["rotulo"]
+    return f"""<div class="slide" style="background:{p['escuro']};
+     color:{p['clarinho']}">
+  {'<div class="fotocheia" style="background-image:url(' + foto + ');'
+   'filter:saturate(1.14) contrast(1.1) brightness(.88)"></div>' if foto else ''}
+  <!-- ⚠️ o véu é leve NO MEIO de propósito: esta composição existe pra a foto
+       aparecer. Escurecer o quadro inteiro transforma "foto dominante" em
+       "retângulo escuro com legenda" — e aí ela não se distingue da `numero`. -->
+  <div class="fade" style="inset:0;background:linear-gradient(180deg,
+       {p['escuro']}a6 0%,{p['escuro']}0d 26%,{p['escuro']}00 46%,
+       {p['escuro']}bf 74%,{p['escuro']}f7 100%)"></div>
+  {_cabecalho(plano, i, total, True)}
+  <div style="margin-top:auto">
+    {'<div class="versal" style="color:' + p['acento'] + ';opacity:1;'
+     'margin-bottom:22px">' + rotulo + '</div>' if rotulo else ''}
+    <h1 style="font-size:96px">{_marcar(ctx['titulo'], p['acento'])}</h1>
+  </div>
+</div>"""
+
+
+def _comp_numero(item, i, total, plano, p, ctx) -> str:
+    """O número vira forma. Sangra pela borda e o texto pousa por cima.
+
+    ⚠️ É A ÚNICA QUE SERVE NOS DOIS TONS, e isso não é enfeite: sem ela, depois
+    de um slide escuro só sobrava a `meio` (as outras claras exigem foto ou
+    lista), e o carrossel virava escuro→meio→escuro→meio. Alternância perfeita
+    é um padrão como qualquer outro — só demora um slide a mais pra cansar."""
+    n = ctx["ordem"]
+    claro = ctx.get("claro", False)
+    fundoS = p["clarinho"] if claro else p["escuro"]
+    corS = "#1C1A18" if claro else p["clarinho"]
+    return f"""<div class="slide" style="background:{fundoS};color:{corS}">
+  {'<div class="fotocheia" style="background-image:url(' + ctx['fundo'] + ');'
+   'filter:saturate(1.05) contrast(1.05) brightness(.34)"></div>'
+   if ctx['fundo'] and not claro else ''}
+  <div class="gigante" style="color:{p['acento']};
+       opacity:{'.20' if claro else '.16'}">{n:02d}</div>
+  {_cabecalho(plano, i, total, not claro)}
+  <div style="margin-top:auto;max-width:86%">
+    <h1 style="font-size:104px">{_marcar(ctx['titulo'], p['acento'])}</h1>
+    {'<p class="corpo" style="margin-top:32px;opacity:.78">' + ctx['corpo']
+     + '</p>' if ctx['corpo'] else ''}
+  </div>
+</div>"""
+
+
+def _comp_respiro(item, i, total, plano, p, ctx) -> str:
+    """A punchline. Cor chapada, uma frase, e nada mais.
+
+    ⚠️ É O SLIDE QUE 'ACORDA O OLHO' — o Dre: *"depois de dois slides escuros,
+    um slide claro"*. Ele não carrega informação nova; carrega RITMO. Por isso
+    não leva foto: se levasse, seria mais um slide bonito no meio de slides
+    bonitos, e o contraste morreria."""
+    return f"""<div class="slide" style="background:{p['acento']};
+     color:{p['clarinho']}">
+  <div class="mancha" style="width:900px;height:900px;left:-320px;
+       bottom:-340px;background:{p['clarinho']};opacity:.09"></div>
+  {_cabecalho(plano, i, total, True, sobre_acento=True)}
+  <div style="margin:auto 0;max-width:92%">
+    {'<div class="versal" style="margin-bottom:28px">' + ctx['rotulo']
+     + '</div>' if ctx['rotulo'] else ''}
+    <div class="punch" style="font-size:118px">
+      {_marcar(ctx['titulo'], p['clarinho'])}</div>
+    {'<p class="corpo" style="margin-top:38px;opacity:.86">' + ctx['corpo']
+     + '</p>' if ctx['corpo'] else ''}
+  </div>
+</div>"""
+
+
+def _comp_produto(item, i, total, plano, p, ctx) -> str:
+    """Objeto isolado em superfície clara. O `multiply` some com o fundo
+    branco do catálogo da Shopee — ver `.recorte` no CSS."""
+    return f"""<div class="slide" style="background:{p['clarinho']};
+     color:#1C1A18">
+  <div class="mancha" style="width:820px;height:820px;right:-250px;top:-280px;
+       background:{p['sombra']}"></div>
+  {_cabecalho(plano, i, total, False)}
+  <div style="margin-top:44px">
+    <h1 style="font-size:76px">{_marcar(ctx['titulo'], p['acento'])}</h1>
+  </div>
+  <div style="margin:auto 0;display:flex;justify-content:center">
+    {'<img class="recorte" src="' + ctx['fotoitem'] + '" style="max-height:600px">'
+     if ctx['fotoitem'] else ''}
+  </div>
+  <div class="rodape">
+    {'<div class="preco">' + ctx['preco'] + '</div>' if ctx['preco'] else '<div></div>'}
+    {'<div class="caixa" style="max-width:47%">' + ctx['conclusao'] + '</div>'
+     if ctx['conclusao'] else '<div></div>'}
+  </div>
+</div>"""
+
+
+def _comp_meio(item, i, total, plano, p, ctx) -> str:
+    """Foto sangrando na metade de cima, texto em cor chapada embaixo.
+
+    A composição antiga — mantida porque É BOA. O defeito nunca foi ela; foi
+    ela ser a ÚNICA."""
+    return f"""<div class="slide" style="background:{p['creme']};color:#1C1A18">
+  {'<div class="fototopo" style="height:640px;background-image:url('
+   + ctx['fundo'] + ')"></div><div class="fade" style="top:0;height:640px;'
+   'background:linear-gradient(180deg,rgba(0,0,0,.30) 0%,' + p['creme']
+   + '00 34%,' + p['creme'] + 'e6 78%,' + p['creme'] + ' 100%)"></div>'
+   if ctx['fundo'] else ''}
+  {_cabecalho(plano, i, total, False)}
+  <div style="margin-top:auto">
+    <div class="tag" style="gap:26px;margin-bottom:30px">
+      <div class="num">{ctx['ordem']}</div>
+      {'<div class="rotulo">' + ctx['rotulo'] + '</div>' if ctx['rotulo'] else ''}
+    </div>
+    <h1 style="font-size:82px">{_marcar(ctx['titulo'], p['acento'])}</h1>
+    {'<p class="corpo" style="margin-top:30px;opacity:.76">' + ctx['corpo']
+     + '</p>' if ctx['corpo'] else ''}
+  </div>
+</div>"""
+
+
+def _comp_checklist(item, i, total, plano, p, ctx) -> str:
+    """Blocos curtos. É o slide feito pra ser SALVO."""
+    itens = ctx["itens"]
+    import html as _h
+    linhas = "".join(
+        f'<li><i>✓</i><span>{_h.escape(_limpo(t))}</span></li>'
+        for t in itens[:7])
+    return f"""<div class="slide" style="background:{p['clarinho']};
+     color:#1C1A18">
+  <div class="mancha" style="width:700px;height:700px;right:-230px;
+       bottom:-260px;background:{p['sombra']}"></div>
+  {_cabecalho(plano, i, total, False)}
+  <div style="margin-top:52px">
+    <h1 style="font-size:78px">{_marcar(ctx['titulo'], p['acento'])}</h1>
+  </div>
+  <ul class="lista" style="margin-top:auto;margin-bottom:auto">{linhas}</ul>
+</div>"""
+
+
+# tom: pra alternar claro/escuro. quer: o que o slide precisa ter pra caber.
+COMPOSICOES = {
+    "cheia":     {"fn": _comp_cheia,     "tom": "escuro", "quer": "titulo"},
+    "numero":    {"fn": _comp_numero,    "tom": "ambos",  "quer": "titulo"},
+    "respiro":   {"fn": _comp_respiro,   "tom": "escuro", "quer": "curto"},
+    "produto":   {"fn": _comp_produto,   "tom": "claro",  "quer": "foto"},
+    "meio":      {"fn": _comp_meio,      "tom": "claro",  "quer": "titulo"},
+    "checklist": {"fn": _comp_checklist, "tom": "claro",  "quer": "itens"},
+}
+
+
+def _elegiveis(ctx: dict) -> list:
+    """As composições que o conteúdo DESTE slide comporta."""
+    if ctx["itens"]:
+        return ["checklist"]
+    if ctx["fotoitem"]:
+        return ["produto"]
+    fora = []
+    for nome, c in COMPOSICOES.items():
+        if c["quer"] in ("foto", "itens"):
+            continue
+        # `respiro` só aceita frase curta: uma punchline de 14 palavras não é
+        # punchline, é parágrafo em corpo 118px, e vaza o slide.
+        if c["quer"] == "curto" and len(ctx["titulo"].split()) > 7:
+            continue
+        # `cheia` sem foto é retângulo escuro com texto — pior que `meio`.
+        if nome == "cheia" and not (ctx["fundo"] or ctx["fotoitem"]):
+            continue
+        fora.append(nome)
+    return fora or ["meio"]
+
+
+def _escolher_comp(ctx: dict, anterior: str, tom_ant: str = "") -> tuple:
+    """Nunca a mesma da anterior; quando dá, o tom oposto.
+
+    Devolve (nome, tom). O tom sai daqui e não de dentro da composição porque a
+    `numero` serve nos dois — e quem sabe qual falta é quem viu o slide de trás.
+
+    ⚠️ A ALTERNÂNCIA É PREFERÊNCIA, NÃO LEI. Na 1ª versão eu filtrava pelo tom
+    oposto e pronto: como só a `meio` é clara entre as de texto, TODO slide
+    depois de um escuro virava `meio`, sempre. Sai um padrão e entra outro. Se
+    o tom oposto deixa uma opção só, ela leva vantagem — não exclusividade."""
+    op = _elegiveis(ctx)
+    if len(op) > 1 and anterior in op:
+        op = [o for o in op if o != anterior]
+
+    if tom_ant:
+        oposto = "claro" if tom_ant == "escuro" else "escuro"
+        opostas = [o for o in op
+                   if COMPOSICOES[o]["tom"] in (oposto, "ambos")]
+        if len(opostas) >= 2 or (opostas and random.random() < .70):
+            op = opostas
+    nome = op[0] if len(op) == 1 else random.choice(op)
+
+    tom = COMPOSICOES[nome]["tom"]
+    if tom == "ambos":
+        tom = ("claro" if tom_ant == "escuro" else "escuro") if tom_ant \
+            else random.choice(["claro", "escuro"])
+    ctx["claro"] = (tom == "claro")
+    return nome, tom
+
+
+def _html_conteudo(item: dict, i: int, total: int, plano: dict,
+                   anterior: str = "", tom_ant: str = "") -> tuple:
+    import html as _h
+    p = _paleta(plano.get("nicho", "geral"))
+    ctx = {
+        "rotulo": _h.escape((item.get("rotulo") or "").strip().upper()),
+        "titulo": (item.get("titulo") or "").strip(),
+        "corpo": _h.escape((item.get("linha") or "").strip()),
+        "preco": _h.escape((item.get("preco") or "").strip()),
+        "conclusao": _h.escape((item.get("conclusao") or "").strip()),
+        "ordem": max(1, i - 1),
+        "itens": [str(x) for x in (item.get("itens") or []) if str(x).strip()],
+        "fotoitem": (_b64(item["foto"]) if item.get("foto")
+                     and Path(item["foto"]).exists() else ""),
+        "fundo": _fundo(plano, item) if item.get("fundo") else "",
+    }
+    nome, tom = _escolher_comp(ctx, anterior, tom_ant)
+    return COMPOSICOES[nome]["fn"](item, i, total, plano, p, ctx), nome, tom
+
+
+def _html_conteudo_legado(item: dict, i: int, total: int, plano: dict) -> str:
     import html as _h
     p = _paleta(plano.get("nicho", "geral"))
     rotulo = _h.escape((item.get("rotulo") or "").strip().upper())
@@ -632,10 +1001,29 @@ def renderizar_slides(plano: dict, pasta) -> list:
     itens = plano.get("slides") or []
     total = len(itens) + 2
 
-    paginas = [_html_capa(plano, total)]
-    for k, item in enumerate(itens, start=2):
-        paginas.append(_html_conteudo(item, k, total, plano))
-    paginas.append(_html_fecho(plano, total))
+    # ⚠️ ESTE `try` É O QUE FALTAVA. A montagem do HTML ficava FORA de qualquer
+    # captura: um erro aqui subia direto pro `carrossel_render`, que cai no PIL
+    # sem dizer por quê. Resultado prático de um `fundo: true` num campo que
+    # espera caminho: o post sai feio, sai publicado, e o log não menciona
+    # erro nenhum. Agora o motivo aparece antes de a gente perder a tarde.
+    try:
+        paginas = [_html_capa(plano, total)]
+        # O `anterior` é o estado que faz a regra funcionar. Sem ele cada slide
+        # decidiria sozinho e duas composições iguais coladas voltariam a
+        # acontecer — o defeito que esta biblioteca existe pra resolver.
+        anterior, tom_ant, usadas = "", "escuro", []   # a capa é sempre escura
+        for k, item in enumerate(itens, start=2):
+            corpo, anterior, tom_ant = _html_conteudo(item, k, total, plano,
+                                                      anterior, tom_ant)
+            paginas.append(corpo)
+            usadas.append(f"{anterior}({tom_ant[0]})")
+        paginas.append(_html_fecho(plano, total))
+    except Exception as e:
+        log.warning(f"   ⚠️  não montei o HTML ({type(e).__name__}: "
+                    f"{str(e)[:120]}) — caindo no PIL")
+        return []
+    if usadas:
+        log.info(f"   🧩 composições: {' → '.join(usadas)}")
 
     try:
         from playwright.sync_api import sync_playwright
@@ -683,15 +1071,25 @@ _EXEMPLO = {
     "nicho": "casa", "handle": "@topshopcasa_",
     "capa": {"hook": "Você está cometendo esse erro *sem perceber*",
              "sub": "3 erros que bagunçam a casa"},
+    # ⚠️ `fundo: True` em todos os de texto porque é ASSIM QUE O BRAIN MANDA.
+    # Sem isso o exemplo nunca exercitava a composição `cheia` (ela exige foto),
+    # e um exemplo que não passa por todos os caminhos é um teste que aprova o
+    # que não testou.
     "slides": [
         {"rotulo": "ERRO Nº 1", "titulo": "Guardar tudo o que sobrou",
+         "fundo": True,
          "linha": "Pote sem tampa, sacola de sacola e caixa vazia ocupam a "
                   "prateleira que faria falta pro que você usa toda semana.",
          "conclusao": "Descarta antes de organizar"},
         {"rotulo": "ERRO Nº 2", "titulo": "Organizar sem lugar fixo",
+         "fundo": True,
          "linha": "Se cada coisa volta pra um lugar diferente, a bagunça "
                   "reaparece em três dias. Lugar fixo é o que sustenta.",
          "conclusao": "Um lugar pra cada coisa"},
+        {"rotulo": "ERRO Nº 3", "titulo": "Deixar tudo à vista",
+         "fundo": True,
+         "linha": "Superfície cheia cansa o olho antes de a casa estar suja.",
+         "conclusao": "Superfície livre"},
         {"rotulo": "", "titulo": "", "itens": [
             "Descartar o que não usa", "Lugar fixo pra cada coisa",
             "Limpar por zona, não por cômodo"]},

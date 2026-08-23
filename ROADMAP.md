@@ -5703,6 +5703,136 @@ Dois detalhes que só apareceram porque tirei print da página e olhei:
 - a legenda passa por escape de HTML. Ela vem do Gemini e é texto livre; um
   `<` solto quebraria a página inteira em silêncio.
 
+#### 🧩 BIBLIOTECA DE COMPOSIÇÕES — "identidade consistente + composição variável" (23/08)
+
+⚠️ **O DRE NOMEOU O DEFEITO MELHOR DO QUE EU TINHA DIAGNOSTICADO.** Eu achava
+que o problema era falta de foto. Não era. Ele escreveu:
+
+> os slides não podem parecer variações do mesmo template. Eles precisam manter
+> a identidade da conta, mas mudar composição, hierarquia e tipo de visual (...)
+> O erro seria fazer 6 slides assim: título à esquerda + foto à direita, título
+> à esquerda + foto à direita, título à esquerda + foto à direita... Isso fica
+> bonito, mas visualmente cansa rápido.
+
+E era **literalmente** o que o `_html_conteudo` fazia: UMA composição (tag, h1,
+miolo, rodapé) com três variações de MIOLO. Trocar foto por lista não muda a
+composição — muda o recheio. **O olho lê a estrutura, não o recheio.**
+
+**Seis composições**, cada uma com um tom (claro/escuro) e uma exigência de
+conteúdo:
+
+| composição | tom | serve quando | o que faz |
+|---|---|---|---|
+| `cheia` | escuro | tem foto | foto sangrando, ~80% imagem, texto mínimo |
+| `numero` | **ambos** | sempre | número gigante como forma, sangrando pela direita |
+| `respiro` | escuro | título ≤ 7 palavras | punchline em cor chapada, sem foto |
+| `produto` | claro | tem foto de produto | objeto isolado + preço |
+| `meio` | claro | sempre | foto na metade de cima, texto embaixo (a antiga) |
+| `checklist` | claro | tem lista | blocos com ✓ — o slide feito pra SALVAR |
+
+**A regra vale mais que as composições: nunca a mesma duas vezes seguidas, e,
+quando dá, o tom oposto.** Com 6 opções e sorteio puro, repetição colada sairia
+em 1/6 dos pares — e repetição colada é justo o que se vê. Mesma mecânica do
+rodízio dos fundos, dos fechos e do 1º comentário: **memória do anterior vale
+mais que quantidade de opções.**
+
+⚠️ **A ALTERNÂNCIA DE TOM É PREFERÊNCIA, NÃO LEI — e a 1ª versão errou isso.**
+Filtrando pelo tom oposto de forma dura, como só a `meio` era clara entre as de
+texto, TODO slide depois de um escuro virava `meio`. Saía um padrão e entrava
+outro (escuro→meio→escuro→meio), só que mais lento. Duas correções: a `numero`
+serve nos dois tons, e o filtro só manda quando sobram ≥2 opções.
+
+⚠️ **`.recorte` — o conserto do "parece que pegou da Shopee".** A foto de
+catálogo vem em fundo BRANCO; num card creme o branco vaza e denuncia. Com
+`mix-blend-mode:multiply` sobre superfície clara o branco vira a própria
+superfície e só o produto sobra. Sem remover fundo, sem API, sem pagar nada. É
+por isso que a `produto` é obrigatoriamente CLARA — em fundo escuro o multiply
+comeria o produto junto.
+
+⚠️ **Cabeçalho fixo em TODOS os slides** (logo + `TopShop` + `@handle` + `n/6`).
+É isso que faz um carrossel parecer de uma marca; nas referências do Dre ele é
+idêntico nos 6. O nosso tinha logo só na capa, e de 60px.
+
+#### 🩹 Quatro defeitos invisíveis que este trabalho revelou (23/08)
+
+Todos passam em `py_compile`, nenhum levanta erro, **os quatro só aparecem
+olhando o JPEG**. Vale como lista de conferência, não como anedota:
+
+1. **A logo escura sobre fundo escuro.** Quadrado preto ilegível. Consertado com
+   `_logo_claro()`, que MEDE o brilho médio da logo e escolhe o fundo do círculo
+   — troca um palpite por um fato, e o palpite estaria errado em metade das
+   contas.
+2. **O "Shop" laranja sobre o slide laranja.** No `respiro` o fundo *é* a cor de
+   acento: a marca virava "Top". Contraste zero não é erro de código.
+3. **O `.gigante` fora da lista de exceções do `z-index`.** Ele nasceu
+   `absolute`, a regra global o converteu em `relative`, ele caiu no fluxo e o
+   número foi parar em cima do cabeçalho. **O arquivo já tinha um comentário
+   avisando exatamente isso** — e mesmo assim aconteceu, porque lista de
+   exceções é o tipo de coisa que ninguém lembra de atualizar ao criar
+   elemento novo. **Toda camada `absolute` filha direta de `.slide` PRECISA
+   entrar naquela lista.**
+4. **`fundo: true` onde se espera caminho.** `Path(True)` levanta TypeError na
+   montagem do HTML — que ficava FORA de qualquer `try`. A exceção subia, o
+   `carrossel_render` caía no PIL, e **o post saía feio, saía publicado, e o log
+   não mencionava erro nenhum.** Agora a montagem tem `try` com o motivo no log,
+   e o `_fundo()` valida `isinstance(cand, str)`.
+
+E o exemplo do `--exemplo` passou a marcar `fundo: True` nos slides de texto,
+porque é assim que o brain manda: **um exemplo que não passa por todos os
+caminhos é um teste que aprova o que não testou** (era o caso — a `cheia` nunca
+era exercitada).
+
+#### 🎯 DOUTRINA DE FORMATOS — o que o Dre trouxe (23/08)
+
+Ficam registrados aqui porque são decisão de produto, não de código, e a próxima
+sessão não pode perder isso.
+
+**A cadeia que o Jarvis deveria percorrer** (hoje ele pula direto pro formato):
+
+    OBJETIVO → FORMATO → NARRATIVA → VISUAIS → CTA
+
+| objetivo | formato |
+|---|---|
+| venda | Problema → consequência → solução → prova → produto |
+| alcance | Erros / curiosidade |
+| seguidores | Série educacional recorrente |
+| comentários | Comparação / opinião |
+| saves | Checklist / guia |
+| shares | Identificação ("manda isso pra quem...") |
+
+⚠️ **E AQUI TEM UMA DESCOBERTA QUE MUDA A PRIORIDADE.** O carrossel de
+referência que o Dre gerou **não tem produto, nem preço, nem link** — são 4
+dicas e uma pergunta. É carrossel de SEGUIDOR, não de venda. E a meta agora é
+1.000 seguidores (é onde o afiliado da Shopee abre no Reels). Ou seja:
+
+> Até os 1k, o objetivo é **seguidores**, não vendas. E carrossel sem produto
+> não tem a foto branca da Shopee que estraga o design. **O problema estético e
+> o problema estratégico têm a mesma solução.**
+
+Nossos formatos `lista`/`comparacao` (com preço em cada slide) estão empurrando
+pro objetivo errado nesta fase. A distribuição 40/20/15/10/10/5 foi calibrada
+pra VENDA; enquanto a meta for seguidor, `erros` + `checklist` + `passo_a_passo`
+deveriam pesar mais.
+
+**Formatos novos que valem entrar** (do ranking do Dre):
+- **"Não compre antes de saber isso"** — junta viral + venda + save. É o que ele
+  mais destacou pra TopShop.
+- **Checklist** — o monstro dos salvamentos. O último slide tem que ser
+  literalmente construído pra alguém pensar "vou salvar isso". Já temos a
+  composição (`checklist`); falta o formato no brain.
+- **Série recorrente** — "5 coisas simples que deixam qualquer *cômodo* mais
+  bonito", repetido variando o cômodo. A pessoa não segue pelo post, segue pelo
+  PRÓXIMO. É o motor de seguidor mais barato que existe e não precisa de
+  código novo, só de um campo `serie` no plano.
+- **Regra de ouro do hook:** proibir começar com `COMPRE ESSE ORGANIZADOR 😱`.
+  Primeiro conteúdo, depois produto — o produto entra como resolução da
+  história, não como propaganda do slide 1.
+
+**Tipos visuais ainda não implementados** (a lista dele é maior que a nossa
+biblioteca): antes×depois em tela dividida, comparação lado a lado, setas e
+marcações apontando o detalhe, POV/perspectiva incomum, sequência de
+transformação. A `metade` já tem CSS pronto pro lado-a-lado; falta a composição.
+
 #### Ainda falta
 1. ~~Ciclos e horários no `daemon_maestro`~~ ✅ feito
 2. **Ligar** (`carrossel_ligado: true`) depois de olhar alguns prontos.
