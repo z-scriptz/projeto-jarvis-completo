@@ -4990,6 +4990,52 @@ próximo responde"*. Entraram dois slides no meio de todo formato:
 parecer muitooo anúncio"*. Eu tinha marcado "Preço de outro mundo!" como
 defeito; não é.
 
+#### 🧱 O PASSO MANUAL QUE FALHOU DUAS VEZES VIROU COMANDO (22/08)
+
+O `--teste` deu 404 pela terceira vez, e a causa estava no terminal do Dre: ele
+colou o BLOCO DE COMANDOS inteiro, e a linha `# cola no /etc/caddy/Caddyfile`
+virou **comentário do bash**. O `caddy validate` respondeu *"Valid
+configuration"* logo em seguida — porque o arquivo ESTÁ válido: ele só não tem
+a rota. Dois sinais verdes e o 404 continuou.
+
+⚠️ **INSTRUÇÃO NO MEIO DE UMA SEQUÊNCIA DE COMANDOS NÃO É INSTRUÇÃO, É UM
+COMANDO QUE NÃO RODA.** A lição não é "o Dre não colou": é que eu entreguei um
+roteiro onde o único passo que exigia um humano estava disfarçado de comando.
+Então virou comando: `midia_publica.py --instalar-caddy`.
+
+Ele acha o bloco do host, insere a rota **como PRIMEIRA regra** (se entrasse
+depois do `reverse_proxy` solto, o Caddy mandaria `/midia/...` pro Flask do
+painel do TikTok e a Meta receberia um 404 de HTML — exatamente o sintoma que
+a gente quer matar), faz backup com timestamp, valida, recarrega e **restaura o
+original se a validação falhar**. É idempotente, tem `--conferir`, e se o
+binário `caddy` não estiver no PATH ele diz que a edição foi feita mas NÃO
+validada — um "deu certo" ali seria mentira.
+
+#### ✍️ AS FONTES: OFL, e vêm direto pra VPS (22/08)
+
+Pergunta do Dre: *"como vamos pegar as fontes? eu baixo pelo windows?"* Não.
+`baixar_fontes.py` traz **Anton** e **Archivo Black** do repositório público do
+Google direto pra `assets/brand`. Testado de verdade antes de escrever o script:
+`raw.githubusercontent.com/google/fonts/main/ofl/...` responde 200 (o
+`github.com/.../raw/...` não).
+
+⚠️ **LICENÇA, porque a gente monetiza:** as duas são **SIL Open Font License
+1.1** — uso comercial permitido, inclusive embutir em imagem publicada. A
+obrigação prática é manter o aviso junto, então o script baixa o `OFL.txt` de
+cada uma pra `assets/brand/licencas/`, em vez de pegar só o `.ttf`.
+
+⚠️ **Piso de 20 KB no download.** Um 404 do GitHub chega como página HTML de
+~400 bytes; gravar isso com nome `.ttf` deixaria a fonte "instalada" e quebrada,
+e o Pillow só reclamaria na hora de renderizar, longe daqui. E depois de baixar
+ele ABRE a fonte pra valer — fonte quebrada é pior que fonte ausente, porque a
+ausente cai na Montserrat e o carrossel sai.
+
+**O efeito é grande**: com a Anton a capa passou de "texto grande" a cartaz —
+é a diferença entre a nossa capa e as referências, e ela estava toda na fonte.
+
+**Sobre o template: o Dre confirmou que pode ser FIXO por conta.** Já é: cor de
+destaque por nicho + logo por nicho + fundo por nicho. Nada varia por post.
+
 #### Ainda falta
 1. **Rota no Caddy** — sem ela, carrossel e story de imagem não saem do lugar.
    O 404 do `--teste` de 22/08 é o módulo funcionando, não um defeito.

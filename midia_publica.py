@@ -38,7 +38,8 @@
 #   from midia_publica import publicar, limpar
 #   url = publicar("/root/jarvis/pronto_carrossel/slug/1.jpg")
 #
-#   python3 midia_publica.py --caddy     # imprime a rota pro Caddyfile
+#   python3 midia_publica.py --instalar-caddy   # instala a rota SOZINHO
+#   python3 midia_publica.py --caddy     # só imprime a rota pro Caddyfile
 #   python3 midia_publica.py --teste     # publica 1 arquivo e prova que abre
 #   python3 midia_publica.py --limpar    # força a coleta de lixo agora
 
@@ -229,6 +230,111 @@ _CADDY = """\
 """
 
 
+def _cli_instalar_caddy(aplicar: bool) -> int:
+    """Insere a rota /midia no Caddyfile, com rede de segurança.
+
+    ⚠️ ISTO EXISTE PORQUE O PASSO MANUAL FALHOU DUAS VEZES SEGUIDAS (22/08).
+    Eu mandava `--caddy` imprimir a rota e pedia pra colar no arquivo. O Dre
+    colou o BLOCO DE COMANDOS inteiro no terminal — e a linha "# cola no
+    /etc/caddy/Caddyfile" virou comentário do bash. O `caddy validate` então
+    respondeu "Valid configuration", porque o arquivo ESTÁ válido: ele só não
+    tem a rota. Dois sinais verdes e o 404 continuou.
+
+    Instrução no meio de uma sequência de comandos não é instrução, é um
+    comando que não roda. Então vira comando.
+
+    A rede: backup com timestamp → escreve → `caddy validate` → se falhar,
+    RESTAURA e sai. Nunca deixa o Caddy com config quebrada."""
+    import shutil
+    import subprocess
+    from datetime import datetime
+
+    cf = Path(os.environ.get("CADDYFILE", "/etc/caddy/Caddyfile"))
+    if not cf.exists():
+        print(f"❌ não achei {cf}. Se o Caddy está noutro lugar: "
+              f"CADDYFILE=/caminho/Caddyfile python3 midia_publica.py --instalar-caddy")
+        return 1
+
+    texto = cf.read_text(encoding="utf-8")
+    if "/midia" in texto:
+        print(f"✅ {cf} já tem uma rota /midia — nada a fazer.")
+        print("   Se o --teste ainda dá 404, o problema é outro: confira se a "
+              "rota está ANTES do reverse_proxy e se o Caddy foi recarregado.")
+        return 0
+
+    # acha o bloco do host e a chave que o abre
+    host = _base_url().split("//", 1)[-1].split("/", 1)[0]
+    pos = texto.find(host)
+    if pos < 0:
+        print(f"❌ não achei um bloco de '{host}' em {cf}.")
+        print("   Cole a rota à mão (python3 midia_publica.py --caddy) ou me "
+              "mande a saída de:  cat /etc/caddy/Caddyfile")
+        return 1
+    abre = texto.find("{", pos)
+    if abre < 0:
+        print(f"❌ achei '{host}' mas não a chave '{{' que abre o bloco.")
+        return 1
+    fim_linha = texto.find("\n", abre)
+    if fim_linha < 0:
+        fim_linha = len(texto)
+
+    # ⚠️ ENTRA LOGO NA PRIMEIRA LINHA DO BLOCO, e isso é o ponto: se entrasse
+    # depois do `reverse_proxy` solto, o Caddy mandaria /midia/... pro Flask do
+    # painel do TikTok e a Meta receberia um 404 de HTML — que é EXATAMENTE o
+    # sintoma que a gente está tentando resolver.
+    rota = (f"\n\thandle_path /midia/* {{\n"
+            f"\t\troot * {_pasta()}\n"
+            f"\t\tfile_server\n"
+            f"\t}}\n")
+    novo = texto[:fim_linha + 1] + rota + texto[fim_linha + 1:]
+
+    print(f"📄 {cf}")
+    print(f"📍 inserindo a rota como PRIMEIRA regra do bloco '{host}':")
+    print("".join(f"      {l}\n" for l in rota.strip().splitlines()))
+
+    if not aplicar:
+        print("🧪 conferência: nada foi gravado. Rode sem --conferir pra aplicar.")
+        return 0
+
+    bak = cf.with_name(cf.name + f".bak-{datetime.now():%Y%m%d-%H%M%S}")
+    shutil.copy2(cf, bak)
+    cf.write_text(novo, encoding="utf-8")
+    print(f"💾 backup em {bak}")
+
+    try:
+        r = subprocess.run(["caddy", "validate", "--config", str(cf)],
+                           capture_output=True, text=True)
+    except FileNotFoundError:
+        # ⚠️ SEM O BINÁRIO, NÃO DÁ PRA VALIDAR — e um "deu certo" aqui seria
+        # mentira. Mantém a edição (ela é uma inserção simples e o backup está
+        # ali), mas diz em voz alta que a rede de segurança não rodou.
+        print("⚠️  não achei o binário `caddy` no PATH — a edição FOI feita "
+              "mas NÃO foi validada.")
+        print(f"   Confira e recarregue à mão:\n"
+              f"     caddy validate --config {cf} && systemctl reload caddy\n"
+              f"   Se algo der errado:  cp {bak} {cf}")
+        return 1
+    if r.returncode != 0:
+        shutil.copy2(bak, cf)
+        print(f"❌ o Caddyfile não validou — RESTAUREI o original:\n"
+              f"{(r.stderr or r.stdout)[-600:]}")
+        return 1
+    print("✅ Caddyfile válido.")
+
+    try:
+        r = subprocess.run(["systemctl", "reload", "caddy"],
+                           capture_output=True, text=True)
+    except FileNotFoundError:
+        print("⚠️  validou, mas não achei `systemctl`. Recarregue o Caddy à mão.")
+        return 1
+    if r.returncode != 0:
+        print(f"⚠️  validou mas o reload falhou: {(r.stderr or r.stdout)[-300:]}")
+        print("   Rode à mão:  systemctl reload caddy")
+        return 1
+    print("🔄 Caddy recarregado.\n")
+    return _cli_teste()
+
+
 def _cli_teste() -> int:
     alvo = _pasta() / ".teste"
     try:
@@ -270,10 +376,12 @@ def main() -> int:
     if "--limpar" in args:
         print(f"🧹 {limpar(0.0)} arquivo(s) removido(s) de {_pasta()}")
         return 0
+    if "--instalar-caddy" in args:
+        return _cli_instalar_caddy(aplicar="--conferir" not in args)
     if "--teste" in args:
         return _cli_teste()
     print(__doc__ or "")
-    print("Use --caddy, --teste ou --limpar")
+    print("Use --instalar-caddy, --caddy, --teste ou --limpar")
     return 0
 
 
