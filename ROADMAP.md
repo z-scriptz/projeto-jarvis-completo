@@ -5098,6 +5098,40 @@ Estado da infra do carrossel: `/var/www/jarvis-midia` (755) servida em
 `/midia` pelo Caddy · Anton + Archivo Black em `assets/brand` · uploader
 patchado com `postar_instagram_carrossel` · brain, render e ledger no lugar.
 
+#### 🎠🎉 O PRIMEIRO CARROSSEL NO AR (22/08, 21h44)
+
+    ✅ Carrossel publicado [@topshopcasa_]
+       https://www.instagram.com/p/DcXOszEFCiw/
+    💬 1º comentário postado (17972306502124303)
+
+Formato `erros`, 5 slides, legenda de 235 caracteres, 1º comentário junto. O
+ciclo inteiro — escolher formato → escrever texto → baixar foto → desenhar →
+publicar → registrar — rodou sozinho num comando.
+
+**⚠️ E ELE SAIU COM A VERSÃO ERRADA DO BRAIN.** Dois sintomas no log, e os dois
+apontam pra mesma coisa: `capa limpa: nenhum slide trouxe foto` (com 39 produtos
+com foto na fila) e — a prova — **nenhum slide de QUEBRA e nenhum de RESUMO**.
+O `carrossel_brain.py` da VPS parou em `7bd4ae9`; a sequência narrativa e o
+`capa.foto` entraram em `9c85624`. Os deploys seguintes trouxeram
+`carrossel_render.py`, `midia_publica.py` e `baixar_fontes.py` — o brain, não.
+
+⚠️ **A CULPA É DO MÉTODO, NÃO DO DEDO.** Eu vinha mandando
+`git show FETCH_HEAD:<arquivo> > <arquivo>` para os arquivos daquela rodada, e
+esse comando **sempre funciona** — inclusive quando falta um arquivo na lista.
+Ele não tem como dizer "o brain está atrasado", porque nem olha pro brain. O
+projeto TEM a ferramenta certa pra isso e eu não estava usando: o
+`deploy_seguro.py` classifica cada arquivo em IGUAL / **ATRASADO** / DIVERGENTE
+e aceita vários de uma vez. ATRASADO é exatamente este caso.
+
+**Os arquivos do carrossel — a lista canônica, todos de RAIZ:**
+
+    cd ~/jarvis && git fetch pjc claude/opa-clau-dgs591
+    python3 deploy_seguro.py carrossel_brain.py carrossel_render.py \
+                             midia_publica.py baixar_fontes.py
+
+(`patch_carrossel_uploader.py` é à parte: `agents/meta_uploader.py` está
+DIVERGENTE e se atualiza pelo patch, não pelo deploy.)
+
 #### Ainda falta
 1. **Ciclos e horários no `daemon_maestro`** — hoje ele só tem `horarios` +
    `posts_por_dia_semana` pro Reel. Precisa de `carrossel_horarios` separado,
