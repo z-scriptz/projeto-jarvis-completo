@@ -5194,6 +5194,45 @@ Escurecida, foto de catálogo vira mancha; foto de ambiente vira capa. Isso não
 se resolve com layout, e é onde o "conteúdo 100% autoral" que o Dre quer fazer
 depois entra de verdade.
 
+#### 🖼️ "NÃO TEM COMO FAZER ESSAS CAPAS?" — tem, e a peça era a IMAGEM (22/08)
+
+Pergunta do Dre depois de ver o resultado ao lado da referência. A resposta é
+sim, e o que faltava não era layout: **o ChatGPT não MONTA aquelas capas, ele
+GERA a imagem**. A gente montava texto sobre foto de catálogo da Shopee.
+
+⚠️ **MAS A IA GERA SÓ O FUNDO AQUI, NÃO A CAPA INTEIRA.** A IA erra texto —
+em português, com acento, ela troca letra, deforma glifo e inventa palavra, e
+quando erra não dá pra consertar, só regerar. A divisão que funciona:
+
+    IA  → o ambiente   (onde ela é ótima e a gente não tem como fazer)
+    PIL → o texto      (onde ela é ruim e a gente já é exato)
+
+É o melhor dos dois e é reversível: fundo ruim se troca sem tocar no texto.
+
+⚠️ **E O FUNDO É REUSADO, NÃO GERADO POR POST.** Um por carrossel seriam ~60
+imagens/mês por conta. O fundo é CENÁRIO, não conteúdo: 6 por nicho rodam o mês
+inteiro sem ninguém notar, porque o que o olho lê primeiro (hook, tarja,
+produto) muda a cada post.
+
+`fundo_ia.py` (novo) — Fal (`flux/schnell`), 1080×1350 na proporção certa,
+cache em `assets/fundos/<nicho>/`. ⚠️ Todo prompt termina com
+`no text, no words, no logos` (fundo com letra da IA briga com o hook e não tem
+conserto) e `empty negative space on the upper left` (é onde o hook mora; se o
+assunto da foto ficar embaixo dele, o véu não salva). ⚠️ **Para no primeiro
+erro**: chave errada ou crédito no fim faz as outras 5 falharem igual, e
+insistir gasta tempo e possivelmente dinheiro.
+
+No render a ordem é **fundo à mão → fundo de IA → foto do produto**. ⚠️ O fundo
+de IA vem ANTES da foto, e essa ordem é o ponto: o brain SEMPRE preenche
+`capa.foto`, então deixá-la na frente faria o fundo gerado nunca ser usado. Sem
+fundo gerado, cai na foto do produto — o que já funcionava — e nada quebra.
+
+**Correção minha:** eu disse que a capa do @topshoptech_ tinha saído em
+Montserrat. O `--diag` mostrou `fonte de título em uso:
+/root/jarvis/assets/brand/Anton-Regular.ttf` — a Anton estava em uso, e eu
+julguei pelo screenshot reduzido. O `--diag` continua valendo: ele é a resposta
+pra uma pergunta que eu não tinha como responder de outro jeito.
+
 #### Ainda falta
 1. **Ciclos e horários no `daemon_maestro`** — hoje ele só tem `horarios` +
    `posts_por_dia_semana` pro Reel. Precisa de `carrossel_horarios` separado,

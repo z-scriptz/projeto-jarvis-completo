@@ -773,8 +773,27 @@ def renderizar(plano: dict, saida) -> list:
     # ⚠️ A CAPA DRAMÁTICA EXIGE FOTO. Sem foto ela seria um retângulo preto com
     # texto — pior que a capa limpa. Então a escolha é pelo material que existe,
     # não por preferência: tem foto → dramática; não tem → limpa.
-    foto_capa = (plano.get("capa") or {}).get("foto") or next(
-        (s.get("foto") for s in itens if s.get("foto")), "")
+    # ⚠️ O FUNDO DE IA VEM ANTES DA FOTO DO PRODUTO, e é a diferença entre a
+    # nossa capa e as referências: foto de catálogo escurecida vira mancha,
+    # ambiente com profundidade vira capa. Sem fundo gerado, cai na foto do
+    # produto (o que funcionava antes) e nada quebra.
+    # A ordem é: fundo escolhido à mão → fundo de IA → foto do produto.
+    # ⚠️ O FUNDO DE IA VEM ANTES DA FOTO DO PRODUTO, não depois, e essa ordem é
+    # o ponto: o brain SEMPRE preenche `capa.foto` com a foto do produto, então
+    # deixar ela na frente faria o fundo gerado nunca ser usado. Sem fundo
+    # gerado, cai na foto do produto — o que já funcionava — e nada quebra.
+    foto_capa = (plano.get("capa") or {}).get("fundo") or ""
+    if not foto_capa:
+        try:
+            from fundo_ia import fundo_do_nicho
+            foto_capa = fundo_do_nicho(nicho)
+            if foto_capa:
+                log.info(f"   🖼️  fundo de IA: {Path(foto_capa).name}")
+        except Exception:
+            pass
+    if not foto_capa:
+        foto_capa = ((plano.get("capa") or {}).get("foto")
+                     or next((s.get("foto") for s in itens if s.get("foto")), ""))
     if _capa_dramatica_ligada() and foto_capa and Path(foto_capa).exists():
         telas.append(_slide_capa_dramatica(plano, total, Path(foto_capa), avisos))
     else:
