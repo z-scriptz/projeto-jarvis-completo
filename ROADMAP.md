@@ -5430,6 +5430,47 @@ modelo `salva` usa o texto do plano.
 → "QUERO", `comparacao` → "QUAL"), ou de `cta.palavra` no plano. Pedir "comenta
 QUERO" num carrossel de erros é o mesmo desencontro que o 1º comentário tinha.
 
+#### 🖼️ FOTO NOS SLIDES — mas não em todos, e o motivo está nas referências
+
+O Dre: *"o ideal é que cada slide tenha um fundo chamativo, e não fique só com
+cores, mas literalmente imagens"*. Certo — e o Claude Design confirmou o
+limite dele mesmo: *"não consigo gerar imagens — cada slide tem um espaço de
+fundo com a descrição da foto ideal"*.
+
+⚠️ **MAS OLHANDO AS REFERÊNCIAS COM ATENÇÃO, ELAS NÃO PÕEM FOTO EM TODO SLIDE**
+— e o motivo aparece nelas mesmas:
+
+    CAPA e FECHO  → foto cheia, escurecida. É onde tem 5 palavras.
+    CONTEÚDO      → foto SÓ NO TOPO, com fade pro creme. É onde tem um
+                    PARÁGRAFO, e parágrafo sobre foto se lê mal.
+
+A foto entra onde ajuda o olho a **parar** e sai de onde atrapalha o olho a
+**ler**. "Foto em tudo" deixaria o carrossel bonito na miniatura e ilegível no
+celular — que é onde ele é lido.
+
+- **Capa**: `.fotocheia` + gradiente escuro. A mancha de cor cai de .13 pra .07
+  quando há foto, senão as duas competem.
+- **Conteúdo**: `.fototopo` de 620px + fade que morre no creme aos 76%.
+- **Fecho**: ⚠️ **`mix-blend-mode:multiply` NA COR DA CONTA**, não véu preto —
+  véu apaga a foto e sobra cinza; o multiply TINGE a foto na cor da marca e ela
+  continua se lendo como foto.
+- ⚠️ **A fonte da imagem é plugável de propósito**: qualquer JPG em
+  `assets/fundos/<nicho>/` entra no rodízio. Foto sua, print, imagem gerada,
+  banco de imagem — o módulo não sabe de onde veio. A decisão de ONDE arrumar
+  foto é do Dre e mudou duas vezes hoje; ela não podia ficar soldada no código
+  do desenho.
+
+⚠️ **BUG QUE EU MESMO PLANTEI DUAS HORAS ANTES.** A regra
+`.slide > *:not(.mancha) { position:relative }` — que eu tinha criado pra
+resolver a mancha cobrindo o texto — sobrescrevia o `position:absolute` das
+camadas de foto. O estrago era invisível de duas formas ao mesmo tempo: a
+`fotocheia` da capa perdia o `inset:0`, virava um div de altura zero e **a foto
+simplesmente não aparecia**; a `fototopo` do conteúdo caía no fluxo e passava a
+respeitar o padding, ganhando **margem branca dos lados**. Nenhum dos dois dá
+erro — os dois só saem errados. Um seletor que exclui por classe resolve, mas a
+lição é outra: **conserto que muda regra global cria o próximo defeito em outro
+lugar**, e o outro lugar não avisa.
+
 #### Ainda falta
 1. **Ciclos e horários no `daemon_maestro`** — hoje ele só tem `horarios` +
    `posts_por_dia_semana` pro Reel. Precisa de `carrossel_horarios` separado,

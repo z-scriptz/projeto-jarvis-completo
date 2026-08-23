@@ -92,6 +92,45 @@ def _paleta(nicho: str) -> dict:
     return PALETAS.get((nicho or "geral").lower(), PALETAS["geral"])
 
 
+# ══════════════════════════════════════════════════════════════════════════
+# FOTO DE FUNDO
+#
+# ⚠️ O Dre: *"o ideal é que cada slide tenha um fundo chamativo, e não fique só
+# com cores, mas literalmente imagens"*. Certo — mas olhando as referências do
+# Claude Design com atenção, elas **não** põem foto em todo slide, e o motivo
+# aparece nelas mesmas:
+#
+#   CAPA e FECHO  → foto cheia, escurecida. É onde tem 5 palavras.
+#   CONTEÚDO      → foto SÓ NO TOPO, com fade pro creme (ou fundo sólido).
+#                   É onde tem um PARÁGRAFO, e parágrafo sobre foto se lê mal.
+#
+# Ou seja: a foto entra onde ela ajuda o olho a parar, e sai de onde ela
+# atrapalha o olho a ler. Copiar "foto em tudo" deixaria o carrossel bonito na
+# miniatura e ilegível no celular — que é onde ele é lido.
+#
+# ⚠️ E A FONTE DA IMAGEM É PLUGÁVEL DE PROPÓSITO: qualquer JPG em
+# `assets/fundos/<nicho>/` entra no rodízio. Foto sua, print, imagem gerada,
+# banco de imagem — o módulo não sabe e não precisa saber de onde veio. Assim
+# a decisão de ONDE arrumar foto (que é sua, e mudou duas vezes hoje) não fica
+# soldada no código do desenho.
+# ══════════════════════════════════════════════════════════════════════════
+def _fundo(plano: dict, item: dict = None) -> str:
+    """data: URI da foto de fundo, ou "" — nessa ordem: a do slide, a do
+    plano, uma do acervo do nicho."""
+    for cand in ((item or {}).get("fundo"), (item or {}).get("foto"),
+                 (plano.get("capa") or {}).get("fundo")):
+        if cand and Path(cand).exists():
+            return _b64(cand)
+    try:
+        from fundo_ia import fundo_do_nicho
+        alvo = fundo_do_nicho(plano.get("nicho", "geral"))
+        if alvo:
+            return _b64(alvo)
+    except Exception:
+        pass
+    return ""
+
+
 def _brand() -> Path:
     try:
         import render as R
@@ -165,12 +204,33 @@ body {{ width:{LARG}px; height:{ALT}px; overflow:hidden; font-family:'Corpo',
    sangra pra fora do quadro de propósito — forma cortada pela borda dá
    movimento, forma inteira e centrada dá apostila. */
 .mancha {{ position:absolute; border-radius:50%; }}
+/* ⚠️ A FOTO É UMA CAMADA, NÃO O `background` DO SLIDE. Como camada ela recebe
+   filtro próprio (saturação, contraste, brilho) sem afetar o texto — foto de
+   catálogo vem lavada e sem contraste, e é o filtro que tira a cara de
+   catálogo. No `background` do slide, qualquer filtro apagaria a letra junto. */
+.fototopo {{ position:absolute; left:0; right:0; top:0;
+             background-position:center; background-size:cover;
+             filter:saturate(1.12) contrast(1.06) brightness(.86); }}
+.fotocheia {{ position:absolute; inset:0; background-position:center;
+              background-size:cover;
+              filter:saturate(1.1) contrast(1.05) brightness(.6); }}
+/* o degradê que funde a foto no fundo sólido — é ele que deixa o parágrafo
+   pousar em cor chapada mesmo com foto no mesmo slide */
+.fade {{ position:absolute; left:0; right:0; }}
 /* ⚠️ ELEMENTO POSICIONADO PINTA DEPOIS DO ESTÁTICO, mesmo vindo antes no
    HTML. Sem esta linha a mancha cobria o texto: no 1º teste a palavra "que"
    de "Guardar tudo o que sobrou" simplesmente sumiu atrás do círculo, e o
    título ficou agramatical sem nenhum erro aparecer em lugar nenhum. É o pior
    tipo de defeito visual — o post sai, publica, e só um humano lendo percebe. */
-.slide > *:not(.mancha) {{ position:relative; z-index:1; }}
+/* ⚠️ E AS CAMADAS DE FOTO PRECISAM FICAR DE FORA DESTA REGRA. Elas são
+   `position:absolute`; o `position:relative` daqui sobrescrevia isso e o
+   estrago era invisível de duas formas ao mesmo tempo: a `fotocheia` da capa
+   perdia o `inset:0`, virava um div de altura zero e a foto simplesmente não
+   aparecia; a `fototopo` do conteúdo caía no fluxo e passava a respeitar o
+   padding do slide, ganhando uma margem branca dos lados que denunciava a
+   montagem. Nenhum dos dois dá erro — os dois só saem errados. */
+.slide > *:not(.mancha):not(.fototopo):not(.fotocheia):not(.fade)
+  {{ position:relative; z-index:1; }}
 
 /* título: a serifada, com peso e SOFT altos. `wonk` liga as formas
    alternativas do Fraunces — é o detalhe que tira a cara de Times. */
@@ -227,10 +287,17 @@ def _html_capa(plano: dict, total: int) -> str:
     tag = _h.escape((plano.get("nicho") or "geral").upper())
     logo = _logo(plano.get("nicho", "geral"))
 
+    foto = _fundo(plano)
+    camada = (f'<div class="fotocheia" style="background-image:url({foto})"></div>'
+              f'<div class="fade" style="inset:0;background:linear-gradient('
+              f'180deg,{p["escuro"]}e6 0%,{p["escuro"]}b3 42%,'
+              f'{p["escuro"]}f2 100%)"></div>') if foto else ""
+
     return f"""<div class="slide" style="background:{p['escuro']};
      color:{p['clarinho']}">
+  {camada}
   <div class="mancha" style="width:760px;height:760px;right:-260px;top:-230px;
-       background:{p['acento']};opacity:.13"></div>
+       background:{p['acento']};opacity:{'.07' if foto else '.13'}"></div>
   <div class="tag"><b>{tag}</b><span>{sub}</span></div>
   <h1 id="titulo" style="margin-top:auto;margin-bottom:44px;font-size:118px">
     {_marcar(hook, p['acento'])}</h1>
@@ -272,9 +339,22 @@ def _html_conteudo(item: dict, i: int, total: int, plano: dict) -> str:
                  if corpo else "")
         tam = 92
 
+    # ⚠️ A FOTO PARA EM 46% E VIRA CREME. Aqui embaixo mora o parágrafo, e
+    # parágrafo sobre foto se lê mal por melhor que seja o véu — é a mesma
+    # divisão que as referências do Claude Design fazem: imagem onde tem 5
+    # palavras, cor chapada onde tem texto corrido.
+    fundo = _fundo(plano, item) if item.get("fundo") else ""
+    topo = (f'<div class="fototopo" style="height:620px;'
+            f'background-image:url({fundo})"></div>'
+            f'<div class="fade" style="top:0;height:620px;'
+            f'background:linear-gradient(180deg,rgba(0,0,0,.18) 0%,'
+            f'{p["creme"]}00 30%,{p["creme"]}e6 76%,{p["creme"]} 100%)"></div>'
+            ) if fundo else ""
+
     return f"""<div class="slide" style="background:{p['creme']};color:#1C1A18">
+  {topo}
   <div class="mancha" style="width:660px;height:660px;right:-190px;top:-220px;
-       background:{p['sombra']}"></div>
+       background:{p['sombra']};opacity:{'.45' if fundo else '1'}"></div>
   <div class="tag" style="gap:26px">
     <div class="num">{i - 1}</div>
     {'<div class="rotulo">' + rotulo + '</div>' if rotulo else ''}
@@ -430,8 +510,22 @@ def _fecho_salva(plano, p, cta, handle, total):
     """O clássico. Fica na roda porque salvamento é o sinal que a gente mede."""
     import html as _h
     linhas = _h.escape(" ".join(str(x) for x in (cta.get("linhas") or [])))
+    # ⚠️ `mix-blend-mode:multiply` NA COR DA CONTA, não um véu preto: o véu
+    # apaga a foto e sobra cinza; o multiply TINGE a foto na cor da marca e ela
+    # continua se lendo como foto. É o que faz o fecho parecer da mesma família
+    # que a capa sem ser a mesma imagem.
+    foto = _fundo(plano)
+    camada = (f'<div class="fotocheia" style="background-image:url({foto});'
+              f'filter:saturate(.4) contrast(1.1) brightness(.9)"></div>'
+              f'<div class="fade" style="inset:0;background:{p["acento"]};'
+              f'mix-blend-mode:multiply"></div>'
+              f'<div class="fade" style="inset:0;background:linear-gradient('
+              f'180deg,{p["acento"]}66 0%,{p["acento"]}d9 100%)"></div>'
+              ) if foto else ""
+
     return f"""<div class="slide" style="background:{p['acento']};
      color:{p['clarinho']}">
+  {camada}
   <div class="mancha" style="width:820px;height:820px;right:-210px;
        bottom:-300px;background:rgba(255,255,255,.10)"></div>
   <div class="rotulo" style="color:{p['clarinho']};opacity:.8">
