@@ -44,6 +44,7 @@
 #   python3 midia_publica.py --limpar    # força a coleta de lixo agora
 
 import os
+import re
 import sys
 import time
 import shutil
@@ -316,9 +317,22 @@ def ver_pasta(pasta) -> str:
     if not origem.is_dir():
         raise MidiaPublicaErro(f"não é uma pasta: {origem}")
 
+    # ⚠️ SÓ OS SLIDES. A pasta do carrossel também guarda `produto_1.jpg`,
+    # `produto_2.jpg` e outros assets de trabalho. Listando tudo, o preview
+    # mostrava duas fotos cruas de catálogo no fim — e quem revisou (o Dre e o
+    # ChatGPT) leu aquilo como parte do post: "imagens feias, parece que vieram
+    # do Google", "o produto não tem relação com o conteúdo", "diz 10 slides
+    # mas numera até 8". **Três críticas fortes, e nenhuma era do carrossel.**
+    # Ferramenta de revisão que mostra o que não vai ao ar não é neutra: ela
+    # inventa defeito e faz a gente consertar o que não está quebrado.
     imgs = sorted(a for a in origem.iterdir()
                   if a.is_file() and a.suffix.lower() in
-                  (".jpg", ".jpeg", ".png", ".webp"))
+                  (".jpg", ".jpeg", ".png", ".webp")
+                  and re.fullmatch(r"\d{2,3}", a.stem))
+    if not imgs:   # pasta sem slides numerados: mostra o que houver
+        imgs = sorted(a for a in origem.iterdir()
+                      if a.is_file() and a.suffix.lower() in
+                      (".jpg", ".jpeg", ".png", ".webp"))
     if not imgs:
         raise MidiaPublicaErro(f"nenhuma imagem em {origem}")
 

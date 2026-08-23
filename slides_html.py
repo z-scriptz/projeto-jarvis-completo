@@ -461,6 +461,29 @@ def _html_capa(plano: dict, total: int) -> str:
 # CERTA pra cada tópico (abajur em "iluminação quente", cesto em "cestos"). O
 # acervo é de ambiente genérico do nicho — casa a estética, não o assunto.
 # ══════════════════════════════════════════════════════════════════════════
+_RX_NUM = re.compile(r"(\d+)")
+
+
+def _numero_do_item(ctx: dict) -> int:
+    """O número QUE O TEXTO DIZ, não o índice do slide.
+
+    ⚠️ TRÊS NUMERAÇÕES BRIGANDO NO MESMO SLIDE (23/08): a bola dizia "3" (índice
+    do slide), o rótulo dizia "HÁBITO 2" (o item de verdade) e o contador dizia
+    "4/8". O leitor não tem como saber qual seguir — e o `ordem` era só
+    `i - 1`, que coincide com o item apenas quando o carrossel não tem slide de
+    abertura extra. Quando o rótulo traz número, ele MANDA."""
+    m = _RX_NUM.search(ctx.get("rotulo") or "")
+    return int(m.group(1)) if m else ctx["ordem"]
+
+
+def _marca_de_ordem(ctx: dict, p: dict) -> str:
+    """UMA marca de ordem por slide, nunca duas. O rótulo ganha da bola porque
+    ele diz o que é ("ERRO Nº 2"), e a bola só diz um algarismo solto."""
+    if ctx["rotulo"]:
+        return f'<div class="rotulo">{ctx["rotulo"]}</div>'
+    return f'<div class="num">{_numero_do_item(ctx)}</div>'
+
+
 def _comp_cheia(item, i, total, plano, p, ctx) -> str:
     """Foto dominante, texto mínimo. ~80% imagem. O slide que dá impacto."""
     import html as _h
@@ -492,17 +515,29 @@ def _comp_numero(item, i, total, plano, p, ctx) -> str:
     de um slide escuro só sobrava a `meio` (as outras claras exigem foto ou
     lista), e o carrossel virava escuro→meio→escuro→meio. Alternância perfeita
     é um padrão como qualquer outro — só demora um slide a mais pra cansar."""
-    n = ctx["ordem"]
+    n = _numero_do_item(ctx)
     claro = ctx.get("claro", False)
     fundoS = p["clarinho"] if claro else p["escuro"]
     corS = "#1C1A18" if claro else p["clarinho"]
+    # ⚠️ A VERSÃO CLARA TAMBÉM LEVA FOTO, em faixa no alto. Sem isso ela era
+    # texto sobre creme, e o carrossel de 23/08 saiu com 4 de 6 slides sem
+    # imagem nenhuma — "só uma paleta laranja, outra branca", nas palavras do
+    # Dre. Com 10 fundos no acervo, slide sem foto passa a ser escolha e não
+    # consequência.
+    faixa = ('<div class="fototopo" style="height:520px;background-image:url('
+             + ctx['fundo'] + ')"></div><div class="fade" style="top:0;'
+             'height:520px;background:linear-gradient(180deg,rgba(0,0,0,.44) 0%,'
+             + p['clarinho'] + '00 44%,' + p['clarinho'] + 'e6 80%,'
+             + p['clarinho'] + ' 100%)"></div>') if (claro and ctx['fundo']) else ''
     return f"""<div class="slide" style="background:{fundoS};color:{corS}">
   {'<div class="fotocheia" style="background-image:url(' + ctx['fundo'] + ');'
-   'filter:saturate(1.05) contrast(1.05) brightness(.34)"></div>'
+   'filter:saturate(1.05) contrast(1.05) brightness(.40)"></div>'
    if ctx['fundo'] and not claro else ''}
+  {faixa}
   <div class="gigante" style="color:{p['acento']};
-       opacity:{'.20' if claro else '.16'}">{n:02d}</div>
-  {_cabecalho(plano, i, total, not claro)}
+       opacity:{'.16' if claro else '.20'};
+       {'top:430px' if faixa else ''}">{n:02d}</div>
+  {_cabecalho(plano, i, total, (not claro) or bool(faixa))}
   <div style="margin-top:auto;max-width:86%">
     <h1 style="font-size:104px">{_marcar(ctx['titulo'], p['acento'])}</h1>
     {'<p class="corpo" style="margin-top:32px;opacity:.78">' + ctx['corpo']
@@ -565,14 +600,13 @@ def _comp_meio(item, i, total, plano, p, ctx) -> str:
     return f"""<div class="slide" style="background:{p['creme']};color:#1C1A18">
   {'<div class="fototopo" style="height:640px;background-image:url('
    + ctx['fundo'] + ')"></div><div class="fade" style="top:0;height:640px;'
-   'background:linear-gradient(180deg,rgba(0,0,0,.30) 0%,' + p['creme']
-   + '00 34%,' + p['creme'] + 'e6 78%,' + p['creme'] + ' 100%)"></div>'
-   if ctx['fundo'] else ''}
-  {_cabecalho(plano, i, total, False)}
+   'background:linear-gradient(180deg,rgba(0,0,0,.44) 0%,rgba(0,0,0,.10) 18%,'
+   + p['creme'] + '00 40%,' + p['creme'] + 'e6 78%,' + p['creme']
+   + ' 100%)"></div>' if ctx['fundo'] else ''}
+  {_cabecalho(plano, i, total, bool(ctx['fundo']))}
   <div style="margin-top:auto">
     <div class="tag" style="gap:26px;margin-bottom:30px">
-      <div class="num">{ctx['ordem']}</div>
-      {'<div class="rotulo">' + ctx['rotulo'] + '</div>' if ctx['rotulo'] else ''}
+      {_marca_de_ordem(ctx, p)}
     </div>
     <h1 style="font-size:82px">{_marcar(ctx['titulo'], p['acento'])}</h1>
     {'<p class="corpo" style="margin-top:30px;opacity:.76">' + ctx['corpo']
@@ -632,7 +666,7 @@ def _elegiveis(ctx: dict) -> list:
     return fora or ["meio"]
 
 
-def _escolher_comp(ctx: dict, anterior: str, tom_ant: str = "") -> tuple:
+def _escolher_comp(ctx: dict, recentes: list, tom_ant: str = "") -> tuple:
     """Nunca a mesma da anterior; quando dá, o tom oposto.
 
     Devolve (nome, tom). O tom sai daqui e não de dentro da composição porque a
@@ -641,10 +675,25 @@ def _escolher_comp(ctx: dict, anterior: str, tom_ant: str = "") -> tuple:
     ⚠️ A ALTERNÂNCIA É PREFERÊNCIA, NÃO LEI. Na 1ª versão eu filtrava pelo tom
     oposto e pronto: como só a `meio` é clara entre as de texto, TODO slide
     depois de um escuro virava `meio`, sempre. Sai um padrão e entra outro. Se
-    o tom oposto deixa uma opção só, ela leva vantagem — não exclusividade."""
+    o tom oposto deixa uma opção só, ela leva vantagem — não exclusividade.
+
+    ⚠️⚠️ E "NÃO REPETIR A ANTERIOR" NÃO BASTA — foi o que o carrossel de 23/08
+    provou, saindo assim:
+
+        meio → respiro → meio → respiro → numero → checklist
+
+    Nenhuma composição repetida em sequência, e mesmo assim **A→B→A→B**, que é
+    um padrão tão legível quanto A→A→A. O Dre já tinha avisado ("visualmente
+    cansa rápido") e eu implementei uma regra que só olhava UM slide pra trás.
+    Agora a janela é dos DOIS últimos: alternar exige três composições, e três
+    alternando já não parece fórmula."""
     op = _elegiveis(ctx)
-    if len(op) > 1 and anterior in op:
-        op = [o for o in op if o != anterior]
+    janela = [c for c in recentes[-2:] if c]
+    livres = [o for o in op if o not in janela]
+    if livres:
+        op = livres
+    elif len(op) > 1 and janela:            # a janela apagou tudo: cede o
+        op = [o for o in op if o != janela[-1]] or op   # último, não os dois
 
     if tom_ant:
         oposto = "claro" if tom_ant == "escuro" else "escuro"
@@ -663,7 +712,7 @@ def _escolher_comp(ctx: dict, anterior: str, tom_ant: str = "") -> tuple:
 
 
 def _html_conteudo(item: dict, i: int, total: int, plano: dict,
-                   anterior: str = "", tom_ant: str = "") -> tuple:
+                   recentes: list = None, tom_ant: str = "") -> tuple:
     import html as _h
     p = _paleta(plano.get("nicho", "geral"))
     ctx = {
@@ -678,7 +727,7 @@ def _html_conteudo(item: dict, i: int, total: int, plano: dict,
                      and Path(item["foto"]).exists() else ""),
         "fundo": _fundo(plano, item) if item.get("fundo") else "",
     }
-    nome, tom = _escolher_comp(ctx, anterior, tom_ant)
+    nome, tom = _escolher_comp(ctx, recentes or [], tom_ant)
     return COMPOSICOES[nome]["fn"](item, i, total, plano, p, ctx), nome, tom
 
 
@@ -1011,12 +1060,13 @@ def renderizar_slides(plano: dict, pasta) -> list:
         # O `anterior` é o estado que faz a regra funcionar. Sem ele cada slide
         # decidiria sozinho e duas composições iguais coladas voltariam a
         # acontecer — o defeito que esta biblioteca existe pra resolver.
-        anterior, tom_ant, usadas = "", "escuro", []   # a capa é sempre escura
+        recentes, tom_ant, usadas = [], "escuro", []  # a capa é sempre escura
         for k, item in enumerate(itens, start=2):
-            corpo, anterior, tom_ant = _html_conteudo(item, k, total, plano,
-                                                      anterior, tom_ant)
+            corpo, nome, tom_ant = _html_conteudo(item, k, total, plano,
+                                                  recentes, tom_ant)
             paginas.append(corpo)
-            usadas.append(f"{anterior}({tom_ant[0]})")
+            recentes.append(nome)
+            usadas.append(f"{nome}({tom_ant[0]})")
         paginas.append(_html_fecho(plano, total))
     except Exception as e:
         log.warning(f"   ⚠️  não montei o HTML ({type(e).__name__}: "

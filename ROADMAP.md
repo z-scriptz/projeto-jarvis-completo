@@ -5782,6 +5782,54 @@ porque é assim que o brain manda: **um exemplo que não passa por todos os
 caminhos é um teste que aprova o que não testou** (era o caso — a `cheia` nunca
 era exercitada).
 
+#### 🔬 O 1º CARROSSEL COM FOTO DE VERDADE — o que quebrou (23/08, noite)
+
+10 fundos do ChatGPT importados, carrossel produzido, revisado pelo Dre e pelo
+ChatGPT. **Cinco defeitos reais e três críticas que eram culpa da minha
+ferramenta de revisão.** A distinção importa mais que a lista.
+
+**⚠️ O `--ver` INVENTOU TRÊS DEFEITOS.** Ele listava *todas* as imagens da
+pasta, e a pasta do carrossel também guarda `produto_1.jpg` / `produto_2.jpg`
+(assets de trabalho). No preview apareciam duas fotos cruas de catálogo no fim,
+e quem revisou leu como parte do post: *"imagens feias, parece que vieram do
+Google"*, *"o produto não tem relação com o conteúdo"*, *"diz 10 slides mas
+numera até 8"*. **As três críticas eram do preview, não do carrossel** — o post
+tem 8 slides e termina no CTA. Agora o `--ver` só lista `\d{2,3}.jpg`.
+
+> **Ferramenta de revisão que mostra o que não vai ao ar não é neutra: ela
+> inventa defeito e faz a gente consertar o que não está quebrado.** É a irmã
+> gêmea do `--agenda` que mentia sobre domingo. Diagnóstico errado custa mais
+> que diagnóstico nenhum, porque vem com confiança junto.
+
+**Os defeitos reais:**
+
+1. **Cabeçalho invisível no `meio`.** Ele passava `escuro=False` (o slide é
+   creme) — mas o TOPO do slide é a FOTO, que é escura. Texto `#1C1A18` sobre
+   foto escura: sobrava só o "Shop", que é laranja e tinha contraste. **Terceira
+   vez na mesma família** (logo escura sobre escuro; "Shop" laranja sobre slide
+   laranja; agora cabeçalho escuro sobre foto escura). A lição que faltava
+   escrever: **o parâmetro não deve descrever a COR DO SLIDE, e sim o que está
+   ATRÁS DAQUELE ELEMENTO.** Agora é `_cabecalho(..., bool(ctx['fundo']))`.
+2. **⚠️ "NÃO REPETIR A ANTERIOR" NÃO BASTA.** Saiu
+   `meio → respiro → meio → respiro → numero → checklist`: nenhuma repetida em
+   sequência, e mesmo assim **A→B→A→B**, que é padrão tão legível quanto A→A→A.
+   Eu tinha implementado uma regra que olhava UM slide pra trás, contra um
+   pedido que era sobre a SÉRIE inteira. Agora a janela é dos **dois últimos** —
+   alternar passa a exigir três composições, e três já não parece fórmula.
+3. **Três numerações competindo no mesmo slide:** a bola dizia "3" (índice do
+   slide), o rótulo dizia "HÁBITO 2" (o item real) e o contador dizia "4/8". O
+   `ordem` era `i - 1`, que só coincide com o item quando não há slide de
+   abertura extra. Agora `_numero_do_item()` lê o número DO RÓTULO quando existe,
+   e `_marca_de_ordem()` garante **uma** marca por slide: rótulo OU bola, nunca
+   as duas.
+4. **4 de 6 slides sem imagem** — `respiro` não leva foto (é o contraste),
+   `numero` claro não levava, `checklist` não levava. Com 10 fundos no acervo,
+   slide sem foto tem que ser escolha, não consequência. `numero` claro ganhou
+   faixa de foto no alto.
+5. **Texto demais.** Um slide com 6 linhas de parágrafo explicando cerdas,
+   esponja e cantinhos. É o `CARR_PALAVRAS_CORPO=38` sendo generoso demais pra
+   celular. **Não mexido ainda** — é ajuste de brain, e mexer sem medir é chute.
+
 #### 🎯 DOUTRINA DE FORMATOS — o que o Dre trouxe (23/08)
 
 Ficam registrados aqui porque são decisão de produto, não de código, e a próxima
