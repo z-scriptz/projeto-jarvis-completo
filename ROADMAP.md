@@ -5678,6 +5678,31 @@ original é substituído (ou removido, se já houver o gêmeo).
     .venv/bin/python fundo_ia.py --importar casa --de ~/fundos-chatgpt/
     .venv/bin/python fundo_ia.py --listar        # avisa se sobrou PNG cru
 
+#### 👁️ `midia_publica.py --ver` — revisar sem publicar (23/08)
+
+⚠️ **ERA UM DEFEITO DE PROCESSO, E EU TINHA ESCRITO UMA INSTRUÇÃO IMPOSSÍVEL.**
+O "Ainda falta" dizia *"ligar depois de olhar alguns prontos"*. Só que o
+`--agora` monta os slides em `pronto_carrossel/` na VPS e imprime o CAMINHO —
+e quem aprova visual está no navegador, num computador que não vê aquele disco.
+Na prática o Dre só via o carrossel **depois de publicado no Instagram**: a
+revisão só existia quando já era tarde. Mesma família do `--prompt` mandando
+gerar 10 fundos quando só havia 3 cenas — conselho que não tem como cumprir.
+
+    .venv/bin/python midia_publica.py --ver          # o mais recente
+    .venv/bin/python midia_publica.py --ver <pasta>  # um específico
+
+Devolve **uma URL** com os slides em ordem, numerados, mais a `legenda.txt` no
+topo — abre no celular. Reusa o `publicar()`, então **não abre porta nova**: só
+escreve arquivo na pasta estática que o Caddy já serve, não recebe upload nem
+executa nada, e some sozinho no `limpar()` das 6 horas junto com os slides.
+
+Dois detalhes que só apareceram porque tirei print da página e olhei:
+- o contador fica à **direita**. No canto superior esquerdo mora a tag do nicho
+  — e é o espaço vazio que o prompt do fundo reserva. Contador de revisão
+  cobrindo justo o que se quer revisar não serve pra nada.
+- a legenda passa por escape de HTML. Ela vem do Gemini e é texto livre; um
+  `<` solto quebraria a página inteira em silêncio.
+
 #### Ainda falta
 1. ~~Ciclos e horários no `daemon_maestro`~~ ✅ feito
 2. **Ligar** (`carrossel_ligado: true`) depois de olhar alguns prontos.

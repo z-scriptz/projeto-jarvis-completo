@@ -258,6 +258,100 @@ def despublicar(url: str) -> bool:
 
 
 # ══════════════════════════════════════════════════════════════════════════
+# VER — a volta do laço
+# ══════════════════════════════════════════════════════════════════════════
+# ⚠️ O DEFEITO ERA DE PROCESSO, NÃO DE CÓDIGO (23/08). O `--agora casa` monta
+# 7 slides em `pronto_carrossel/` e imprime o CAMINHO. Só que quem precisa
+# aprovar o visual está no navegador, e o caminho é de um disco que ele não vê.
+# Resultado: o Dre só enxergava o carrossel DEPOIS de publicado no Instagram —
+# ou seja, revisão só existia quando já era tarde. Sem isto, "olhe alguns
+# prontos antes de ligar o `carrossel_ligado`" era uma instrução impossível.
+#
+# Isto NÃO abre porta nova: reusa o `publicar()`, que só ESCREVE arquivo numa
+# pasta estática que o Caddy já serve. Não recebe upload, não executa nada. E
+# some sozinho no `limpar()` das 6 horas, junto com os slides.
+_VER_HTML = """<!doctype html><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{titulo}</title>
+<style>
+ body{{margin:0;background:#14120f;color:#efe7dc;
+      font:16px/1.5 system-ui,-apple-system,sans-serif}}
+ header{{padding:22px 18px 6px;max-width:760px;margin:0 auto}}
+ h1{{font-size:19px;margin:0 0 4px}}
+ .sub{{color:#9b9086;font-size:13px}}
+ .leg{{max-width:760px;margin:16px auto;padding:16px 18px;background:#1e1b17;
+       border-radius:14px;white-space:pre-wrap;font-size:14px;
+       color:#d8cec2}}
+ .tira{{max-width:760px;margin:0 auto;padding:10px 18px 60px}}
+ figure{{margin:0 0 26px;position:relative}}
+ img{{width:100%;border-radius:12px;display:block;background:#000}}
+ /* à DIREITA de propósito: o canto superior esquerdo do slide é onde vive a
+    tag do nicho, e é o espaço vazio que o prompt do fundo reserva. Um contador
+    de revisão cobrindo justo o que se quer revisar não serve. */
+ figcaption{{position:absolute;top:12px;right:12px;background:#000000b0;
+             color:#fff;font-size:12px;padding:5px 11px;border-radius:20px}}
+ .fim{{max-width:760px;margin:0 auto;padding:0 18px 40px;color:#6f665e;
+       font-size:12px}}
+</style>
+<header><h1>{titulo}</h1>
+<div class="sub">{quantos} slides · some em ~6h · esta página não vai pro ar
+ pra ninguém além de quem tem o link</div></header>
+{legenda}
+<div class="tira">{figuras}</div>
+<div class="fim">{rodape}</div>
+"""
+
+
+def _texto_curto(p: Path, limite: int = 4000) -> str:
+    try:
+        t = p.read_text(encoding="utf-8").strip()
+    except Exception:
+        return ""
+    return t[:limite] + ("…" if len(t) > limite else "")
+
+
+def ver_pasta(pasta) -> str:
+    """Publica os slides de uma pasta como UMA página, e devolve a URL dela."""
+    origem = Path(pasta)
+    if not origem.is_dir():
+        raise MidiaPublicaErro(f"não é uma pasta: {origem}")
+
+    imgs = sorted(a for a in origem.iterdir()
+                  if a.is_file() and a.suffix.lower() in
+                  (".jpg", ".jpeg", ".png", ".webp"))
+    if not imgs:
+        raise MidiaPublicaErro(f"nenhuma imagem em {origem}")
+
+    figuras = []
+    for i, img in enumerate(imgs, 1):
+        # sem conferir cada uma: são até 10 GETs de ida e volta, e a página no
+        # fim é conferida de qualquer jeito — se o Caddy não estiver servindo,
+        # ela falha lá e a mensagem é a mesma.
+        u = publicar(img, conferir=False)
+        figuras.append(f'<figure><img src="{u}" alt="slide {i}" loading="lazy">'
+                       f'<figcaption>{i}/{len(imgs)}</figcaption></figure>')
+
+    leg = _texto_curto(origem / "legenda.txt")
+    legenda = (f'<div class="leg">{_escapar(leg)}</div>') if leg else ""
+
+    corpo = _VER_HTML.format(
+        titulo=_escapar(origem.name), quantos=len(imgs),
+        legenda=legenda, figuras="\n".join(figuras),
+        rodape=_escapar(str(origem)))
+
+    alvo = _pasta() / f"ver-{secrets.token_hex(6)}.html"
+    alvo.write_text(corpo, encoding="utf-8")
+    os.chmod(alvo, 0o644)
+    url = f"{_base_url()}/{alvo.name}"
+    _conferir(url)
+    return url
+
+
+def _escapar(t: str) -> str:
+    return (t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+
+
+# ══════════════════════════════════════════════════════════════════════════
 # CLI — diagnóstico
 # ══════════════════════════════════════════════════════════════════════════
 _CADDY = """\
@@ -476,8 +570,36 @@ def main() -> int:
         return _cli_instalar_caddy(aplicar="--conferir" not in args)
     if "--teste" in args:
         return _cli_teste()
+    if "--ver" in args:
+        return _cli_ver(sys.argv[1:])
     print(__doc__ or "")
-    print("Use --instalar-caddy, --caddy, --teste ou --limpar")
+    print("Use --instalar-caddy, --caddy, --teste, --ver <pasta> ou --limpar")
+    return 0
+
+
+def _ultima_pasta() -> Path:
+    """A pasta de carrossel modificada mais recentemente. `--ver` sem
+    argumento é o caso comum: acabou de rodar `--agora`, quer ver aquilo."""
+    raiz = BASE_DIR / "pronto_carrossel"
+    cands = [d for d in raiz.iterdir() if d.is_dir()] if raiz.is_dir() else []
+    if not cands:
+        raise MidiaPublicaErro(f"nenhuma pasta em {raiz}")
+    return max(cands, key=lambda d: d.stat().st_mtime)
+
+
+def _cli_ver(argv: list) -> int:
+    resto = [a for a in argv if not a.startswith("--")]
+    try:
+        alvo = Path(resto[0]) if resto else _ultima_pasta()
+        if not resto:
+            print(f"📂 mais recente: {alvo.name}")
+        url = ver_pasta(alvo)
+    except MidiaPublicaErro as e:
+        print(f"❌ {e}")
+        print("   Se for 403/404, rode antes: "
+              ".venv/bin/python midia_publica.py --teste")
+        return 1
+    print(f"\n🔗 {url}\n\n   Abre no celular também. Some sozinho em ~6h.")
     return 0
 
 
