@@ -5636,6 +5636,48 @@ ela vive no slide de produto. O que falta é o LUGAR onde o produto viveria.
 `--prompt <nicho> --quantos 10` imprime os 10 numerados, com o tamanho
 (1080×1350), a pasta de destino e o aviso de que são fundos e não slides.
 
+#### 📥 `--importar` — o bug calado que estava esperando as 10 imagens (23/08)
+
+O Dre gerou os 10 fundos de `casa` no ChatGPT 5.6 e ia salvar na pasta. **Não
+teria funcionado, e ninguém saberia:** o `existentes()` fazia `glob("*.jpg")` e
+o ChatGPT baixa **`.png`**. O acervo teria 10 arquivos, o `existentes()`
+devolveria lista vazia, o `_fundo()` do `slides_html.py` devolveria `""` e o
+carrossel sairia liso — **sem erro, sem log, sem nada**. O glob era `.jpg`
+porque quem alimentava o acervo era o `--gerar` do Fal, que salvava `.jpg`;
+mudou quem alimenta, e a suposição ficou.
+
+⚠️ **A categoria: bug que não reclama.** É o mesmo formato do domingo (`--agenda`
+mentindo) e do `baixar_fontes` (apagando fonte boa). Todos passam no teste de
+"rodou sem erro". O que os pega é conferir o RESULTADO, não o código de saída.
+
+Duas defesas, porque uma só não cobre:
+1. `existentes()` agora aceita **jpg/jpeg/png/webp** — largar o arquivo na pasta
+   na mão funciona.
+2. `--importar <nicho> --de <pasta|arquivos>` normaliza pra JPEG.
+
+`--importar` faz três coisas que parecem frescura e não são:
+- **Converte pra JPEG q88.** O `slides_html.py` embute o fundo como `data:` URI
+  dentro do HTML e base64 engorda 33%: 7 slides × PNG de 3 MB = **~28 MB de
+  HTML** por carrossel pro Chromium mastigar. Em JPEG dá ~250 KB cada. O olho
+  não vê — a foto ainda leva `brightness(.6)` por cima.
+- **Reduz, nunca amplia. E nunca corta.** A régua do prompt é "espaço vazio em
+  cima à esquerda"; cortar aqui pra 4:5 mataria justo a margem onde o título
+  pousa. Quem corta é o CSS, pelo centro, na hora.
+- **Duplicata por conteúdo (sha1), não por nome.** Baixar a mesma imagem duas
+  vezes dá `Cena (1).png` e `Cena (2).png`: nomes diferentes, bytes iguais. Sem
+  isso o rodízio acha que tem 10 fundos quando tem 7 e mostra os clonados com o
+  dobro da frequência — que é justo o que o rodízio existe pra evitar.
+
+⚠️ **E O TESTE PEGOU UM FURO NO MEU PRÓPRIO CONSERTO.** O `--listar` sugere
+`--importar casa --de assets/fundos/casa/` pra normalizar no lugar. Nesse caso
+o PNG cru vira `.jpg` novo **e o PNG continua lá** — a mesma foto duas vezes no
+acervo, exatamente o defeito que o sha1 existia pra impedir. Só apareceu porque
+rodei e **olhei o `ls`**. Agora, quando a origem é a própria pasta de destino, o
+original é substituído (ou removido, se já houver o gêmeo).
+
+    .venv/bin/python fundo_ia.py --importar casa --de ~/fundos-chatgpt/
+    .venv/bin/python fundo_ia.py --listar        # avisa se sobrou PNG cru
+
 #### Ainda falta
 1. ~~Ciclos e horários no `daemon_maestro`~~ ✅ feito
 2. **Ligar** (`carrossel_ligado: true`) depois de olhar alguns prontos.

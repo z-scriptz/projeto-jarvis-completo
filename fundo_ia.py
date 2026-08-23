@@ -184,9 +184,156 @@ def _pasta(nicho: str) -> Path:
     return FUNDOS / (nicho or "geral").lower()
 
 
+# ⚠️ NÃO VOLTE ISTO PRA `*.jpg`. O `--gerar` do Fal salvava .jpg e por isso o
+# glob era .jpg — mas quem alimenta o acervo hoje é o Dre, baixando do ChatGPT,
+# e o ChatGPT baixa .PNG. Com o glob antigo o carrossel renderizaria sem fundo
+# nenhum, SEM ERRO E SEM AVISO: `_fundo()` no slides_html.py só devolve "" e o
+# slide sai bonito, só que liso. É a pior categoria de bug daqui — o que não
+# reclama. O `--importar` normaliza pra .jpg, mas o glob aceita os quatro
+# formatos pra que largar o arquivo na pasta na mão TAMBÉM funcione.
+EXTENSOES = (".jpg", ".jpeg", ".png", ".webp")
+
+
 def existentes(nicho: str) -> list:
     p = _pasta(nicho)
-    return sorted(p.glob("*.jpg")) if p.exists() else []
+    if not p.exists():
+        return []
+    return sorted(a for a in p.iterdir()
+                  if a.suffix.lower() in EXTENSOES and a.is_file())
+
+
+ALVO_L, ALVO_A = 1080, 1350
+
+
+def _digestao(caminho) -> str:
+    return hashlib.sha1(Path(caminho).read_bytes()).hexdigest()
+
+
+def importar(nicho: str, origens: list) -> int:
+    """Põe no acervo do nicho as imagens que o Dre baixou do ChatGPT.
+
+    Faz três coisas que parecem frescura e não são:
+
+    1. CONVERTE PRA JPEG. O ChatGPT entrega PNG de 2-3 MB. O `slides_html.py`
+       embute a foto como data: URI dentro do HTML, e base64 engorda 33%: 7
+       slides × 3 MB viram ~28 MB de HTML pro Chromium mastigar a cada
+       carrossel. Em JPEG q88 o mesmo fundo pesa ~250 KB. O olho não vê a
+       diferença — a foto ainda leva `brightness(.6)` por cima.
+    2. NÃO AMPLIA, só reduz. Fundo menor que 1080x1350 fica borrado quando o
+       `background-size:cover` estica; ampliar aqui não inventa pixel, só
+       esconde o problema do aviso. Se vier pequeno, eu aviso e importo assim
+       mesmo — quem decide se serve é quem olha.
+    3. NÃO CORTA. A régua do prompt é "espaço vazio em cima à esquerda"; cortar
+       aqui pra 4:5 mataria justamente essa margem, que é onde o título pousa.
+       Quem corta é o CSS, na hora, e ele corta pelo centro.
+
+    Duplicata é detectada por conteúdo (sha1 do JPEG final), não por nome:
+    baixar a mesma imagem duas vezes é `Cena (1).png` e `Cena (2).png`, nomes
+    diferentes e bytes iguais. Sem isso o rodízio acharia que tem 10 fundos
+    quando tem 7, e repetiria os 3 clonados com o triplo da frequência.
+    """
+    try:
+        from PIL import Image
+    except ImportError:
+        print("❌ falta o Pillow. Rode com o python do projeto:\n"
+              "   .venv/bin/python fundo_ia.py --importar ...")
+        return 0
+
+    achados = []
+    for o in origens:
+        p = Path(o).expanduser()
+        if p.is_dir():
+            achados += [a for a in sorted(p.rglob("*"))
+                        if a.is_file() and a.suffix.lower() in EXTENSOES]
+        elif p.is_file():
+            achados.append(p)
+        else:
+            print(f"⚠️  não achei: {o}")
+    if not achados:
+        print("⚠️  nenhuma imagem nos caminhos passados "
+              f"(aceito {', '.join(EXTENSOES)}).")
+        return 0
+
+    destino = _pasta(nicho)
+    destino.mkdir(parents=True, exist_ok=True)
+    jaTem = {_digestao(a) for a in existentes(nicho)}
+    indice = 0
+    novos = 0
+
+    for arq in achados:
+        # ⚠️ IMPORTAR A PASTA EM CIMA DELA MESMA é o caso que o `--listar`
+        # sugere pra normalizar PNG cru já guardado. Sem este bloco, o PNG
+        # viraria um .jpg NOVO e o PNG continuaria lá: o acervo passaria a ter
+        # a mesma foto duas vezes, e o rodízio a mostraria com o dobro da
+        # frequência achando que são duas. Aqui o original é SUBSTITUÍDO.
+        no_lugar = arq.resolve().parent == destino.resolve()
+        if no_lugar and arq.suffix.lower() == ".jpg" \
+                and arq.stat().st_size <= 900_000:
+            continue
+
+        try:
+            img = Image.open(arq)
+            img.load()
+        except Exception as e:
+            print(f"⚠️  {arq.name}: não abriu ({e})")
+            continue
+
+        if img.mode in ("RGBA", "LA", "P"):
+            img = img.convert("RGBA")
+            # fundo preto, não branco: estes fundos são escuros e uma borda
+            # branca vazando pelo alfa apareceria como halo no slide.
+            base = Image.new("RGB", img.size, (0, 0, 0))
+            base.paste(img, mask=img.split()[-1])
+            img = base
+        else:
+            img = img.convert("RGB")
+
+        l, a = img.size
+        if l < ALVO_L or a < ALVO_A:
+            print(f"⚠️  {arq.name}: {l}x{a} é menor que {ALVO_L}x{ALVO_A} — "
+                  f"vai esticar. Importei mesmo assim.")
+        else:
+            escala = max(ALVO_L / l, ALVO_A / a)
+            if escala < 1:
+                img = img.resize((round(l * escala), round(a * escala)),
+                                 Image.LANCZOS)
+
+        temp = destino / ".importando.jpg"
+        img.save(temp, "JPEG", quality=88, optimize=True,
+                 progressive=True)
+        chave = _digestao(temp)
+        if chave in jaTem:
+            temp.unlink()
+            # ⚠️ SE A DUPLICATA MORA NA PRÓPRIA PASTA DE DESTINO, pular não
+            # basta: o arquivo cru continuaria lá ao lado do .jpg gêmeo e o
+            # acervo teria a mesma foto duas vezes — o defeito que este bloco
+            # inteiro existe pra evitar. Peguei isso testando, depois de
+            # escrever o comentário dizendo que estava resolvido.
+            if no_lugar:
+                arq.unlink()
+                print(f"🗑️  {arq.name}: era cópia crua de um .jpg que já "
+                      f"estava aqui, removi.")
+            else:
+                print(f"↻  {arq.name}: já estava no acervo, pulei.")
+            continue
+
+        if no_lugar:
+            jaTem.discard(_digestao(arq))
+            arq.unlink()
+
+        while True:
+            indice += 1
+            saida = destino / f"{nicho.lower()}-{indice:02d}.jpg"
+            if not saida.exists():
+                break
+        temp.replace(saida)
+        jaTem.add(chave)
+        novos += 1
+        kb = saida.stat().st_size // 1024
+        print(f"✅ {saida.name}  ({img.size[0]}x{img.size[1]}, {kb} KB) "
+              f"← {arq.name}")
+
+    return novos
 
 
 MEMORIA_FUNDO = BASE_DIR / "shared" / "fundos_recentes.json"
@@ -403,7 +550,27 @@ def main() -> int:
                    help="baixa fundos do Pexels (GRATIS, sem gastar credito)")
     p.add_argument("--listar", action="store_true")
     p.add_argument("--prompt", metavar="NICHO", help="imprime o prompt e sai")
+    p.add_argument("--importar", metavar="NICHO",
+                   help="põe no acervo as imagens baixadas do ChatGPT")
+    p.add_argument("--de", nargs="+", metavar="CAMINHO", default=[],
+                   help="pasta ou arquivos de onde importar")
     a = p.parse_args()
+
+    if a.importar:
+        if not a.de:
+            print("❌ falta o --de. Exemplo:\n"
+                  f"   .venv/bin/python fundo_ia.py --importar {a.importar} "
+                  f"--de ~/fundos-chatgpt/")
+            return 1
+        n = importar(a.importar, a.de)
+        acervo = existentes(a.importar)
+        print(f"\n{'✅' if n else '⚠️ '} {n} fundo(s) novo(s). "
+              f"Acervo de '{a.importar}': {len(acervo)}.")
+        if acervo:
+            print(f"   Ver o carrossel usando eles:\n"
+                  f"   .venv/bin/python carrossel_agendador.py "
+                  f"--agora {a.importar}")
+        return 0 if n else 1
 
     if a.prompt:
         cenas = CENARIOS.get(a.prompt, CENARIOS["geral"])
@@ -421,11 +588,24 @@ def main() -> int:
         return 0
     if a.listar:
         print(f"📁 {FUNDOS}\n")
+        pesados = 0
         for nicho in CENARIOS:
             arqs = existentes(nicho)
             marca = "✅" if arqs else "⬜"
-            print(f"  {marca} {nicho:<8} {len(arqs)} fundo(s)")
-        print("\nGerar:  python3 fundo_ia.py --gerar casa --quantos 6")
+            crus = [a for a in arqs if a.suffix.lower() != ".jpg"
+                    or a.stat().st_size > 900_000]
+            pesados += len(crus)
+            aviso = f"  ⚠️  {len(crus)} sem normalizar" if crus else ""
+            print(f"  {marca} {nicho:<8} {len(arqs)} fundo(s){aviso}")
+        if pesados:
+            # não é purismo: o fundo vira base64 dentro do HTML, e PNG cru
+            # multiplica o tamanho do HTML por 4. Ver `importar()`.
+            print("\n⚠️  Tem imagem crua (PNG ou >900 KB) no acervo. Funciona,"
+                  "\n   mas pesa o render. Normalize sem sair do lugar:"
+                  "\n   .venv/bin/python fundo_ia.py --importar casa "
+                  "--de assets/fundos/casa/")
+        print("\nPrompts:  python3 fundo_ia.py --prompt casa --quantos 10")
+        print("Importar: python3 fundo_ia.py --importar casa --de ~/Downloads/")
         return 0
     if a.pexels:
         print(f"📁 {_pasta(a.pexels)}\n🆓 Pexels (uso comercial liberado)\n")
