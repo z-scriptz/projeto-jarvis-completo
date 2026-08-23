@@ -5076,16 +5076,36 @@ um aviso de que não deu pra conferir.
 Reproduzido em sandbox com um `python3` sem PIL antes do conserto e depois: as
 fontes sobrevivem. (Mesmo assim, o comando certo é `.venv/bin/python`.)
 
+#### ✅ O HOST PÚBLICO ESTÁ DE PÉ (22/08, 21h41)
+
+    ✅ FUNCIONA — https://jarvis.topshopoficial.com.br/midia/.teste-…png
+                  respondeu 200.
+    ⬇️  Anton-Regular.ttf ... OK (166 KB)
+    ⬇️  ArchivoBlack-Regular.ttf ... OK (88 KB)
+
+**Carrossel deixou de ter bloqueio.** Foram quatro rodadas até aqui e vale
+anotar o que cada uma custou, porque o padrão é o mesmo: **404** (rota nunca
+colada — instrução disfarçada de comando) → **404 de novo** (bloco colado
+inteiro, o comentário virou no-op do bash) → **403** (rota certa, `/root` em
+modo 700) → **200**. Nenhuma das quatro foi um erro de código do carrossel; as
+quatro foram infra, e três delas foram roteiro meu mal desenhado.
+
+⚠️ **A LIÇÃO QUE FICA:** todo passo que exige um humano no meio de uma sequência
+de comandos vira um passo que não acontece. Se dá pra virar comando, vira
+comando — e o comando confere o resultado, em vez de confiar que deu certo.
+
+Estado da infra do carrossel: `/var/www/jarvis-midia` (755) servida em
+`/midia` pelo Caddy · Anton + Archivo Black em `assets/brand` · uploader
+patchado com `postar_instagram_carrossel` · brain, render e ledger no lugar.
+
 #### Ainda falta
-1. **Rota no Caddy** — sem ela, carrossel e story de imagem não saem do lugar.
-   O 404 do `--teste` de 22/08 é o módulo funcionando, não um defeito.
-2. **Ciclos e horários no `daemon_maestro`** — hoje ele só tem `horarios` +
+1. **Ciclos e horários no `daemon_maestro`** — hoje ele só tem `horarios` +
    `posts_por_dia_semana` pro Reel. Precisa de `carrossel_horarios` separado,
    senão os dois formatos disputam o mesmo slot.
-3. **Cruzar o ledger com as métricas** — o `carrosseis_ledger.jsonl` guarda o
+2. **Cruzar o ledger com as métricas** — o `carrosseis_ledger.jsonl` guarda o
    formato, mas quem mede alcance/salvamento é o `metricas_posts`. Falta juntar
    os dois pelo shortcode pra fase 2 ligar sozinha.
-4. **Story (depois do carrossel, decisão do Dre)** — e o mais barato já está
+3. **Story (depois do carrossel, decisão do Dre)** — e o mais barato já está
    pronto: o `.mp4` do Reel que a conta acabou de postar está no disco e tem
    menos de 60s, então `--story` o republica com **zero** render e **zero**
    infra nova.
