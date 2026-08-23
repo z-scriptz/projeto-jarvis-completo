@@ -40,6 +40,16 @@ FONTES = [
      f"{_RAW}/anton/OFL.txt", "Anton — condensada pesada, a das referências"),
     ("ArchivoBlack-Regular.ttf", f"{_RAW}/archivoblack/ArchivoBlack-Regular.ttf",
      f"{_RAW}/archivoblack/OFL.txt", "Archivo Black — larga e pesada, 2ª opção"),
+    # ⚠️ AS DUAS DE BAIXO SÃO AS DO SISTEMA NOVO (slides_html), e são as que
+    # importam agora: a serifada display + a geométrica de corpo são o par que
+    # dá a cara editorial das referências. Anton e Archivo servem o desenho
+    # antigo em PIL, que virou rede de segurança.
+    ("Fraunces.ttf",
+     f"{_RAW}/fraunces/Fraunces%5BSOFT,WONK,opsz,wght%5D.ttf",
+     f"{_RAW}/fraunces/OFL.txt",
+     "Fraunces — serifada display VARIÁVEL (peso e serifa vêm do CSS)"),
+    ("Poppins-Medium.ttf", f"{_RAW}/poppins/Poppins-Medium.ttf",
+     f"{_RAW}/poppins/OFL.txt", "Poppins — geométrica, o corpo dos slides"),
 ]
 
 # ⚠️ 20 KB de piso: um 404 do GitHub vem como página HTML de ~400 bytes, e

@@ -5352,6 +5352,50 @@ Três coisas que custaram tentativa:
 não dá.** Sem Chromium, sem Playwright, ou qualquer erro: a capa continua
 saindo. Nenhum post depende do navegador estar bem.
 
+#### 🎨 O SISTEMA DE DESIGN (22/08) — a resposta era design, não ferramenta
+
+O Dre pôs um carrossel do **Claude Design** ao lado do meu: *"olha simplesmente
+o claude design fazendo os slides, e você aí no código, na mão, e qual você
+preferiu?"* O dele, sem discussão. E o motivo não é gosto:
+
+    o meu   → uma CAPA bonita, e slides internos que não conversavam com ela
+    o dele  → um SISTEMA: paleta, escala tipográfica, formas de fundo e
+              hierarquia que se repetem slide a slide
+
+⚠️ **CARROSSEL NÃO SE JULGA POR SLIDE, SE JULGA POR SEQUÊNCIA.** Sete peças que
+parecem sete posts diferentes é o que faz um carrossel parecer amador — e era
+exatamente o que saía daqui. Eu estava otimizando a capa e deixando os slides
+internos como planilha.
+
+⚠️⚠️ **E A TECNOLOGIA JÁ ERA A CERTA.** Aquele design é HTML/CSS — o mesmo motor
+que eu tinha acabado de pôr na VPS. O que faltava não era ferramenta, era
+DECISÃO DE DESIGN. Isso responde as três perguntas de uma vez: **Hugging Face,
+ChatGPT e Fal não resolveriam**, porque nenhum deles é o problema. E um modelo
+de imagem faria a peça bonita com a marca infiel — aqui a logo, o @, o preço e
+a cor da conta saem exatos, de graça, em 2 segundos, sem fila e sem crédito.
+
+`slides_html.py` (novo) — o sistema inteiro:
+- **Paleta por conta é um TRIO, não uma cor**: `acento` (fecho e círculos),
+  `creme` (fundo dos slides) e `sombra` (a mancha). Uma cor só não faz sistema,
+  faz destaque. A família é a MESMA nas 6 contas — mesma tipografia, mesmas
+  formas, mesma hierarquia — e só o trio muda: cada grid tem identidade e as
+  seis continuam sendo visivelmente a mesma marca.
+- **Fraunces + Poppins**, as duas OFL. ⚠️ Fraunces é VARIÁVEL: peso e `SOFT`
+  (arredondamento da serifa) vêm do CSS, não do arquivo — é o que dá o desenho
+  macio das referências sem comprar fonte.
+- ⚠️ **A mancha é o que costura a sequência.** Sem ela cada slide é um
+  retângulo de cor com texto. Ela sangra pra fora do quadro de propósito:
+  forma cortada pela borda dá movimento, forma inteira e centrada dá apostila.
+- ⚠️ **`ELEMENTO POSICIONADO PINTA DEPOIS DO ESTÁTICO`**, mesmo vindo antes no
+  HTML — e por isso a mancha cobria o texto. No 1º teste a palavra "que" de
+  *"Guardar tudo o que sobrou"* **simplesmente sumiu atrás do círculo**, e o
+  título ficou agramatical sem nenhum erro aparecer em lugar nenhum. É o pior
+  tipo de defeito: o post sai, publica, e só um humano lendo percebe.
+
+**No `carrossel_render` o sistema HTML vem primeiro e o PIL ficou como rede** —
+sem Chromium, sem Playwright, sem as fontes, ou qualquer erro, o post sai do
+mesmo jeito. O desenho em PIL continua inteiro; ele só deixou de ser o padrão.
+
 #### Ainda falta
 1. **Ciclos e horários no `daemon_maestro`** — hoje ele só tem `horarios` +
    `posts_por_dia_semana` pro Reel. Precisa de `carrossel_horarios` separado,

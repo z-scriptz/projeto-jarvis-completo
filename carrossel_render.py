@@ -769,6 +769,21 @@ def renderizar(plano: dict, saida) -> list:
         log.warning(f"   ⚠️  carrossel tem no máximo 10 slides — deixei "
                     f"{sobra} produto(s) de fora")
 
+    # ⚠️ O SISTEMA EM HTML/CSS VEM PRIMEIRO, E DESENHA O CARROSSEL INTEIRO.
+    # O desenho em PIL abaixo continua inteiro e funcional — ele é a rede: sem
+    # Chromium, sem Playwright, sem as fontes, ou qualquer erro, o post sai do
+    # mesmo jeito. Nenhuma publicação pode depender de o navegador estar bem.
+    try:
+        from slides_html import renderizar_slides
+        prontos = renderizar_slides(plano, Path(saida))
+        if prontos:
+            if plano.get("legenda"):
+                (Path(saida) / "legenda.txt").write_text(plano["legenda"],
+                                                         encoding="utf-8")
+            return prontos
+    except Exception as e:
+        log.debug(f"   sistema HTML indisponível: {e}")
+
     avisos, telas = [], []
     # ⚠️ A CAPA DRAMÁTICA EXIGE FOTO. Sem foto ela seria um retângulo preto com
     # texto — pior que a capa limpa. Então a escolha é pelo material que existe,
