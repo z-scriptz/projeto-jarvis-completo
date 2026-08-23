@@ -139,13 +139,38 @@ def existentes(nicho: str) -> list:
     return sorted(p.glob("*.jpg")) if p.exists() else []
 
 
-def fundo_do_nicho(nicho: str) -> str:
-    """Um fundo já gerado, sorteado. "" quando não há nenhum.
+MEMORIA_FUNDO = BASE_DIR / "shared" / "fundos_recentes.json"
 
-    Sorteia em vez de rodar em ordem porque a ordem faria dois posts seguidos
-    da mesma conta usarem o mesmo cenário sempre que a fila reiniciasse."""
-    arqs = existentes(nicho)
-    return str(random.choice(arqs)) if arqs else ""
+
+def fundo_do_nicho(nicho: str) -> str:
+    """Um fundo do acervo do nicho. "" quando não há nenhum.
+
+    ⚠️ RODÍZIO COM MEMÓRIA, NÃO SORTEIO — e isso vale DINHEIRO, não só estética.
+    Com sorteio puro e N fundos, a chance de repetir o anterior é 1/N: com 6
+    fundos e 8 carrosséis por semana, a mesma foto sairia repetida umas 1,3
+    vezes por semana na MESMA conta. Guardando os últimos 3, os mesmos 6 fundos
+    rendem o que 12 renderiam no sorteio — ou seja, **metade das imagens pra
+    gerar**. É a mesma mecânica do rodízio dos fechos e do 1º comentário."""
+    arqs = [str(a) for a in existentes(nicho)]
+    if not arqs:
+        return ""
+    try:
+        mem = json.loads(MEMORIA_FUNDO.read_text(encoding="utf-8"))
+    except Exception:
+        mem = {}
+    recentes = mem.get(nicho, [])
+    novos = [a for a in arqs if a not in recentes]
+    escolha = random.choice(novos or arqs)
+    try:
+        # lembra no máximo METADE do acervo: guardar demais esvazia a lista de
+        # candidatos e o rodízio vira ordem fixa, que é o defeito oposto
+        mem[nicho] = ([escolha] + recentes)[:max(1, min(3, len(arqs) // 2))]
+        MEMORIA_FUNDO.parent.mkdir(parents=True, exist_ok=True)
+        MEMORIA_FUNDO.write_text(json.dumps(mem, ensure_ascii=False, indent=2),
+                                 encoding="utf-8")
+    except Exception:
+        pass
+    return escolha
 
 
 # ══════════════════════════════════════════════════════════════════════════

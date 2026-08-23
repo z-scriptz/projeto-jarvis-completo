@@ -5538,6 +5538,50 @@ espelhando a pirâmide mais baixa) · `carrossel_contas` · `carrossel_ligado` �
 `carrossel_intervalo_seg` (90s entre contas — seis contas publicando no mesmo
 minuto todo dia é padrão mais evidente que o horário cravado).
 
+#### 📸 QUANTAS FOTOS DE FUNDO? A CONTA (23/08)
+
+Pergunta do Dre: *"quantas fotos serão necessárias gerar no chatgpt? ou teremos
+que fazer por dia pra cada carrossel e slide?"*
+
+**Nem por dia nem por slide. Por NICHO, e reusadas.** O fundo é CENÁRIO —
+sofá, bancada, armário. Ele não descreve o post; o que descreve é o texto, o
+produto e a cor. Duas semanas depois ninguém lembra que a sala já apareceu.
+
+Onde a foto entra hoje: **capa (1) + fecho (1)** por carrossel, ambas sorteadas
+do acervo do nicho. Os slides de conteúdo só usam foto se o item trouxer
+`fundo` — o brain não preenche, então são 2 usos por post.
+
+Volume: a pirâmide do carrossel é `[2,1,1,2,1,1,0]` = **8 carrosséis por semana
+por conta**.
+
+⚠️ **E O RODÍZIO COM MEMÓRIA CORTA O NÚMERO PELA METADE.** Com sorteio puro e N
+fundos, a chance de repetir o anterior é 1/N — com 6 fundos e 8 posts/semana, a
+mesma foto sairia repetida ~1,3 vezes por semana na MESMA conta. Guardando os
+últimos 3, **6 fundos rendem o que 12 renderiam no sorteio**. Mesma mecânica do
+rodízio dos fechos e do 1º comentário; aqui ela vale dinheiro, não só estética.
+
+**A conta final: 6 a 8 fundos por nicho, uma vez.** 6 nichos × 7 ≈ **42
+imagens**, e depois 2-3 por nicho por mês só pra renovar. Não é trabalho diário.
+
+⚠️ **A memória lembra no máximo METADE do acervo** (`min(3, N//2)`): guardar
+demais esvazia a lista de candidatos e o rodízio degenera em ordem fixa, que é
+o defeito oposto ao que ele conserta.
+
+#### 🐍 O PYTHON ERRADO, PELA TERCEIRA VEZ (23/08)
+
+    ⚠️ Gemini indisponível (No module named 'google') — usando reserva
+    ❌ casa: não renderizei (No module named 'PIL')
+
+Eu mandei `python3 carrossel_agendador.py` em vez de `.venv/bin/python`. ⚠️ **É
+a terceira vez que esse comando meu quebra na VPS** (baixar_fontes, fundo_ia,
+agora aqui), e o erro sempre aparece TARDE — depois de escolher formato, ler a
+fila de 164 produtos e baixar as fotos. Trabalho jogado fora, e a mensagem não
+diz a causa: não é biblioteca faltando, é o interpretador errado.
+
+`_confere_python()` recusa na primeira linha e **imprime o comando certo, com
+os argumentos que a pessoa acabou de digitar**. Erro de ambiente tem que falhar
+antes do trabalho, não depois.
+
 #### Ainda falta
 1. ~~Ciclos e horários no `daemon_maestro`~~ ✅ feito
 2. **Ligar** (`carrossel_ligado: true`) depois de olhar alguns prontos.

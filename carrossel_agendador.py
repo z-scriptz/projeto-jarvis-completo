@@ -55,6 +55,30 @@ except Exception:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
     log = logging.getLogger("carrossel_agendador")
 
+def _confere_python() -> str:
+    """Diz se este interpretador tem o que o carrossel precisa. "" se tem.
+
+    ⚠️ ISTO EXISTE PORQUE EU JÁ MANDEI O COMANDO ERRADO DUAS VEZES. O Pillow e
+    o `google-genai` moram no `.venv`; rodando com o `python3` do sistema o
+    erro que aparece é `No module named 'PIL'` — DEPOIS de escolher formato,
+    ler a fila e baixar as fotos. Três minutos de trabalho jogados fora e uma
+    mensagem que não diz a causa: não é biblioteca faltando, é o interpretador
+    errado. Melhor recusar na primeira linha, dizendo o comando certo."""
+    faltam = []
+    for mod, nome in (("PIL", "Pillow"), ("requests", "requests")):
+        try:
+            __import__(mod)
+        except Exception:
+            faltam.append(nome)
+    if not faltam:
+        return ""
+    venv = BASE_DIR / ".venv" / "bin" / "python"
+    dica = (f"\n   Use:  {venv} {' '.join(sys.argv)}" if venv.exists()
+            else f"\n   Instale:  pip install {' '.join(faltam)}")
+    return (f"este python não tem {', '.join(faltam)} "
+            f"({sys.executable}){dica}")
+
+
 HORARIOS_PADRAO = ["15:30", "20:30"]
 POR_DIA_PADRAO = [2, 1, 1, 2, 1, 1, 0]      # espelha a pirâmide, mais baixa
 
@@ -252,6 +276,11 @@ def main() -> int:
     p.add_argument("--agora", metavar="NICHO", help="produz 1 agora (teste)")
     p.add_argument("--postar", action="store_true", help="com --agora, publica")
     a = p.parse_args()
+
+    problema = _confere_python()
+    if problema:
+        print(f"❌ {problema}")
+        return 1
 
     cfg = {}
     for cand in (BASE_DIR / "agendador_config.json",
