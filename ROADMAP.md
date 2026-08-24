@@ -6127,6 +6127,33 @@ lugar nenhum depois. Com um comando, quem sabe a estrutura é o programa, e o
 relatório do fim conta quantas entraram em cada formato **e quantas pastas
 continuam vazias**.
 
+#### 🗂️ `--contato` — como eu reviso 260 imagens que não consigo ver (24/08)
+
+O Dre gerou 260 fundos (tech e casa) e perguntou se eu conseguia dar uma olhada.
+**Eu não vejo o disco da VPS nem a área de trabalho dele** — e mesmo publicando
+com `midia_publica --ver`, 130 imagens são 130 arquivos pra abrir um por um. Na
+prática, isso não é revisão: é uma lista que ninguém termina.
+
+`fundo_ia.py --contato <nicho>` monta **uma folha por formato**: grade de
+miniaturas 4:5 num JPEG só, com o nome do arquivo queimado em cada célula.
+
+    🗂️  casa-erros.jpg  (5 imagens, 92 KB)
+    🗂️  casa-lista.jpg  (6 imagens, 104 KB)
+
+⚠️ **O NOME EM CADA CÉLULA NÃO É ENFEITE.** Sem ele eu diria "a terceira da
+segunda linha está estranha" e ninguém saberia qual arquivo é. Com ele a
+conversa vira "troca a `casa-lista-04`".
+
+**E o teste provou o valor sozinho:** eu misturei imagens de `moda` dentro de
+`casa/lista` de propósito, e na folha elas **saltam de imediato** — joia, terno
+e flatlay masculino no meio de cozinha e quarto. Numa lista de 130 arquivos
+abertos um a um, isso passaria batido; numa grade, o que destoa destoa JUNTO.
+É pra isso que serve olhar tudo ao mesmo tempo.
+
+(Detalhe pego na 1ª folha: o `—` do cabeçalho virou quadradinho — a fonte
+embutida do PIL não tem travessão. Só ASCII ali. Bobo, mas a folha existe pra
+ser lida, e caractere quebrado no título é a primeira coisa que o olho acha.)
+
 #### 🎨 A PALETA DE `moda` BRIGA COM O ACERVO DE `moda` (24/08)
 
 Medindo os 10 fundos de moda que o Dre gerou:

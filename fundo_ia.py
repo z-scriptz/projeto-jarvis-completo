@@ -682,6 +682,86 @@ FORMATOS_BIBLIOTECA = [
 ]
 
 
+def contato(nicho: str, saida=None) -> int:
+    """Uma folha de contato POR FORMATO — grade de miniaturas num JPEG só.
+
+    ⚠️ NASCEU DE UMA LIMITAÇÃO REAL, NÃO DE CAPRICHO. O Dre gerou 260 imagens e
+    perguntou se eu conseguia olhar. Eu não vejo o disco da VPS nem a área de
+    trabalho dele; e mesmo publicando com `midia_publica --ver`, 130 imagens
+    são 130 arquivos pra baixar e olhar um por um — na prática, não revisa.
+    Uma grade de 25 numa folha eu leio de uma vez, e o que salta (foto clara no
+    meio de escuras, cena repetida, enquadramento errado) salta JUNTO, que é o
+    que a revisão precisa enxergar.
+
+    O nome do arquivo vai queimado em cada célula: sem isso eu diria "a terceira
+    da segunda linha está estranha" e ninguém saberia qual é."""
+    try:
+        from PIL import Image, ImageDraw
+    except ImportError:
+        print("❌ falta o Pillow — use o .venv")
+        return 1
+
+    base = _pasta(nicho)
+    if not base.exists():
+        print(f"❌ não achei {base}")
+        return 1
+    saida = Path(saida) if saida else (BASE_DIR / "pronto_carrossel"
+                                       / f"contato_{nicho}")
+    saida.mkdir(parents=True, exist_ok=True)
+
+    grupos = []
+    soltas = [a for a in sorted(base.iterdir())
+              if a.is_file() and a.suffix.lower() in EXTENSOES]
+    if soltas:
+        grupos.append(("raiz", soltas))
+    for d in sorted(x for x in base.iterdir() if x.is_dir()):
+        fotos = [a for a in sorted(d.iterdir())
+                 if a.is_file() and a.suffix.lower() in EXTENSOES]
+        if fotos:
+            grupos.append((d.name, fotos))
+    if not grupos:
+        print(f"⚠️  nenhuma imagem em {base}")
+        return 1
+
+    COL, CEL, PAD, TOPO = 5, 300, 8, 46
+    feitas = 0
+    for nome, fotos in grupos:
+        linhas = (len(fotos) + COL - 1) // COL
+        alt_cel = int(CEL * 1.25)          # as fontes são 4:5
+        larg = COL * (CEL + PAD) + PAD
+        alt = TOPO + linhas * (alt_cel + PAD) + PAD
+        folha = Image.new("RGB", (larg, alt), (22, 22, 24))
+        d = ImageDraw.Draw(folha)
+        # ⚠️ SÓ ASCII NO CABEÇALHO. A fonte embutida do PIL não tem travessão
+        # nem acento: o "—" saiu como quadradinho vazio na 1ª folha. Detalhe
+        # bobo, mas a folha existe pra ser LIDA — caractere quebrado no título
+        # é a primeira coisa que o olho encontra.
+        d.text((PAD + 4, 14), f"{nicho} / {nome}  -  {len(fotos)} imagens",
+               fill=(235, 235, 235))
+        for i, f in enumerate(fotos):
+            try:
+                im = Image.open(f).convert("RGB")
+            except Exception:
+                continue
+            im = im.resize((CEL, alt_cel), Image.LANCZOS)
+            x = PAD + (i % COL) * (CEL + PAD)
+            y = TOPO + (i // COL) * (alt_cel + PAD)
+            folha.paste(im, (x, y))
+            # etiqueta com o nome, pra dar pra apontar qual é qual
+            d.rectangle([x, y + alt_cel - 22, x + CEL, y + alt_cel],
+                        fill=(0, 0, 0))
+            d.text((x + 5, y + alt_cel - 18), f.stem[:44], fill=(255, 255, 255))
+        alvo = saida / f"{nicho}-{nome}.jpg"
+        folha.save(alvo, "JPEG", quality=82, optimize=True)
+        feitas += 1
+        print(f"  🗂️  {alvo.name}  ({len(fotos)} imagens, "
+              f"{alvo.stat().st_size // 1024} KB)")
+
+    print(f"\n✅ {feitas} folha(s) em {saida}")
+    print(f"   Publique pra revisão:  midia_publica.py --ver {saida}")
+    return 0
+
+
 def importar_arvore(raiz) -> int:
     """Importa `<raiz>/<nicho>/<formato>/*` de uma vez só.
 
@@ -924,6 +1004,8 @@ def main() -> int:
     # `nargs="?"` + `const=""`: `--do-plano` sozinho pega a pasta mais recente
     p.add_argument("--arvore", metavar="RAIZ",
                    help="importa uma árvore inteira <nicho>/<formato>/ de uma vez")
+    p.add_argument("--contato", metavar="NICHO",
+                   help="folha de contato: grade de miniaturas por formato")
     p.add_argument("--criar-arvore", metavar="RAIZ",
                    help="cria as pastas <nicho>/<formato>/ vazias, pra receber")
     p.add_argument("--do-plano", metavar="PASTA", dest="do_plano",
@@ -931,6 +1013,9 @@ def main() -> int:
                    help="1 imagem por slide, do texto do slide (Gemini). "
                         "Sem argumento, usa o carrossel mais recente.")
     a = p.parse_args()
+
+    if a.contato:
+        return contato(a.contato)
 
     if a.criar_arvore:
         raiz = Path(a.criar_arvore).expanduser()
