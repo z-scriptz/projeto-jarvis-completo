@@ -674,6 +674,52 @@ def _quando(pasta) -> float:
         return 0.0
 
 
+# os dez papéis/formatos que a biblioteca usa — os nomes que o Dre e o ChatGPT
+# combinaram. O `_ALIAS` traduz os que o brain chama de outra coisa.
+FORMATOS_BIBLIOTECA = [
+    "erros", "curiosidade", "comparacao", "antes_depois", "checklist",
+    "lista", "produto", "problema_solucao", "nao_compre", "cta",
+]
+
+
+def importar_arvore(raiz) -> int:
+    """Importa `<raiz>/<nicho>/<formato>/*` de uma vez só.
+
+    ⚠️ ISTO SUBSTITUI UM LAÇO DE BASH QUE EU TINHA MANDADO O DRE COLAR — e
+    laço colado é onde mora o erro que ninguém vê. São 60 pastas: um `for`
+    escrito errado importa metade, e "metade" não aparece em lugar nenhum
+    depois. Com um comando só, o programa é que sabe a estrutura, e o
+    relatório do fim diz exatamente quantas entraram em cada formato."""
+    raiz = Path(raiz).expanduser()
+    if not raiz.is_dir():
+        print(f"❌ não achei a pasta {raiz}")
+        return 1
+    total, vazias = 0, []
+    for nicho_dir in sorted(d for d in raiz.iterdir() if d.is_dir()):
+        nicho = nicho_dir.name.lower()
+        subs = sorted(d for d in nicho_dir.iterdir() if d.is_dir())
+        soltas = [a for a in nicho_dir.iterdir()
+                  if a.is_file() and a.suffix.lower() in EXTENSOES]
+        if soltas:
+            print(f"\n📂 {nicho}  (raiz)")
+            total += importar(nicho, [nicho_dir])
+        for sub in subs:
+            fotos = [a for a in sub.iterdir()
+                     if a.is_file() and a.suffix.lower() in EXTENSOES]
+            if not fotos:
+                vazias.append(f"{nicho}/{sub.name}")
+                continue
+            print(f"\n📂 {nicho}/{sub.name}  →  {_canon(sub.name)}")
+            total += importar(nicho, [sub], sub.name)
+    print(f"\n{'✅' if total else '⚠️ '} {total} imagem(ns) importada(s).")
+    if vazias:
+        # não é erro: pasta vazia é formato que ainda não foi gerado. Mas
+        # precisa aparecer, senão some no meio de 60 linhas de sucesso.
+        print(f"⬜ {len(vazias)} pasta(s) ainda sem imagem: "
+              f"{', '.join(vazias[:8])}{'…' if len(vazias) > 8 else ''}")
+    return 0 if total else 1
+
+
 def do_plano(pasta=None, seco: bool = False) -> int:
     """Gera UMA imagem POR SLIDE, a partir do que aquele slide diz.
 
@@ -876,11 +922,32 @@ def main() -> int:
                    help="erros, lista, checklist, comparacao, antes_depois... "
                         "guarda em fundos/<nicho>/<formato>/")
     # `nargs="?"` + `const=""`: `--do-plano` sozinho pega a pasta mais recente
+    p.add_argument("--arvore", metavar="RAIZ",
+                   help="importa uma árvore inteira <nicho>/<formato>/ de uma vez")
+    p.add_argument("--criar-arvore", metavar="RAIZ",
+                   help="cria as pastas <nicho>/<formato>/ vazias, pra receber")
     p.add_argument("--do-plano", metavar="PASTA", dest="do_plano",
                    nargs="?", const="",
                    help="1 imagem por slide, do texto do slide (Gemini). "
                         "Sem argumento, usa o carrossel mais recente.")
     a = p.parse_args()
+
+    if a.criar_arvore:
+        raiz = Path(a.criar_arvore).expanduser()
+        n = 0
+        for nicho in CENARIOS:
+            for f in FORMATOS_BIBLIOTECA:
+                (raiz / nicho / f).mkdir(parents=True, exist_ok=True)
+                n += 1
+        print(f"📁 {n} pasta(s) em {raiz}\n")
+        print("   Agora mande as imagens pra dentro delas. Do Windows:")
+        print(f"   scp \"C:\\...\\moda-erros\\*.png\" "
+              f"root@SEU_HOST:{raiz}/moda/erros/\n")
+        print(f"   Depois:  fundo_ia.py --arvore {raiz}")
+        return 0
+
+    if a.arvore:
+        return importar_arvore(a.arvore)
 
     if a.do_plano is not None:
         return do_plano(a.do_plano or None, a.seco)

@@ -5976,6 +5976,36 @@ faz o papel GANHAR do formato, e o fecho pede `cta`, as duas composições de
 produto pedem `produto`. Sem isso, o fecho de todo carrossel de `erros` pegaria
 foto de erro.
 
+#### 🖥️ ⚠️ TODO BLOCO DE COMANDO PRECISA DIZER **EM QUAL MÁQUINA** RODA (24/08)
+
+O Dre colou um script de **PowerShell** (que cria as 60 pastas no Windows dele)
+no **bash da VPS**:
+
+    =: command not found
+    New-Item: command not found
+    Command 'explorer' not found
+
+Culpa da instrução, não dele. Os dois blocos vinham seguidos na mesma resposta,
+o anterior era bash da VPS, e nenhum dos dois dizia onde rodava. Os prompts são
+quase idênticos (`root@vmi...#` e `PS C:\Users\...>`) e quem está no meio de
+uma sequência não olha pro prompt, olha pro próximo bloco.
+
+É a mesma família do *"instrução dentro de sequência de comando é comando que
+não roda"* (o Caddyfile, 22/08) e do *"comando com data na mão tem prazo de
+validade"*. **Explicar melhor não resolve — o certo é o comando não precisar da
+explicação:**
+
+    fundo_ia.py --criar-arvore ~/fundos   # cria as 60 pastas NA VPS
+    fundo_ia.py --arvore ~/fundos         # importa <nicho>/<formato>/ inteiro
+
+Assim o PowerShell sai da jogada: as pastas nascem onde o Dre já está logado, e
+o Windows só precisa de `scp`, que ele já usa. **E o laço de bash de 60 pastas
+que eu tinha mandado colar também sumiu** — laço colado é onde mora o erro que
+ninguém vê: um `for` escrito errado importa metade, e "metade" não aparece em
+lugar nenhum depois. Com um comando, quem sabe a estrutura é o programa, e o
+relatório do fim conta quantas entraram em cada formato **e quantas pastas
+continuam vazias**.
+
 #### 🎨 A PALETA DE `moda` BRIGA COM O ACERVO DE `moda` (24/08)
 
 Medindo os 10 fundos de moda que o Dre gerou:
