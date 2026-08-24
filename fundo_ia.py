@@ -763,6 +763,64 @@ def contato(nicho: str, saida=None) -> int:
     return 0
 
 
+_MESES = {"jan": 1, "fev": 2, "mar": 3, "abr": 4, "mai": 5, "jun": 6,
+          "jul": 7, "ago": 8, "set": 9, "out": 10, "nov": 11, "dez": 12}
+_RX_TS = re.compile(r"(\d{1,2})\s+de\s+(\w{3})\w*\.?\s+de\s+(\d{4}),?\s+"
+                    r"(\d{2})[_:h](\d{2})[_:](\d{2})", re.I)
+
+
+def _quando_baixou(arq: Path) -> float:
+    """A hora do download — LIDA DO NOME quando dá, senão do `mtime`.
+
+    ⚠️ O `mtime` NÃO SOBREVIVE AO `scp`. Sem `-p`, todo arquivo chega na VPS com
+    a hora da transferência, e aí ordenar por `mtime` devolve a ordem em que o
+    shell expandiu o `*.png` — **alfabética**. Alfabética junta `(1)`, `(10)`,
+    `(2)`, `(3)`: os blocos originais viram picadinho e o `--lotes` entregaria
+    grupos errados com toda a cara de certos.
+
+    Mas o ChatGPT carimba a hora NO NOME do arquivo ("ChatGPT Image 24 de ago.
+    de 2026, 15_29_23 (4).png"), e nome sobrevive a qualquer cópia. O `mtime`
+    vira só o plano B, pra imagem que veio de outra fonte."""
+    m = _RX_TS.search(arq.name)
+    if m:
+        try:
+            import datetime as _dt
+            d, mes, ano, h, mi, s = m.groups()
+            mesn = _MESES.get(mes[:3].lower())
+            if mesn:
+                return _dt.datetime(int(ano), mesn, int(d), int(h), int(mi),
+                                    int(s)).timestamp()
+        except Exception:
+            pass
+    return arq.stat().st_mtime
+
+
+def _agrupar(fotos: list, tamanho: int, folga: int = 90) -> list:
+    """Corta a lista em blocos por BURACO DE TEMPO, não a cada N fixo.
+
+    ⚠️ CORTAR DE 10 EM 10 SÓ FUNCIONA SE TODO BLOCO TIVER 10. O acervo do Dre
+    tem lotes de 10, mas também tem avulsas (uma imagem sozinha às 17_31_40) e
+    lotes incompletos. Um único bloco de 9 desalinha TODO o resto da lista — e o
+    erro não aparece: sai um `lote-14` misturando o fim de um formato com o
+    começo de outro, e ninguém percebe até ver o carrossel.
+
+    O download de um lote leva segundos; entre um lote e o outro passam
+    dezenas. Cortar onde o buraco é grande devolve os blocos REAIS. O `tamanho`
+    vira só um teto de segurança."""
+    if not fotos:
+        return []
+    blocos, atual = [], [fotos[0]]
+    for ant, foto in zip(fotos, fotos[1:]):
+        gap = _quando_baixou(foto) - _quando_baixou(ant)
+        if gap > folga or len(atual) >= tamanho:
+            blocos.append(atual)
+            atual = []
+        atual.append(foto)
+    if atual:
+        blocos.append(atual)
+    return blocos
+
+
 def lotes(pasta, tamanho: int = 10, saida=None) -> int:
     """Reconstrói os blocos de download pela HORA e monta uma folha por bloco.
 
@@ -783,12 +841,12 @@ def lotes(pasta, tamanho: int = 10, saida=None) -> int:
         print("❌ falta o Pillow — use o .venv")
         return 1
     pasta = Path(pasta).expanduser()
-    fotos = sorted((a for a in pasta.iterdir()
-                    if a.is_file() and a.suffix.lower() in EXTENSOES),
-                   key=lambda a: a.stat().st_mtime)
-    if not fotos:
+    brutas = [a for a in pasta.iterdir()
+              if a.is_file() and a.suffix.lower() in EXTENSOES]
+    if not brutas:
         print(f"❌ nenhuma imagem em {pasta}")
         return 1
+    fotos = sorted(brutas, key=_quando_baixou)
 
     saida = Path(saida) if saida else BASE_DIR / "pronto_carrossel" / "lotes"
     if saida.exists():
@@ -796,7 +854,7 @@ def lotes(pasta, tamanho: int = 10, saida=None) -> int:
         _sh.rmtree(saida)
     saida.mkdir(parents=True, exist_ok=True)
 
-    blocos = [fotos[i:i + tamanho] for i in range(0, len(fotos), tamanho)]
+    blocos = _agrupar(fotos, tamanho)
     mapa = {}
     print(f"📦 {len(fotos)} imagem(ns) → {len(blocos)} lote(s) de {tamanho}\n")
     for n, bloco in enumerate(blocos, start=1):

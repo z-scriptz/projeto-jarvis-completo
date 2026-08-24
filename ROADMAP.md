@@ -6161,9 +6161,29 @@ e ele não lembra a ordem: *"acho que foi pet, beleza, tech, moda, casa, geral. 
 depois tech 100 e casa 100"*. Sem separação, as 260 viram um monte só — o acervo
 funciona, mas perde o nicho e o formato que custaram horas pra gerar.
 
-⚠️ **A MEMÓRIA DE QUEM BAIXOU FALHA; O CARIMBO DE TEMPO DO ARQUIVO, NÃO.** O
-ChatGPT entrega os blocos em sequência, então ordenar por `mtime` e cortar de 10
-em 10 devolve os blocos originais — exatos, sem depender de ninguém lembrar.
+⚠️ **A MEMÓRIA DE QUEM BAIXOU FALHA; O CARIMBO DE TEMPO, NÃO** — mas o carimbo
+certo **não é o `mtime`**.
+
+O `scp` sem `-p` não preserva data: os 268 arquivos chegaram na VPS com a hora
+da transferência. Ordenar por `mtime` devolveria a ordem em que o shell expandiu
+o `*.png`, que é **alfabética** — e alfabética junta `(1)`, `(10)`, `(2)`, `(3)`.
+Os blocos originais viravam picadinho, e o `--lotes` entregaria grupos errados
+**com toda a cara de certos**.
+
+Só que o ChatGPT carimba a hora **no nome do arquivo** (`ChatGPT Image 24 de
+ago. de 2026, 15_29_23 (4).png`), e nome sobrevive a qualquer cópia.
+`_quando_baixou()` lê o nome primeiro e só cai no `mtime` como plano B.
+
+⚠️ **E O CORTE É POR BURACO DE TEMPO, NÃO A CADA 10.** Cortar de 10 em 10 só
+funciona se todo bloco tiver 10 — e o acervo tem avulsas (uma imagem sozinha às
+17:31:40) e lotes incompletos. **Um único bloco de 9 desalinha todo o resto da
+lista**, e o erro não aparece: sai um `lote-14` misturando o fim de um formato
+com o começo de outro, e ninguém percebe até ver o carrossel. Baixar um lote
+leva segundos; entre um lote e outro passam dezenas. Cortar onde o buraco é
+grande devolve os blocos REAIS; o `--tamanho` vira só teto de segurança.
+
+Testado contra os nomes reais do log do Dre: três blocos de 10 limpos e as
+avulsas do fim agrupadas.
 
 Mas o relógio **não sabe o que cada bloco É**. E é aí que a folha de contato
 fecha o par: eu olho a grade e digo "esse é pet" (comedouro, caminha, bolsa de
