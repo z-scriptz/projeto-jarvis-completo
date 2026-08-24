@@ -553,6 +553,66 @@ def _casar_produto(slide: dict, produtos: list, i: int, usados: set):
     return produtos[i] if i < len(produtos) else None
 
 
+
+# ⚠️ O QUE CADA FORMATO OBRIGA NA NARRATIVA (24/08).
+#
+# O `desc` de cada formato é UMA LINHA, e uma linha não segura estrutura. No
+# teste do dia o brain escolheu `passo_a_passo` e o Gemini devolveu quatro
+# DICAS INDEPENDENTES — "entenda os sinais do bebê", "crie um cantinho
+# tranquilo", "use produtos pensados pra eles". Nada ali é passo: some o
+# terceiro e os outros continuam de pé.
+#
+# **O formato virava rótulo.** O brain registrava `passo_a_passo` no ledger, a
+# métrica ia medir "desempenho de passo a passo", e o que saiu foi lista. Isso
+# não é só estética: envenena a fase 2, que um dia vai decidir o que postar
+# comparando formatos que nunca foram o que diziam ser.
+#
+# Cada roteiro abaixo diz o que CADA SLIDE tem que ser. É mais texto no prompt,
+# e é o texto que faz o rótulo virar verdade.
+ROTEIROS = {
+    "lista": (
+        "Cada slide do corpo e UM produto, com o nome dele no titulo.\n"
+        "  A ordem importa: o melhor achado vai por ULTIMO, nunca no primeiro.\n"
+        "  O corpo diz PRA QUE serve e POR QUE vale — nao repete o nome."
+    ),
+    "erros": (
+        "Cada slide do corpo e UM erro que a pessoa comete SEM PERCEBER.\n"
+        "  O titulo nomeia o erro (nao a solucao). O corpo explica por que\n"
+        "  aquilo atrapalha, e a conclusao diz o que fazer no lugar.\n"
+        "  Erro tem que ser algo que a pessoa FAZ, nao algo que ela nao tem."
+    ),
+    "antes_depois": (
+        "SLIDE 1 do corpo: como era ANTES (o incomodo concreto, sem julgar).\n"
+        "  SLIDE 2: o que mudou — a acao, nao o sentimento.\n"
+        "  SLIDE 3: o DEPOIS, descrito pelo que a pessoa nota no dia a dia.\n"
+        "  Nao invente medida, tempo nem porcentagem de melhora."
+    ),
+    "comparacao": (
+        "Cada slide do corpo e UMA das opcoes, e as duas sao comparadas pelo\n"
+        "  MESMO criterio (preco, espaco, durabilidade — escolha um e mantenha).\n"
+        "  Nenhuma das duas e 'a ruim': cada uma ganha em uma situacao.\n"
+        "  O ultimo slide diz PRA QUEM cada uma serve, nao qual e melhor."
+    ),
+    "passo_a_passo": (
+        "⚠️ ESTE FORMATO E UMA SEQUENCIA, NAO UMA LISTA DE DICAS.\n"
+        "  O PASSO 2 so faz sentido DEPOIS do PASSO 1 ter sido feito. Se voce\n"
+        "  puder trocar a ordem dos slides sem estragar nada, voce escreveu\n"
+        "  uma lista e o formato esta errado — reescreva.\n"
+        "  Comece o titulo de cada slide com o verbo da acao ('Separe...',\n"
+        "  'Depois disso, ...'), e o rotulo com PASSO 1, PASSO 2..."
+    ),
+    "historia": (
+        "A sequencia e: problema vivido -> o que voce tentou e nao deu ->\n"
+        "  o que descobriu -> como aplicou -> o que mudou.\n"
+        "  Escreva em primeira pessoa, no passado. Sem moral da historia."
+    ),
+    "mitos": (
+        "Cada slide do corpo e UMA frase que todo mundo repete, e a resposta.\n"
+        "  O titulo e o mito (como as pessoas falam). O corpo diz se procede\n"
+        "  e o que e verdade — sem inventar dado, numero nem estudo."
+    ),
+}
+
 def _prompt(formato: str, nicho: str, produtos: list, angulo: str) -> str:
     cfg = FORMATOS[formato]
     # ⚠️ NUMERADOS, E O MODELO TEM QUE DEVOLVER O NÚMERO. Antes era uma lista
@@ -577,6 +637,9 @@ uma pessoa falando — NAO como anuncio.
 FORMATO: {formato} — {cfg['desc']}
 ANGULO DA CAPA: {angulo}
 
+COMO ESTE FORMATO TEM QUE SER ESCRITO (isto NAO e sugestao):
+  {ROTEIROS.get(formato, "Um assunto por slide, do mais fraco pro mais forte.")}
+
 PRODUTOS DISPONIVEIS:
 {nomes}
 
@@ -589,8 +652,25 @@ REGRAS DURAS:
    · "conclusao": ate 5 palavras, o fecho pratico do slide (ex: "Descarta
      antes de organizar"). Vira uma etiqueta verde no rodape.
 2. Sem emoji, sem aspas, sem hashtag, sem CAIXA ALTA gritada.
-3. A capa nao pode fechar porta: nada de "se voce tem X" ou "quem sofre com
-   Y". Ela descreve uma situacao reconhecivel por muita gente.
+3. ⚠️ A CAPA E O SLIDE QUE DECIDE O POST INTEIRO, e ela tem DUAS travas:
+
+   3a. GANCHO AMPLO. A conta e de "{nicho}", nao de um sub-assunto dele. A
+       capa tem que interessar a quem ainda nao sabe que precisa daquilo.
+       Nada de "se voce tem X", "quem sofre com Y" — e nem de assunto que
+       so serve pra um grupo pequeno.
+       ERRADO: "O jeito mais facil de limpar mamadeiras"
+               (fecha a conta de Casa em quem tem bebe)
+       CERTO:  "4 coisas que fazem voce perder tempo na cozinha"
+               (a mamadeira pode aparecer LA DENTRO, num slide)
+       O especifico e permitido quando o proprio produto so serve pra
+       aquele publico — mas ai o slide 2 precisa abrir de novo.
+
+   3b. SEM DUPLO SENTIDO. Leia a capa em voz alta imaginando alguem
+       passando rapido no feed, sem contexto e sem ver a foto. Se qualquer
+       palavra puder ser lida com sentido sexual, violento ou ofensivo,
+       TROQUE A PALAVRA — nao adiante explicar depois, porque ninguem le o
+       slide 2 pra corrigir a leitura do slide 1.
+       Foi o que aconteceu com "evitar o choro na mamada".
 4. Nao invente preco, marca, medida nem promessa de resultado.
 5. Nada de "corre ver", "arrasta que eu te mostro", "voce nao vai acreditar".
 
@@ -607,8 +687,19 @@ Por isso a ordem e:
   · CORPO     {passos} slides de entrega, um assunto por slide. O MAIS FORTE
               vai por ULTIMO, nao primeiro.
   · RESUMO    a lista do que foi dito, curta, feita pra ser SALVA.
-  · CTA       contextual, nunca generico. Nada de "siga para mais dicas".
-              Puxe do assunto: "voce fazia algum desses?".
+  · CTA       ⚠️ O CTA E CONSEQUENCIA DO QUE O CARROSSEL ENTREGOU, e o
+              erro classico e pedir uma coisa que o post nao sustenta.
+              Escolha pelo que os slides REALMENTE mostraram:
+                mostrou produto com preco  -> "comenta LINK que eu te mando"
+                foi resumo/checklist       -> "salva pra consultar depois"
+                foi lista de erros         -> "qual desses voce fazia?"
+                foram duas opcoes          -> "qual dos dois voce levaria?"
+                nao mostrou produto nenhum -> pergunta sobre o assunto,
+                                              NUNCA "quer o link?"
+              ⚠️ Se voce nao citou nenhum produto, esta PROIBIDO de
+              prometer link — "quer o link desses achadinhos?" num post que
+              so deu dicas nao e CTA, e propaganda colada no fim.
+              Nada de "siga para mais dicas".
 
 DESTAQUE EM COR: marque com *asteriscos* a parte da CAPA que deve sair
 colorida — 1 a 3 palavras, o miolo da frase, nunca a frase toda.

@@ -5932,6 +5932,46 @@ mostra — o "parece que pegou da Shopee" que eu já tinha declarado resolvido
 **duas vezes**. Sobre cartão branco a foto de catálogo some sozinha, com ou sem
 blend; o multiply virou reforço, não estrutura.
 
+#### 🧠 O BRAIN — três consertos de conteúdo (24/08)
+
+**1. ⚠️ O FORMATO VIRAVA RÓTULO.** O brain escolheu `passo_a_passo` e o Gemini
+devolveu quatro DICAS INDEPENDENTES ("entenda os sinais do bebê", "crie um
+cantinho tranquilo"). Nada ali era passo: some o terceiro e os outros continuam
+de pé.
+
+> E o estrago não é estético. O ledger registra `passo_a_passo`, e a **fase 2**
+> um dia vai decidir o que postar comparando o desempenho dos formatos — usando
+> um histórico de posts que nunca foram o que diziam ser. **Formato mentiroso
+> envenena a medição futura**, e ninguém vai conseguir voltar atrás.
+
+A causa: o `desc` de cada formato tem UMA LINHA, e uma linha não segura
+estrutura. Nasceu o `ROTEIROS`, que diz o que CADA SLIDE tem que ser. O teste
+que o `passo_a_passo` agora carrega no prompt é literal:
+
+    "Se voce puder trocar a ordem dos slides sem estragar nada, voce
+     escreveu uma lista e o formato esta errado — reescreva."
+
+**2. O GANCHO FECHAVA A CONTA.** *"O jeito mais fácil de limpar mamadeiras"* numa
+conta de **Casa**. A regra antiga só proibia o padrão `"se você tem X"` — e
+nenhuma das duas falhas reais tinha esse formato. Agora a regra 3 tem exemplo
+ERRADO e CERTO com o caso que aconteceu, e diz onde o específico cabe: **dentro
+de um slide, não na capa.**
+
+⚠️ **E ganhou uma segunda trava: DUPLO SENTIDO.** *"evitar o choro na mamada"*
+lido rápido no feed, sem foto e sem contexto, vai pro lugar errado. A regra manda
+ler a capa em voz alta imaginando quem passa rápido — **não adianta explicar no
+slide 2, porque ninguém lê o slide 2 pra corrigir a leitura do slide 1.**
+
+**3. O CTA PROMETIA O QUE O POST NÃO TINHA.** *"Quer o link desses achadinhos?
+comenta PASSO"* num carrossel que **não mostrou produto nenhum**. Agora o CTA é
+escolhido pelo que os slides realmente entregaram, com uma proibição explícita:
+sem produto citado, está **proibido** prometer link. *"Quer o link?"* num post só
+de dicas não é CTA — é propaganda colada no fim.
+
+⚠️ **NÃO ENTROU O `FACT_CHECK_REQUIRED`** que o ChatGPT propôs (bebê/saúde/
+suplemento): o Dre disse que já resolveu isso por outro caminho. Fica anotado que
+foi decisão dele, não esquecimento — pra ninguém reintroduzir achando que faltou.
+
 #### 📚 BIBLIOTECA POR FORMATO — `fundos/<nicho>/<formato>/` (24/08)
 
 O Dre está gerando **100 imagens por nicho, separadas por formato de carrossel**
