@@ -595,7 +595,27 @@ def _ultimo_carrossel():
     aprendida."""
     raiz = BASE_DIR / "pronto_carrossel"
     cands = [d for d in raiz.iterdir() if d.is_dir()] if raiz.is_dir() else []
-    return max(cands, key=lambda d: d.stat().st_mtime) if cands else None
+    return max(cands, key=_quando) if cands else None
+
+
+def _quando(pasta) -> float:
+    """A hora do arquivo MAIS NOVO dentro da pasta, não a da pasta.
+
+    ⚠️ MTIME DE DIRETÓRIO NÃO É "MEXIDO POR ÚLTIMO". Ele só muda quando uma
+    ENTRADA é criada ou removida — **reescrever um arquivo que já existe não
+    mexe nele**. E o `--agora` reescreve `01.jpg`..`07.jpg` numa pasta que já
+    os tinha, do mesmo dia. Resultado real (24/08): o Dre rodou `--agora tech`,
+    a pasta `tech` ficou com o mtime da rodada ANTERIOR, a pasta `pet` (onde
+    um `fundos/` tinha sido criado depois) ficou "mais nova" — e o `--do-plano`
+    gerou 7 imagens de pet, pagas, enquanto ele testava tech.
+
+    Ninguém erra sozinho aqui: o comando roda, imprime ✅ sete vezes, e o único
+    sinal são os títulos dos slides falando de outro nicho no meio do log."""
+    try:
+        return max((a.stat().st_mtime for a in pasta.rglob("*") if a.is_file()),
+                   default=pasta.stat().st_mtime)
+    except Exception:
+        return 0.0
 
 
 def do_plano(pasta=None, seco: bool = False) -> int:

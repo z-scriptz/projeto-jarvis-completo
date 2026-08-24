@@ -654,10 +654,22 @@ def _comp_respiro(item, i, total, plano, p, ctx) -> str:
 def _comp_produto(item, i, total, plano, p, ctx) -> str:
     """Objeto isolado em superfície clara. O `multiply` some com o fundo
     branco do catálogo da Shopee — ver `.recorte` no CSS."""
+    # ⚠️ ERA A ÚNICA COMPOSIÇÃO QUE NÃO DESENHAVA FUNDO NENHUM, e foi ela que
+    # sobrou no aviso `💸 04.png` depois de eu ter "resolvido" o desperdício.
+    # Ela é clara de propósito (o `.palco` branco precisa disso), então a foto
+    # entra bem lavada: dá contexto ao produto sem competir com ele nem
+    # escurecer a superfície que faz o recorte funcionar.
+    amb = ctx["fundo"] or _fundo(plano, {"n": ctx.get("n")})
+    ambiente = (f'<div class="fotocheia" style="background-image:url({amb});'
+                f'filter:saturate(.9) contrast(1.02) brightness(1.06)"></div>'
+                f'<div class="fade" style="inset:0;background:linear-gradient('
+                f'180deg,{p["clarinho"]}d9 0%,{p["clarinho"]}f2 38%,'
+                f'{p["clarinho"]} 100%)"></div>') if amb else ""
     return f"""<div class="slide" style="background:{p['clarinho']};
      color:#1C1A18">
+  {ambiente}
   <div class="mancha" style="width:820px;height:820px;right:-250px;top:-280px;
-       background:{p['sombra']}"></div>
+       background:{p['sombra']};opacity:{'.55' if amb else '1'}"></div>
   {_cabecalho(plano, i, total, False)}
   <div style="margin-top:44px">
     <h1 style="font-size:76px">{_marcar(ctx['titulo'], p['acento'])}</h1>

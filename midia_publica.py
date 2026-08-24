@@ -598,7 +598,17 @@ def _ultima_pasta() -> Path:
     cands = [d for d in raiz.iterdir() if d.is_dir()] if raiz.is_dir() else []
     if not cands:
         raise MidiaPublicaErro(f"nenhuma pasta em {raiz}")
-    return max(cands, key=lambda d: d.stat().st_mtime)
+    # ⚠️ pelo arquivo mais novo DENTRO, não pelo mtime da pasta: reescrever um
+    # arquivo que já existe não mexe no mtime do diretório, e o `--agora`
+    # reescreve os mesmos `NN.jpg` o dia inteiro. Em 24/08 isso fez o `--ver`
+    # abrir o carrossel de `pet` logo depois de renderizar `tech`.
+    def _quando(p):
+        try:
+            return max((a.stat().st_mtime for a in p.rglob("*") if a.is_file()),
+                       default=p.stat().st_mtime)
+        except Exception:
+            return 0.0
+    return max(cands, key=_quando)
 
 
 def _cli_ver(argv: list) -> int:
