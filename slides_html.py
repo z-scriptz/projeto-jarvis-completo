@@ -214,7 +214,14 @@ def _fundo(plano: dict, item: dict = None) -> str:
             return _b64(cand)
     try:
         from fundo_ia import fundo_do_nicho
-        alvo = fundo_do_nicho(plano.get("nicho", "geral"))
+        # ⚠️ O FORMATO VAI JUNTO, e é ele que faz a biblioteca valer. O acervo
+        # passou a ser `fundos/<nicho>/<formato>/`: 100 imagens por nicho,
+        # separadas por erros / lista / checklist / comparação / antes-depois.
+        # Sem passar o formato aqui, o rodízio continuaria pegando "uma foto
+        # bonita do nicho" e as 600 imagens organizadas viravam 600 imagens
+        # sorteadas — o trabalho de separação existiria e ninguém consultaria.
+        alvo = fundo_do_nicho(plano.get("nicho", "geral"),
+                              plano.get("formato", ""))
         if alvo:
             return _b64(alvo)
     except Exception:

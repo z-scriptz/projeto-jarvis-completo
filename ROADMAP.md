@@ -5932,6 +5932,54 @@ mostra — o "parece que pegou da Shopee" que eu já tinha declarado resolvido
 **duas vezes**. Sobre cartão branco a foto de catálogo some sozinha, com ou sem
 blend; o multiply virou reforço, não estrutura.
 
+#### 📚 BIBLIOTECA POR FORMATO — `fundos/<nicho>/<formato>/` (24/08)
+
+O Dre está gerando **100 imagens por nicho, separadas por formato de carrossel**
+(erros, curiosidade, comparação, checklist, lista, produto, problema/solução,
+CTA, não-compre, antes-depois). São ~600 imagens.
+
+⚠️ **A ESTRUTURA PRECISAVA EXISTIR ANTES DA TRANSFERÊNCIA, não depois.** Uma
+pasta chapada por nicho jogaria fora a informação mais valiosa dessa
+biblioteca: **um fundo de "erros" e um de "checklist" não são
+intercambiáveis**. Com o formato na pasta, o rodízio deixa de ser "uma foto
+bonita do nicho" e vira "uma foto que combina com o que este carrossel está
+dizendo" — sem custar uma chamada de IA.
+
+    fundos/moda/erros/moda-erros-01.jpg
+    fundos/moda/lista/moda-lista-01.jpg
+    fundos/moda/*.jpg            ← a raiz continua valendo (comportamento antigo)
+
+- `--importar <nicho> --formato erros --de <pasta>`
+- `existentes(nicho, formato)` cai na raiz quando o formato não tem acervo
+- `--listar` mostra a árvore com a contagem por formato
+- ⚠️ **e o `_fundo()` do `slides_html` passa `plano["formato"]`** — sem isso a
+  biblioteca existiria e ninguém a consultaria: 600 imagens separadas com
+  cuidado voltariam a ser 600 imagens sorteadas.
+- a deduplicação passou a olhar só a pasta de destino: a mesma cena pode
+  legitimamente existir em `erros` e em `checklist`, são usos diferentes.
+
+#### 🎨 A PALETA DE `moda` BRIGA COM O ACERVO DE `moda` (24/08)
+
+Medindo os 10 fundos de moda que o Dre gerou:
+
+| imagem | brilho | cor média |
+|---|---|---|
+| seda + corrente de ouro | 0.09 | quente escuro |
+| terno azul | 0.10 | **azul** (15,26,40) |
+| sneakers | 0.17 | **azul** (20,48,77) |
+| bolsa + scarpin | 0.15 | **azul** (30,39,52) |
+
+E a paleta da conta tem acento **`#C2456B` — rosa framboesa**. Sobre foto
+azul-marinho com dourado isso não combina: o acento vira um corpo estranho no
+slide. O acento de `geral` (`#B98B2E`, dourado) casaria com o que ele gerou.
+
+> **Quando o acervo é bom, é ele que define a identidade — não a paleta que eu
+> escolhi antes de existir foto nenhuma.** As paletas nasceram como suposição
+> ("moda = rosa"); agora existe evidência, e evidência ganha de suposição.
+
+**Ainda não mexido** — trocar o acento de uma conta muda o visual dela inteiro
+e é decisão do Dre, não minha. Fica registrado com a medição junto.
+
 #### 💡 O ACERVO TEM DUAS FAMÍLIAS DE LUZ — véu medido, não chutado (24/08)
 
 O Dre gerou 120 fundos no ChatGPT. Medindo o brilho médio deles, aparece uma

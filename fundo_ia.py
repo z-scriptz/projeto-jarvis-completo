@@ -181,8 +181,21 @@ def prompt_do_nicho(nicho: str, i: int = None) -> str:
     return f"{cena}, {_COMUM}"
 
 
-def _pasta(nicho: str) -> Path:
-    return FUNDOS / (nicho or "geral").lower()
+# ⚠️ O ACERVO GANHOU UM NÍVEL: `assets/fundos/<nicho>/<formato>/`.
+# O Dre está gerando 100 imagens POR NICHO organizadas por formato de carrossel
+# (erros, comparação, checklist, lista, produto, antes-depois, CTA...). Isso é
+# uma biblioteca de 600 imagens, e uma pasta chapada por nicho jogaria fora a
+# informação mais valiosa que ela tem: **um fundo de "erros" e um de "checklist"
+# não são intercambiáveis**. Com o formato na pasta, o rodízio deixa de ser
+# "uma foto bonita do nicho" e vira "uma foto que combina com o que este
+# carrossel está dizendo" — sem custar uma chamada de IA.
+#
+# A pasta rasa continua valendo: quem largar imagem direto em `fundos/casa/`
+# tem o comportamento antigo, e é pra lá que o código cai quando o formato não
+# tem acervo próprio. Nada do que já existe quebra.
+def _pasta(nicho: str, formato: str = "") -> Path:
+    base = FUNDOS / (nicho or "geral").lower()
+    return (base / formato.lower()) if formato else base
 
 
 # ⚠️ NÃO VOLTE ISTO PRA `*.jpg`. O `--gerar` do Fal salvava .jpg e por isso o
@@ -195,12 +208,19 @@ def _pasta(nicho: str) -> Path:
 EXTENSOES = (".jpg", ".jpeg", ".png", ".webp")
 
 
-def existentes(nicho: str) -> list:
-    p = _pasta(nicho)
-    if not p.exists():
-        return []
-    return sorted(a for a in p.iterdir()
-                  if a.suffix.lower() in EXTENSOES and a.is_file())
+def existentes(nicho: str, formato: str = "") -> list:
+    """As imagens do nicho. Com `formato`, as daquele formato — e se ele não
+    tiver acervo próprio, as da raiz do nicho."""
+    def _dentro(p):
+        if not p.exists():
+            return []
+        return sorted(a for a in p.iterdir()
+                      if a.suffix.lower() in EXTENSOES and a.is_file())
+    if formato:
+        achadas = _dentro(_pasta(nicho, formato))
+        if achadas:
+            return achadas
+    return _dentro(_pasta(nicho))
 
 
 ALVO_L, ALVO_A = 1080, 1350
@@ -210,7 +230,7 @@ def _digestao(caminho) -> str:
     return hashlib.sha1(Path(caminho).read_bytes()).hexdigest()
 
 
-def importar(nicho: str, origens: list) -> int:
+def importar(nicho: str, origens: list, formato: str = "") -> int:
     """Põe no acervo do nicho as imagens que o Dre baixou do ChatGPT.
 
     Faz três coisas que parecem frescura e não são:
@@ -255,9 +275,12 @@ def importar(nicho: str, origens: list) -> int:
               f"(aceito {', '.join(EXTENSOES)}).")
         return 0
 
-    destino = _pasta(nicho)
+    destino = _pasta(nicho, formato)
     destino.mkdir(parents=True, exist_ok=True)
-    jaTem = {_digestao(a) for a in existentes(nicho)}
+    # ⚠️ a deduplicação olha SÓ a pasta de destino. A mesma cena pode
+    # legitimamente existir em `erros` e em `checklist` — são usos diferentes.
+    jaTem = {_digestao(a) for a in destino.iterdir()
+             if a.is_file() and a.suffix.lower() in EXTENSOES}
     indice = 0
     novos = 0
 
@@ -324,7 +347,8 @@ def importar(nicho: str, origens: list) -> int:
 
         while True:
             indice += 1
-            saida = destino / f"{nicho.lower()}-{indice:02d}.jpg"
+            base = f"{nicho.lower()}-{formato.lower()}" if formato else nicho.lower()
+            saida = destino / f"{base}-{indice:02d}.jpg"
             if not saida.exists():
                 break
         temp.replace(saida)
@@ -340,7 +364,7 @@ def importar(nicho: str, origens: list) -> int:
 MEMORIA_FUNDO = BASE_DIR / "shared" / "fundos_recentes.json"
 
 
-def fundo_do_nicho(nicho: str) -> str:
+def fundo_do_nicho(nicho: str, formato: str = "") -> str:
     """Um fundo do acervo do nicho. "" quando não há nenhum.
 
     ⚠️ RODÍZIO COM MEMÓRIA, NÃO SORTEIO — e isso vale DINHEIRO, não só estética.
@@ -349,7 +373,7 @@ def fundo_do_nicho(nicho: str) -> str:
     vezes por semana na MESMA conta. Guardando os últimos 3, os mesmos 6 fundos
     rendem o que 12 renderiam no sorteio — ou seja, **metade das imagens pra
     gerar**. É a mesma mecânica do rodízio dos fechos e do 1º comentário."""
-    arqs = [str(a) for a in existentes(nicho)]
+    arqs = [str(a) for a in existentes(nicho, formato)]
     if not arqs:
         return ""
     try:
@@ -816,6 +840,9 @@ def main() -> int:
                    help="põe no acervo as imagens baixadas do ChatGPT")
     p.add_argument("--de", nargs="+", metavar="CAMINHO", default=[],
                    help="pasta ou arquivos de onde importar")
+    p.add_argument("--formato", metavar="FORMATO", default="",
+                   help="erros, lista, checklist, comparacao, antes_depois... "
+                        "guarda em fundos/<nicho>/<formato>/")
     # `nargs="?"` + `const=""`: `--do-plano` sozinho pega a pasta mais recente
     p.add_argument("--do-plano", metavar="PASTA", dest="do_plano",
                    nargs="?", const="",
@@ -832,8 +859,8 @@ def main() -> int:
                   f"   .venv/bin/python fundo_ia.py --importar {a.importar} "
                   f"--de ~/fundos-chatgpt/")
             return 1
-        n = importar(a.importar, a.de)
-        acervo = existentes(a.importar)
+        n = importar(a.importar, a.de, a.formato)
+        acervo = existentes(a.importar, a.formato)
         print(f"\n{'✅' if n else '⚠️ '} {n} fundo(s) novo(s). "
               f"Acervo de '{a.importar}': {len(acervo)}.")
         if acervo:
@@ -860,13 +887,23 @@ def main() -> int:
         print(f"📁 {FUNDOS}\n")
         pesados = 0
         for nicho in CENARIOS:
-            arqs = existentes(nicho)
-            marca = "✅" if arqs else "⬜"
-            crus = [a for a in arqs if a.suffix.lower() != ".jpg"
+            base = _pasta(nicho)
+            raiz = [a for a in base.iterdir()
+                    if a.is_file() and a.suffix.lower() in EXTENSOES] \
+                if base.exists() else []
+            subs = sorted(d for d in base.iterdir() if d.is_dir()) \
+                if base.exists() else []
+            total = len(raiz) + sum(len(existentes(nicho, d.name)) for d in subs)
+            marca = "✅" if total else "⬜"
+            print(f"  {marca} {nicho:<8} {total:>3} fundo(s)"
+                  + (f"  ·  {len(raiz)} na raiz" if raiz else ""))
+            for d in subs:
+                n = len([a for a in d.iterdir() if a.is_file()
+                         and a.suffix.lower() in EXTENSOES])
+                print(f"        └ {d.name:<16} {n:>3}")
+            crus = [a for a in raiz if a.suffix.lower() != ".jpg"
                     or a.stat().st_size > 900_000]
             pesados += len(crus)
-            aviso = f"  ⚠️  {len(crus)} sem normalizar" if crus else ""
-            print(f"  {marca} {nicho:<8} {len(arqs)} fundo(s){aviso}")
         if pesados:
             # não é purismo: o fundo vira base64 dentro do HTML, e PNG cru
             # multiplica o tamanho do HTML por 4. Ver `importar()`.
@@ -876,6 +913,7 @@ def main() -> int:
                   "--de assets/fundos/casa/")
         print("\nPrompts:  python3 fundo_ia.py --prompt casa --quantos 10")
         print("Importar: python3 fundo_ia.py --importar casa --de ~/Downloads/")
+        print("  por formato:  --importar casa --formato erros --de ~/erros/")
         return 0
     if a.pexels:
         print(f"📁 {_pasta(a.pexels)}\n🆓 Pexels (uso comercial liberado)\n")
