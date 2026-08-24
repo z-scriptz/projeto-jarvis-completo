@@ -115,6 +115,58 @@ def _paleta(nicho: str) -> dict:
 # a decisão de ONDE arrumar foto (que é sua, e mudou duas vezes hoje) não fica
 # soldada no código do desenho.
 # ══════════════════════════════════════════════════════════════════════════
+_BRILHO_CACHE = {}
+
+
+def _brilho(caminho) -> float:
+    """Luminância média da imagem, de 0 (preta) a 1 (branca).
+
+    ⚠️ ISTO EXISTE PORQUE O ACERVO TEM DUAS FAMÍLIAS DE LUZ, e o template só
+    conhecia uma. Os fundos de `casa` e `tech` que o Dre gerou são noturnos —
+    parede escura, luz pontual, neon. Os de `pet` e `beleza` são claros — dia,
+    parede branca, mármore rosa. **As duas famílias estão ótimas**; o que estava
+    errado era o véu ser fixo, calibrado no lote escuro:
+
+        foto escura + brightness(.40)  → dramática ✅
+        foto clara  + brightness(.40)  → CINZA SUJA ❌
+
+    Medir custa milissegundos e resolve os dois casos sem escolher um. É a
+    mesma ideia do `_logo_claro()`: trocar um palpite por um fato."""
+    chave = str(caminho)
+    if chave in _BRILHO_CACHE:
+        return _BRILHO_CACHE[chave]
+    val = 0.5
+    try:
+        from PIL import Image
+        img = Image.open(caminho).convert("L")
+        img.thumbnail((48, 48))
+        px = list(img.getdata())
+        val = (sum(px) / len(px)) / 255.0 if px else 0.5
+    except Exception:
+        pass
+    _BRILHO_CACHE[chave] = val
+    return val
+
+
+def _veu(ctx: dict, alvo: float) -> str:
+    """O `filter:` que leva ESTA foto até a luminância `alvo`.
+
+    Sem isto o número mágico do CSS só serve pra uma família de foto. Com ele
+    o slide escuro pede "quero isto em 0.30" e cada imagem chega lá do seu
+    jeito — a clara desce bastante, a escura quase não mexe."""
+    b = max(0.04, ctx.get("brilho", 0.5))
+    # ⚠️ O TETO É 1.12, NÃO "o que for preciso". Perseguir o alvo pra CIMA
+    # clareia foto noturna — a sala de jantar do `casa` com um `brightness
+    # (1.83)` perde a penumbra, o brilho da luminária estoura e o grão
+    # aparece. O véu existe pra ESCURECER o que está claro demais pro texto
+    # ler; foto já escura está no ponto e não precisa de nada.
+    f = max(0.28, min(1.12, alvo / b))
+    # saturação e contraste sobem um pouco quando a foto é muito escurecida:
+    # escurecer lava a cor, e sem isso a foto vira cinza mesmo com o alvo certo
+    sat = 1.05 + (0.35 if f < 0.6 else 0.0)
+    return f"filter:saturate({sat:.2f}) contrast(1.06) brightness({f:.2f})"
+
+
 def _imagem_propria(plano: dict, n):
     """O caminho de `fundos/NN.png` — a imagem feita SOB MEDIDA pra este slide.
 
@@ -564,8 +616,7 @@ def _comp_cheia(item, i, total, plano, p, ctx) -> str:
     rotulo = ctx["rotulo"]
     return f"""<div class="slide" style="background:{p['escuro']};
      color:{p['clarinho']}">
-  {'<div class="fotocheia" style="background-image:url(' + foto + ');'
-   'filter:saturate(1.14) contrast(1.1) brightness(.88)"></div>' if foto else ''}
+  {'<div class="fotocheia" style="background-image:url(' + foto + ');' + _veu(ctx, .46) + '"></div>' if foto else ''}
   <!-- ⚠️ o véu é leve NO MEIO de propósito: esta composição existe pra a foto
        aparecer. Escurecer o quadro inteiro transforma "foto dominante" em
        "retângulo escuro com legenda" — e aí ela não se distingue da `numero`. -->
@@ -612,10 +663,18 @@ def _comp_numero(item, i, total, plano, p, ctx) -> str:
              + p['clarinho'] + '00 44%,' + p['clarinho'] + 'e6 80%,'
              + p['clarinho'] + ' 100%)"></div>') if (claro and ctx['fundo']) else ''
     return f"""<div class="slide" style="background:{fundoS};color:{corS}">
-  {'<div class="fotocheia" style="background-image:url(' + ctx['fundo'] + ');'
-   'filter:saturate(1.05) contrast(1.05) brightness(.40)"></div>'
+  {'<div class="fotocheia" style="background-image:url(' + ctx['fundo'] + ');' + _veu(ctx, .22) + '"></div>'
    if ctx['fundo'] and not claro else ''}
   {faixa}
+  <!-- ⚠️ DEGRADÊ EMBAIXO, senão o parágrafo pousa em cima do que a foto tiver
+       ali. A `cheia` sempre teve o dela; a `numero` escura não, e com foto de
+       ambiente cheia de textura (sofá, almofadas) o corpo em cinza claro
+       ficava no limite da leitura. Não é escurecer o quadro — é escurecer só
+       onde vai texto corrido. -->
+  {'<div class="fade" style="left:0;right:0;bottom:0;height:56%;'
+   'background:linear-gradient(180deg,' + p['escuro'] + '00 0%,'
+   + p['escuro'] + 'a6 46%,' + p['escuro'] + 'e6 100%)"></div>'
+   if (ctx['fundo'] and not claro) else ''}
   <div class="gigante" style="color:{p['acento']};
        opacity:{'.16' if claro else '.20'};
        {'top:430px' if faixa else ''}">{n:02d}</div>
@@ -660,8 +719,7 @@ def _comp_produto(item, i, total, plano, p, ctx) -> str:
     # entra bem lavada: dá contexto ao produto sem competir com ele nem
     # escurecer a superfície que faz o recorte funcionar.
     amb = ctx["fundo"] or _fundo(plano, {"n": ctx.get("n")})
-    ambiente = (f'<div class="fotocheia" style="background-image:url({amb});'
-                f'filter:saturate(.9) contrast(1.02) brightness(1.06)"></div>'
+    ambiente = (f'<div class="fotocheia" style="background-image:url({amb});' + _veu(ctx, .80) + f'"></div>'
                 f'<div class="fade" style="inset:0;background:linear-gradient('
                 f'180deg,{p["clarinho"]}d9 0%,{p["clarinho"]}f2 38%,'
                 f'{p["clarinho"]} 100%)"></div>') if amb else ""
@@ -706,8 +764,7 @@ def _comp_produto_vitrine(item, i, total, plano, p, ctx) -> str:
     foto = ctx["fundo"] or _fundo(plano, {"n": ctx.get("n")})
     return f"""<div class="slide" style="background:{p['escuro']};
      color:{p['clarinho']}">
-  {'<div class="fotocheia" style="background-image:url(' + foto + ');'
-   'filter:saturate(1.05) contrast(1.05) brightness(.38)"></div>'
+  {'<div class="fotocheia" style="background-image:url(' + foto + ');' + _veu(ctx, .22) + '"></div>'
    if foto else ''}
   <div class="mancha" style="width:900px;height:900px;right:-330px;
        bottom:-330px;background:{p['acento']};opacity:.14"></div>
@@ -777,8 +834,7 @@ def _comp_checklist(item, i, total, plano, p, ctx) -> str:
     escuro = bool(foto)
     return f"""<div class="slide" style="background:{p['escuro'] if escuro
      else p['clarinho']};color:{p['clarinho'] if escuro else '#1C1A18'}">
-  {'<div class="fotocheia" style="background-image:url(' + foto + ');'
-   'filter:saturate(1.05) contrast(1.04) brightness(.46)"></div>'
+  {'<div class="fotocheia" style="background-image:url(' + foto + ');' + _veu(ctx, .26) + '"></div>'
    '<div class="fade" style="inset:0;background:linear-gradient(180deg,'
    + p['escuro'] + 'b3 0%,' + p['escuro'] + '59 40%,' + p['escuro']
    + 'd9 100%)"></div>' if escuro else
@@ -880,7 +936,28 @@ def _escolher_comp(ctx: dict, recentes: list, tom_ant: str = "") -> tuple:
     cansa rápido") e eu implementei uma regra que só olhava UM slide pra trás.
     Agora a janela é dos DOIS últimos: alternar exige três composições, e três
     alternando já não parece fórmula."""
-    op = _elegiveis(ctx)
+    op = todas = _elegiveis(ctx)
+
+    # ⚠️ O VOTO DA FOTO VEM PRIMEIRO DE TODOS, e isso é uma correção de ORDEM,
+    # não de regra. Na 1ª versão ele vinha depois da janela anti-repetição: no
+    # teste com as duas famílias misturadas, uma foto CLARA de pet caiu na
+    # `cheia` (escura) porque a janela já tinha eliminado as claras. Resultado
+    # visível: mancha cinza no meio de um carrossel bonito.
+    #
+    # A hierarquia certa é essa, e vale registrar o porquê:
+    #     foto clara em composição escura  → parece DEFEITO
+    #     composição repetida              → parece repetida
+    # Uma custa a credibilidade do post, a outra custa um pouco de ritmo.
+    if ctx.get("propria"):
+        b = ctx.get("brilho", .5)
+        prefere = "claro" if b > .58 else "escuro" if b < .34 else ""
+        if prefere:
+            casa = [o for o in todas
+                    if COMPOSICOES[o]["tom"] in (prefere, "ambos")]
+            if casa:
+                op = todas = casa
+                tom_ant = "escuro" if prefere == "claro" else "claro"
+
     janela = [c for c in recentes[-2:] if c]
     livres = [o for o in op if o not in janela]
     if livres:
@@ -948,10 +1025,12 @@ def _html_conteudo(item: dict, i: int, total: int, plano: dict,
     # composições `meio` e `numero` levaram a culpa — elas estavam certas, só
     # recebiam string vazia. **Corrigi `checklist`, `vitrine` e os cinco fechos
     # um a um e não olhei a fonte comum dos três.**
-    ctx["propria"] = _imagem_propria(plano, ctx["n"])
-    ctx["fundo"] = (_b64(ctx["propria"]) if ctx["propria"] else
+    propria = _imagem_propria(plano, ctx["n"])
+    ctx["fundo"] = (_b64(propria) if propria else
                     (_fundo(plano, item) if item.get("fundo") else ""))
-    ctx["propria"] = ctx["propria"] is not None
+    ctx["propria"] = propria is not None
+    # o brilho é medido no ARQUIVO, não no base64 — e é ele que decide o véu
+    ctx["brilho"] = _brilho(propria) if propria else 0.5
     # ⚠️ `propria` PRECISA ENTRAR AQUI. Sem ela o checklist com imagem própria
     # era classificado como "sem foto", saía claro, e o log imprimia (c) num
     # slide que renderiza escuro — a alternância decidindo com dado errado.

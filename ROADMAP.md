@@ -5932,6 +5932,48 @@ mostra — o "parece que pegou da Shopee" que eu já tinha declarado resolvido
 **duas vezes**. Sobre cartão branco a foto de catálogo some sozinha, com ou sem
 blend; o multiply virou reforço, não estrutura.
 
+#### 💡 O ACERVO TEM DUAS FAMÍLIAS DE LUZ — véu medido, não chutado (24/08)
+
+O Dre gerou 120 fundos no ChatGPT. Medindo o brilho médio deles, aparece uma
+divisão limpa que **ninguém tinha pedido e que quebra o template**:
+
+| lote | luminância medida | família |
+|---|---|---|
+| `casa` (jantar, despensa, quarto) | 0.14 – 0.20 | **noturna** |
+| `tech` (setup neon, relógio, gadgets) | 0.14 – 0.29 | **noturna** |
+| `pet` (comedouro, cachorro, gato) | 0.61 | **clara** |
+| `beleza` (mármore, flatlay rosa) | 0.62 – 0.70 | **clara** |
+
+⚠️ **As duas famílias estão ótimas. O errado era o véu ser fixo**, calibrado no
+lote escuro do `casa`:
+
+    foto escura + brightness(.40)  → dramática ✅
+    foto clara  + brightness(.40)  → CINZA SUJA ❌
+
+`_brilho()` mede (thumbnail 48px, luminância média, com cache) e `_veu(ctx,
+alvo)` calcula o filtro que leva AQUELA foto até a luminância pedida. O slide
+escuro pede 0.22 e cada imagem chega lá do seu jeito. Mesma ideia do
+`_logo_claro()`: trocar um palpite por um fato.
+
+⚠️ **O TETO DO VÉU É 1.12, e isso importa.** Perseguir o alvo pra CIMA clareia
+foto noturna: a sala de jantar do `casa` com `brightness(1.83)` perde a
+penumbra, o brilho da luminária estoura e o grão aparece. O véu existe pra
+escurecer o que está claro demais pro texto ler — foto já escura está no ponto.
+
+**E A FOTO PASSOU A TER VOTO NO TOM DO SLIDE, antes de tudo.** Foto clara vai
+pra composição clara, escura pra escura. Na 1ª versão esse voto vinha DEPOIS da
+janela anti-repetição, e no teste com as duas famílias misturadas uma foto clara
+de pet caiu na `cheia` (escura) porque a janela já tinha eliminado as claras —
+mancha cinza no meio de um carrossel bonito. A hierarquia certa:
+
+> **foto clara em composição escura → parece DEFEITO.**
+> **composição repetida → parece repetida.**
+> Uma custa a credibilidade do post; a outra custa um pouco de ritmo.
+
+Junto: a `numero` escura ganhou degradê embaixo. Era a única composição escura
+sem ele, e com foto de ambiente texturizada (sofá, almofadas) o corpo em cinza
+claro ficava no limite da leitura.
+
 #### 🔴 TESTE MULTI-NICHO — dois defeitos críticos que o `casa` escondia (24/08)
 
 Rodamos tech, beleza e pet. O `casa` sozinho tinha escondido os dois piores
