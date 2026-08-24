@@ -135,7 +135,15 @@ def _fundo(plano: dict, item: dict = None) -> str:
             if alvo.exists():
                 return _b64(alvo)
 
-    for cand in ((item or {}).get("fundo"), (item or {}).get("foto"),
+    # ⚠️ `item["foto"]` NÃO ENTRA AQUI, E ISSO É O CONSERTO DE UM DEFEITO GRANDE.
+    # Ela é a foto de CATÁLOGO do produto: recorte em fundo branco. Como fundo
+    # de tela cheia, escurecida a 38%, ela vira um borrão cinza gigante com a
+    # silhueta do produto atrás do texto — foi o que deixou a `vitrine` toda
+    # cinza no teste. O cabeçalho deste arquivo já dizia, desde o primeiro dia,
+    # que "foto de catálogo vira mancha; foto de ambiente vira capa" — e mesmo
+    # assim o catálogo estava na lista de candidatos a fundo. Foto de produto
+    # tem um lugar só: dentro do `.palco`, no slide de produto.
+    for cand in ((item or {}).get("fundo"),
                  (plano.get("capa") or {}).get("fundo")):
         if isinstance(cand, str) and cand and Path(cand).exists():
             return _b64(cand)
@@ -359,6 +367,28 @@ h1 {{ font-family:'Disp',Georgia,serif; font-variation-settings:'wght' 900,
 .lista li {{ display:flex; gap:26px; align-items:flex-start; font-size:40px;
              line-height:1.34; margin-bottom:30px; }}
 .cartao {{ border-radius:34px; padding:46px 44px; }}
+/* ⚠️ `isolation:isolate` NÃO É OPCIONAL, É O QUE FAZ O TRUQUE FUNCIONAR.
+   `mix-blend-mode` mescla o elemento com o que está pintado ATRÁS DELE DENTRO
+   DO MESMO contexto de empilhamento. A regra global lá em cima dá `z-index:1`
+   em todo filho direto de `.slide`, e isso CRIA um contexto novo, de fundo
+   transparente: o multiply passava a mesclar contra o nada e a foto saía
+   intacta, com o quadrado branco do catálogo à mostra — exatamente o "parece
+   que pegou da Shopee" que eu tinha declarado resolvido. Isolando o palco, o
+   único fundo possível é o dele, que é claro. Testado com uma foto de fundo
+   branco de verdade, não no olho. */
+/* ⚠️ E O PALCO É BRANCO, NÃO CREME — o que torna o truque à prova de falha.
+   Foto de catálogo vem em fundo BRANCO; sobre um cartão branco ela some sozinha,
+   com ou sem blend. Deixar o palco no creme obrigava o multiply a funcionar, e
+   ele é frágil demais pra ser a única linha de defesa: na `vitrine` escura ele
+   vazou pro slide inteiro e deixou tudo cinza. Agora o multiply é um reforço
+   (tira sombra cinza de recorte mal feito), não a estrutura. */
+.palco {{ display:flex; align-items:center; justify-content:center;
+          background:#FFFFFF; border-radius:34px; padding:26px;
+          isolation:isolate; overflow:hidden; }}
+/* dimensão explícita: sem isto o `width:100%` do `.recorte` fazia a foto sair
+   pelo palco e cobrir meio slide */
+.palco img {{ width:auto !important; height:auto !important;
+              max-width:100%; max-height:100%; object-fit:contain; }}
 .cartao li:last-child {{ margin-bottom:0; }}
 .lista i {{ font-style:normal; font-family:'Disp',serif;
             font-variation-settings:'wght' 900,'SOFT' 100;
@@ -620,13 +650,57 @@ def _comp_produto(item, i, total, plano, p, ctx) -> str:
     <h1 style="font-size:76px">{_marcar(ctx['titulo'], p['acento'])}</h1>
   </div>
   <div style="margin:auto 0;display:flex;justify-content:center">
-    {'<img class="recorte" src="' + ctx['fotoitem'] + '" style="max-height:600px">'
+    {'<span class="palco" style="height:620px;width:100%">'
+     '<img class="recorte" src="' + ctx['fotoitem'] + '"></span>'
      if ctx['fotoitem'] else ''}
   </div>
   <div class="rodape">
     {'<div class="preco">' + ctx['preco'] + '</div>' if ctx['preco'] else '<div></div>'}
     {'<div class="caixa" style="max-width:47%">' + ctx['conclusao'] + '</div>'
      if ctx['conclusao'] else '<div></div>'}
+  </div>
+</div>"""
+
+
+def _comp_produto_vitrine(item, i, total, plano, p, ctx) -> str:
+    """O produto em cima do AMBIENTE do nicho, não recortado numa folha lisa.
+
+    ⚠️ ELA NASCEU DE UM DEFEITO QUE A REGRA NÃO PEGOU: saiu
+    `produto(c) → produto(c)`, duas composições idênticas coladas. A janela dos
+    dois últimos não conseguiu evitar porque `_elegiveis` devolvia UMA opção só
+    quando o slide tem foto de produto — e não se escolhe entre uma coisa.
+    **Regra de variedade não funciona sem alternativa: onde só há um caminho,
+    a repetição é inevitável por construção.** Carrossel de `comparacao` e de
+    `lista` tem vários slides de produto seguidos, então essa era a única
+    família garantida a repetir.
+
+    Aqui o produto fica à direita, grande, sobre a foto de ambiente escurecida,
+    e o texto ocupa a esquerda — silhueta oposta à `produto`, que centraliza
+    tudo em superfície clara. O `multiply` continua sendo o truque do fundo
+    branco, mas agora sobre um cartão claro atrás só do produto."""
+    foto = ctx["fundo"] or _fundo(plano)
+    return f"""<div class="slide" style="background:{p['escuro']};
+     color:{p['clarinho']}">
+  {'<div class="fotocheia" style="background-image:url(' + foto + ');'
+   'filter:saturate(1.05) contrast(1.05) brightness(.38)"></div>'
+   if foto else ''}
+  <div class="mancha" style="width:900px;height:900px;right:-330px;
+       bottom:-330px;background:{p['acento']};opacity:.14"></div>
+  {_cabecalho(plano, i, total, True)}
+  <div class="metade" style="margin-top:auto;gap:40px">
+    <div>
+      <h1 style="font-size:72px">{_marcar(ctx['titulo'], p['acento'])}</h1>
+      {'<div class="preco" style="margin-top:28px">' + ctx['preco'] + '</div>'
+       if ctx['preco'] else ''}
+      {'<div class="caixa" style="margin-top:26px;border-color:'
+       + p['clarinho'] + '59">' + ctx['conclusao'] + '</div>'
+       if ctx['conclusao'] else ''}
+    </div>
+    <div style="justify-content:center">
+      {'<span class="palco" style="height:560px;width:100%">'
+       '<img class="recorte" src="' + ctx['fotoitem'] + '"></span>'
+       if ctx['fotoitem'] else ''}
+    </div>
   </div>
 </div>"""
 
@@ -696,6 +770,7 @@ COMPOSICOES = {
     "numero":    {"fn": _comp_numero,    "tom": "ambos",  "quer": "titulo"},
     "respiro":   {"fn": _comp_respiro,   "tom": "escuro", "quer": "curto"},
     "produto":   {"fn": _comp_produto,   "tom": "claro",  "quer": "foto"},
+    "vitrine":   {"fn": _comp_produto_vitrine, "tom": "escuro", "quer": "foto"},
     "meio":      {"fn": _comp_meio,      "tom": "claro",  "quer": "titulo"},
     # "ambos" porque ele fica ESCURO quando há foto e claro quando não há —
     # e o tom precisa ser verdade, senão a alternância decide com base numa
@@ -714,7 +789,10 @@ def _elegiveis(ctx: dict) -> list:
     if ctx["itens"]:
         return ["checklist"]
     if ctx["fotoitem"]:
-        return ["produto"]
+        # DUAS, não uma — ver `_comp_produto_vitrine`. Carrossel de comparação
+        # tem produtos em slides seguidos, e com uma opção só a repetição era
+        # garantida por construção, não por azar do sorteio.
+        return ["produto", "vitrine"]
     fora = []
     for nome, c in COMPOSICOES.items():
         if c["quer"] in ("foto", "itens"):

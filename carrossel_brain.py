@@ -840,6 +840,22 @@ def preparar_pasta(plano: dict, pasta: Path) -> None:
     if not arq.exists() or not arq.read_text(encoding="utf-8").strip():
         arq.write_text(_legenda_reserva(plano), encoding="utf-8")
 
+    # ⚠️ O PLANO PRECISA SOBREVIVER À RODADA. Ele existia só na memória do
+    # processo: a pasta guardava conta, engajamento e legenda, e o que o
+    # carrossel DIZ morria quando o comando terminava. Foi assim que o
+    # `fundo_ia --do-plano` falhou no primeiro uso — eu supus um `plano.json`
+    # que nunca ninguém tinha escrito. Qualquer coisa que queira reagir ao
+    # conteúdo depois do render (imagem por slide, revisão, refazer um slide
+    # só) precisa dele em disco.
+    try:
+        (pasta / "plano.json").write_text(
+            json.dumps(plano, ensure_ascii=False, indent=2, default=str),
+            encoding="utf-8")
+    except Exception as e:
+        # não é motivo pra impedir a publicação: o post sai igual sem ele
+        log.warning(f"   ⚠️  não escrevi plano.json ({e}) — o post sai, mas "
+                    f"`fundo_ia --do-plano` não vai achar esta pasta")
+
 
 def publicar(plano: dict, pasta: Path, arquivos: list) -> dict:
     """Renderizado → publicado. Devolve o resultado do uploader."""

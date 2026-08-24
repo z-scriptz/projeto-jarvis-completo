@@ -5894,6 +5894,44 @@ informações que o plano não carregava: `pasta` (era só argumento do
 elas o `--do-plano` geraria as imagens **e o render não olharia pra elas** —
 trabalho feito, pago e jogado fora, em silêncio.
 
+#### 🧱 O `--do-plano` FALHOU NO 1º USO — e os 3 defeitos que ele revelou (24/08)
+
+**1. `plano.json` nunca existiu.** Eu supus que a pasta do carrossel guardava o
+plano. Ela guardava `conta.json`, `engajamento.json` e `legenda.txt` — o que o
+carrossel DIZ morria com o processo. Pior: no **dry-run** a pasta nem era
+preparada, e dry-run é exatamente onde o `--do-plano` deveria rodar (gerar as
+imagens antes de publicar). Agora os dois caminhos escrevem `plano.json`.
+⚠️ **No dry-run só o `plano.json`, nunca o `conta.json`** — pasta com conta é
+pasta pronta pra postar, e ensaio não pode virar publicação por engano.
+
+**2. `produto(c) → produto(c)`, duas composições idênticas coladas.** A janela
+dos dois últimos não pegou, e o motivo é estrutural:
+
+> **Regra de variedade não funciona sem alternativa.** `_elegiveis` devolvia UMA
+> opção quando o slide tem foto de produto, e não se escolhe entre uma coisa.
+> Carrossel de `comparacao` e de `lista` tem vários slides de produto seguidos,
+> então essa era a única família **garantida** a repetir — por construção, não
+> por azar do sorteio.
+
+Nasceu a `vitrine`: produto num cartão à direita sobre o ambiente escurecido,
+texto na esquerda. Silhueta oposta à `produto`, que centraliza em fundo claro.
+
+**3. ⚠️ O `_fundo()` USAVA A FOTO DE CATÁLOGO COMO FUNDO DE TELA CHEIA.** Este é
+o grande. `item["foto"]` estava na lista de candidatos a fundo — e ela é o
+recorte da Shopee em fundo branco. Escurecida a 38% e esticada em `cover`, virava
+um borrão cinza gigante com a silhueta do produto atrás do texto. **O cabeçalho
+do `fundo_ia.py` avisa disso desde o primeiro dia** — *"foto de catálogo vira
+mancha; foto de ambiente vira capa"* — e mesmo assim o catálogo estava na lista.
+Foto de produto tem um lugar só: dentro do `.palco`, no slide de produto.
+
+**E o `.palco` virou branco, com `isolation:isolate`.** O `mix-blend-mode:
+multiply` sozinho era frágil demais pra ser a estrutura: a regra global de
+`z-index` cria contexto de empilhamento em todo filho direto de `.slide`, o
+blend passava a mesclar contra transparente e o branco do catálogo ficava à
+mostra — o "parece que pegou da Shopee" que eu já tinha declarado resolvido
+**duas vezes**. Sobre cartão branco a foto de catálogo some sozinha, com ou sem
+blend; o multiply virou reforço, não estrutura.
+
 #### ✂️ A COMPOSIÇÃO TEM QUE CABER NO CONTEÚDO, NÃO CORTÁ-LO (23/08)
 
 ⚠️ **A `cheia` estava DESCARTANDO o corpo do slide.** Ela desenhava só rótulo +

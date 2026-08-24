@@ -190,6 +190,19 @@ def publicar_um(nicho: str, cfg: dict = None, dry_run: bool = False,
         return {"ok": False, "motivo": "render_vazio"}
 
     if dry_run:
+        # ⚠️ O DRY-RUN TAMBÉM PRECISA DEIXAR O `plano.json` EM DISCO. Ele saía
+        # sem preparar nada, então o que o carrossel DIZ morria junto com o
+        # processo — e o `fundo_ia --do-plano`, que é justamente pra rodar em
+        # cima de um dry-run antes de publicar, não tinha o que ler. Só o
+        # plano: `conta.json` fica de fora de propósito, porque pasta com
+        # conta é pasta pronta pra postar, e ensaio não pode virar publicação
+        # por engano.
+        try:
+            (pasta / "plano.json").write_text(
+                json.dumps(plano, ensure_ascii=False, indent=2, default=str),
+                encoding="utf-8")
+        except Exception as e:
+            log.warning(f"   ⚠️  não escrevi plano.json ({e})")
         log.info(f"   🧪 [dry-run] {nicho}: {len(arquivos)} slide(s) em {pasta}")
         return {"ok": True, "dry_run": True, "pasta": str(pasta)}
 
