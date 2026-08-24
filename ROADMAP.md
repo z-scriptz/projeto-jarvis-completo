@@ -6154,6 +6154,36 @@ abertos um a um, isso passaria batido; numa grade, o que destoa destoa JUNTO.
 embutida do PIL não tem travessão. Só ASCII ali. Bobo, mas a folha existe pra
 ser lida, e caractere quebrado no título é a primeira coisa que o olho acha.)
 
+#### 🕐 `--lotes` — MÁQUINA RECONSTRÓI A ORDEM, OLHO HUMANO PÕE O RÓTULO (24/08)
+
+O Dre gerou ~260 fundos em blocos de 10, **todos caíram juntos em `Downloads`**,
+e ele não lembra a ordem: *"acho que foi pet, beleza, tech, moda, casa, geral. Aí
+depois tech 100 e casa 100"*. Sem separação, as 260 viram um monte só — o acervo
+funciona, mas perde o nicho e o formato que custaram horas pra gerar.
+
+⚠️ **A MEMÓRIA DE QUEM BAIXOU FALHA; O CARIMBO DE TEMPO DO ARQUIVO, NÃO.** O
+ChatGPT entrega os blocos em sequência, então ordenar por `mtime` e cortar de 10
+em 10 devolve os blocos originais — exatos, sem depender de ninguém lembrar.
+
+Mas o relógio **não sabe o que cada bloco É**. E é aí que a folha de contato
+fecha o par: eu olho a grade e digo "esse é pet" (comedouro, caminha, bolsa de
+transporte, gato na janela — não tem como errar). **Máquina reconstrói a ordem,
+olho humano põe o rótulo. Nenhum dos dois faria o trabalho sozinho.**
+
+    fundo_ia.py --lotes ~/downloads          # folhas + lotes.json
+    midia_publica.py --ver pronto_carrossel/lotes
+    (eu olho e digo o que é cada lote; o Dre preenche o JSON)
+    fundo_ia.py --aplicar-lotes .../lotes.json
+
+⚠️ **Lote sem `nicho` preenchido é PULADO E ANUNCIADO.** Pular calado seria o
+pior desfecho: o Dre acharia que importou tudo e o acervo ficaria menor do que
+ele pensa, sem sinal nenhum.
+
+⚠️ **E O `~/qualquer-pasta/` QUE EU ESCREVI COMO EXEMPLO, ELE COLOU LITERAL.**
+Terceira ocorrência da mesma família (o Caddyfile como comentário, o PowerShell
+no bash, agora o placeholder). **Placeholder dentro de bloco de comando é
+comando** — quem está executando uma sequência não separa exemplo de instrução.
+
 #### 🎨 A PALETA DE `moda` BRIGA COM O ACERVO DE `moda` (24/08)
 
 Medindo os 10 fundos de moda que o Dre gerou:

@@ -41,6 +41,7 @@ import os
 import sys
 import json
 import re
+import time
 import random
 import hashlib
 import argparse
@@ -762,6 +763,121 @@ def contato(nicho: str, saida=None) -> int:
     return 0
 
 
+def lotes(pasta, tamanho: int = 10, saida=None) -> int:
+    """Reconstrói os blocos de download pela HORA e monta uma folha por bloco.
+
+    ⚠️ O PROBLEMA REAL (24/08): o Dre baixou ~260 imagens em blocos de 10, todas
+    caíram juntas em `Downloads`, e ele não lembra a ordem. Sem isso, as 260
+    viram um monte só — o acervo funciona, mas perde a separação por nicho e
+    formato que custou horas pra gerar.
+
+    A memória de quem baixou falha; o **carimbo de tempo do arquivo, não**. O
+    ChatGPT entrega os blocos em sequência, então ordenar por data e cortar de
+    `tamanho` em `tamanho` devolve os blocos originais. O que o relógio NÃO
+    sabe é o que cada bloco É — e é aí que entra a folha de contato: eu olho e
+    digo "esse é pet", "esse é tech/produto". **Máquina reconstrói a ordem,
+    olho humano põe o rótulo.** Nenhum dos dois faria o trabalho sozinho."""
+    try:
+        from PIL import Image
+    except ImportError:
+        print("❌ falta o Pillow — use o .venv")
+        return 1
+    pasta = Path(pasta).expanduser()
+    fotos = sorted((a for a in pasta.iterdir()
+                    if a.is_file() and a.suffix.lower() in EXTENSOES),
+                   key=lambda a: a.stat().st_mtime)
+    if not fotos:
+        print(f"❌ nenhuma imagem em {pasta}")
+        return 1
+
+    saida = Path(saida) if saida else BASE_DIR / "pronto_carrossel" / "lotes"
+    if saida.exists():
+        import shutil as _sh
+        _sh.rmtree(saida)
+    saida.mkdir(parents=True, exist_ok=True)
+
+    blocos = [fotos[i:i + tamanho] for i in range(0, len(fotos), tamanho)]
+    mapa = {}
+    print(f"📦 {len(fotos)} imagem(ns) → {len(blocos)} lote(s) de {tamanho}\n")
+    for n, bloco in enumerate(blocos, start=1):
+        nome = f"lote-{n:02d}"
+        mapa[nome] = {"nicho": "", "formato": "",
+                      "arquivos": [str(a) for a in bloco]}
+        _folha(bloco, saida / f"{nome}.jpg",
+               f"{nome}  -  {len(bloco)} imagens  -  "
+               f"{time.strftime('%d/%m %H:%M', time.localtime(bloco[0].stat().st_mtime))}")
+        print(f"  🗂️  {nome}.jpg   "
+              f"{time.strftime('%d/%m %H:%M', time.localtime(bloco[0].stat().st_mtime))}"
+              f"  ({len(bloco)})")
+
+    arq = saida / "lotes.json"
+    arq.write_text(json.dumps(mapa, ensure_ascii=False, indent=2),
+                   encoding="utf-8")
+    print(f"\n✅ folhas em {saida}")
+    print(f"   1) publique:  midia_publica.py --ver {saida}")
+    print(f"   2) preencha 'nicho' e 'formato' em {arq.name}")
+    print(f"   3) aplique:   fundo_ia.py --aplicar-lotes {arq}")
+    return 0
+
+
+def _folha(fotos: list, alvo: Path, titulo: str) -> None:
+    """A grade — usada pelo `--contato` e pelo `--lotes`."""
+    from PIL import Image, ImageDraw
+    COL, CEL, PAD, TOPO = 5, 300, 8, 46
+    linhas = (len(fotos) + COL - 1) // COL
+    alt_cel = int(CEL * 1.25)
+    folha = Image.new("RGB", (COL * (CEL + PAD) + PAD,
+                              TOPO + linhas * (alt_cel + PAD) + PAD),
+                      (22, 22, 24))
+    d = ImageDraw.Draw(folha)
+    d.text((PAD + 4, 14), titulo, fill=(235, 235, 235))
+    for i, f in enumerate(fotos):
+        try:
+            im = Image.open(f).convert("RGB").resize((CEL, alt_cel),
+                                                     Image.LANCZOS)
+        except Exception:
+            continue
+        x = PAD + (i % COL) * (CEL + PAD)
+        y = TOPO + (i // COL) * (alt_cel + PAD)
+        folha.paste(im, (x, y))
+        d.rectangle([x, y + alt_cel - 22, x + CEL, y + alt_cel], fill=(0, 0, 0))
+        d.text((x + 5, y + alt_cel - 18), f.stem[-40:], fill=(255, 255, 255))
+    alvo.parent.mkdir(parents=True, exist_ok=True)
+    folha.save(alvo, "JPEG", quality=82, optimize=True)
+
+
+def aplicar_lotes(arquivo) -> int:
+    """Lê o `lotes.json` já rotulado e importa cada bloco pro lugar certo."""
+    arq = Path(arquivo).expanduser()
+    try:
+        mapa = json.loads(arq.read_text(encoding="utf-8"))
+    except Exception as e:
+        print(f"❌ não li {arq}: {e}")
+        return 1
+    total, pulados = 0, []
+    for nome, info in mapa.items():
+        nicho = (info.get("nicho") or "").strip().lower()
+        if not nicho:
+            pulados.append(nome)
+            continue
+        formato = (info.get("formato") or "").strip()
+        arquivos = [Path(a) for a in info.get("arquivos") or []]
+        arquivos = [a for a in arquivos if a.exists()]
+        if not arquivos:
+            print(f"  ⚠️  {nome}: os arquivos não estão mais lá")
+            continue
+        print(f"\n📂 {nome} → {nicho}" + (f"/{formato}" if formato else ""))
+        total += importar(nicho, arquivos, formato)
+    print(f"\n{'✅' if total else '⚠️ '} {total} imagem(ns) importada(s).")
+    if pulados:
+        # ⚠️ pular calado seria o pior desfecho: o Dre acharia que importou
+        # tudo e o acervo ficaria menor do que ele pensa, sem sinal nenhum.
+        print(f"⬜ {len(pulados)} lote(s) sem 'nicho' preenchido, não "
+              f"importados: {', '.join(pulados[:10])}"
+              f"{'…' if len(pulados) > 10 else ''}")
+    return 0 if total else 1
+
+
 def importar_arvore(raiz) -> int:
     """Importa `<raiz>/<nicho>/<formato>/*` de uma vez só.
 
@@ -1004,6 +1120,12 @@ def main() -> int:
     # `nargs="?"` + `const=""`: `--do-plano` sozinho pega a pasta mais recente
     p.add_argument("--arvore", metavar="RAIZ",
                    help="importa uma árvore inteira <nicho>/<formato>/ de uma vez")
+    p.add_argument("--lotes", metavar="PASTA",
+                   help="reconstrói os blocos de download pela hora do arquivo")
+    p.add_argument("--tamanho", type=int, default=10,
+                   help="imagens por lote (padrão 10)")
+    p.add_argument("--aplicar-lotes", metavar="JSON", dest="aplicar_lotes",
+                   help="importa os lotes já rotulados no lotes.json")
     p.add_argument("--contato", metavar="NICHO",
                    help="folha de contato: grade de miniaturas por formato")
     p.add_argument("--criar-arvore", metavar="RAIZ",
@@ -1013,6 +1135,12 @@ def main() -> int:
                    help="1 imagem por slide, do texto do slide (Gemini). "
                         "Sem argumento, usa o carrossel mais recente.")
     a = p.parse_args()
+
+    if a.lotes:
+        return lotes(a.lotes, a.tamanho)
+
+    if a.aplicar_lotes:
+        return aplicar_lotes(a.aplicar_lotes)
 
     if a.contato:
         return contato(a.contato)
