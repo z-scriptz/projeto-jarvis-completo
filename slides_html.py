@@ -124,6 +124,17 @@ def _fundo(plano: dict, item: dict = None) -> str:
     # foi o erro: foi que o `renderizar_slides` engole exceção, devolve [] e o
     # carrossel cai no desenho em PIL — ou seja, o post sai FEIO, sai
     # publicado, e o log não diz que houve um erro de tipo num campo.
+    # ⚠️ `fundos/NN.png` GANHA DE TUDO. É a imagem que o `fundo_ia --do-plano`
+    # gerou A PARTIR DO TEXTO DESTE SLIDE — ela representa o assunto, enquanto
+    # o acervo do nicho só combina com a estética da conta. Quando existe, é
+    # sempre a melhor resposta; quando não existe, o rodízio continua valendo.
+    n = (item or {}).get("n")
+    if n:
+        for ext in (".png", ".jpg", ".jpeg", ".webp"):
+            alvo = Path(plano.get("pasta") or ".") / "fundos" / f"{n:02d}{ext}"
+            if alvo.exists():
+                return _b64(alvo)
+
     for cand in ((item or {}).get("fundo"), (item or {}).get("foto"),
                  (plano.get("capa") or {}).get("fundo")):
         if isinstance(cand, str) and cand and Path(cand).exists():
@@ -418,7 +429,7 @@ def _html_capa(plano: dict, total: int) -> str:
     tag = _h.escape((plano.get("nicho") or "geral").upper())
     # a logo e o @ agora saem no `_cabecalho`, em TODOS os slides
 
-    foto = _fundo(plano)
+    foto = _fundo(plano, {"n": 1})   # a capa é o slide 1: usa `fundos/01.png`
     camada = (f'<div class="fotocheia" style="background-image:url({foto})"></div>'
               f'<div class="fade" style="inset:0;background:linear-gradient('
               f'180deg,{p["escuro"]}e6 0%,{p["escuro"]}b3 42%,'
@@ -523,6 +534,15 @@ def _comp_cheia(item, i, total, plano, p, ctx) -> str:
     {'<div class="versal" style="color:' + p['acento'] + ';opacity:1;'
      'margin-bottom:22px">' + rotulo + '</div>' if rotulo else ''}
     <h1 style="font-size:96px">{_marcar(ctx['titulo'], p['acento'])}</h1>
+    <!-- ⚠️ O CORPO PRECISA APARECER AQUI TAMBÉM. Antes esta composição
+         desenhava só rótulo + título, e o `linha` que o brain escreveu era
+         DESCARTADO em silêncio: o slide dizia "bebê em posição errada" e não
+         explicava nada. O Dre viu no post e a regra dele é a certa — *"quando
+         o slide tiver que explicar um assunto, ele precisa ter mais palavras;
+         se for uma dica, pode ter quase nada; tudo depende do contexto"*. Aqui
+         cabe uma frase de apoio; texto longo é barrado no `_elegiveis`. -->
+    {'<p class="corpo" style="margin-top:26px;opacity:.82;max-width:88%">'
+     + ctx['corpo'] + '</p>' if ctx['corpo'] else ''}
   </div>
 </div>"""
 
@@ -705,6 +725,12 @@ def _elegiveis(ctx: dict) -> list:
             continue
         # `cheia` sem foto é retângulo escuro com texto — pior que `meio`.
         if nome == "cheia" and not (ctx["fundo"] or ctx["fotoitem"]):
+            continue
+        # ⚠️ E A COMPOSIÇÃO TEM QUE CABER NO CONTEÚDO, NÃO CORTÁ-LO. A `cheia`
+        # é a de texto mínimo: com um parágrafo de explicação em cima da foto,
+        # ou ela come o texto (o que acontecia) ou o texto come a foto. Slide
+        # que precisa EXPLICAR vai pra uma composição com área de leitura.
+        if nome == "cheia" and len(ctx["corpo"].split()) > 16:
             continue
         # a `numero` só serve pra slide que É um item numerado — ver `_numerado`
         if nome == "numero" and not _numerado(ctx):
@@ -1118,6 +1144,15 @@ def renderizar_slides(plano: dict, pasta) -> list:
     # sem dizer por quê. Resultado prático de um `fundo: true` num campo que
     # espera caminho: o post sai feio, sai publicado, e o log não menciona
     # erro nenhum. Agora o motivo aparece antes de a gente perder a tarde.
+    # ⚠️ O `_fundo()` precisa saber ONDE a pasta está e QUAL é o número do
+    # slide pra achar `fundos/NN.png`. O plano não carregava nenhum dos dois:
+    # `pasta` é argumento desta função e o número só existia como índice do
+    # laço. Sem estas duas linhas o `--do-plano` geraria as imagens e o render
+    # não olharia pra elas — trabalho feito e jogado fora, em silêncio.
+    plano = dict(plano, pasta=str(pasta))
+    for k, item in enumerate(itens, start=2):
+        item.setdefault("n", k)
+
     try:
         paginas = [_html_capa(plano, total)]
         # O `anterior` é o estado que faz a regra funcionar. Sem ele cada slide

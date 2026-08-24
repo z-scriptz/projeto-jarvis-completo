@@ -5859,6 +5859,57 @@ tem 8 slides e termina no CTA. Agora o `--ver` só lista `\d{2,3}.jpg`.
   falsa **e o log imprimir "(c)" onde saiu um slide escuro** — diagnóstico que
   mente, de novo.
 
+#### 🖼️ IMAGEM POR SLIDE — "eu mesmo que preciso fazer?" (23/08, noite)
+
+⚠️ **NÃO. E A CHAVE JÁ ESTAVA NO `.env` HÁ MESES.** O projeto inteiro chama
+`google.genai` com `GEMINI_API_KEY` pra escrever texto (`main.py`, `ceo_agent`,
+`narration_script_builder`…). **A mesma chave e o mesmo cliente geram imagem** —
+muda só o nome do modelo (`gemini-2.5-flash-image`). Não precisa de conta nova,
+chave nova nem SDK novo. Eu nunca tinha olhado pra isso: fui atrás de Fal e de
+Pexels enquanto a capacidade estava dentro de casa.
+
+⚠️ **O QUE ISSO NÃO É:** não é o ChatGPT ilimitado do Dre. Aquilo é assinatura,
+e assinatura não vira API. No Gemini paga-se por imagem. **As duas fontes
+coexistem e servem a coisas diferentes:**
+
+| fonte | custo | serve pra |
+|---|---|---|
+| ChatGPT, na mão | grátis (31 dias) | acervo de AMBIENTE, reusado o mês inteiro |
+| Gemini, API | por imagem | a foto DAQUELE slide, no dia, sozinho |
+
+`fundo_ia.py --do-plano <pasta>` lê o `plano.json` (que já existe em disco antes
+do render e já sabe o que cada slide diz) e gera **uma imagem por slide, a
+partir do texto do slide**. `--seco` mostra os prompts sem gastar.
+
+Isso é o conserto do maior defeito que sobrou, e o teste que o ChatGPT propôs
+nomeia bem: *"se eu remover todo o texto, essa imagem ainda representa o assunto
+deste slide?"* — dava **não em 4 dos 8**, porque o fundo saía por rodízio do
+acervo do NICHO. O slide dizia "bebê em posição errada" e o fundo era uma
+despensa com potes: casa a estética da conta, não casa o assunto.
+
+⚠️ **E O RENDER PRECISAVA SABER DISSO.** `_fundo()` agora procura
+`<pasta>/fundos/NN.png` ANTES de qualquer outra coisa. Faltavam duas
+informações que o plano não carregava: `pasta` (era só argumento do
+`renderizar_slides`) e o número do slide (só existia como índice do laço). Sem
+elas o `--do-plano` geraria as imagens **e o render não olharia pra elas** —
+trabalho feito, pago e jogado fora, em silêncio.
+
+#### ✂️ A COMPOSIÇÃO TEM QUE CABER NO CONTEÚDO, NÃO CORTÁ-LO (23/08)
+
+⚠️ **A `cheia` estava DESCARTANDO o corpo do slide.** Ela desenhava só rótulo +
+título. Quando um slide de explicação caía nela, o `linha` que o brain escreveu
+sumia sem erro nenhum: o slide dizia *"bebê em posição errada"* e não explicava
+nada. O Dre viu no post publicado, e a regra que ele deu é a certa:
+
+> *"quando o slide tiver que explicar um assunto, ele precisa sim ter mais
+> palavras e explicações; agora se for uma dica, pode conter menos texto, ou
+> quase nada. Tudo depende do contexto."*
+
+Duas mudanças: a `cheia` passou a renderizar uma frase de apoio, e **um slide
+com mais de 16 palavras de corpo não é mais elegível pra ela** — vai pra uma
+composição com área de leitura. O teto de palavras do brain (`PALAVRAS_CORPO`)
+não estava errado; errado era o layout jogar fora o que ele produzia.
+
 #### 🎯 DOUTRINA DE FORMATOS — o que o Dre trouxe (23/08)
 
 Ficam registrados aqui porque são decisão de produto, não de código, e a próxima

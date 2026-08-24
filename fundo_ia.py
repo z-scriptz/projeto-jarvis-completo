@@ -40,6 +40,7 @@
 import os
 import sys
 import json
+import re
 import random
 import hashlib
 import argparse
@@ -512,6 +513,143 @@ def _gerar_um(prompt: str, destino: Path) -> str:
     return ""
 
 
+# ══════════════════════════════════════════════════════════════════════════
+# GEMINI — a resposta pra "eu mesmo que preciso fazer as imagens?"
+#
+# ⚠️ NÃO. E A CHAVE JÁ ESTÁ NO `.env` HÁ MESES. O projeto inteiro chama
+# `google.genai` com `GEMINI_API_KEY` pra escrever texto (main, ceo_agent,
+# narration_script_builder...). A MESMA chave e o MESMO cliente geram imagem —
+# muda só o nome do modelo. Não precisa de conta nova, chave nova nem SDK novo.
+#
+# ⚠️ O QUE ISSO **NÃO** É: não é o ChatGPT ilimitado do Dre. Aquilo é
+# assinatura, e assinatura não vira API. Aqui se paga por imagem, na conta do
+# Google que o projeto já usa. Ou seja, as duas fontes coexistem e servem a
+# coisas diferentes:
+#     ChatGPT (mão, ilimitado 31 dias) → acervo de ambiente, reusado o mês todo
+#     Gemini  (API, por imagem)        → a foto DAQUELE slide, no dia, sozinho
+# A segunda é a que resolve o gargalo que o ChatGPT apontou ("se eu tirar o
+# texto, a imagem ainda representa o assunto?"), porque ela nasce do texto do
+# slide. A primeira continua valendo por ser de graça e sem depender de rede.
+MODELO_IMG = os.environ.get("GEMINI_MODELO_IMG", "gemini-2.5-flash-image")
+
+
+def _gemini_imagem(prompt: str, destino: Path) -> str:
+    """Gera UMA imagem pelo Gemini. Devolve "" se deu certo, ou o motivo."""
+    chave = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not chave:
+        return ("GEMINI_API_KEY não está no ambiente. Ela existe no .env da "
+                "VPS — rode com o mesmo carregador de env dos outros módulos.")
+    try:
+        from google import genai
+    except ImportError:
+        return "falta o pacote google-genai (.venv/bin/pip install google-genai)"
+
+    try:
+        cli = genai.Client(api_key=chave)
+        r = cli.models.generate_content(model=MODELO_IMG, contents=prompt)
+    except Exception as e:
+        return _traduzir_gemini(e)
+
+    # a imagem vem como parte inline dentro da resposta, junto de partes de
+    # texto — pegar a primeira parte com bytes, e não a primeira parte.
+    try:
+        for cand in (r.candidates or []):
+            for parte in (getattr(cand.content, "parts", None) or []):
+                dados = getattr(getattr(parte, "inline_data", None), "data", None)
+                if dados:
+                    destino.parent.mkdir(parents=True, exist_ok=True)
+                    destino.write_bytes(dados)
+                    return ""
+    except Exception as e:
+        return f"resposta em formato inesperado: {e}"
+    return ("a resposta veio sem imagem — normalmente é o prompt sendo "
+            "recusado por política de conteúdo")
+
+
+def _traduzir_gemini(e: Exception) -> str:
+    """⚠️ Mensagem de API não diz o que FAZER. Estes três erros têm conserto
+    diferente e a mesma cara de 'deu erro'."""
+    t = str(e)
+    if "403" in t or "PERMISSION" in t.upper():
+        return ("403: a chave não tem acesso a geração de imagem. Costuma ser "
+                "faturamento desligado no projeto do Google Cloud — a mesma "
+                "chave que escreve texto pode não estar liberada pra imagem.")
+    if "404" in t or "NOT_FOUND" in t:
+        return (f"404: o modelo '{MODELO_IMG}' não existe pra esta chave. "
+                f"Ajuste com GEMINI_MODELO_IMG=<nome> no .env.")
+    if "429" in t or "RESOURCE_EXHAUSTED" in t.upper():
+        return "429: cota estourada. Espera a janela virar ou sobe o limite."
+    return t[:200]
+
+
+def do_plano(pasta, seco: bool = False) -> int:
+    """Gera UMA imagem POR SLIDE, a partir do que aquele slide diz.
+
+    ⚠️ ESTE É O CONSERTO DO MAIOR DEFEITO QUE SOBROU. Hoje o fundo sai por
+    rodízio do acervo do NICHO: o slide fala "bebê em posição errada" e o fundo
+    é uma despensa com potes. Casa a estética da conta e não casa o assunto. O
+    teste que o ChatGPT propôs — *"se eu remover todo o texto, essa imagem
+    ainda representa o assunto deste slide?"* — dava NÃO em 4 dos 8.
+
+    O plano já existe em disco ANTES do render e já sabe o que cada slide diz.
+    Então a foto pode nascer do texto em vez de ser sorteada."""
+    pasta = Path(pasta)
+    plano_j = pasta / "plano.json"
+    if not plano_j.exists():
+        print(f"❌ não achei {plano_j}")
+        return 1
+    plano = json.loads(plano_j.read_text(encoding="utf-8"))
+    nicho = plano.get("nicho", "geral")
+    saida = pasta / "fundos"
+    alvos = []
+    capa = plano.get("capa") or {}
+    if capa.get("hook"):
+        alvos.append((1, capa.get("hook", ""), capa.get("sub", "")))
+    for k, s in enumerate(plano.get("slides") or [], start=2):
+        if s.get("itens"):
+            continue                      # checklist usa fundo de ambiente
+        alvos.append((k, s.get("titulo") or "", s.get("linha") or ""))
+
+    print(f"🎯 {len(alvos)} imagem(ns) — uma por slide, do texto dele\n")
+    feitos = 0
+    for n, titulo, apoio in alvos:
+        p = prompt_do_slide(nicho, titulo, apoio)
+        destino = saida / f"{n:02d}.png"
+        print(f"  slide {n:02d} · {titulo[:46]}")
+        if seco:
+            print(f"     {p[:150]}…\n")
+            continue
+        erro = _gemini_imagem(p, destino)
+        if erro:
+            print(f"     ❌ {erro}")
+            break                          # mesmo motivo do `gerar()`
+        feitos += 1
+        print(f"     ✅ {destino.name} ({destino.stat().st_size // 1024} KB)")
+    if feitos:
+        print(f"\n✅ {feitos} imagem(ns) em {saida}")
+    return 0 if (feitos or seco) else 1
+
+
+def prompt_do_slide(nicho: str, titulo: str, apoio: str = "") -> str:
+    """O prompt da foto DESTE slide. O texto do slide é o briefing."""
+    # ⚠️ TIRA O MARKUP. `*sem perceber*` e `[preço]` são instruções de REALCE
+    # pro render — dentro de um prompt de imagem viram lixo que o modelo tenta
+    # interpretar, e asterisco em prompt costuma virar ênfase de estilo.
+    limpo = re.sub(r"[\*\[\]]", "", " ".join(x for x in (titulo, apoio) if x))
+    assunto = " ".join(limpo.split())[:260]
+    return (
+        f"Fotografia editorial realista para um post de Instagram do nicho "
+        f"'{nicho}'. A cena deve mostrar CLARAMENTE o assunto: {assunto}. "
+        f"Enquadramento vertical 4:5, luz baixa e quente, sombras marcadas, "
+        f"profundidade de campo rasa, aparência cinematográfica e cara de foto "
+        f"real — não ilustração, não 3D, não render. "
+        # a régua de sempre: texto na imagem é o que mais denuncia montagem, e
+        # o canto de cima à esquerda é onde a tipografia do slide vai pousar.
+        f"Sem nenhum texto, sem palavras, sem letras, sem logotipos, sem "
+        f"marcas d'água. Deixe espaço negativo limpo no canto superior "
+        f"esquerdo para o título entrar por cima depois.")
+
+
 def gerar(nicho: str, quantos: int = 6, seco: bool = False) -> int:
     pasta = _pasta(nicho)
     ja = len(existentes(nicho))
@@ -554,7 +692,12 @@ def main() -> int:
                    help="põe no acervo as imagens baixadas do ChatGPT")
     p.add_argument("--de", nargs="+", metavar="CAMINHO", default=[],
                    help="pasta ou arquivos de onde importar")
+    p.add_argument("--do-plano", metavar="PASTA", dest="do_plano",
+                   help="1 imagem por slide, gerada do texto do slide (Gemini)")
     a = p.parse_args()
+
+    if a.do_plano:
+        return do_plano(a.do_plano, a.seco)
 
     if a.importar:
         if not a.de:
