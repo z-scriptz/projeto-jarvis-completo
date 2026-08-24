@@ -5932,6 +5932,67 @@ mostra — o "parece que pegou da Shopee" que eu já tinha declarado resolvido
 **duas vezes**. Sobre cartão branco a foto de catálogo some sozinha, com ou sem
 blend; o multiply virou reforço, não estrutura.
 
+#### 🔴 TESTE MULTI-NICHO — dois defeitos críticos que o `casa` escondia (24/08)
+
+Rodamos tech, beleza e pet. O `casa` sozinho tinha escondido os dois piores
+problemas do sistema.
+
+**1. 🔴 O TEXTO DE UM PRODUTO COM A FOTO DE OUTRO.** No @topshoptech_:
+
+    "Resgate sua infancia gamer agora"   → foto de um smartphone
+    "Seu cinema particular onde quiser"  → foto de um tubarao de controle remoto
+
+A causa: `prod = produtos[i]` — **casamento por POSIÇÃO**, supondo que o modelo
+escreveria os slides na mesma ordem em que a lista de produtos chegou. Ele não
+escreve.
+
+> **É o defeito mais caro que este sistema pode ter, porque não parece
+> defeito.** Parece anúncio mentiroso. Quem clica encontra outra coisa, e a
+> conta perde a única coisa que tem, que é a confiança de quem segue. Nenhum
+> ajuste de layout conserta e o log não menciona nada.
+
+Agora os produtos vão **numerados** no prompt e o modelo devolve
+`"produto": <n>` em cada slide; `_casar_produto()` liga por esse número. Índice
+repetido é tratado como sintoma (se dois slides pedem o mesmo produto, algum
+ficou órfão) e cai na posição, com aviso. Sem o campo — modelo antigo, reserva —
+o comportamento é o de antes, então nada quebra.
+
+**2. 🔴 AINDA SE PAGAVA POR IMAGEM QUE NÃO APARECIA — e eu já tinha "resolvido"
+isso duas vezes.** No pet foram geradas 7 imagens e o leitor não via 4. A
+sequência do log é praticamente um teste unitário:
+
+    meio(c) → SEM imagem   numero(e) → SEM imagem
+    meio(c) → SEM imagem   numero(e) → SEM imagem   checklist(e) → COM
+
+⚠️ **E as composições estavam certas.** A fonte era uma linha só, na montagem
+do `ctx`:
+
+    "fundo": _fundo(plano, item) if item.get("fundo") else ""
+
+O slide só ia atrás de foto **quando o brain tinha marcado `fundo: True` nele** —
+uma marca de outra época, de quando o fundo era sorteio do acervo do nicho e a
+gente escolhia quais slides mereciam. Com imagem gerada sob medida a pergunta
+perdeu o sentido: se `fundos/NN.png` existe, alguém pagou por ela pra ESTE slide.
+No `casa` passou batido porque o formato usado marcava `fundo` na maioria dos
+slides; no `pet` (formato `erros`) o brain não marca quase nenhum.
+
+**A lição, e ela é sobre método:** eu consertei `respiro`, depois `checklist`,
+depois `vitrine`, depois os cinco fechos — **quatro consertos, um a um, sem
+nunca perguntar de onde os quatro tiravam a informação**. Era todo mundo da
+mesma linha. Sintoma repetido em lugares diferentes é sinal de causa única
+acima deles, não de quatro defeitos parecidos.
+
+**3. ✅ `_conferir_imagens_usadas()` — a defesa que não depende de eu lembrar.**
+Depois do render, o programa confere se cada arquivo de `fundos/` aparece em
+alguma página (a foto vira `data:` URI, então basta procurar um trecho do
+base64) e grita no log quando não aparece:
+
+    💸 2 imagem(ns) GERADA(S) E NÃO USADA(S): 03.png, 05.png
+       Alguém pagou por elas e o leitor não vai ver.
+
+Três causas diferentes, o mesmo sintoma invisível, três consertos que falharam
+em silêncio. **A defesa não podia ser eu conferir — tinha que ser o programa.**
+
 #### 🎬 DIRETOR VISUAL, E A REGRA DA IMAGEM PAGA (24/08)
 
 Primeira rodada com imagem por slide de verdade. O Dre: *"melhorou absurdamente

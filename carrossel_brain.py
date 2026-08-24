@@ -518,10 +518,57 @@ def _orcamento(titulo: str, linha: str, teto: int = None) -> tuple:
     return (tit, corpo)
 
 
+def _casar_produto(slide: dict, produtos: list, i: int, usados: set):
+    """O produto de que ESTE slide fala. Pelo número que o modelo devolveu.
+
+    ⚠️ ANTES ERA `produtos[i]` — casamento por POSIÇÃO, supondo que o modelo
+    escreveria os slides na mesma ordem da lista. Ele não escreve. No teste de
+    24/08, no @topshoptech_:
+
+        "Resgate sua infancia gamer agora"  → foto de um smartphone
+        "Seu cinema particular onde quiser" → foto de um tubarao de controle
+
+    Texto de um produto com foto e preço de OUTRO. É o defeito mais caro que
+    este sistema pode ter, porque não parece defeito: parece anúncio
+    mentiroso. Quem clica encontra outra coisa, e a conta perde a única coisa
+    que ela tem, que é a confiança de quem segue.
+
+    O `usados` existe porque índice repetido é sintoma: se o modelo mandou dois
+    slides pro mesmo produto, algum produto ficou órfão e alguém vai levar a
+    foto errada. Nesse caso é melhor cair no índice do que insistir num número
+    que já sabemos estar errado."""
+    if not produtos:
+        return None
+    try:
+        n = int(slide.get("produto") or 0)
+    except (TypeError, ValueError):
+        n = 0
+    if 1 <= n <= len(produtos) and n not in usados:
+        usados.add(n)
+        return produtos[n - 1]
+    if n:
+        motivo = "repetido" if n in usados else f"fora da lista de {len(produtos)}"
+        log.warning(f"   ⚠️  slide {i + 1}: 'produto': {n} {motivo} "
+                    f"— caindo na posição")
+    return produtos[i] if i < len(produtos) else None
+
+
 def _prompt(formato: str, nicho: str, produtos: list, angulo: str) -> str:
     cfg = FORMATOS[formato]
-    nomes = "\n".join(f"- {p['nome']}" + (f" ({p['preco']})" if p["preco"] else "")
-                      for p in produtos) or "- (nenhum produto informado)"
+    # ⚠️ NUMERADOS, E O MODELO TEM QUE DEVOLVER O NÚMERO. Antes era uma lista
+    # de traços e o casamento slide↔produto se fazia por ÍNDICE
+    # (`produtos[i]`), supondo que o modelo escreveria na mesma ordem em que a
+    # lista chegou. Ele não escreve. No teste de 24/08 saiu, no @topshoptech_:
+    #     "Resgate sua infancia gamer"  → foto de um smartphone
+    #     "Seu cinema particular"       → foto de um tubarao de controle remoto
+    # Texto de um produto com foto e preço de outro. **É o pior defeito que
+    # este sistema pode ter**, porque não parece defeito: parece anúncio
+    # mentiroso, e quem clica encontra outra coisa. Nenhum ajuste de layout
+    # conserta, e ninguém percebe olhando o log.
+    nomes = "\n".join(
+        f"{i}. {p['nome']}" + (f" ({p['preco']})" if p["preco"] else "")
+        for i, p in enumerate(produtos, start=1)
+    ) or "- (nenhum produto informado)"
     passos = int(cfg.get("passos", 3))
     return f"""Voce escreve carrosseis para uma conta brasileira de achadinhos
 da Shopee, nicho "{nicho}". Escreva em portugues do Brasil, informal, como
@@ -573,6 +620,8 @@ RESPONDA SO COM JSON, sem cerca de codigo, neste formato exato:
   "quebra": {{"titulo": "<aumenta a tensao, NAO entrega a resposta>",
              "linha": "<uma linha de apoio, pode ser vazia>"}},
   "slides": [{{"rotulo": "<curto, ex ERRO 1 — pode ser vazio>",
+               "produto": <o NUMERO do produto da lista acima sobre o qual
+                           este slide fala; 0 se o slide nao fala de nenhum>,
                "titulo": "<a manchete do slide, curta>",
                "linha": "<2 a 3 frases explicando de verdade>",
                "conclusao": "<ate 5 palavras, o fecho pratico>"}}],
@@ -580,7 +629,11 @@ RESPONDA SO COM JSON, sem cerca de codigo, neste formato exato:
   "cta": "<a frase do ultimo slide, contextual>",
   "legenda": "<2 a 4 linhas pra legenda do post>"}}
 
-Gere exatamente {passos} objeto(s) em "slides" e {passos} item(ns) em "resumo"."""
+Gere exatamente {passos} objeto(s) em "slides" e {passos} item(ns) em "resumo".
+
+⚠️ O CAMPO "produto" E OBRIGATORIO quando o slide fala de um produto da lista.
+E por ele que a foto e o preco certos entram no slide. Escrever sobre o
+produto 3 e deixar "produto": 1 faz o slide sair com a foto errada."""
 
 
 def _via_gemini(formato: str, nicho: str, produtos: list, angulo: str):
@@ -690,8 +743,9 @@ def montar_plano(nicho: str, formato: str = "", fotos_em: Path = None) -> dict:
     # Une o texto do modelo com os FATOS (preço, foto, link), que nunca vêm
     # dele. O modelo escreve; a fila é quem sabe quanto custa.
     slides = []
+    usados = set()
     for i, s in enumerate(d.get("slides") or []):
-        prod = produtos[i] if i < len(produtos) else None
+        prod = _casar_produto(s, produtos, i, usados)
         tit, apoio = _orcamento(s.get("titulo") or (prod["nome"] if prod else ""),
                                 s.get("linha") or "")
         # ⚠️ NO FORMATO LISTA O RÓTULO É IGNORADO PELO DESENHO (`_slide_produto`

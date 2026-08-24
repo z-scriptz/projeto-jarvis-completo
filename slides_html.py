@@ -920,11 +920,26 @@ def _html_conteudo(item: dict, i: int, total: int, plano: dict,
         "itens": [str(x) for x in (item.get("itens") or []) if str(x).strip()],
         "fotoitem": (_b64(item["foto"]) if item.get("foto")
                      and Path(item["foto"]).exists() else ""),
-        "fundo": _fundo(plano, item) if item.get("fundo") else "",
     }
-    # o `checklist` cai no acervo do nicho mesmo sem `fundo` no item, então
-    # "tem foto" aqui é mais amplo que `ctx["fundo"]`
-    ctx["propria"] = _imagem_propria(plano, ctx["n"]) is not None
+    # ⚠️⚠️ AQUI ESTAVA O DESPERDÍCIO, E ELE SOBREVIVEU A DOIS CONSERTOS MEUS.
+    # A linha era:
+    #     "fundo": _fundo(plano, item) if item.get("fundo") else ""
+    # ou seja, o slide só ia atrás de foto QUANDO O BRAIN TINHA MARCADO
+    # `fundo: True` nele. Essa marca é de outra época, de quando o fundo era
+    # sorteio do acervo do nicho e a gente escolhia quais slides mereciam.
+    # Com imagem gerada SOB MEDIDA a pergunta deixou de fazer sentido: se
+    # `fundos/NN.png` existe, alguém pagou por ela pra ESTE slide.
+    #
+    # No `casa` passou despercebido porque o formato usado marcava `fundo` na
+    # maioria dos slides. No `pet` (formato `erros`) o brain não marca quase
+    # nenhum: foram geradas 7 imagens e o leitor não viu 4 delas. As
+    # composições `meio` e `numero` levaram a culpa — elas estavam certas, só
+    # recebiam string vazia. **Corrigi `checklist`, `vitrine` e os cinco fechos
+    # um a um e não olhei a fonte comum dos três.**
+    ctx["propria"] = _imagem_propria(plano, ctx["n"])
+    ctx["fundo"] = (_b64(ctx["propria"]) if ctx["propria"] else
+                    (_fundo(plano, item) if item.get("fundo") else ""))
+    ctx["propria"] = ctx["propria"] is not None
     # ⚠️ `propria` PRECISA ENTRAR AQUI. Sem ela o checklist com imagem própria
     # era classificado como "sem foto", saía claro, e o log imprimia (c) num
     # slide que renderiza escuro — a alternância decidindo com dado errado.
@@ -1333,10 +1348,50 @@ def renderizar_slides(plano: dict, pasta) -> list:
         log.warning(f"   ⚠️  Chromium falhou ({str(e)[:100]}) — caindo no PIL")
         return []
 
+    _conferir_imagens_usadas(plano, pasta, paginas)
+
     if plano.get("legenda"):
         (pasta / "legenda.txt").write_text(plano["legenda"], encoding="utf-8")
     log.info(f"   🎨 {len(arquivos)} slide(s) pelo navegador em {pasta}")
     return arquivos
+
+
+def _conferir_imagens_usadas(plano: dict, pasta, paginas: list) -> None:
+    """Grita quando uma imagem gerada não apareceu em slide nenhum.
+
+    ⚠️ ISTO EXISTE PORQUE EU CONSERTEI "IMAGEM PAGA DESCARTADA" DUAS VEZES E AS
+    DUAS FALHARAM EM SILÊNCIO. Primeiro a `respiro` descartava; depois
+    `checklist`, `vitrine` e os fechos, cada um por não receber o número do
+    slide; e por fim o `ctx["fundo"]` inteiro, que só ia atrás de foto quando o
+    brain marcava `fundo: True`. Três causas diferentes, **o mesmo sintoma
+    invisível**: sai um carrossel bonito, o log diz que deu tudo certo, e o
+    dinheiro da imagem foi pro lixo.
+
+    A defesa não pode ser eu lembrar de checar — tem que ser o programa
+    checando. O teste é bobo de propósito: a foto vira `data:` URI dentro do
+    HTML, então basta perguntar se aquele pedaço de base64 aparece em alguma
+    página. Não avalia estética, avalia se a imagem CHEGOU."""
+    raiz = Path(pasta) / "fundos"
+    if not raiz.is_dir():
+        return
+    tudo = "".join(paginas)
+    sobrou = []
+    for img in sorted(raiz.iterdir()):
+        if img.suffix.lower() not in (".png", ".jpg", ".jpeg", ".webp"):
+            continue
+        # um trecho do meio do base64: começo e fim colidem entre imagens do
+        # mesmo formato (cabeçalho PNG igual), o meio não.
+        b64 = _b64(img)
+        marca = b64[len(b64) // 2: len(b64) // 2 + 64]
+        if marca and marca not in tudo:
+            sobrou.append(img.name)
+    if sobrou:
+        log.warning(f"   💸 {len(sobrou)} imagem(ns) GERADA(S) E NÃO USADA(S): "
+                    f"{', '.join(sobrou)}")
+        log.warning("      Alguém pagou por elas e o leitor não vai ver. "
+                    "Isso é defeito de render, não de gosto.")
+    else:
+        log.info("   ✅ todas as imagens geradas apareceram em algum slide")
 
 
 def _gravar_jpeg(png: bytes, destino: Path) -> None:
