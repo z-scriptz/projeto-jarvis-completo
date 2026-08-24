@@ -2457,8 +2457,20 @@ def main():
                           else "amanhã")
                 _log(f"não é hora — próximo horário sorteado: {quando}")
                 return 0
-            _log(f"⏰ horário sorteado {slot // 60:02d}:{slot % 60:02d} — enviando")
-            r = enviar(max(1, min(args.quantos, MAX_RODADA)), teste=args.teste)
+            # ⚠️ UMA POR SLOT, NÃO `MAX_RODADA`. Com 12 horários sorteados e 2
+            # mensagens por rodada seriam 24 tentativas contra um teto de 12: os
+            # 6 primeiros horários gastariam o dia inteiro e a NOITE FICARIA
+            # VAZIA — o espalhamento que este código existe pra criar morreria
+            # na primeira tarde. `MAX_RODADA` foi feito pro modo antigo, de 3
+            # disparos por dia, onde mandar 2 de uma vez era o único jeito de
+            # chegar a 6. Aqui a conta é outra: 1 mensagem × N horários = N.
+            #
+            # O `--quantos` continua respeitado quando o Dre pede explicitamente
+            # (ele nunca vem sozinho no cron), mas o padrão do `--auto` é 1.
+            quantos = args.quantos if args.quantos != MAX_RODADA else 1
+            _log(f"⏰ horário sorteado {slot // 60:02d}:{slot % 60:02d}"
+                 f" — enviando {quantos}")
+            r = enviar(max(1, min(quantos, MAX_RODADA)), teste=args.teste)
             if r == 0 and not args.teste:
                 _marcar_slot(_carregar_json(ESTADO, {}), slot)
             return r

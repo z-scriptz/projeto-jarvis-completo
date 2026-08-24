@@ -6374,9 +6374,27 @@ perderia o horário quando a sessão estivesse caída — e o dia terminaria aba
 do teto sem ninguém saber por quê. Falhando, o slot segue vencido e a próxima
 acordada tenta de novo dentro da tolerância.
 
-**Volume:** `WHATSAPP_MAX_DIA` 6 → 12 é uma linha no `.env`, não código. O
-`MAX_RODADA=2` **fica como está**: o que protege é não disparar em rajada, e com
-12 horários espalhados não existe motivo pra mandar 4 de uma vez.
+**Volume:** `WHATSAPP_MAX_DIA` 6 → 12 é uma linha no `.env`, não código.
+
+⚠️ **E O `--auto` MANDA UMA POR SLOT, NÃO `MAX_RODADA`.** Peguei isso só quando
+o Dre mostrou o `crontab -l` — a linha antiga era `0 9,14,19` (3 rodadas × 2
+mensagens = os 6/dia). Se o `--auto` herdasse esse 2, seriam **12 horários × 2 =
+24 tentativas contra um teto de 12**: os 6 primeiros slots gastariam o dia
+inteiro e **a noite ficaria vazia** — o espalhamento que este código existe pra
+criar morreria na primeira tarde, e o log não acusaria nada além de "teto do dia
+atingido". `MAX_RODADA=2` foi feito pro modo de 3 disparos, onde mandar 2 de uma
+vez era o único jeito de chegar a 6. Aqui a conta é outra: **1 × N horários = N**.
+
+O crontab velho, pra referência (e ele fica com uma linha só):
+
+    ANTES  0 9,14,19 * * *   whatsapp_playwright.py
+    DEPOIS */15 7-21 * * *   whatsapp_playwright.py --auto
+
+⚠️ **E o `crontab -l` está com o cabeçalho do `setup_cron_jarvis.sh` repetido
+seis vezes** — o script vem re-anexando o bloco de comentários a cada execução
+em vez de substituir. Não quebra nada (são comentários), mas o arquivo já está
+com mais comentário duplicado do que cron, e um dia isso esconde uma linha de
+verdade. Anotado; não mexido.
 
 ## 📌 Referência rápida (infra)
 
