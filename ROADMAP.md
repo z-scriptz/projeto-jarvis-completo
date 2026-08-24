@@ -5932,6 +5932,31 @@ mostra — o "parece que pegou da Shopee" que eu já tinha declarado resolvido
 **duas vezes**. Sobre cartão branco a foto de catálogo some sozinha, com ou sem
 blend; o multiply virou reforço, não estrutura.
 
+#### ⏰ COMANDO COM DATA NA MÃO TEM PRAZO DE VALIDADE (24/08)
+
+O `--do-plano` falhou de novo, e desta vez o sistema estava **funcionando**. Eu
+mandei rodar:
+
+    .venv/bin/python fundo_ia.py --do-plano pronto_carrossel/20260823_manual_casa
+
+Entre o comando que eu escrevi e a hora em que ele rodou, **passou da meia-noite
+na VPS**. O render criou `20260824_manual_casa`, escreveu o `plano.json` lá
+dentro certinho, e o meu caminho apontava pro dia anterior. Saiu "não achei
+plano.json" e pareceu que o conserto não tinha funcionado.
+
+⚠️ **E EU JÁ TINHA APRENDIDO ISSO.** O `midia_publica --ver` pega a pasta mais
+recente sozinho **exatamente por causa desta armadilha**, e está anotado neste
+arquivo. Não apliquei no comando novo. **Lição repetida é lição não aprendida** —
+e a forma de não repetir não é lembrar, é fazer o padrão ser o certo:
+
+- `--do-plano` **sem argumento** usa o carrossel mais recente.
+- Apontando pra pasta errada, ele **diz onde o `plano.json` está de fato** em vez
+  de só reclamar.
+
+Regra geral pra qualquer comando que eu mandar daqui pra frente: **se o caminho
+tem data, hash ou id dentro, o comando está errado.** O certo é ter um padrão
+que o próprio programa descobre.
+
 #### ✂️ A COMPOSIÇÃO TEM QUE CABER NO CONTEÚDO, NÃO CORTÁ-LO (23/08)
 
 ⚠️ **A `cheia` estava DESCARTANDO o corpo do slide.** Ela desenhava só rótulo +

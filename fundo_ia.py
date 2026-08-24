@@ -582,7 +582,23 @@ def _traduzir_gemini(e: Exception) -> str:
     return t[:200]
 
 
-def do_plano(pasta, seco: bool = False) -> int:
+def _ultimo_carrossel():
+    """A pasta de carrossel mais recente.
+
+    ⚠️ COMANDO COM DATA ESCRITA NA MÃO É COMANDO COM PRAZO DE VALIDADE. Eu
+    mandei o Dre rodar `--do-plano pronto_carrossel/20260823_manual_casa` e,
+    entre um comando e o outro, passou da meia-noite na VPS: o render criou
+    `20260824_...` e o meu caminho apontava pro dia anterior. Deu "não achei
+    plano.json" num sistema que estava funcionando. **E eu já tinha aprendido
+    isso**: o `midia_publica --ver` pega a mais recente sozinho justamente por
+    causa desta armadilha — só não apliquei aqui. Lição repetida é lição não
+    aprendida."""
+    raiz = BASE_DIR / "pronto_carrossel"
+    cands = [d for d in raiz.iterdir() if d.is_dir()] if raiz.is_dir() else []
+    return max(cands, key=lambda d: d.stat().st_mtime) if cands else None
+
+
+def do_plano(pasta=None, seco: bool = False) -> int:
     """Gera UMA imagem POR SLIDE, a partir do que aquele slide diz.
 
     ⚠️ ESTE É O CONSERTO DO MAIOR DEFEITO QUE SOBROU. Hoje o fundo sai por
@@ -593,10 +609,20 @@ def do_plano(pasta, seco: bool = False) -> int:
 
     O plano já existe em disco ANTES do render e já sabe o que cada slide diz.
     Então a foto pode nascer do texto em vez de ser sorteada."""
-    pasta = Path(pasta)
+    pasta = Path(pasta) if pasta else _ultimo_carrossel()
+    if pasta is None:
+        print("❌ nenhuma pasta em pronto_carrossel/")
+        return 1
     plano_j = pasta / "plano.json"
     if not plano_j.exists():
         print(f"❌ não achei {plano_j}")
+        irmas = sorted((BASE_DIR / "pronto_carrossel").glob("*/plano.json"),
+                       key=lambda p: p.stat().st_mtime, reverse=True)[:3]
+        if irmas:
+            print("   Mas existe plano.json em:")
+            for i in irmas:
+                print(f"     {i.parent}")
+            print("   (rode sem argumento que eu pego o mais recente)")
         return 1
     plano = json.loads(plano_j.read_text(encoding="utf-8"))
     nicho = plano.get("nicho", "geral")
@@ -692,12 +718,15 @@ def main() -> int:
                    help="põe no acervo as imagens baixadas do ChatGPT")
     p.add_argument("--de", nargs="+", metavar="CAMINHO", default=[],
                    help="pasta ou arquivos de onde importar")
+    # `nargs="?"` + `const=""`: `--do-plano` sozinho pega a pasta mais recente
     p.add_argument("--do-plano", metavar="PASTA", dest="do_plano",
-                   help="1 imagem por slide, gerada do texto do slide (Gemini)")
+                   nargs="?", const="",
+                   help="1 imagem por slide, do texto do slide (Gemini). "
+                        "Sem argumento, usa o carrossel mais recente.")
     a = p.parse_args()
 
-    if a.do_plano:
-        return do_plano(a.do_plano, a.seco)
+    if a.do_plano is not None:
+        return do_plano(a.do_plano or None, a.seco)
 
     if a.importar:
         if not a.de:
