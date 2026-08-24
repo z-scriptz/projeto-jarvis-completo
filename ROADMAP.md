@@ -5990,6 +5990,42 @@ avisa no log (`↩️ CTA prometia link num post sem produto — troquei`).
 > **Prompt pede; código garante.** Prometer link no que não tem link é anúncio
 > mentiroso, e isso não pode depender de o modelo estar de bom humor.
 
+Confirmado nos dois testes seguintes: `↩️ CTA prometia link num post sem
+produto — troquei` disparou em `passo_a_passo` e em `erros`, e o `erros` saiu
+com *"Qual desses você fazia?"*.
+
+#### 🪜 REGRA O MODELO OBEDECE NA FORMA; ESTRUTURA ELE COPIA DE EXEMPLO (24/08)
+
+O roteiro do `passo_a_passo` falhou **duas vezes, em nichos diferentes** — o que
+descarta azar de sorteio:
+
+    casa  PASSO 1 Comece eliminando o que não serve
+          PASSO 2 Olhe pra sua casa com outros olhos     ← não depende do 1
+          PASSO 4 Menos é mais: simplifique              ← repete o 1
+    tech  PASSO 1 Comece pela proteção básica
+          PASSO 2 Entenda o que desgasta mais            ← devia vir ANTES
+          PASSO 3 Otimize seu carregamento diário
+
+A regra abstrata ("o passo 2 depende do passo 1") comprou a **superfície**:
+rótulo `PASSO N`, verbo no início do título. Não comprou a dependência.
+
+Então o `passo_a_passo` ganhou o único roteiro **com exemplo trabalhado** — um
+par ASSIM NÃO / ASSIM SIM, e a frase que explica o mecanismo: *"no exemplo bom,
+o PASSO 2 fala do 'que sobrou' do PASSO 1, e o PASSO 3 fala do 'monte' que o
+PASSO 2 criou. Cada título CITA algo que o slide anterior produziu."*
+
+⚠️ **E UMA SAÍDA HONESTA PRO MODELO: o campo `aviso`.** Boa parte dos produtos
+de afiliado **não tem procedimento de 4 passos** — "manter o celular em dia" é
+lista de cuidados, não sequência. Forçar produz passo falso. Agora o modelo pode
+dizer que o formato não cabe, em vez de inventar.
+
+⚠️ **E O `aviso` VAI PRO LEDGER, não só pro log.** Pedir sinalização e depois
+ignorar o campo é pior que não pedir: cria a impressão de que existe uma trava
+onde não existe. No ledger ele responde, daqui a meses, *"em quantos
+`passo_a_passo` o próprio modelo avisou que não era passo?"* — número alto
+significa formato sendo forçado, e o peso dele precisa cair. **Sem registrar,
+essa pergunta não teria como ser feita.**
+
 ⚠️ **NÃO ENTROU O `FACT_CHECK_REQUIRED`** que o ChatGPT propôs (bebê/saúde/
 suplemento): o Dre disse que já resolveu isso por outro caminho. Fica anotado que
 foi decisão dele, não esquecimento — pra ninguém reintroduzir achando que faltou.

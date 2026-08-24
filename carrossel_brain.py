@@ -593,13 +593,36 @@ ROTEIROS = {
         "  Nenhuma das duas e 'a ruim': cada uma ganha em uma situacao.\n"
         "  O ultimo slide diz PRA QUEM cada uma serve, nao qual e melhor."
     ),
+    # ⚠️ ESTE E O UNICO ROTEIRO COM EXEMPLO, e o exemplo nasceu de duas
+    # falhas seguidas em nichos diferentes (casa e tech, 24/08). So a REGRA
+    # ("passo 2 depende do passo 1") melhorou a superficie — rotulo PASSO N,
+    # verbo no inicio — e nao a dependencia: saiu "Comece pela protecao
+    # basica / Entenda o que desgasta mais / Otimize o carregamento", que da
+    # pra embaralhar sem estragar nada. Regra abstrata o modelo obedece na
+    # forma; **estrutura ele copia de exemplo.**
     "passo_a_passo": (
         "⚠️ ESTE FORMATO E UMA SEQUENCIA, NAO UMA LISTA DE DICAS.\n"
-        "  O PASSO 2 so faz sentido DEPOIS do PASSO 1 ter sido feito. Se voce\n"
-        "  puder trocar a ordem dos slides sem estragar nada, voce escreveu\n"
-        "  uma lista e o formato esta errado — reescreva.\n"
-        "  Comece o titulo de cada slide com o verbo da acao ('Separe...',\n"
-        "  'Depois disso, ...'), e o rotulo com PASSO 1, PASSO 2..."
+        "  TESTE OBRIGATORIO antes de responder: troque a ordem de dois slides\n"
+        "  do corpo. Se o texto continuar fazendo sentido, voce escreveu uma\n"
+        "  LISTA — jogue fora e escreva de novo.\n"
+        "\n"
+        "  ASSIM NAO (cada slide e independente, da pra embaralhar):\n"
+        "    PASSO 1 Comece pela protecao basica\n"
+        "    PASSO 2 Entenda o que desgasta mais\n"
+        "    PASSO 3 Otimize seu carregamento diario\n"
+        "\n"
+        "  ASSIM SIM (cada slide usa o resultado do anterior):\n"
+        "    PASSO 1 Tire tudo da gaveta e ponha na cama\n"
+        "    PASSO 2 Separe o que sobrou em tres montes: usa, nao usa, quebrado\n"
+        "    PASSO 3 Devolve so o monte 'usa' — agora sobra espaco de verdade\n"
+        "    PASSO 4 O que sobrou de espaco vira o lugar fixo do que voce usa\n"
+        "\n"
+        "  Repare: no exemplo bom, o PASSO 2 fala do 'que sobrou' do PASSO 1, e\n"
+        "  o PASSO 3 fala do 'monte' que o PASSO 2 criou. Cada titulo CITA algo\n"
+        "  que o slide anterior produziu. Faca igual.\n"
+        "\n"
+        "  ⚠️ E SE O ASSUNTO NAO TIVER UMA SEQUENCIA DE VERDADE, diga isso no\n"
+        "  campo \"aviso\" do JSON em vez de inventar passos falsos."
     ),
     "historia": (
         "A sequencia e: problema vivido -> o que voce tentou e nao deu ->\n"
@@ -718,7 +741,8 @@ RESPONDA SO COM JSON, sem cerca de codigo, neste formato exato:
                "conclusao": "<ate 5 palavras, o fecho pratico>"}}],
   "resumo": ["<item 1, curtissimo>", "<item 2>", "..."],
   "cta": "<a frase do ultimo slide, contextual>",
-  "legenda": "<2 a 4 linhas pra legenda do post>"}}
+  "legenda": "<2 a 4 linhas pra legenda do post>",
+  "aviso": "<vazio; so preencha se o formato pedido nao couber no assunto>"}}
 
 Gere exatamente {passos} objeto(s) em "slides" e {passos} item(ns) em "resumo".
 
@@ -944,6 +968,18 @@ def montar_plano(nicho: str, formato: str = "", fotos_em: Path = None) -> dict:
                 fila = list(acervo)
             s["fundo"] = fila.pop(0)
 
+    # ⚠️ O `aviso` SÓ VALE SE ALGUÉM LER. Pedir ao modelo que sinalize quando
+    # o formato não cabe no assunto e depois ignorar o campo é pior que não
+    # pedir: cria a impressão de que existe uma trava, e não existe. Ele vai
+    # pro log E pro ledger — no ledger é o que permite, meses depois, perguntar
+    # "em quantos `passo_a_passo` o próprio modelo avisou que não era passo?".
+    # Se esse número for alto, o formato está sendo forçado e o peso dele
+    # precisa cair; sem registrar, essa pergunta não teria como ser feita.
+    aviso = (d.get("aviso") or "").strip()
+    if aviso:
+        log.warning(f"   ⚠️  o modelo avisou sobre o formato '{formato}': "
+                    f"{aviso[:160]}")
+
     cta = _cta_do_conteudo(d, slides, formato)
 
     return {
@@ -952,7 +988,7 @@ def montar_plano(nicho: str, formato: str = "", fotos_em: Path = None) -> dict:
         "capa": {"hook": _cortar(d.get("capa") or angulo),
                  "sub": _cortar(d.get("capa_sub") or "", 10),
                  "foto": next((p["foto"] for p in produtos if p.get("foto")), "")},
-        "slides": slides, "cta": cta,
+        "slides": slides, "cta": cta, "aviso": aviso,
         "legenda": (d.get("legenda") or "").strip(),
         "links": [p["link"] for p in produtos if p.get("link")],
     }
@@ -1071,6 +1107,11 @@ def registrar(plano: dict, slug: str = "", url: str = "") -> None:
                 "conta": plano.get("handle", ""), "nicho": plano.get("nicho", ""),
                 "formato": plano.get("formato", ""),
                 "reserva": bool(plano.get("reserva")),
+                # ⚠️ o aviso do modelo entra no ledger, não só no log: é ele
+                # que vai responder, daqui a alguns meses, "em quantos
+                # `passo_a_passo` o próprio modelo disse que não era passo?".
+                # Número alto = formato sendo forçado, e o peso dele cai.
+                "aviso": (plano.get("aviso") or "")[:200],
                 "hook": (plano.get("capa") or {}).get("hook", ""),
                 "slides": len(plano.get("slides") or []),
                 "slug": slug, "url": url,
