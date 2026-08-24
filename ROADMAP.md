@@ -6019,6 +6019,29 @@ de afiliado **não tem procedimento de 4 passos** — "manter o celular em dia" 
 lista de cuidados, não sequência. Forçar produz passo falso. Agora o modelo pode
 dizer que o formato não cabe, em vez de inventar.
 
+**RESULTADO (2ª rodada com o exemplo):**
+
+`casa` passou. O teste de embaralhar não quebra mais:
+
+    PASSO 1 Libere o palco da sua festa
+    PASSO 2 Ache o coração da sua celebração
+    PASSO 3 Dê vida ao seu ponto focal        ← precisa do 2 ter achado
+    PASSO 4 Expanda a atmosfera por toda casa ← precisa do 3 ter um centro
+
+⚠️ **`tech` SE CORRIGIU SOZINHO — E EM SILÊNCIO.** Pedimos `passo_a_passo`, o
+modelo percebeu que "manter o celular" não tem sequência, **tirou os rótulos
+PASSO por conta própria** e escreveu *"4 hábitos"*. O texto ficou honesto; o
+registro, não — o ledger ia gravar `passo_a_passo` num post que virou lista.
+
+> É o mesmo envenenamento da medição, só que mais difícil de ver: **antes o
+> formato saía errado E rotulado errado; agora sai certo no texto e errado na
+> etiqueta.** E ele nem usou o campo `aviso` — se corrigiu e seguiu.
+
+Por isso o ledger passou a guardar **os dois**: `formato` (o que pedimos) e
+`formato_real` (o que veio). Quando um `passo_a_passo` sai sem rótulos de passo,
+o registro vira `lista` e o log diz por quê — *"o texto está ok, a etiqueta é
+que não podia mentir"*.
+
 ⚠️ **E O `aviso` VAI PRO LEDGER, não só pro log.** Pedir sinalização e depois
 ignorar o campo é pior que não pedir: cria a impressão de que existe uma trava
 onde não existe. No ledger ele responde, daqui a meses, *"em quantos

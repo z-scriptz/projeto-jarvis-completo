@@ -975,6 +975,27 @@ def montar_plano(nicho: str, formato: str = "", fotos_em: Path = None) -> dict:
     # "em quantos `passo_a_passo` o próprio modelo avisou que não era passo?".
     # Se esse número for alto, o formato está sendo forçado e o peso dele
     # precisa cair; sem registrar, essa pergunta não teria como ser feita.
+    # ⚠️ O MODELO SE CORRIGE EM SILÊNCIO, E ISSO TAMBÉM MENTE NO LEDGER.
+    # Teste de 24/08, nicho tech: pedimos `passo_a_passo`, ele percebeu que
+    # "manter o celular" não tem sequência, **tirou os rótulos PASSO sozinho**
+    # e escreveu "4 hábitos". O texto ficou honesto; o registro não — o ledger
+    # ia gravar `passo_a_passo` num post que virou lista.
+    #
+    # É o mesmo envenenamento da medição de antes, só que mais difícil de ver:
+    # antes o formato saía errado E rotulado errado; agora sai certo no texto e
+    # errado na etiqueta. Então o ledger guarda os DOIS: o que a gente pediu e
+    # o que de fato veio.
+    formato_real = formato
+    if formato == "passo_a_passo":
+        marcados = sum(1 for s2 in slides
+                       if re.search(r"passo\s*\d", str(s2.get("rotulo") or ""),
+                                    re.I))
+        if marcados < 2:
+            formato_real = "lista"
+            log.info("   🔁 pedi 'passo_a_passo' e veio sem passos — "
+                     "registro como 'lista' (o texto está ok, a etiqueta é "
+                     "que não podia mentir)")
+
     aviso = (d.get("aviso") or "").strip()
     if aviso:
         log.warning(f"   ⚠️  o modelo avisou sobre o formato '{formato}': "
@@ -989,6 +1010,7 @@ def montar_plano(nicho: str, formato: str = "", fotos_em: Path = None) -> dict:
                  "sub": _cortar(d.get("capa_sub") or "", 10),
                  "foto": next((p["foto"] for p in produtos if p.get("foto")), "")},
         "slides": slides, "cta": cta, "aviso": aviso,
+        "formato_real": formato_real,
         "legenda": (d.get("legenda") or "").strip(),
         "links": [p["link"] for p in produtos if p.get("link")],
     }
@@ -1106,6 +1128,11 @@ def registrar(plano: dict, slug: str = "", url: str = "") -> None:
                 "data": time.strftime("%Y-%m-%d"),
                 "conta": plano.get("handle", ""), "nicho": plano.get("nicho", ""),
                 "formato": plano.get("formato", ""),
+                # o que a gente PEDIU acima; o que de fato VEIO aqui. Iguais na
+                # maioria das vezes — e quando divergem, é isso que a fase 2
+                # precisa ler pra não medir uma coisa achando que é outra.
+                "formato_real": plano.get("formato_real")
+                or plano.get("formato", ""),
                 "reserva": bool(plano.get("reserva")),
                 # ⚠️ o aviso do modelo entra no ledger, não só no log: é ele
                 # que vai responder, daqui a alguns meses, "em quantos
