@@ -5962,11 +5962,33 @@ lido rápido no feed, sem foto e sem contexto, vai pro lugar errado. A regra man
 ler a capa em voz alta imaginando quem passa rápido — **não adianta explicar no
 slide 2, porque ninguém lê o slide 2 pra corrigir a leitura do slide 1.**
 
-**3. O CTA PROMETIA O QUE O POST NÃO TINHA.** *"Quer o link desses achadinhos?
-comenta PASSO"* num carrossel que **não mostrou produto nenhum**. Agora o CTA é
-escolhido pelo que os slides realmente entregaram, com uma proibição explícita:
-sem produto citado, está **proibido** prometer link. *"Quer o link?"* num post só
-de dicas não é CTA — é propaganda colada no fim.
+**3. O CTA PROMETIA O QUE O POST NÃO TINHA** — e aqui o prompt não bastou.
+
+Primeiro tentei só a regra no prompt. No teste seguinte o Gemini devolveu
+*"comenta LINK que eu te mando"* num carrossel de 8 slides **sem um único
+produto**. Fui olhar o código e o problema era maior:
+
+    CTA_PADRAO = {"linhas": ["🛒 o link tá na bio",
+                             "💬 comenta QUERO que eu te mando"]}
+
+⚠️ **AS DUAS LINHAS DO FECHO ERAM FIXAS.** O Gemini escrevia só o `titulo`; as
+linhas de baixo prometiam link em TODO carrossel, inclusive os que não citam
+produto. **Era estruturalmente impossível ter um fecho não-comercial** — e
+nenhuma regra de prompt conserta o que o código escreve depois.
+
+`_cta_do_conteudo()` decide pelo que os slides realmente têm:
+
+| o post mostrou | fecho |
+|---|---|
+| produto com preço | "o link tá na bio" · "comenta QUERO" |
+| checklist/resumo | "salva pra consultar na hora que precisar" |
+| só texto | "comenta aqui embaixo — respondo todo mundo" |
+
+E se o modelo prometer link num post sem produto, o código **troca o título** e
+avisa no log (`↩️ CTA prometia link num post sem produto — troquei`).
+
+> **Prompt pede; código garante.** Prometer link no que não tem link é anúncio
+> mentiroso, e isso não pode depender de o modelo estar de bom humor.
 
 ⚠️ **NÃO ENTROU O `FACT_CHECK_REQUIRED`** que o ChatGPT propôs (bebê/saúde/
 suplemento): o Dre disse que já resolveu isso por outro caminho. Fica anotado que

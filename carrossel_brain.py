@@ -792,6 +792,51 @@ def _reserva(formato: str, nicho: str, produtos: list, angulo: str) -> dict:
 # ══════════════════════════════════════════════════════════════════════════
 # MONTAGEM DO PLANO
 # ══════════════════════════════════════════════════════════════════════════
+_RX_PROMETE_LINK = re.compile(
+    r"\b(link|linkin|bio|manda(r)?\s+o\s+link|comenta\s+\w+\s+que\s+eu"
+    r"\s+te\s+mando|quero|compra|carrinho|cupom)\b", re.I)
+
+
+def _cta_do_conteudo(d: dict, slides: list, formato: str) -> dict:
+    """O fecho, escolhido pelo que os slides REALMENTE mostraram.
+
+    ⚠️ AS DUAS LINHAS DO CTA ERAM FIXAS, e isso era pior que o modelo
+    desobedecer. O `CTA_PADRAO["linhas"]` — "🛒 o link tá na bio" e "💬 comenta
+    QUERO que eu te mando" — ia pra TODO carrossel, inclusive os que não citam
+    produto nenhum. O Gemini escrevia só o `titulo`; as linhas de baixo
+    prometiam link de qualquer jeito. **Era estruturalmente impossível ter um
+    fecho não-comercial**, e nenhuma regra de prompt conserta o que o código
+    escreve depois.
+
+    ⚠️ E A REGRA NOVA DE PROMPT TAMBÉM NÃO PEGOU SOZINHA: no teste de 24/08 o
+    modelo devolveu "comenta LINK que eu te mando" num carrossel de 8 slides
+    sem um único produto. Prompt pede; código garante. Aqui é o segundo caso —
+    prometer link no que não tem link é anúncio mentiroso, e isso não pode
+    depender de o modelo estar de bom humor."""
+    tem_produto = any(s.get("tipo") == "produto" or s.get("preco")
+                      for s in slides)
+    tem_lista = any(s.get("itens") for s in slides)
+
+    titulo = _cortar(d.get("cta") or "") or CTA_PADRAO["titulo"]
+    if not tem_produto and _RX_PROMETE_LINK.search(titulo):
+        # o modelo prometeu link num post que não mostrou produto — troco por
+        # um fecho que o próprio conteúdo sustenta
+        titulo = {
+            "erros": "Qual desses você fazia?",
+            "comparacao": "Qual dos dois você levaria?",
+            "mitos": "Qual desses você achava verdade?",
+        }.get(formato, "Salva pra não perder")
+        log.info("   ↩️  CTA prometia link num post sem produto — troquei")
+
+    if tem_produto:
+        linhas = list(CTA_PADRAO["linhas"])
+    elif tem_lista:
+        linhas = ["Salva pra consultar na hora que precisar."]
+    else:
+        linhas = ["Comenta aqui embaixo — respondo todo mundo."]
+    return {"titulo": titulo, "linhas": linhas}
+
+
 def _handle(nicho: str) -> str:
     try:
         c = json.loads((BASE_DIR / "contas.json").read_text(encoding="utf-8"))
@@ -899,9 +944,7 @@ def montar_plano(nicho: str, formato: str = "", fotos_em: Path = None) -> dict:
                 fila = list(acervo)
             s["fundo"] = fila.pop(0)
 
-    cta = dict(CTA_PADRAO)
-    if d.get("cta"):
-        cta["titulo"] = _cortar(d["cta"])
+    cta = _cta_do_conteudo(d, slides, formato)
 
     return {
         "nicho": nicho, "handle": conta, "formato": formato,
