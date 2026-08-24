@@ -5932,6 +5932,45 @@ mostra — o "parece que pegou da Shopee" que eu já tinha declarado resolvido
 **duas vezes**. Sobre cartão branco a foto de catálogo some sozinha, com ou sem
 blend; o multiply virou reforço, não estrutura.
 
+#### ♻️ `--refazer` — o furo que fazia o conserto produzir o defeito (24/08)
+
+⚠️ **O FLUXO QUE EU PROPUS NÃO FECHAVA, E O JEITO COMO ELE FALHAVA ERA O PIOR
+POSSÍVEL.** O passo a passo era:
+
+    --agora casa          → monta o plano A, renderiza
+    fundo_ia --do-plano   → gera as imagens DO PLANO A  (pago)
+    --agora casa          → monta o plano B ← e joga o A fora
+
+O terceiro passo chamava o brain **de novo**, e o Gemini escreve outra coisa a
+cada chamada — no teste do Dre o primeiro plano era uma comparação de torneira
+com aquecedor e o segundo virou um `passo_a_passo` de outro assunto. As imagens
+do plano A iriam parar num carrossel que fala do plano B.
+
+> **O passo que existe pra casar imagem e texto produzia justamente o
+> descasamento** — e ainda gastando dinheiro em imagem. E nada falha: sai um
+> carrossel bonito, com fotos que não têm relação nenhuma. Mesma família do
+> fundo por rodízio, com o agravante de que aqui a gente pagou.
+
+`--agora <nicho> --refazer` lê o `plano.json` da pasta e renderiza em cima dele,
+sem chamar o brain. O log diz quantas imagens por slide encontrou — e avisa
+quando não encontrou nenhuma, que é o caso em que o `--refazer` não tem motivo
+pra existir.
+
+O ciclo certo, e ele agora tem os três passos com o mesmo padrão (sem caminho
+escrito na mão):
+
+    carrossel_agendador.py --agora casa            # plano + 1º render
+    fundo_ia.py --do-plano --seco                  # confere os prompts
+    fundo_ia.py --do-plano                         # gera (pago)
+    carrossel_agendador.py --agora casa --refazer  # re-render COM as imagens
+    midia_publica.py --ver                         # revisa
+
+**E o preço saiu do prompt de imagem.** *"Torneira com aquecedor: R$126,35 vale
+o dobro"* foi pro briefing da foto inteiro. Preço num prompt de imagem convida o
+modelo a desenhar uma etiqueta com número — e número desenhado ou sai errado, ou
+sai **certo e gravado no pixel**, que é pior: não dá pra corrigir quando a Shopee
+mudar o valor. Preço tem lugar próprio, a pílula do render, onde é texto.
+
 #### ⏰ COMANDO COM DATA NA MÃO TEM PRAZO DE VALIDADE (24/08)
 
 O `--do-plano` falhou de novo, e desta vez o sistema estava **funcionando**. Eu

@@ -164,21 +164,56 @@ def _slug(nicho: str, horario: str) -> str:
 
 
 def publicar_um(nicho: str, cfg: dict = None, dry_run: bool = False,
-                horario: str = "manual") -> dict:
-    """Monta, renderiza e publica UM carrossel. Nunca levanta."""
+                horario: str = "manual", refazer: bool = False) -> dict:
+    """Monta, renderiza e publica UM carrossel. Nunca levanta.
+
+    ⚠️ `refazer=True` REAPROVEITA O PLANO QUE JÁ ESTÁ EM DISCO. Sem isso o
+    fluxo das imagens por slide não fecha, e o furo é traiçoeiro:
+
+        --agora casa          → monta o plano A, renderiza
+        fundo_ia --do-plano   → gera as imagens DO PLANO A
+        --agora casa          → monta o plano B ← e joga o A fora
+
+    O terceiro passo chamava o brain de novo, e o Gemini escreve outra coisa a
+    cada chamada. As imagens do plano A iam parar num carrossel que fala do
+    plano B — ou seja, **o passo que existe pra casar imagem e texto produzia
+    justamente o descasamento**, e ainda gastando dinheiro em imagem. Só que
+    nada falha: sai um carrossel bonito, com fotos que não têm relação. É a
+    mesma família do fundo por rodízio, com um agravante — aqui a gente pagou.
+    """
     cfg = cfg or {}
     pasta = PRONTO / _slug(nicho, horario)
-    try:
-        import carrossel_brain as CB
-        plano = CB.montar_plano(nicho, fotos_em=pasta)
-    except SystemExit as e:
-        # o brain recusa formato de vitrine sem foto — é decisão dele, e o
-        # motivo já vem escrito na mensagem
-        log.warning(f"   ⏭️  {nicho}: {str(e)[:120]}")
-        return {"ok": False, "motivo": "sem_material"}
-    except Exception as e:
-        log.error(f"   ❌ {nicho}: não montei o plano ({str(e)[:100]})")
-        return {"ok": False, "motivo": "plano"}
+
+    plano = None
+    if refazer:
+        arq = pasta / "plano.json"
+        if not arq.exists():
+            log.error(f"   ❌ {nicho}: --refazer não achou {arq}. "
+                      f"Rode sem --refazer primeiro pra criar o plano.")
+            return {"ok": False, "motivo": "sem_plano"}
+        try:
+            plano = json.loads(arq.read_text(encoding="utf-8"))
+            n = len(list((pasta / "fundos").glob("*"))) \
+                if (pasta / "fundos").is_dir() else 0
+            log.info(f"   ♻️  {nicho}: reusando o plano de {pasta.name}"
+                     + (f" · {n} imagem(ns) por slide" if n else
+                        " · ⚠️  sem imagens por slide ainda"))
+        except Exception as e:
+            log.error(f"   ❌ {nicho}: plano.json ilegível ({str(e)[:80]})")
+            return {"ok": False, "motivo": "plano"}
+
+    if plano is None:
+        try:
+            import carrossel_brain as CB
+            plano = CB.montar_plano(nicho, fotos_em=pasta)
+        except SystemExit as e:
+            # o brain recusa formato de vitrine sem foto — é decisão dele, e o
+            # motivo já vem escrito na mensagem
+            log.warning(f"   ⏭️  {nicho}: {str(e)[:120]}")
+            return {"ok": False, "motivo": "sem_material"}
+        except Exception as e:
+            log.error(f"   ❌ {nicho}: não montei o plano ({str(e)[:100]})")
+            return {"ok": False, "motivo": "plano"}
 
     try:
         import carrossel_render as CR
@@ -296,6 +331,9 @@ def main() -> int:
     p.add_argument("--agenda", action="store_true", help="o mapa da semana")
     p.add_argument("--agora", metavar="NICHO", help="produz 1 agora (teste)")
     p.add_argument("--postar", action="store_true", help="com --agora, publica")
+    p.add_argument("--refazer", action="store_true",
+                   help="com --agora, reusa o plano em disco em vez de montar "
+                        "outro (é o que faz as imagens por slide baterem)")
     a = p.parse_args()
 
     problema = _confere_python()
@@ -316,7 +354,8 @@ def main() -> int:
     if a.agenda:
         return _agenda(cfg)
     if a.agora:
-        r = publicar_um(a.agora, cfg, dry_run=not a.postar)
+        r = publicar_um(a.agora, cfg, dry_run=not a.postar,
+                        refazer=a.refazer)
         print(json.dumps(r, ensure_ascii=False, indent=2))
         return 0 if r.get("ok") else 1
     p.print_help()

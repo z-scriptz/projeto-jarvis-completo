@@ -662,6 +662,13 @@ def prompt_do_slide(nicho: str, titulo: str, apoio: str = "") -> str:
     # pro render — dentro de um prompt de imagem viram lixo que o modelo tenta
     # interpretar, e asterisco em prompt costuma virar ênfase de estilo.
     limpo = re.sub(r"[\*\[\]]", "", " ".join(x for x in (titulo, apoio) if x))
+    # ⚠️ E TIRA O PREÇO. "Torneira com aquecedor: R$126,35 vale o dobro" foi pro
+    # prompt inteiro no 1º teste. Preço num briefing de FOTO é um convite pro
+    # modelo desenhar uma etiqueta com número — e número desenhado por IA sai
+    # errado, some no véu, ou pior: sai CERTO e vira um preço gravado no pixel,
+    # que a gente não consegue mais corrigir quando a Shopee mudar o valor. O
+    # preço tem lugar próprio, a pílula do render, onde é texto de verdade.
+    limpo = re.sub(r"R\$\s?[\d.,]+", "", limpo, flags=re.I)
     assunto = " ".join(limpo.split())[:260]
     return (
         f"Fotografia editorial realista para um post de Instagram do nicho "
