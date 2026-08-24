@@ -193,9 +193,41 @@ def prompt_do_nicho(nicho: str, i: int = None) -> str:
 # A pasta rasa continua valendo: quem largar imagem direto em `fundos/casa/`
 # tem o comportamento antigo, e é pra lá que o código cai quando o formato não
 # tem acervo próprio. Nada do que já existe quebra.
+# ⚠️ O DRE ORGANIZA A BIBLIOTECA COM OS NOMES DO CHATGPT; O BRAIN USA OS DELE.
+# São listas parecidas e NÃO iguais, e a diferença é silenciosa: uma pasta
+# `tech/curiosidade/` com 10 imagens ótimas nunca seria encontrada por um brain
+# que chama aquilo de `historia`. Ninguém vê erro — o rodízio só cai na raiz e
+# o trabalho de separação vira enfeite.
+#
+# Traduzir aqui é melhor que renomear 600 arquivos ou que obrigar o Dre a
+# decorar os meus nomes: **a pasta pode se chamar do jeito que fizer sentido
+# pra quem organiza.**
+_ALIAS = {
+    "curiosidade": "historia",      # "segredo revelado" — mesma estrutura
+    "segredo": "historia",
+    "antes-depois": "antes_depois",
+    "antesdepois": "antes_depois",
+    "comparação": "comparacao",
+    "passo": "passo_a_passo",
+    "passo-a-passo": "passo_a_passo",
+    "problema-solucao": "problema_solucao",
+    "nao-compre": "nao_compre",
+    "naocompre": "nao_compre",
+    "não_compre": "nao_compre",
+    "top5": "lista",
+    "ranking": "lista",
+    "mitos_verdades": "mitos",
+}
+
+
+def _canon(formato: str) -> str:
+    f = (formato or "").strip().lower().replace(" ", "_")
+    return _ALIAS.get(f, f)
+
+
 def _pasta(nicho: str, formato: str = "") -> Path:
     base = FUNDOS / (nicho or "geral").lower()
-    return (base / formato.lower()) if formato else base
+    return (base / _canon(formato)) if formato else base
 
 
 # ⚠️ NÃO VOLTE ISTO PRA `*.jpg`. O `--gerar` do Fal salvava .jpg e por isso o

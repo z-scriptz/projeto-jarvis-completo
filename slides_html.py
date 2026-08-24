@@ -197,7 +197,7 @@ def _imagem_propria(plano: dict, n):
     return None
 
 
-def _fundo(plano: dict, item: dict = None) -> str:
+def _fundo(plano: dict, item: dict = None, papel: str = "") -> str:
     """data: URI da foto de fundo, ou "" — nessa ordem: a do slide, a do
     plano, uma do acervo do nicho."""
     # ⚠️ `isinstance(cand, str)` NÃO É PARANOIA. O plano vem de JSON escrito
@@ -234,8 +234,18 @@ def _fundo(plano: dict, item: dict = None) -> str:
         # Sem passar o formato aqui, o rodízio continuaria pegando "uma foto
         # bonita do nicho" e as 600 imagens organizadas viravam 600 imagens
         # sorteadas — o trabalho de separação existiria e ninguém consultaria.
-        alvo = fundo_do_nicho(plano.get("nicho", "geral"),
-                              plano.get("formato", ""))
+        # ⚠️ `papel` GANHA DO `formato`, e é uma distinção real. `cta/` e
+        # `produto/` não são formatos de carrossel — são PAPÉIS DE SLIDE. Um
+        # carrossel de `erros` termina num slide de CTA e pode mostrar um
+        # produto no meio; esses dois slides não querem a mesma foto que os
+        # slides de erro. A biblioteca do Dre já separa assim, e ignorar isso
+        # aqui faria o fecho de todo carrossel de `erros` pegar foto de erro.
+        alvo = ""
+        if papel:
+            alvo = fundo_do_nicho(plano.get("nicho", "geral"), papel)
+        if not alvo:
+            alvo = fundo_do_nicho(plano.get("nicho", "geral"),
+                                  plano.get("formato", ""))
         if alvo:
             return _b64(alvo)
     except Exception:
@@ -739,7 +749,7 @@ def _comp_produto(item, i, total, plano, p, ctx) -> str:
     # Ela é clara de propósito (o `.palco` branco precisa disso), então a foto
     # entra bem lavada: dá contexto ao produto sem competir com ele nem
     # escurecer a superfície que faz o recorte funcionar.
-    amb = ctx["fundo"] or _fundo(plano, {"n": ctx.get("n")})
+    amb = ctx["fundo"] or _fundo(plano, {"n": ctx.get("n")}, papel="produto")
     ambiente = (f'<div class="fotocheia" style="background-image:url({amb});' + _veu(ctx, .80) + f'"></div>'
                 f'<div class="fade" style="inset:0;background:linear-gradient('
                 f'180deg,{p["clarinho"]}d9 0%,{p["clarinho"]}f2 38%,'
@@ -782,7 +792,7 @@ def _comp_produto_vitrine(item, i, total, plano, p, ctx) -> str:
     e o texto ocupa a esquerda — silhueta oposta à `produto`, que centraliza
     tudo em superfície clara. O `multiply` continua sendo o truque do fundo
     branco, mas agora sobre um cartão claro atrás só do produto."""
-    foto = ctx["fundo"] or _fundo(plano, {"n": ctx.get("n")})
+    foto = ctx["fundo"] or _fundo(plano, {"n": ctx.get("n")}, papel="produto")
     return f"""<div class="slide" style="background:{p['escuro']};
      color:{p['clarinho']}">
   {'<div class="fotocheia" style="background-image:url(' + foto + ');' + _veu(ctx, .22) + '"></div>'
@@ -1331,7 +1341,7 @@ def _html_fecho(plano: dict, total: int) -> str:
     # `04.png` descartado pela `respiro`, e seria burrice consertar num lugar e
     # deixar no outro. Injetar no despachante cobre os cinco sem reescrever
     # cinco funções, e cobre também qualquer modelo novo que apareça depois.
-    foto = _fundo(plano, {"n": total})
+    foto = _fundo(plano, {"n": total}, papel="cta")
     if foto and 'class="fotocheia"' not in corpo:
         camada = (f'<div class="fotocheia" style="background-image:url({foto});'
                   f'filter:saturate(.95) contrast(1.06) brightness(.66)"></div>'

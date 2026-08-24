@@ -5958,6 +5958,24 @@ dizendo" — sem custar uma chamada de IA.
 - a deduplicação passou a olhar só a pasta de destino: a mesma cena pode
   legitimamente existir em `erros` e em `checklist`, são usos diferentes.
 
+⚠️ **OS NOMES DAS PASTAS NÃO PRECISAM SER OS MEUS** (`_ALIAS`, 24/08). O Dre
+organiza com os nomes que o ChatGPT sugeriu; o brain usa os dele. São listas
+parecidas e **não iguais**, e a diferença falha em silêncio: `tech/curiosidade/`
+com 10 imagens ótimas nunca seria encontrada por um brain que chama aquilo de
+`historia` — o rodízio cai na raiz e o trabalho de separação vira enfeite.
+Traduzir na leitura é melhor que renomear 600 arquivos ou obrigar quem organiza
+a decorar meus nomes:
+
+    curiosidade / segredo  → historia        top5 / ranking → lista
+    antes-depois           → antes_depois    não compre     → nao_compre
+
+⚠️ **E `cta/` E `produto/` NÃO SÃO FORMATOS — SÃO PAPÉIS DE SLIDE.** Um
+carrossel de `erros` termina num CTA e pode mostrar um produto no meio; esses
+dois slides não querem a mesma foto que os slides de erro. `_fundo(..., papel=)`
+faz o papel GANHAR do formato, e o fecho pede `cta`, as duas composições de
+produto pedem `produto`. Sem isso, o fecho de todo carrossel de `erros` pegaria
+foto de erro.
+
 #### 🎨 A PALETA DE `moda` BRIGA COM O ACERVO DE `moda` (24/08)
 
 Medindo os 10 fundos de moda que o Dre gerou:
