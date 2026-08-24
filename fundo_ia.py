@@ -631,15 +631,36 @@ def do_plano(pasta=None, seco: bool = False) -> int:
     capa = plano.get("capa") or {}
     if capa.get("hook"):
         alvos.append((1, capa.get("hook", ""), capa.get("sub", "")))
-    for k, s in enumerate(plano.get("slides") or [], start=2):
-        if s.get("itens"):
-            continue                      # checklist usa fundo de ambiente
-        alvos.append((k, s.get("titulo") or "", s.get("linha") or ""))
+    slides = plano.get("slides") or []
+    for k, sl in enumerate(slides, start=2):
+        # ⚠️ O CHECKLIST TAMBÉM ENTRA. Na 1ª rodada eu pulava os slides de
+        # `itens` "porque usam fundo de ambiente" — e o resultado foi o slide
+        # de checklist de MAMADEIRA aparecer sobre uma prateleira de potes de
+        # cozinha. É o mesmo defeito que o `--do-plano` existe pra matar, só
+        # que eu tinha aberto uma exceção pra ele.
+        if sl.get("itens"):
+            alvos.append((k, " · ".join(str(x) for x in sl["itens"][:4]),
+                          "cena de contexto, o texto entra num cartão por cima"))
+            continue
+        alvos.append((k, sl.get("titulo") or "", sl.get("linha") or ""))
+    # e o FECHO, que é o último slide e também vinha do acervo genérico
+    cta = plano.get("cta") or {}
+    if cta:
+        alvos.append((len(slides) + 2, cta.get("titulo") or "",
+                      " ".join(cta.get("linhas") or [])))
 
     print(f"🎯 {len(alvos)} imagem(ns) — uma por slide, do texto dele\n")
+    # ⚠️ RODA NO `--seco` TAMBÉM. A direção é uma chamada de TEXTO, que custa
+    # uma fração de uma imagem — e é exatamente ela que precisa ser conferida
+    # antes de gastar. Um `--seco` que mostra um prompt diferente do que vai
+    # rodar de verdade é pior que não ter `--seco`: aprova o que não testou.
+    direcao = _direcao_visual(nicho, alvos)
+    if direcao:
+        print(f"   🎬 direção visual: {len(direcao)} cena(s) traduzidas\n")
     feitos = 0
     for n, titulo, apoio in alvos:
-        p = prompt_do_slide(nicho, titulo, apoio)
+        p = (prompt_do_slide(nicho, direcao[n]) if n in direcao
+             else prompt_do_slide(nicho, titulo, apoio))
         destino = saida / f"{n:02d}.png"
         print(f"  slide {n:02d} · {titulo[:46]}")
         if seco:
@@ -654,6 +675,56 @@ def do_plano(pasta=None, seco: bool = False) -> int:
     if feitos:
         print(f"\n✅ {feitos} imagem(ns) em {saida}")
     return 0 if (feitos or seco) else 1
+
+
+def _direcao_visual(nicho: str, alvos: list) -> dict:
+    """Traduz o TEXTO de cada slide numa CENA fotografável. {n: briefing}.
+
+    ⚠️ ESTE É O SALTO QUE O TESTE DE 24/08 REVELOU. Mandar o texto literal pro
+    modelo de imagem funciona quando a frase é concreta ("Confira o fluxo do
+    bico" → saiu bico e bebê mamando, ótimo) e falha quando é abstrata:
+
+        "Você provavelmente erra em dois passos todo dia"
+              ↓ o modelo não tem o que fotografar
+        um bebê num trocador, sem mamadeira, sem erro, sem nada do assunto
+
+    Frase abstrata não é fotografável. Alguém precisa decidir O QUE MOSTRAR
+    quando o texto não mostra nada — e esse alguém é uma chamada de TEXTO, que
+    custa uma fração da chamada de imagem. Por isso vem antes, e por isso vale
+    a pena mesmo quando falha: se a direção não vier, cai no texto literal, que
+    é o que já existia.
+
+    Uma chamada só pro carrossel inteiro: além de mais barato, o modelo vê os
+    slides juntos e não repete a mesma cena em dois deles."""
+    chave = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not chave:
+        return {}
+    lista = "\n".join(f'{n}. {t} — {a[:120]}' for n, t, a in alvos)
+    pedido = (
+        f"Voce e diretor de arte de um perfil de Instagram do nicho '{nicho}'.\n"
+        f"Para CADA slide abaixo, descreva UMA cena fotografavel que mostre o "
+        f"assunto do slide. Regras:\n"
+        f"- descreva OBJETOS, PESSOAS e AMBIENTE concretos, nunca conceitos\n"
+        f"- se a frase for abstrata, escolha a cena que a pessoa veria na vida "
+        f"real naquele momento\n"
+        f"- nada de texto, letreiro, cartaz ou numero na cena\n"
+        f"- cenas DIFERENTES entre si, sem repetir o mesmo enquadramento\n"
+        f"- ate 25 palavras cada, em ingles\n"
+        f"Responda SO um JSON: {{\"1\": \"cena\", \"2\": \"cena\"}}\n\n{lista}")
+    try:
+        from google import genai
+        cli = genai.Client(api_key=chave)
+        r = cli.models.generate_content(
+            model=os.environ.get("GEMINI_MODELO_TXT", "gemini-2.5-flash"),
+            contents=pedido)
+        bruto = (r.text or "").strip()
+        m = re.search(r"\{.*\}", bruto, re.S)
+        dados = json.loads(m.group(0)) if m else {}
+        return {int(k): str(v).strip() for k, v in dados.items()
+                if str(v).strip()}
+    except Exception as e:
+        log.info(f"   ℹ️  sem direção visual ({str(e)[:70]}) — uso o texto cru")
+        return {}
 
 
 def prompt_do_slide(nicho: str, titulo: str, apoio: str = "") -> str:

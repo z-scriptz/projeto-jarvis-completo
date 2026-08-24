@@ -5932,6 +5932,54 @@ mostra — o "parece que pegou da Shopee" que eu já tinha declarado resolvido
 **duas vezes**. Sobre cartão branco a foto de catálogo some sozinha, com ou sem
 blend; o multiply virou reforço, não estrutura.
 
+#### 🎬 DIRETOR VISUAL, E A REGRA DA IMAGEM PAGA (24/08)
+
+Primeira rodada com imagem por slide de verdade. O Dre: *"melhorou absurdamente
+o nível do carrossel, imagens ótimas"* — e aprovou o visual do `casa`. O que
+sobrou são três coisas nomeadas com precisão pela revisão:
+
+**1. ⚠️ IMAGEM PAGA DESCARTADA PELA COMPOSIÇÃO.** O `04.png` foi gerado, pago, e
+o slide 4 caiu na `respiro` — que é cor chapada por definição. O sistema fez o
+trabalho, cobrou por ele, e o render jogou fora **sem erro nenhum no log**.
+
+> Isso não é questão de gosto, é **defeito de arquitetura**: quando existe foto
+> feita sob medida pro assunto daquele slide, uma composição que não mostra foto
+> está errada por construção.
+
+`ctx["propria"]` diz se `fundos/NN.png` existe; havendo, as composições de
+`_SEM_FOTO` saem da disputa. A `respiro` continua valendo pros slides sem imagem
+própria — lá ela é quebra de ritmo, não desperdício.
+
+**E o mesmo buraco existia em três outros lugares**, todos consertados junto: o
+`checklist` e a `vitrine` chamavam `_fundo(plano)` **sem o número do slide** (e
+sem o `n` a função nunca olha a pasta `fundos/`, só o acervo do nicho — foi por
+isso que o checklist de mamadeira saiu sobre uma prateleira de potes); e os
+**cinco modelos de fecho** nasceram sem foto, então a imagem do último slide não
+era usada por nenhum. A camada agora é injetada no despachante `_html_fecho`,
+o que cobre os cinco de uma vez e qualquer modelo novo que apareça.
+
+**2. 🎬 O DIRETOR VISUAL — texto literal não basta.** Mandar a frase do slide
+direto pro modelo de imagem funciona quando ela é concreta ("Confira o fluxo do
+bico" → saiu bico e bebê mamando) e falha quando é abstrata:
+
+    "Você provavelmente erra em dois passos todo dia"
+          ↓ o modelo não tem o que fotografar
+    um bebê num trocador — sem mamadeira, sem erro, sem nada do assunto
+
+**Frase abstrata não é fotografável.** Alguém precisa decidir O QUE MOSTRAR
+quando o texto não mostra nada, e esse alguém é uma chamada de **texto**
+(`gemini-2.5-flash`), que custa uma fração de uma chamada de imagem. Uma
+chamada só pro carrossel inteiro: mais barato, e o modelo vê os slides juntos,
+então não repete o mesmo enquadramento em dois deles. Falhou? Cai no texto
+literal, que é o que já existia.
+
+⚠️ **E ela roda no `--seco` também.** Um `--seco` que mostra prompt diferente do
+que vai rodar de verdade é pior que não ter `--seco`: aprova o que não testou.
+
+**3. Checklist e fecho passaram a receber imagem.** Eu pulava os slides de
+`itens` "porque usam fundo de ambiente" — uma exceção que reintroduzia
+exatamente o defeito que o `--do-plano` existe pra matar.
+
 #### ♻️ `--refazer` — o furo que fazia o conserto produzir o defeito (24/08)
 
 ⚠️ **O FLUXO QUE EU PROPUS NÃO FECHAVA, E O JEITO COMO ELE FALHAVA ERA O PIOR

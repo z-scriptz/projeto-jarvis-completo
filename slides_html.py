@@ -115,6 +115,22 @@ def _paleta(nicho: str) -> dict:
 # a decisão de ONDE arrumar foto (que é sua, e mudou duas vezes hoje) não fica
 # soldada no código do desenho.
 # ══════════════════════════════════════════════════════════════════════════
+def _imagem_propria(plano: dict, n):
+    """O caminho de `fundos/NN.png` — a imagem feita SOB MEDIDA pra este slide.
+
+    Separado do `_fundo()` porque a resposta serve a duas perguntas diferentes:
+    "qual foto uso?" (render) e "esta foto foi feita pra este slide?"
+    (escolha da composição). A segunda decide se pode haver slide sem foto."""
+    if not n:
+        return None
+    raiz = Path(plano.get("pasta") or ".") / "fundos"
+    for ext in (".png", ".jpg", ".jpeg", ".webp"):
+        alvo = raiz / f"{int(n):02d}{ext}"
+        if alvo.exists():
+            return alvo
+    return None
+
+
 def _fundo(plano: dict, item: dict = None) -> str:
     """data: URI da foto de fundo, ou "" — nessa ordem: a do slide, a do
     plano, uma do acervo do nicho."""
@@ -128,12 +144,9 @@ def _fundo(plano: dict, item: dict = None) -> str:
     # gerou A PARTIR DO TEXTO DESTE SLIDE — ela representa o assunto, enquanto
     # o acervo do nicho só combina com a estética da conta. Quando existe, é
     # sempre a melhor resposta; quando não existe, o rodízio continua valendo.
-    n = (item or {}).get("n")
-    if n:
-        for ext in (".png", ".jpg", ".jpeg", ".webp"):
-            alvo = Path(plano.get("pasta") or ".") / "fundos" / f"{n:02d}{ext}"
-            if alvo.exists():
-                return _b64(alvo)
+    alvo = _imagem_propria(plano, (item or {}).get("n"))
+    if alvo:
+        return _b64(alvo)
 
     # ⚠️ `item["foto"]` NÃO ENTRA AQUI, E ISSO É O CONSERTO DE UM DEFEITO GRANDE.
     # Ela é a foto de CATÁLOGO do produto: recorte em fundo branco. Como fundo
@@ -678,7 +691,7 @@ def _comp_produto_vitrine(item, i, total, plano, p, ctx) -> str:
     e o texto ocupa a esquerda — silhueta oposta à `produto`, que centraliza
     tudo em superfície clara. O `multiply` continua sendo o truque do fundo
     branco, mas agora sobre um cartão claro atrás só do produto."""
-    foto = ctx["fundo"] or _fundo(plano)
+    foto = ctx["fundo"] or _fundo(plano, {"n": ctx.get("n")})
     return f"""<div class="slide" style="background:{p['escuro']};
      color:{p['clarinho']}">
   {'<div class="fotocheia" style="background-image:url(' + foto + ');'
@@ -743,7 +756,12 @@ def _comp_checklist(item, i, total, plano, p, ctx) -> str:
     # carrossel terminava foto → creme vazio → creme vazio: justo o clímax
     # perdendo energia. Agora ele é foto cheia com véu e a lista num cartão —
     # continua sendo o slide de salvar, mas parece parte do mesmo carrossel.
-    foto = ctx["fundo"] or _fundo(plano)
+    # ⚠️ COM O `n`, senão não acha `fundos/NN.png`. Era isso que fazia o
+    # checklist sair claro e sem foto mesmo tendo imagem gerada pra ele: o
+    # `_fundo(plano)` sem item nunca olha a pasta `fundos/`, só o acervo do
+    # nicho. Foi o slide 7 do teste de 24/08 — checklist de mamadeira sobre
+    # uma prateleira de potes de cozinha.
+    foto = ctx["fundo"] or _fundo(plano, {"n": ctx.get("n")})
     escuro = bool(foto)
     return f"""<div class="slide" style="background:{p['escuro'] if escuro
      else p['clarinho']};color:{p['clarinho'] if escuro else '#1C1A18'}">
@@ -785,9 +803,19 @@ _SEM_FOTO = {"respiro"}
 
 
 def _elegiveis(ctx: dict) -> list:
-    """As composições que o conteúdo DESTE slide comporta."""
+    """As composições que o conteúdo DESTE slide comporta.
+
+    ⚠️ IMAGEM GERADA PRA ESTE SLIDE NUNCA PODE SER DESCARTADA. Na 1ª rodada com
+    o `--do-plano` o `04.png` foi gerado, pago, e o slide 4 caiu na `respiro` —
+    que é cor chapada por definição. O sistema fez o trabalho, cobrou por ele e
+    o render jogou no lixo, sem erro nenhum no log. **Isso não é questão de
+    gosto, é defeito de arquitetura:** quando existe foto feita sob medida pro
+    assunto daquele slide, uma composição que não mostra foto está errada por
+    construção. A `respiro` continua existindo pros slides que não têm imagem
+    própria — lá ela é quebra de ritmo, não desperdício."""
     if ctx["itens"]:
         return ["checklist"]
+    sob_medida = bool(ctx.get("propria"))
     if ctx["fotoitem"]:
         # DUAS, não uma — ver `_comp_produto_vitrine`. Carrossel de comparação
         # tem produtos em slides seguidos, e com uma opção só a repetição era
@@ -812,6 +840,8 @@ def _elegiveis(ctx: dict) -> list:
             continue
         # a `numero` só serve pra slide que É um item numerado — ver `_numerado`
         if nome == "numero" and not _numerado(ctx):
+            continue
+        if sob_medida and nome in _SEM_FOTO:
             continue
         fora.append(nome)
     return fora or ["meio"]
@@ -886,6 +916,7 @@ def _html_conteudo(item: dict, i: int, total: int, plano: dict,
         "preco": _h.escape((item.get("preco") or "").strip()),
         "conclusao": _h.escape((item.get("conclusao") or "").strip()),
         "ordem": max(1, i - 1),
+        "n": item.get("n", i),
         "itens": [str(x) for x in (item.get("itens") or []) if str(x).strip()],
         "fotoitem": (_b64(item["foto"]) if item.get("foto")
                      and Path(item["foto"]).exists() else ""),
@@ -893,7 +924,12 @@ def _html_conteudo(item: dict, i: int, total: int, plano: dict,
     }
     # o `checklist` cai no acervo do nicho mesmo sem `fundo` no item, então
     # "tem foto" aqui é mais amplo que `ctx["fundo"]`
-    ctx["tem_foto"] = bool(ctx["fundo"] or ctx["fotoitem"] or _fundo(plano))
+    ctx["propria"] = _imagem_propria(plano, ctx["n"]) is not None
+    # ⚠️ `propria` PRECISA ENTRAR AQUI. Sem ela o checklist com imagem própria
+    # era classificado como "sem foto", saía claro, e o log imprimia (c) num
+    # slide que renderiza escuro — a alternância decidindo com dado errado.
+    ctx["tem_foto"] = bool(ctx["fundo"] or ctx["fotoitem"] or ctx["propria"]
+                           or _fundo(plano))
     nome, tom = _escolher_comp(ctx, recentes or [], tom_ant)
     return COMPOSICOES[nome]["fn"](item, i, total, plano, p, ctx), nome, tom
 
@@ -1160,7 +1196,27 @@ def _html_fecho(plano: dict, total: int) -> str:
     handle = _h.escape(plano.get("handle") or "")
     modelo = _escolher_fecho(plano.get("handle", ""))
     log.info(f"   🎬 fecho '{modelo}'")
-    return MODELOS_FECHO[modelo](plano, p, cta, handle, total)
+    corpo = MODELOS_FECHO[modelo](plano, p, cta, handle, total)
+
+    # ⚠️ A FOTO DO FECHO ENTRA AQUI, NOS CINCO MODELOS DE UMA VEZ. Os modelos
+    # nasceram sem foto (eram cor chapada) e o `--do-plano` passou a gerar uma
+    # imagem PAGA pro último slide — que nenhum deles usava. É a mesma falha do
+    # `04.png` descartado pela `respiro`, e seria burrice consertar num lugar e
+    # deixar no outro. Injetar no despachante cobre os cinco sem reescrever
+    # cinco funções, e cobre também qualquer modelo novo que apareça depois.
+    foto = _fundo(plano, {"n": total})
+    if foto and 'class="fotocheia"' not in corpo:
+        camada = (f'<div class="fotocheia" style="background-image:url({foto});'
+                  f'filter:saturate(.95) contrast(1.06) brightness(.66)"></div>'
+                  # véu leve: o fecho é o último slide e devia FECHAR com
+                  # energia. Na 1ª versão pus brightness .42 sob um degradê
+                  # opaco e a foto virou uma mancha marrom — paguei por ela e
+                  # entreguei quase a mesma parede chapada de antes.
+                  f'<div class="fade" style="inset:0;background:linear-gradient('
+                  f'180deg,{p["escuro"]}a6 0%,{p["escuro"]}4d 46%,'
+                  f'{p["escuro"]}cc 100%)"></div>')
+        corpo = corpo.replace(">", ">" + camada, 1)
+    return corpo
 
 
 # ⚠️ O AJUSTE DE TAMANHO RODA NO NAVEGADOR, e é a única coisa que o JS faz.
