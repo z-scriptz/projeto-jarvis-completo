@@ -414,6 +414,95 @@ def _dentro_da_janela() -> bool:
     return HORA_INI <= datetime.now().hour <= HORA_FIM
 
 
+# ══════════════════════════════════════════════════════════════════════════
+# HORÁRIOS SORTEADOS — o pedido do Dre (24/08): "os horários estão sempre
+# fixos, queria que fosse mais aleatório"
+#
+# ⚠️ E O DEFEITO NÃO ESTAVA NESTE ARQUIVO. Ele nunca soube QUANDO rodar: só
+# checava a janela (07–21h) e os tetos. Quem escolhia a hora era o **cron da
+# VPS**, e cron é fixo por definição — `0 9,13,18 * * *` manda exatamente às
+# 9:00:00, 13:00:00 e 18:00:00, todo santo dia, no segundo.
+#
+# ⚠️ ISSO É EXATAMENTE O "PADRÃO DE ROBÔ" QUE O CABEÇALHO DESTE ARQUIVO DIZ SER
+# O QUE DERRUBA NÚMERO — mais até que o volume. Pessoa nenhuma manda mensagem
+# no mesmo minuto todo dia; sistema antifraude não precisa de IA pra ver isso,
+# só de um `GROUP BY minuto`.
+#
+# O conserto NÃO é "cron aleatório" (cron não sorteia). É inverter quem manda:
+# o cron passa a acordar de 15 em 15 minutos e PERGUNTA se está na hora; quem
+# responde é aqui, com uma agenda sorteada UMA VEZ POR DIA e guardada no
+# estado. Mesmo desenho do `carrossel_agendador`, e pelo mesmo motivo.
+GAP_MIN = int(float(os.environ.get("WHATSAPP_GAP_MIN", "35")))    # minutos
+TOLERANCIA = int(float(os.environ.get("WHATSAPP_TOLERANCIA", "16")))
+
+
+def _agenda_do_dia(estado: dict) -> list:
+    """Os horários de hoje, em minutos desde 00:00. Sorteia na 1ª chamada.
+
+    ⚠️ SORTEADA UMA VEZ E GUARDADA, não sorteada a cada acordada. Se cada
+    execução tirasse um dado novo, dois horários poderiam cair colados ou o dia
+    inteiro passar sem nenhum — e o teto por dia deixaria de significar
+    qualquer coisa. Guardando, a agenda é um FATO do dia: dá pra ver de manhã
+    o que vai sair, e o log consegue dizer 'faltam 3'."""
+    hoje = str(date.today())
+    ag = estado.get("agenda") or {}
+    if ag.get("dia") == hoje and ag.get("horarios"):
+        return list(ag["horarios"])
+
+    ini, fim = HORA_INI * 60, HORA_FIM * 60 + 59
+    alvo = max(1, MAX_DIA)
+    # ⚠️ O GAP É O QUE FAZ A ALEATORIEDADE PARECER HUMANA. Sorteio puro num
+    # intervalo de 15h com 12 pontos junta dois deles a 3 minutos de distância
+    # com frequência alta — e duas mensagens coladas chamam mais atenção que
+    # horário fixo. Sorteio um ponto por FAIXA e jitter dentro dela.
+    largura = (fim - ini) / alvo
+    horarios, ultimo = [], -10 ** 9
+    for i in range(alvo):
+        a = ini + largura * i
+        b = a + largura
+        # a faixa encolhe pelas pontas pra não colar na faixa vizinha
+        margem = min(largura * 0.18, 12)
+        t = int(random.uniform(a + margem, b - margem))
+        if t - ultimo < GAP_MIN:
+            t = ultimo + GAP_MIN
+        if t > fim:
+            break
+        horarios.append(t)
+        ultimo = t
+
+    estado["agenda"] = {"dia": hoje, "horarios": horarios}
+    _salvar_estado(estado)
+    _log("🎲 agenda de hoje: "
+         + " · ".join(f"{t // 60:02d}:{t % 60:02d}" for t in horarios))
+    return horarios
+
+
+def _slot_devido(estado: dict):
+    """O horário de hoje que já passou, ainda não foi usado e está na
+    tolerância. Devolve None quando não é hora."""
+    agora = datetime.now()
+    agora_min = agora.hour * 60 + agora.minute
+    feitos = set((estado.get("agenda") or {}).get("feitos") or [])
+    for t in _agenda_do_dia(estado):
+        if t in feitos:
+            continue
+        # ⚠️ JANELA DE TOLERÂNCIA, não igualdade. O cron acorda de 15 em 15 e
+        # nunca vai cair no minuto exato do sorteio; sem folga, TODO slot seria
+        # pulado e o WhatsApp nunca mandaria nada. É a mesma tolerância do
+        # agendador de carrossel, pelo mesmo motivo.
+        if 0 <= (agora_min - t) <= TOLERANCIA:
+            return t
+    return None
+
+
+def _marcar_slot(estado: dict, t: int) -> None:
+    ag = estado.setdefault("agenda", {})
+    ag.setdefault("feitos", [])
+    if t not in ag["feitos"]:
+        ag["feitos"].append(t)
+    _salvar_estado(estado)
+
+
 def _enviados_hoje(estado: dict) -> int:
     return int(estado.get("por_dia", {}).get(str(date.today()), 0))
 
@@ -2282,7 +2371,34 @@ def main():
                    help="abre o menu de anexo e mostra os inputs, SEM enviar")
     p.add_argument("--forcar", action="store_true", help="ignora a janela de horário")
     p.add_argument("--quantos", type=int, default=MAX_RODADA)
+    p.add_argument("--auto", action="store_true",
+                   help="só envia se um horário sorteado de hoje estiver "
+                        "vencendo — é o que o cron deve chamar")
+    p.add_argument("--agenda", action="store_true",
+                   help="mostra os horários sorteados de hoje e sai")
     args = p.parse_args()
+
+    # ⚠️ `--agenda` ANTES DE QUALQUER TRAVA. Ele não abre navegador, não envia
+    # nada e não depende de WHATSAPP_ATIVO: é justamente o comando pra olhar o
+    # dia com o sistema DESLIGADO, antes de ligar. Trancá-lo atrás do `_ligado()`
+    # seria dar um diagnóstico que só funciona quando não se precisa dele.
+    if args.agenda:
+        est = _carregar_json(ESTADO, {})
+        hs = _agenda_do_dia(est)
+        agora = datetime.now()
+        am = agora.hour * 60 + agora.minute
+        feitos = set((est.get("agenda") or {}).get("feitos") or [])
+        print(f"\n📅 {date.today()}  ·  janela {HORA_INI:02d}:00–{HORA_FIM:02d}:59"
+              f"  ·  teto {MAX_DIA}/dia, {MAX_RODADA}/rodada\n")
+        for t in hs:
+            marca = ("✅ enviado" if t in feitos else
+                     "⏰ AGORA" if 0 <= (am - t) <= TOLERANCIA else
+                     "· passou" if t < am else "· a caminho")
+            print(f"   {t // 60:02d}:{t % 60:02d}   {marca}")
+        print(f"\n   {_enviados_hoje(est)} de {MAX_DIA} enviada(s) hoje.")
+        print(f"   Sorteada 1x por dia e guardada em {ESTADO.name} —"
+              f" amanhã são outras.\n")
+        return 0
 
     # As travas de configuração vêm ANTES do playwright: erro de .env é o caso
     # comum, e ouvir "playwright não instalado" quando o problema é
@@ -2325,6 +2441,28 @@ def main():
             return diagnostico()
         if args.diag_anexo:
             return diag_anexo()
+
+        # ⚠️ O SLOT SÓ É MARCADO DEPOIS DO ENVIO DAR CERTO. Marcar antes
+        # perderia o horário quando a sessão estivesse caída ou o grupo não
+        # fosse achado — e o dia terminaria com menos mensagens do que o teto,
+        # sem ninguém saber por quê. Falhou, o slot continua vencido e a
+        # próxima acordada do cron (15 min) tenta de novo, dentro da tolerância.
+        if args.auto:
+            est = _carregar_json(ESTADO, {})
+            slot = _slot_devido(est)
+            if slot is None:
+                prox = [t for t in _agenda_do_dia(est)
+                        if t > datetime.now().hour * 60 + datetime.now().minute]
+                quando = (f"{prox[0] // 60:02d}:{prox[0] % 60:02d}" if prox
+                          else "amanhã")
+                _log(f"não é hora — próximo horário sorteado: {quando}")
+                return 0
+            _log(f"⏰ horário sorteado {slot // 60:02d}:{slot % 60:02d} — enviando")
+            r = enviar(max(1, min(args.quantos, MAX_RODADA)), teste=args.teste)
+            if r == 0 and not args.teste:
+                _marcar_slot(_carregar_json(ESTADO, {}), slot)
+            return r
+
         return enviar(max(1, min(args.quantos, MAX_RODADA)), teste=args.teste)
 
 

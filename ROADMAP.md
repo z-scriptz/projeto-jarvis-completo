@@ -6333,6 +6333,51 @@ transformação. A `metade` já tem CSS pronto pro lado-a-lado; falta a composi�
 
 ---
 
+### 📱 WHATSAPP: HORÁRIO SORTEADO E VOLUME DOBRADO (24/08)
+
+Pedido do Dre: *"os horários estão sempre fixos, eu queria que fosse mais
+aleatório, e que ele dobrasse as postagens"*.
+
+⚠️ **O DEFEITO NÃO ESTAVA NO `whatsapp_playwright.py`.** Ele nunca soube QUANDO
+rodar — só checava a janela (07–21h) e os tetos. Quem escolhia a hora era o
+**cron da VPS**, e cron é fixo por definição: `0 9,13,18 * * *` dispara às
+9:00:00, 13:00:00 e 18:00:00, todo dia, no segundo.
+
+> ⚠️ **E isso é exatamente o "padrão de robô" que o cabeçalho do arquivo diz ser
+> o que derruba número — mais até que o volume.** Pessoa nenhuma manda mensagem
+> no mesmo minuto todo dia. Antifraude não precisa de IA pra ver isso, só de um
+> `GROUP BY minuto`. Ou seja: **o pedido do Dre reduz risco, não aumenta.**
+
+O conserto não é "cron aleatório" (cron não sorteia) — é **inverter quem manda**.
+O cron passa a acordar de 15 em 15 minutos e PERGUNTAR se é hora; quem responde
+é o módulo, com uma agenda sorteada **uma vez por dia** e guardada no estado.
+Mesmo desenho do `carrossel_agendador`, pelo mesmo motivo.
+
+    .venv/bin/python whatsapp_playwright.py --agenda   # vê o dia, não envia
+    */15 7-21 * * *  .../whatsapp_playwright.py --auto  # o cron novo
+
+**Três decisões que o teste de 30 dias justificou:**
+- **Sorteio por FAIXA, não uniforme.** 12 pontos uniformes numa janela de 15h
+  juntam dois a 3 minutos de distância com frequência alta — e duas mensagens
+  coladas chamam mais atenção que horário fixo. Um ponto por faixa + jitter, com
+  piso de `WHATSAPP_GAP_MIN` (35 min). Medido: menor intervalo 35 min, maior 123.
+- **Sorteada 1× e GUARDADA.** Se cada acordada tirasse dado novo, dois horários
+  cairiam colados ou o dia passaria em branco — e o teto/dia deixaria de
+  significar algo. Guardada, a agenda é um fato do dia: dá pra ver de manhã o
+  que vai sair. Em 30 dias simulados, **0 agendas repetidas**.
+- **Tolerância de 16 min, não igualdade.** O cron de 15 em 15 nunca cai no
+  minuto exato do sorteio; sem folga, TODO slot seria pulado e o WhatsApp nunca
+  mandaria nada.
+
+⚠️ **O slot só é marcado como usado DEPOIS do envio dar certo.** Marcar antes
+perderia o horário quando a sessão estivesse caída — e o dia terminaria abaixo
+do teto sem ninguém saber por quê. Falhando, o slot segue vencido e a próxima
+acordada tenta de novo dentro da tolerância.
+
+**Volume:** `WHATSAPP_MAX_DIA` 6 → 12 é uma linha no `.env`, não código. O
+`MAX_RODADA=2` **fica como está**: o que protege é não disparar em rajada, e com
+12 horários espalhados não existe motivo pra mandar 4 de uma vez.
+
 ## 📌 Referência rápida (infra)
 
 - **VPS:** Contabo · daemon `jarvis.service` (`python -m agents.daemon_maestro`)
