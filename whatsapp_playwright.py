@@ -434,6 +434,13 @@ def _dentro_da_janela() -> bool:
 # estado. Mesmo desenho do `carrossel_agendador`, e pelo mesmo motivo.
 GAP_MIN = int(float(os.environ.get("WHATSAPP_GAP_MIN", "35")))    # minutos
 TOLERANCIA = int(float(os.environ.get("WHATSAPP_TOLERANCIA", "16")))
+# ⚠️ DE QUANTO EM QUANTO O CRON ACORDA. Não é enfeite: é o que define o ÚLTIMO
+# minuto sorteável da janela. Com `*/15 7-21` a última acordada é 21:45, então
+# um slot sorteado às 21:52 NÃO SERIA ALCANÇADO POR NINGUÉM — e o dia acabaria
+# com 11 mensagens em vez de 12, todo dia em que a última faixa caísse ali, sem
+# erro nenhum no log. Achei simulando as acordadas contra a janela, não rodando.
+# Se mudar o `*/15` no crontab, mude aqui junto.
+CRON_MIN = int(float(os.environ.get("WHATSAPP_CRON_MIN", "15")))
 
 
 def _agenda_do_dia(estado: dict) -> list:
@@ -449,7 +456,9 @@ def _agenda_do_dia(estado: dict) -> list:
     if ag.get("dia") == hoje and ag.get("horarios"):
         return list(ag["horarios"])
 
-    ini, fim = HORA_INI * 60, HORA_FIM * 60 + 59
+    # o teto da janela recua até o último minuto que o cron ainda alcança
+    ini = HORA_INI * 60
+    fim = HORA_FIM * 60 + max(0, 59 - CRON_MIN)
     alvo = max(1, MAX_DIA)
     # ⚠️ O GAP É O QUE FAZ A ALEATORIEDADE PARECER HUMANA. Sorteio puro num
     # intervalo de 15h com 12 pontos junta dois deles a 3 minutos de distância

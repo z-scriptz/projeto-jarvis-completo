@@ -6385,6 +6385,19 @@ criar morreria na primeira tarde, e o log não acusaria nada além de "teto do d
 atingido". `MAX_RODADA=2` foi feito pro modo de 3 disparos, onde mandar 2 de uma
 vez era o único jeito de chegar a 6. Aqui a conta é outra: **1 × N horários = N**.
 
+⚠️ **E A JANELA RECUA ATÉ ONDE O CRON ALCANÇA (`WHATSAPP_CRON_MIN`).** Com
+`*/15 7-21` a última acordada é **21:45**; um slot sorteado às 21:52 não seria
+alcançado por acordada nenhuma. O dia terminaria com 11 em vez de 12 — todo dia
+em que a última faixa caísse ali — **sem erro nenhum no log**. Achei simulando
+as acordadas do cron contra cada minuto da janela, não esperando acontecer:
+
+    minutos que NENHUMA acordada alcança: 21:46 … 21:59
+
+Agora `fim = HORA_FIM*60 + (59 - CRON_MIN)` = 21:44, e 300 dias sorteados dão
+**0 slots inalcançáveis**. ⚠️ **Se um dia o `*/15` do crontab mudar, mude o
+`WHATSAPP_CRON_MIN` junto** — são o mesmo número em dois lugares, e é o tipo de
+par que se separa em silêncio.
+
 O crontab velho, pra referência (e ele fica com uma linha só):
 
     ANTES  0 9,14,19 * * *   whatsapp_playwright.py
