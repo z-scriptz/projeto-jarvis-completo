@@ -74,8 +74,22 @@ PALETAS = {
                "escuro": "#241C21", "clarinho": "#F9EDF2"},
     "pet":    {"acento": "#2F6FA8", "creme": "#E6EEF5", "sombra": "#D2E4F2",
                "escuro": "#1B2229", "clarinho": "#EDF3F8"},
-    "moda":   {"acento": "#C2456B", "creme": "#F6E7EA", "sombra": "#F8D5DD",
-               "escuro": "#241B1E", "clarinho": "#FAEEF0"},
+    # ⚠️ AZUL-MARINHO + DOURADO, NÃO ROSA — e quem decidiu foi o ACERVO, não eu.
+    # A paleta original ("moda = rosa framboesa") era suposição, escrita antes
+    # de existir foto nenhuma. Quando o Dre gerou os 10 fundos de moda, a
+    # medição desmentiu: brilho 0.09–0.17 e cor média azul (15,26,40),
+    # (20,48,77), (30,39,52) — editorial noturno com ouro. Sobre isso o
+    # `#C2456B` não era acento, era MANCHA: no teste lado a lado o círculo
+    # rosa por cima do ombro da modelo parecia defeito de impressão.
+    #
+    # ⚠️ E O `escuro` MUDOU JUNTO, de propósito. Só trocar o acento pro dourado
+    # deixaria `moda` idêntica a `geral` (#B98B2E) — duas contas com a mesma
+    # cara. É a BASE que separa as duas: moda em azul-marinho, geral em marrom
+    # quente, e o mesmo ouro por cima lê como duas marcas diferentes.
+    #
+    # Voltar é uma linha: `"acento": "#C2456B"` + `"escuro": "#241B1E"`.
+    "moda":   {"acento": "#C9A45C", "creme": "#EFEAE2", "sombra": "#DED5C6",
+               "escuro": "#141A26", "clarinho": "#F5F1EA"},
     "geral":  {"acento": "#B98B2E", "creme": "#F4EDDD", "sombra": "#F6E4BC",
                "escuro": "#232019", "clarinho": "#F8F2E6"},
 }

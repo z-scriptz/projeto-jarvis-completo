@@ -5977,8 +5977,18 @@ slide. O acento de `geral` (`#B98B2E`, dourado) casaria com o que ele gerou.
 > escolhi antes de existir foto nenhuma.** As paletas nasceram como suposição
 > ("moda = rosa"); agora existe evidência, e evidência ganha de suposição.
 
-**Ainda não mexido** — trocar o acento de uma conta muda o visual dela inteiro
-e é decisão do Dre, não minha. Fica registrado com a medição junto.
+**DECIDIDO (24/08), com o teste lado a lado.** O Dre pediu a melhor decisão pra
+conta, então rendereizei as duas paletas na mesma foto em vez de argumentar
+sobre cor. Na versão rosa, o círculo de acento por cima do ombro da modelo
+**parece defeito de impressão**; na azul+dourada o mesmo elemento vira
+profundidade. Não foi opinião, foi olhar.
+
+    moda: acento #C9A45C · escuro #141A26 (era #C2456B / #241B1E)
+
+⚠️ **E o `escuro` mudou junto, de propósito.** Só trocar o acento pro dourado
+deixaria `moda` idêntica a `geral` (`#B98B2E`) — duas contas com a mesma cara.
+**É a BASE que separa as duas:** moda em azul-marinho, geral em marrom quente,
+e o mesmo ouro por cima lê como duas marcas diferentes. Voltar é uma linha.
 
 #### 💡 O ACERVO TEM DUAS FAMÍLIAS DE LUZ — véu medido, não chutado (24/08)
 
