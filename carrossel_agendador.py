@@ -164,7 +164,8 @@ def _slug(nicho: str, horario: str) -> str:
 
 
 def publicar_um(nicho: str, cfg: dict = None, dry_run: bool = False,
-                horario: str = "manual", refazer: bool = False) -> dict:
+                horario: str = "manual", refazer: bool = False,
+                formato: str = "") -> dict:
     """Monta, renderiza e publica UM carrossel. Nunca levanta.
 
     ⚠️ `refazer=True` REAPROVEITA O PLANO QUE JÁ ESTÁ EM DISCO. Sem isso o
@@ -205,7 +206,7 @@ def publicar_um(nicho: str, cfg: dict = None, dry_run: bool = False,
     if plano is None:
         try:
             import carrossel_brain as CB
-            plano = CB.montar_plano(nicho, fotos_em=pasta)
+            plano = CB.montar_plano(nicho, formato=formato, fotos_em=pasta)
         except SystemExit as e:
             # o brain recusa formato de vitrine sem foto — é decisão dele, e o
             # motivo já vem escrito na mensagem
@@ -331,6 +332,16 @@ def main() -> int:
     p.add_argument("--agenda", action="store_true", help="o mapa da semana")
     p.add_argument("--agora", metavar="NICHO", help="produz 1 agora (teste)")
     p.add_argument("--postar", action="store_true", help="com --agora, publica")
+    # ⚠️ O BRAIN JÁ ACEITAVA `formato`; O AGENDADOR É QUE NÃO PASSAVA.
+    # O Dre rodou `--agora tech --formato erros` pra testar a biblioteca por
+    # formato, o argparse recusou a opção, e o `||` do shell disparou o
+    # fallback SEM formato — saiu `lista` e o teste de `erros` nunca aconteceu.
+    # Ele só descobriu lendo o log com atenção. **Comando que morre e cai num
+    # fallback silencioso é pior que comando que falha**: o resultado aparece,
+    # parece legítimo, e valida outra coisa.
+    p.add_argument("--formato", metavar="FORMATO", default="",
+                   help="força o formato (erros, lista, comparacao...) — "
+                        "sem isto o brain sorteia")
     p.add_argument("--refazer", action="store_true",
                    help="com --agora, reusa o plano em disco em vez de montar "
                         "outro (é o que faz as imagens por slide baterem)")
@@ -355,7 +366,7 @@ def main() -> int:
         return _agenda(cfg)
     if a.agora:
         r = publicar_um(a.agora, cfg, dry_run=not a.postar,
-                        refazer=a.refazer)
+                        refazer=a.refazer, formato=a.formato)
         print(json.dumps(r, ensure_ascii=False, indent=2))
         return 0 if r.get("ok") else 1
     p.print_help()

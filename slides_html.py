@@ -1343,15 +1343,36 @@ def _html_fecho(plano: dict, total: int) -> str:
     # cinco funções, e cobre também qualquer modelo novo que apareça depois.
     foto = _fundo(plano, {"n": total}, papel="cta")
     if foto and 'class="fotocheia"' not in corpo:
-        camada = (f'<div class="fotocheia" style="background-image:url({foto});'
-                  f'filter:saturate(.95) contrast(1.06) brightness(.66)"></div>'
-                  # véu leve: o fecho é o último slide e devia FECHAR com
-                  # energia. Na 1ª versão pus brightness .42 sob um degradê
-                  # opaco e a foto virou uma mancha marrom — paguei por ela e
-                  # entreguei quase a mesma parede chapada de antes.
-                  f'<div class="fade" style="inset:0;background:linear-gradient('
-                  f'180deg,{p["escuro"]}a6 0%,{p["escuro"]}4d 46%,'
-                  f'{p["escuro"]}cc 100%)"></div>')
+        # ⚠️⚠️ O VÉU TEM QUE SEGUIR A COR DO TEXTO DO MODELO, e ignorar isso
+        # produziu o defeito que o Dre viu de primeira: *"o CTA final muito
+        # escuro pra ler, as letras pretas se esconderam no design"*.
+        #
+        # Os cinco fechos nasceram SEM foto e cada um escolheu a cor do texto
+        # pro fundo chapado que tinha: `perfil` e `ajudou` são escuros com
+        # letra clara; `comente` e `perfil_certo` são CREMES COM LETRA PRETA.
+        # Quando eu injetei a mesma camada escura nos cinco, os dois últimos
+        # ficaram com letra preta sobre foto de meio-tom — some.
+        #
+        # É a QUARTA vez que erro nesta mesma família (a logo escura sobre
+        # escuro, o "Shop" laranja sobre laranja, o cabeçalho do `meio`, agora
+        # o fecho). A lição já estava escrita e eu não a apliquei ao criar
+        # camada nova: **o véu não descreve a foto, descreve o que vai ser LIDO
+        # em cima dela.** Modelo de letra clara pede véu escuro; modelo de
+        # letra escura pede a foto LAVADA até quase branco.
+        escuro_no_texto = ("color:#1C1A18" in corpo[:400]
+                           or f"color:{p['escuro']}" in corpo[:400])
+        if escuro_no_texto:
+            camada = (f'<div class="fotocheia" style="background-image:url({foto});'
+                      f'filter:saturate(.55) contrast(.95) brightness(1.25)"></div>'
+                      f'<div class="fade" style="inset:0;background:linear-gradient('
+                      f'180deg,{p["clarinho"]}f2 0%,{p["clarinho"]}d9 40%,'
+                      f'{p["clarinho"]}f7 100%)"></div>')
+        else:
+            camada = (f'<div class="fotocheia" style="background-image:url({foto});'
+                      f'filter:saturate(.95) contrast(1.06) brightness(.66)"></div>'
+                      f'<div class="fade" style="inset:0;background:linear-gradient('
+                      f'180deg,{p["escuro"]}a6 0%,{p["escuro"]}4d 46%,'
+                      f'{p["escuro"]}cc 100%)"></div>')
         corpo = corpo.replace(">", ">" + camada, 1)
     return corpo
 

@@ -6053,6 +6053,27 @@ essa pergunta não teria como ser feita.**
 suplemento): o Dre disse que já resolveu isso por outro caminho. Fica anotado que
 foi decisão dele, não esquecimento — pra ninguém reintroduzir achando que faltou.
 
+#### 🌗 O VÉU NÃO DESCREVE A FOTO — DESCREVE O QUE VAI SER LIDO EM CIMA (25/08)
+
+O Dre: *"achei o CTA final muito escuro pra ler, as letras pretas se esconderam
+no design"*. E era exatamente isso.
+
+Os cinco fechos nasceram **sem foto**, e cada um escolheu a cor do texto pro
+fundo chapado que tinha: `perfil`, `ajudou` e `salva` são escuros com letra
+clara; **`comente` e `perfil_certo` são cremes com letra PRETA**. Quando injetei
+a mesma camada escura nos cinco (24/08), os dois últimos ficaram com letra preta
+sobre foto de meio-tom. Some.
+
+⚠️ **É A QUARTA VEZ NESTA MESMA FAMÍLIA:** a logo escura sobre escuro, o "Shop"
+laranja sobre laranja, o cabeçalho do `meio` sobre a foto, agora o fecho. A
+lição já estava escrita neste arquivo — e eu não a apliquei ao criar camada
+nova. Escrever a lição não é o mesmo que consultá-la.
+
+**A regra, agora explícita:** modelo de letra clara pede véu escuro; modelo de
+letra escura pede a foto **lavada até quase branco** (`brightness(1.25)` +
+degradê do `clarinho` a 95%). Conferido nos cinco: `comente` e `perfil_certo`
+recebem véu claro, os outros três o escuro.
+
 #### 📚 BIBLIOTECA POR FORMATO — `fundos/<nicho>/<formato>/` (24/08)
 
 O Dre está gerando **100 imagens por nicho, separadas por formato de carrossel**
