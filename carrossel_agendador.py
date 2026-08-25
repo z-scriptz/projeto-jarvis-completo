@@ -215,9 +215,17 @@ def publicar_um(nicho: str, cfg: dict = None, dry_run: bool = False,
     # ⚠️ A imagem SOB MEDIDA (`fundos/NN.png` na pasta do plano) conta como
     # acervo: o `_imagem_propria()` tem prioridade máxima no render, então um
     # plano que traz as próprias imagens não depende da biblioteca do nicho.
+    #
+    # ⚠️ E CONTA COM `_todas()`, NÃO COM `existentes()`. O `existentes(nicho)`
+    # sem formato lê só a RAIZ da pasta do nicho — o acervo de verdade mora nas
+    # subpastas por formato (`fundos/<nicho>/erros/`, `/lista/`, …), que o
+    # `_todas()` varre com rglob. Medido em 25/08: `existentes()` dizia 10 por
+    # nicho quando havia ~100. Com o número errado esta guarda barraria um nicho
+    # de acervo cheio, e a mensagem juraria que a biblioteca não existe.
     try:
         import fundo_ia as FI
-        tem_acervo = bool(FI.existentes(nicho))
+        tem_acervo = bool(FI._todas(nicho) if hasattr(FI, "_todas")
+                          else FI.existentes(nicho))
     except Exception:
         tem_acervo = True          # na dúvida não bloqueia a esteira que já roda
     proprias = (pasta / "fundos")
