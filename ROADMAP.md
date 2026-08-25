@@ -6185,6 +6185,22 @@ grande devolve os blocos REAIS; o `--tamanho` vira só teto de segurança.
 Testado contra os nomes reais do log do Dre: três blocos de 10 limpos e as
 avulsas do fim agrupadas.
 
+**RESULTADO (24/08): 256 importadas, biblioteca de pé.**
+
+    casa   116  ·  20 na raiz + 96 em 10 formatos
+    tech   110  ·  10 na raiz + 100 em 10 formatos
+    beleza / pet / moda / geral   10 cada, na raiz
+
+Duas coisas que o log confirmou sem alarde:
+
+- ⚠️ **O `_ALIAS` fez o trabalho dele em silêncio.** O Dre importou
+  `curiosidade` e a árvore mostra `historia`. Sem essa tradução, 20 imagens
+  ficariam numa pasta que o brain nunca procuraria — e ninguém veria erro.
+- ⚠️ **`casa/cta` ficou com 6 de 8.** Duas das avulsas eram cópias LITERAIS de
+  outras duas (o ChatGPT regerou a mesma cena). A dedup por conteúdo pegou.
+  Sem ela o rodízio mostraria aquela poltrona com o dobro da frequência,
+  achando que eram fundos diferentes.
+
 Mas o relógio **não sabe o que cada bloco É**. E é aí que a folha de contato
 fecha o par: eu olho a grade e digo "esse é pet" (comedouro, caminha, bolsa de
 transporte, gato na janela — não tem como errar). **Máquina reconstrói a ordem,
