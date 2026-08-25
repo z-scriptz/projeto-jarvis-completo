@@ -198,7 +198,17 @@ def _fila_por_nicho() -> tuple:
         print(f"   (não classifiquei a fila: {str(e)[:60]})")
         return cont, len(itens), fonte
 
-    cache = RC._ler_cache()
+    # ⚠️ O CACHE SÓ VALE SE A IA ESTIVER LIGADA, e essa ordem é do roteador,
+    # não minha: `_por_ia()` testa `_ia_ligada()` ANTES de olhar o cache e
+    # devolve "" na hora se ROTEADOR_IA estiver desligado. Ou seja, com a IA
+    # off a produção IGNORA um cache cheio e manda tudo pro 'geral'.
+    #
+    # Eu lia o cache sempre. Resultado medido em 25/08: meu relatório dizia
+    # "pet: 2 produtos na fila" enquanto o log do daemon dizia "ainda faltam
+    # pacotes (pet:4) mas não há produto desses nichos na fila". Os dois liam
+    # o mesmo arquivo. A diferença era esta linha.
+    usa_cache = RC._ia_ligada()
+    cache = RC._ler_cache() if usa_cache else {}
     for p in itens:
         p = p or {}
         # ⚠️ CLASSIFICO PELO CAMPO `produto`, e é de propósito: os DOIS caminhos
@@ -218,6 +228,8 @@ def _fila_por_nicho() -> tuple:
             cont[n] = cont.get(n, 0) + 1
         else:
             indefinidos += 1
+    if not usa_cache:
+        fonte += "  ·  ⚠️ ROTEADOR_IA DESLIGADO: sem palavra-chave o produto vai pro geral"
     return cont, indefinidos, fonte
 
 
@@ -290,7 +302,7 @@ def _rota_da_producao() -> tuple:
     except Exception:
         return {}, {}, []
 
-    cache = RC._ler_cache()
+    cache = RC._ler_cache() if RC._ia_ligada() else {}
 
     def rotular(txt):
         t = RC._sem_acento(str(txt or "").lower())
