@@ -6761,6 +6761,59 @@ Por isso o `diag_contas.py` agora separa quatro estados que de fora parecem o
 mesmo "a conta não posta" e pedem ações **opostas**: desligada / sem insumo /
 com fome / órfã.
 
+### ❌❌ E A FOME TAMBÉM CAIU — terceira medição (25/08)
+
+Lendo o `conta.json` de cada pacote em vez de chutar pela pasta:
+
+    postagem: 1 POR CONTA por slot (balanceado)  ·  teto 3  ·  validade 7d
+
+    nicho    ativa   fila  prontos  +velho   último post
+    geral    sim   11+13?     143     27d    2026-08-24
+    beleza   sim      29       84     27d    2026-08-24
+    tech     sim      52      116     27d    2026-08-25
+    casa     sim      58       80     21d    2026-08-24
+    pet      sim       6        0      -     2026-08-06   ← ZERO pacotes
+    moda     sim      32       10      4d    2026-08-25
+
+O rodízio **está ligado**, então fome não explica nada. E pet tem **0 pacotes**
+— os "4" da rodada anterior eram o chute pelo nome da pasta. **Pet não deixa de
+postar: pet não tem o que postar.** O problema é PRODUÇÃO, e sempre foi.
+
+📌 **Três rodadas, três causas diferentes, e as duas primeiras foram invenção do
+próprio instrumento.** Cada versão do diagnóstico produziu um culpado plausível
+e distinto. Ferramenta de medição errada não fica calada — ela responde, com
+convicção, o que você perguntou errado.
+
+**O que a terceira rodada expôs de verdade, e não é pequeno:**
+
+⚠️ **`validade 7d` e o pacote mais velho com 27d, em todas as contas.** O
+`_prontos_nao_postados()` **descarta pacote vencido**, e o `_estoque_por_conta()`
+conta só o que sobra dali. Ou seja: as centenas de pacotes no disco podem estar
+**invisíveis pro daemon**. Quem olha `ls` vê estoque; quem lê o log vê esteira
+vazia. E o comentário do próprio `_prontos_nao_postados` raciocina com validade
+**27** — o 7 pode ser o default de uma chave que ninguém escreveu.
+📌 **Contar pasta não é contar esteira.**
+
+**O que entrou no diagnóstico por causa disso:**
+
+- coluna **`vivos`** ao lado de `pastas` — o que o daemon realmente enxerga,
+  pela mesma regra (não postado + dentro da validade)
+- a validade agora imprime **`(DEFAULT, chave ausente)`** quando é o default.
+  Mesmo erro do `geral`: valor igual ao default não é leitura, é silêncio
+  disfarçado de resposta
+- a **fonte da fila**, porque `_carregar_produtos_para_produzir` lê o
+  `validacao_fila.json` (só `mina_ouro`/`ok`) e só CAI no `produtos_fila.json`.
+  Eu contava o segundo e reportava "6 produtos de pet na fila" sobre um arquivo
+  que a produção talvez nem consulte
+- classificação pelo campo **`produto`** e não `campeao`, porque é o que a
+  produção monta (`{"nome": p["produto"]}`) — com uma checagem separada que
+  mede a divergência entre os dois. Testei: o keyword list cobre "comedouro" e
+  "arranhador", então **essa divergência não se confirmou**. Fica o instrumento.
+
+**Próximo passo:** rodar a v3 na VPS. As perguntas que ela responde: pet tem
+candidato no `validacao_fila.json` (não no produtos_fila)? Quantos pacotes estão
+vivos de verdade? A validade é 7 escolhido ou 7 por omissão?
+
 **A armadilha estrutural, que é o que importa aqui:** `"ativa": false` é
 INVISÍVEL em toda ferramenta que não seja o daemon. Varri o repo inteiro: o
 campo tem **um único leitor em produção**, o `_nichos_das_contas()`. O vigia lê

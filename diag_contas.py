@@ -48,6 +48,8 @@ from pathlib import Path
 BASE = Path(__file__).resolve().parent
 PRONTO = BASE / "pronto_para_postar"
 CONFIG = BASE / "shared" / "content_plans" / "agendador_config.json"
+HIST = BASE / "shared" / "content_plans" / "agendador_historico.json"
+VALIDACAO = BASE / "shared" / "content_plans" / "validacao_fila.json"
 LEDGER = BASE / "shared" / "posts_ledger.jsonl"
 METRICAS = BASE / "shared" / "metricas_posts.jsonl"
 
@@ -90,6 +92,16 @@ def _pacotes_por_conta(contas: dict) -> tuple:
     if not PRONTO.is_dir():
         return por_nicho, orfaos
 
+    # ⚠️ CONTAR PASTA NÃO É CONTAR ESTEIRA. `_estoque_por_conta()` do daemon
+    # conta só o que `_prontos_nao_postados()` devolve, e essa lista TIRA o que
+    # já foi postado e o que passou da validade. Um pacote de 27 dias com
+    # validade de 7 continua ocupando disco e aparece em qualquer `ls` — e é
+    # invisível pra produção, que por isso acha a conta vazia. Reportar só o
+    # total de pastas faz o diagnóstico discordar do daemon sem que nenhum dos
+    # dois esteja errado.
+    postados = set((_json(HIST, {}) or {}).get("postados") or [])
+    validade = _modo_postagem()["validade"]
+
     # handle -> nicho, pra traduzir o que o conta.json grava
     de_handle = {}
     for chave, conta in contas.items():
@@ -103,6 +115,8 @@ def _pacotes_por_conta(contas: dict) -> tuple:
         if not (p.is_dir() and (p / "video.mp4").exists()):
             continue
         idade = (agora - p.stat().st_mtime) / 86400
+        # vivo = o daemon ainda enxerga. Mesma regra de _prontos_nao_postados.
+        vivo = p.name not in postados and not (0 < validade <= idade)
         d = _json(p / "conta.json", None)
         if not isinstance(d, dict):
             orfaos.append((idade, p.name))
@@ -114,7 +128,7 @@ def _pacotes_por_conta(contas: dict) -> tuple:
         if not nicho:
             orfaos.append((idade, p.name))
             continue
-        por_nicho.setdefault(nicho, []).append((idade, p.name))
+        por_nicho.setdefault(nicho, []).append((idade, p.name, vivo))
     return por_nicho, orfaos
 
 
@@ -132,12 +146,20 @@ def _modo_postagem() -> dict:
         "teto": cfg.get("posts_por_dia_semana")
                 or cfg.get("max_posts_por_conta_dia", 3),
         "validade": int(cfg.get("fila_validade_dias", 7) or 0),
+        # ⚠️ "7" pode ser o valor escolhido OU o default de quem nunca escreveu
+        # a chave, e a diferença importa: o comentário do _prontos_nao_postados
+        # raciocina com validade 27. Imprimir só o número deixa quem lê achando
+        # que alguém decidiu 7. É o mesmo erro do 'geral': valor igual ao
+        # default não é leitura, é silêncio disfarçado de resposta.
+        "validade_explicita": "fila_validade_dias" in cfg,
+        "alvo_dias": int(cfg.get("estoque_alvo_dias", 3) or 0),
+        "piso": int(cfg.get("producao_minima_por_conta", 0) or 0),
         "achou": CONFIG.exists(),
     }
 
 
 def _fila_por_nicho() -> tuple:
-    """(contagem por nicho, quantos ficaram indefinidos) — com a regra da produção.
+    """(contagem por nicho, indefinidos, fonte) — com a regra da produção.
 
     ⚠️ Reusa as funções internas do `roteador_contas`, não reimplementa a
     classificação. Duas regras de "que nicho é este produto" divergiriam com o
@@ -149,35 +171,44 @@ def _fila_por_nicho() -> tuple:
     idêntica à da produção) e, para o resto, só LEIO o cache que a produção já
     gravou. O que sobra vira a coluna `?`: é honesto dizer "a IA decidiria" em
     vez de chutar 'geral' e inflar o número de uma conta que não é a dona."""
-    itens = []
-    for arq in FILAS:
-        itens = _json(arq, []) or []
-        if isinstance(itens, dict):
-            itens = itens.get("produtos") or itens.get("itens") or []
-        if itens:
-            break
+    # ⚠️ A PRODUÇÃO NÃO LÊ ESTE ARQUIVO PRIMEIRO. `_carregar_produtos_para_produzir`
+    # tenta o `validacao_fila.json` (só classe mina_ouro/ok) e só CAI no
+    # produtos_fila.json se aquele não render nada. Contar o produtos_fila e
+    # dizer "há 6 produtos de pet na fila" descreve uma fila que a produção
+    # talvez nem consulte — e leva a procurar o defeito no lugar errado.
+    itens, fonte = [], "produtos_fila.json (fallback)"
+    val = _json(VALIDACAO, {}) or {}
+    bons = [p for p in (val.get("produtos") or [])
+            if isinstance(p, dict) and p.get("classe") in ("mina_ouro", "ok")
+            and p.get("produto")]
+    if bons:
+        itens, fonte = bons, "validacao_fila.json (é o que a produção usa)"
+    else:
+        for arq in FILAS:
+            itens = _json(arq, []) or []
+            if isinstance(itens, dict):
+                itens = itens.get("produtos") or itens.get("itens") or []
+            if itens:
+                break
 
     cont, indefinidos = {}, 0
     try:
         import roteador_contas as RC
     except Exception as e:
         print(f"   (não classifiquei a fila: {str(e)[:60]})")
-        return cont, len(itens)
+        return cont, len(itens), fonte
 
     cache = RC._ler_cache()
     for p in itens:
         p = p or {}
-        # ⚠️ o item da fila NÃO tem "nome". Tem `produto` (termo de busca
-        # genérico) e `campeao` (nome real do produto), e o resto do sistema lê
-        # sempre `campeao or produto` — piloto.py, storyboard.py, revisao_geral.
-        # Com "nome" eu classificava 24 de 24 como indefinido e o diagnóstico
-        # acusaria "fila vazia" em toda conta. Erro de campo é erro silencioso:
-        # não estoura, só zera.
-        camp = p.get("campeao")
-        if isinstance(camp, dict):
-            camp = camp.get("nome") or camp.get("titulo") or ""
-        nome = str(camp or p.get("produto") or p.get("nome")
-                   or p.get("titulo") or "")
+        # ⚠️ CLASSIFICO PELO CAMPO `produto`, e é de propósito: os DOIS caminhos
+        # de `_carregar_produtos_para_produzir` montam {"nome": item["produto"]}.
+        # `campeao` (o nome real) é mais rico e classificaria melhor — mas quem
+        # decide o que produzir não olha pra ele. O diagnóstico tem que enxergar
+        # o que a produção enxerga; se eu usar o nome melhor, digo que há
+        # produto de pet na fila enquanto a produção nunca o vê como pet.
+        # A diferença entre os dois é medida à parte, em _rota_da_producao().
+        nome = str(p.get("produto") or p.get("nome") or p.get("titulo") or "")
         # `classe` NÃO entra aqui: é "mina_ouro"/"pilar", curadoria e não
         # assunto. Jogar isso no texto só adiciona ruído ao casamento.
         cat = str(p.get("categoria") or "")
@@ -187,7 +218,7 @@ def _fila_por_nicho() -> tuple:
             cont[n] = cont.get(n, 0) + 1
         else:
             indefinidos += 1
-    return cont, indefinidos
+    return cont, indefinidos, fonte
 
 
 def _ultimos_posts(contas: dict) -> dict:
@@ -232,6 +263,54 @@ def _ultimos_posts(contas: dict) -> dict:
     return ultimo
 
 
+def _rota_da_producao() -> tuple:
+    """(o que a PRODUÇÃO acha, o que o nome REAL diria, divergências).
+
+    ⚠️ A produção e o empacotamento leem campos DIFERENTES do mesmo item, e
+    ninguém tinha olhado pra isso:
+
+      daemon_maestro._carregar_produtos_para_produzir → {"nome": p["produto"]}
+      resto do sistema (piloto, storyboard, revisao)   → campeao or produto
+
+    `produto` é o termo de busca genérico ("Comedouro"); `campeao` é o nome
+    real do achado ("Comedouro Automático Pet Gato Bebedouro"). O genérico
+    perde as palavras que decidem o nicho — e quem escolhe O QUE PRODUZIR é
+    justamente quem lê o genérico.
+
+    Se isto divergir, o efeito é exato e silencioso: `falta[pet]` fica > 0 pra
+    sempre, nenhum candidato é atribuído a pet, e o log escreve "ainda faltam
+    pacotes (pet:N) mas não há produto desses nichos na fila" — uma frase
+    FALSA, porque os produtos estão lá, só entraram pela porta errada."""
+    dados = _json(VALIDACAO, {}) or {}
+    itens = dados.get("produtos") or []
+    if not itens:
+        return {}, {}, []
+    try:
+        import roteador_contas as RC
+    except Exception:
+        return {}, {}, []
+
+    cache = RC._ler_cache()
+
+    def rotular(txt):
+        t = RC._sem_acento(str(txt or "").lower())
+        return RC._por_palavra_chave(t) or cache.get(RC._chave_cache(t), "") \
+            or "geral?"
+
+    prod, real, divs = {}, {}, []
+    for p in itens:
+        if not isinstance(p, dict) or p.get("classe") not in ("mina_ouro", "ok"):
+            continue                       # só estes viram candidato à produção
+        generico = p.get("produto") or ""
+        campeao = p.get("campeao") or generico
+        a, b = rotular(generico), rotular(campeao)
+        prod[a] = prod.get(a, 0) + 1
+        real[b] = real.get(b, 0) + 1
+        if a != b:
+            divs.append((a, b, str(campeao)[:52]))
+    return prod, real, divs
+
+
 def _dias_desde(data: str) -> int:
     """Dias entre `data` (YYYY-MM-DD) e hoje. Sem data = 9999, que é 'nunca'."""
     try:
@@ -248,7 +327,7 @@ def olhar(so_esta: str = "") -> int:
         return 2
 
     pacotes, orfaos = _pacotes_por_conta(contas)
-    fila, indefinidos = _fila_por_nicho()
+    fila, indefinidos, fonte_fila = _fila_por_nicho()
     ultimo = _ultimos_posts(contas)
     modo = _modo_postagem()
     hoje = str(date.today())
@@ -258,12 +337,17 @@ def olhar(so_esta: str = "") -> int:
         print("   ⚠️  agendador_config.json não encontrado — modo de postagem "
               "desconhecido (rode na VPS).")
     else:
+        val = f"{modo['validade']}d" + ("" if modo["validade_explicita"]
+                                        else " (DEFAULT, chave ausente)")
         print(f"   postagem: {'1 POR CONTA por slot (balanceado)' if modo['por_conta'] else '❌ 1 POR SLOT no total (clássico) — sem vaga reservada por conta'}"
-              f"  ·  teto {modo['teto']}  ·  validade {modo['validade']}d")
+              f"  ·  teto {modo['teto']}")
+        print(f"   esteira:  validade {val}  ·  colchão {modo['alvo_dias']}d"
+              f"  ·  piso {modo['piso']}/dia")
+        print(f"   fila:     {fonte_fila}")
     print()
     print(f"   {'nicho':<8} {'handle':<20} {'ativa':<7} {'fila':>5} "
-          f"{'prontos':>8} {'+velho':>7}  último post")
-    print("   " + "─" * 74)
+          f"{'pastas':>7} {'vivos':>6} {'+velho':>7}  último post")
+    print("   " + "─" * 80)
 
     problemas, achei = [], 0
     for chave, conta in contas.items():
@@ -285,10 +369,22 @@ def olhar(so_esta: str = "") -> int:
         # justamente a conta que come as sobras.
         talvez = indefinidos if nicho == "geral" else 0
         col = f"{nf}+{talvez}?" if talvez else str(nf)
-        velho = f"{max(i for i, _ in prontos):.0f}d" if prontos else "-"
+        velho = f"{max(i for i, _n, _v in prontos):.0f}d" if prontos else "-"
+        vivos = sum(1 for _i, _n, v in prontos if v)
         print(f"   {nicho:<8} {conta.get('handle',''):<20} "
-              f"{'sim' if ativa else '❌ NÃO':<7} {col:>5} {len(prontos):>8}"
-              f" {velho:>7}  {visto or 'NUNCA'}")
+              f"{'sim' if ativa else '❌ NÃO':<7} {col:>5} {len(prontos):>7}"
+              f" {vivos:>6} {velho:>7}  {visto or 'NUNCA'}")
+
+        # ⚠️ pasta cheia + vivos zerado é o caso que engana mais: o `ls` mostra
+        # estoque, o daemon lê esteira vazia, e a produção acha que a conta
+        # precisa de tudo. Quem olha o disco e quem olha o log discordam.
+        if prontos and not vivos:
+            problemas.append(
+                f"{nicho}: {len(prontos)} pacote(s) no disco e ZERO visíveis pro "
+                f"daemon — todos já postados ou passados da validade "
+                f"({modo['validade']}d). Pra `_estoque_por_conta()` esta conta "
+                f"está vazia; o `ls` diz o contrário. É disco ocupado, não "
+                f"estoque.")
 
         if not ativa:
             problemas.append(
@@ -303,7 +399,7 @@ def olhar(so_esta: str = "") -> int:
                 f"{nicho}: ativa, mas SEM produto na fila e SEM pacote pronto. "
                 f"Ou o roteador não tem palavra-chave que mande produto pra cá, "
                 f"ou o coletor não trouxe nada do assunto.")
-        elif prontos and _dias_desde(visto) >= 2:
+        elif vivos and _dias_desde(visto) >= 2:
             # ⚠️ o corte é 2 dias, não "não postou hoje". A pirâmide tem dia de
             # volume baixo e domingo é 0 — alarmar por um dia sem post faria o
             # diagnóstico gritar toda segunda-feira de manhã, e alarme que toca
@@ -312,7 +408,7 @@ def olhar(so_esta: str = "") -> int:
             quanto = f"{d} dias sem post" if visto else "e NUNCA postou"
             if not modo["por_conta"]:
                 problemas.append(
-                    f"{nicho}: {len(prontos)} pacote(s) PRONTO(S), o mais velho "
+                    f"{nicho}: {vivos} pacote(s) PRONTO(S) e vivo(s), o mais velho "
                     f"com {velho}, {quanto}. Com `post_por_conta` "
                     f"DESLIGADO o daemon posta 1 pacote por slot no total — não "
                     f"há vaga reservada por conta, e quem tem estoque pequeno "
@@ -320,7 +416,7 @@ def olhar(so_esta: str = "") -> int:
                     f"vencido: o pacote está pronto e a vez não vem.")
             else:
                 problemas.append(
-                    f"{nicho}: {len(prontos)} pacote(s) PRONTO(S), o mais velho "
+                    f"{nicho}: {vivos} pacote(s) PRONTO(S) e vivo(s), o mais velho "
                     f"com {velho}, {quanto} — com o rodízio por conta "
                     f"LIGADO. Aí o gargalo é a publicação em si: veja o token "
                     f"dessa conta e o `fila_problema/` (pacote que a Meta recusa "
@@ -335,6 +431,24 @@ def olhar(so_esta: str = "") -> int:
               f"nicho tem outro nome, ou o arquivo aqui está atrasado em "
               f"relação ao da VPS — rode este diagnóstico NA VPS.\n")
         return 1
+
+    prod, real, divs = _rota_da_producao()
+    if divs:
+        print(f"\n   ⚠️  ROTEAMENTO: {len(divs)} produto(s) que a PRODUÇÃO manda "
+              f"pra um nicho e o nome real manda pra outro")
+        for a, b, nome in divs[:6]:
+            print(f"      {a:>8} → {b:<8} {nome}")
+        print(f"      produção vê: "
+              + ", ".join(f"{k}={v}" for k, v in sorted(prod.items())))
+        print(f"      nome real:   "
+              + ", ".join(f"{k}={v}" for k, v in sorted(real.items())))
+        problemas.append(
+            f"roteamento: a produção escolhe o que produzir lendo o campo "
+            f"`produto` (termo de busca genérico), não `campeao` (nome real) — "
+            f"`_carregar_produtos_para_produzir` monta {{'nome': p['produto']}}. "
+            f"O genérico perde as palavras que decidem o nicho. Resultado: "
+            f"`falta[<nicho>]` nunca é atendido, e o log escreve 'não há produto "
+            f"desses nichos na fila' com os produtos ali na fila.")
 
     if orfaos and not so_esta:
         velho = max(i for i, _ in orfaos)
