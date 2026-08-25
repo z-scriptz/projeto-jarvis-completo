@@ -432,6 +432,28 @@ def olhar(so_esta: str = "") -> int:
               f"relação ao da VPS — rode este diagnóstico NA VPS.\n")
         return 1
 
+    # ⚠️ O TOTAL É A MANCHETE E ESTAVA ESCONDIDO NAS LINHAS. Pasta que venceu
+    # não é estoque: é disco. Somar as duas colunas mostra de uma vez o
+    # tamanho do desperdício, que por conta parecia sempre "uns poucos".
+    tp = sum(len(v) for v in pacotes.values()) + len(orfaos)
+    tv = sum(1 for v in pacotes.values() for _i, _n, viv in v if viv)
+    if tp and not so_esta:
+        print(f"\n   Σ {tp} pacote(s) no disco · {tv} vivo(s) · "
+              f"{tp - tv} morto(s) ({(tp - tv) * 100 // max(tp, 1)}%)")
+        if tp - tv > tv:
+            problemas.append(
+                f"esteira: {tp - tv} de {tp} pacotes estão MORTOS (postados ou "
+                f"vencidos) e continuam ocupando disco. A validade em vigor é "
+                f"{modo['validade']}d"
+                + ("" if modo["validade_explicita"] else
+                   " — e é o DEFAULT, ninguém escreveu `fila_validade_dias`. O "
+                   "comentário do próprio `_prontos_nao_postados` raciocina com "
+                   "27. Se 7 não foi uma escolha, a esteira está vencendo cerca "
+                   "de quatro vezes mais rápido do que o projeto supunha")
+                + f". Com a esteira nesse tamanho e o ritmo real de postagem, o "
+                f"pacote vence antes de chegar a vez dele — produzir mais não "
+                f"resolve, só aumenta a pilha que vai vencer.")
+
     prod, real, divs = _rota_da_producao()
     if divs:
         print(f"\n   ⚠️  ROTEAMENTO: {len(divs)} produto(s) que a PRODUÇÃO manda "
@@ -443,12 +465,17 @@ def olhar(so_esta: str = "") -> int:
         print(f"      nome real:   "
               + ", ".join(f"{k}={v}" for k, v in sorted(real.items())))
         problemas.append(
-            f"roteamento: a produção escolhe o que produzir lendo o campo "
-            f"`produto` (termo de busca genérico), não `campeao` (nome real) — "
-            f"`_carregar_produtos_para_produzir` monta {{'nome': p['produto']}}. "
-            f"O genérico perde as palavras que decidem o nicho. Resultado: "
-            f"`falta[<nicho>]` nunca é atendido, e o log escreve 'não há produto "
-            f"desses nichos na fila' com os produtos ali na fila.")
+            f"roteamento: {len(divs)} produto(s) são COBRADOS de uma conta e "
+            f"ENTREGUES em outra. Quem escolhe o que produzir lê o campo "
+            f"`produto`, o termo de busca genérico "
+            f"(`_carregar_produtos_para_produzir` monta {{'nome': p['produto']}}); "
+            f"quem monta o pacote lê `campeao`, o nome real. Então "
+            f"`_priorizar_por_estoque` desconta o déficit da conta A — 'já "
+            f"produzi pra ela' — e o `conta.json` do pacote sai com a conta B. "
+            f"A conta A nunca enche, a conta B recebe pacote que não pediu, e "
+            f"as duas parecem estar funcionando. É o candidato número 1 pra "
+            f"explicar por que o `geral` acumula pacote sem ter produto na "
+            f"fila: ele é o destino de quem perdeu o nicho no caminho.")
 
     if orfaos and not so_esta:
         velho = max(i for i, _ in orfaos)
