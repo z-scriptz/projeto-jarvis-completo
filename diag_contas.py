@@ -1,185 +1,260 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# diag_contas.py -- enumera TODAS as Páginas + contas do Instagram ligadas ao seu
-# token, pra montar o roteador multi-conta. SEGURO: imprime só ids/@usernames
-# (nunca o token). Com --escrever, grava os tokens de cada página no .env como
-# PAGE_TOKEN_<SLUG> (e mostra só mascarado).
+# diag_contas.py — POR QUE UMA CONTA NÃO ESTÁ POSTANDO.
 #
-# IMPORTANTE: pra listar TODAS as páginas, o META_ACCESS_TOKEN precisa ser um
-# token de USUÁRIO (não de página) com pages_show_list + pages_manage_posts +
-# instagram_basic + instagram_content_publish + business_management.
+# ⚠️ NASCEU DE UMA PERGUNTA QUE LEVOU SEMANAS PRA SER RESPONDIDA (25/08): o
+# @topshoppet_ não posta há dias e ninguém sabia dizer em que ponto da esteira
+# ele parava. O vigia avisa que a conta está parada — e não avisa POR QUÊ,
+# porque ele olha o resultado (o feed), não a máquina.
 #
-# Uso (VPS):  cd ~/jarvis && .venv/bin/python diag_contas.py
-#   ver o que existe (não escreve nada)
-#             cd ~/jarvis && .venv/bin/python diag_contas.py --escrever
-#   grava os PAGE_TOKEN_<SLUG> no .env
-import os
-import re
+# E as causas possíveis moram em arquivos diferentes, o que é justamente o que
+# torna o diagnóstico caro na mão:
+#
+#   contas.json          a conta existe? está `"ativa": false`?
+#   roteador_contas.py   existe palavra-chave que mande produto pra ela?
+#   produtos_fila.json   sobrou produto do nicho dela na fila?
+#   pronto_para_postar/  tem pacote pronto esperando?
+#   historico            o pacote saiu ou está encalhado?
+#
+# ⚠️ E O CASO MAIS TRAIÇOEIRO É O `"ativa": false`, porque ele é INVISÍVEL em
+# toda ferramenta que não seja esta. O vigia lê o contas.json inteiro e reporta
+# a conta; a produção filtra por `ativa` e pula. As duas estão certas — só que
+# uma diz "a conta existe e está parada" e a outra nunca soube que devia
+# produzir. Quem lê os dois relatórios conclui que há um bug, e não há: há uma
+# decisão antiga que ninguém desfez.
+#
+# USO (na VPS):
+#   .venv/bin/python diag_contas.py
+#   .venv/bin/python diag_contas.py pet     # só uma conta, com detalhe
+
+import json
 import sys
+from datetime import date
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parent
-GRAPH = "https://graph.facebook.com/v21.0"
-ENV = BASE_DIR / ".env"
+BASE = Path(__file__).resolve().parent
+PRONTO = BASE / "pronto_para_postar"
+LEDGER = BASE / "shared" / "posts_ledger.jsonl"
+METRICAS = BASE / "shared" / "metricas_posts.jsonl"
+
+# ⚠️ o produtos_fila.json mora em `shared/` na VPS e na raiz em algumas cópias.
+# O vigia já resolve assim; se aqui eu olhasse só um dos dois, o diagnóstico
+# diria "fila vazia" sobre uma fila cheia — o pior erro que ele pode cometer.
+FILAS = (BASE / "shared" / "produtos_fila.json", BASE / "produtos_fila.json")
 
 
-def _carregar_env():
-    if not ENV.exists():
-        return
-    for linha in ENV.read_text(encoding="utf-8").splitlines():
-        linha = linha.strip()
-        if not linha or linha.startswith("#") or "=" not in linha:
+def _json(caminho: Path, padrao):
+    try:
+        return json.loads(Path(caminho).read_text(encoding="utf-8"))
+    except Exception:
+        return padrao
+
+
+def _contas() -> dict:
+    return _json(BASE / "contas.json", {}) or {}
+
+
+def _nicho_da_chave(chave: str, conta: dict) -> str:
+    """No contas.json o nicho é a CHAVE; só o `_default` traz o campo dentro."""
+    return (conta.get("nicho") or "geral") if chave == "_default" else chave
+
+
+def _pacotes_por_nicho() -> dict:
+    """Pastas prontas em `pronto_para_postar/`, por nicho do slug."""
+    cont = {}
+    if not PRONTO.is_dir():
+        return cont
+    for p in PRONTO.iterdir():
+        if not (p.is_dir() and (p / "video.mp4").exists()):
             continue
-        if linha.lower().startswith("export "):
-            linha = linha[7:]
-        k, _, v = linha.partition("=")
-        k, v = k.strip(), v.strip().strip('"').strip("'")
-        if k and k not in os.environ:
-            os.environ[k] = v
+        # o nicho vem no nome da pasta; sem ele o pacote cai em geral
+        nicho = "geral"
+        for parte in p.name.lower().replace("-", "_").split("_"):
+            if parte in ("beleza", "tech", "casa", "pet", "moda", "geral"):
+                nicho = parte
+                break
+        cont.setdefault(nicho, []).append(p)
+    return cont
 
 
-_carregar_env()
+def _fila_por_nicho() -> tuple:
+    """(contagem por nicho, quantos ficaram indefinidos) — com a regra da produção.
 
+    ⚠️ Reusa as funções internas do `roteador_contas`, não reimplementa a
+    classificação. Duas regras de "que nicho é este produto" divergiriam com o
+    tempo, e o diagnóstico passaria a descrever um sistema que não existe.
 
-def _mascara(t):
-    return f"{t[:6]}…{t[-4:]}" if t else "(vazio)"
-
-
-def _slug(nome):
-    s = re.sub(r"[^A-Za-z0-9]+", "_", (nome or "").upper()).strip("_")
-    return s or "PAGINA"
-
-
-def _erro(j):
-    e = (j or {}).get("error") or {}
-    return f"[code {e.get('code')}/{e.get('type')}] {e.get('message')}" if e else ""
-
-
-def _set_env(chave, valor):
-    """Grava/atualiza CHAVE=valor no .env (sem duplicar)."""
-    linhas = ENV.read_text(encoding="utf-8").splitlines() if ENV.exists() else []
-    achou = False
-    for i, l in enumerate(linhas):
-        if l.strip().startswith(chave + "="):
-            linhas[i] = f"{chave}={valor}"
-            achou = True
+    ⚠️ MAS NÃO CHAMA A IA. `nicho_do_produto()` cai no Gemini quando nenhuma
+    palavra-chave bate — rodar um diagnóstico não pode custar uma rajada de
+    chamadas pagas sobre a fila inteira. Aqui uso a palavra-chave (grátis e
+    idêntica à da produção) e, para o resto, só LEIO o cache que a produção já
+    gravou. O que sobra vira a coluna `?`: é honesto dizer "a IA decidiria" em
+    vez de chutar 'geral' e inflar o número de uma conta que não é a dona."""
+    itens = []
+    for arq in FILAS:
+        itens = _json(arq, []) or []
+        if isinstance(itens, dict):
+            itens = itens.get("produtos") or itens.get("itens") or []
+        if itens:
             break
-    if not achou:
-        linhas.append(f"{chave}={valor}")
-    ENV.write_text("\n".join(linhas) + "\n", encoding="utf-8")
 
-
-def _trocar_long_lived(sess, token, app_id, app_secret):
-    """Troca um token de usuário CURTO por um LONG-LIVED (~60 dias). As páginas
-    derivadas de um token long-lived viram tokens que NÃO EXPIRAM."""
+    cont, indefinidos = {}, 0
     try:
-        r = sess.get(f"{GRAPH}/oauth/access_token", timeout=30, params={
-            "grant_type": "fb_exchange_token", "client_id": app_id,
-            "client_secret": app_secret, "fb_exchange_token": token})
-        return (r.json() or {}).get("access_token")
-    except Exception:
-        return None
+        import roteador_contas as RC
+    except Exception as e:
+        print(f"   (não classifiquei a fila: {str(e)[:60]})")
+        return cont, len(itens)
+
+    cache = RC._ler_cache()
+    for p in itens:
+        p = p or {}
+        # ⚠️ o item da fila NÃO tem "nome". Tem `produto` (termo de busca
+        # genérico) e `campeao` (nome real do produto), e o resto do sistema lê
+        # sempre `campeao or produto` — piloto.py, storyboard.py, revisao_geral.
+        # Com "nome" eu classificava 24 de 24 como indefinido e o diagnóstico
+        # acusaria "fila vazia" em toda conta. Erro de campo é erro silencioso:
+        # não estoura, só zera.
+        camp = p.get("campeao")
+        if isinstance(camp, dict):
+            camp = camp.get("nome") or camp.get("titulo") or ""
+        nome = str(camp or p.get("produto") or p.get("nome")
+                   or p.get("titulo") or "")
+        # `classe` NÃO entra aqui: é "mina_ouro"/"pilar", curadoria e não
+        # assunto. Jogar isso no texto só adiciona ruído ao casamento.
+        cat = str(p.get("categoria") or "")
+        texto = RC._sem_acento(f"{cat} {nome}".lower())
+        n = RC._por_palavra_chave(texto) or cache.get(RC._chave_cache(texto), "")
+        if n:
+            cont[n] = cont.get(n, 0) + 1
+        else:
+            indefinidos += 1
+    return cont, indefinidos
 
 
-def _validade(sess, token, app_id, app_secret):
-    """Mostra quando o token expira (0 = nunca) via debug_token."""
-    try:
-        r = sess.get(f"{GRAPH}/debug_token", timeout=30, params={
-            "input_token": token, "access_token": f"{app_id}|{app_secret}"})
-        d = (r.json() or {}).get("data") or {}
-        exp = d.get("expires_at")
-        if exp == 0:
-            return "NUNCA expira ✅"
-        if exp:
-            import time
-            return "expira em " + time.strftime("%Y-%m-%d %H:%M", time.localtime(exp))
-        return "?"
-    except Exception:
-        return "?"
+def _ultimos_posts(contas: dict) -> dict:
+    """{nicho: data do post mais recente} — uma passada só nos ledgers.
+
+    ⚠️ Casa por HANDLE antes de casar por nicho. O ledger grava a conta como
+    `@topshoppet_`, e procurar a substring 'geral' dentro de '@topshop.__' não
+    acha nada — a conta principal apareceria eternamente como '?'. O handle é
+    o identificador que o ledger realmente tem."""
+    handles = {}
+    for chave, conta in contas.items():
+        if isinstance(conta, dict):
+            h = str(conta.get("handle") or "").lower().lstrip("@")
+            if h:
+                handles[h] = _nicho_da_chave(chave, conta)
+
+    ultimo = {}
+    for arq in (LEDGER, METRICAS):
+        if not arq.exists():
+            continue
+        try:
+            linhas = arq.read_text(encoding="utf-8").splitlines()
+        except Exception:
+            continue
+        for linha in linhas:
+            try:
+                d = json.loads(linha)
+            except Exception:
+                continue
+            alvo = f"{d.get('conta','')} {d.get('handle','')}".lower()
+            nicho = ""
+            for h, n in handles.items():
+                if h in alvo:
+                    nicho = n
+                    break
+            nicho = nicho or str(d.get("nicho") or "")
+            if not nicho:
+                continue
+            data = str(d.get("data") or d.get("ts") or d.get("quando") or "")[:10]
+            if data and data > ultimo.get(nicho, ""):
+                ultimo[nicho] = data
+    return ultimo
 
 
-def main():
-    escrever = "--escrever" in sys.argv[1:]
-    try:
-        import requests
-    except Exception:
-        print("❌ lib 'requests' não instalada")
+def olhar(so_esta: str = "") -> int:
+    contas = _contas()
+    if not contas:
+        print("❌ contas.json ausente ou ilegível — nada a diagnosticar.")
+        return 2
+
+    pacotes = _pacotes_por_nicho()
+    fila, indefinidos = _fila_por_nicho()
+    ultimo = _ultimos_posts(contas)
+    hoje = str(date.today())
+
+    print(f"\n🔍 {len(contas)} conta(s) no contas.json  ·  {hoje}\n")
+    print(f"   {'nicho':<8} {'handle':<20} {'ativa':<7} {'fila':>5} "
+          f"{'prontos':>8}  último post")
+    print("   " + "─" * 66)
+
+    problemas, achei = [], 0
+    for chave, conta in contas.items():
+        if not isinstance(conta, dict):
+            continue
+        nicho = _nicho_da_chave(chave, conta)
+        if so_esta and nicho != so_esta:
+            continue
+        achei += 1
+        # ⚠️ ausência do campo = ATIVA. É o default do daemon, e o diagnóstico
+        # tem que espelhar o código, não inventar um default mais seguro.
+        ativa = conta.get("ativa") is not False
+        prontos = pacotes.get(nicho, [])
+        nf = fila.get(nicho, 0)
+        visto = ultimo.get(nicho, "")
+        # ⚠️ os indefinidos são POTENCIALMENTE geral: quando nem a palavra-chave
+        # nem a IA decidem, `nicho_do_produto_detalhado` devolve 'geral'. Contar
+        # o geral como 0 e gritar "sem produto na fila" seria acusar de fome
+        # justamente a conta que come as sobras.
+        talvez = indefinidos if nicho == "geral" else 0
+        col = f"{nf}+{talvez}?" if talvez else str(nf)
+        print(f"   {nicho:<8} {conta.get('handle',''):<20} "
+              f"{'sim' if ativa else '❌ NÃO':<7} {col:>5} {len(prontos):>8}"
+              f"  {visto or 'NUNCA'}")
+
+        if not ativa:
+            problemas.append(
+                f"{nicho}: `\"ativa\": false` no contas.json — a PRODUÇÃO nunca "
+                f"vai gerar pra ela (é o único lugar que lê esse campo: "
+                f"daemon_maestro._nichos_das_contas). Sem pacote produzido não "
+                f"há o que postar, e o vigia reporta a conta como parada porque "
+                f"ele lê o arquivo inteiro e não filtra por `ativa`. As duas "
+                f"estão certas. Ligar é trocar para `true`.")
+        elif nf + talvez == 0 and not prontos:
+            problemas.append(
+                f"{nicho}: ativa, mas SEM produto na fila e SEM pacote pronto. "
+                f"Ou o roteador não tem palavra-chave que mande produto pra cá, "
+                f"ou o coletor não trouxe nada do assunto.")
+        elif prontos and visto != hoje:
+            problemas.append(
+                f"{nicho}: {len(prontos)} pacote(s) PRONTO(S) e sem post hoje — "
+                f"o gargalo é a POSTAGEM, não a produção. Olhe token e limite "
+                f"diário dessa conta.")
+
+    # ⚠️ tabela vazia + "nenhuma conta parada" seria a pior resposta possível:
+    # a conta perguntada nem existe no arquivo, e é exatamente por isso que ela
+    # não posta. Silêncio aqui vira "está tudo bem" na cabeça de quem lê.
+    if so_esta and not achei:
+        print(f"   (nenhuma conta com o nicho '{so_esta}')\n")
+        print(f"⚠️  '{so_esta}' NÃO ESTÁ no contas.json desta máquina. Ou o "
+              f"nicho tem outro nome, ou o arquivo aqui está atrasado em "
+              f"relação ao da VPS — rode este diagnóstico NA VPS.\n")
         return 1
-    sess = requests.Session()
-    token = os.environ.get("META_ACCESS_TOKEN", "").strip()
-    if not token:
-        print("❌ Sem META_ACCESS_TOKEN no .env.")
-        return 1
 
-    # long-lived: se tiver app id+secret, troca o token por um de 60 dias (as
-    # páginas derivadas dele NÃO expiram — fim do 'session has expired').
-    app_id = os.environ.get("FACEBOOK_APP_ID", "").strip()
-    app_secret = os.environ.get("FACEBOOK_APP_SECRET", "").strip()
-    if app_id and app_secret:
-        ll = _trocar_long_lived(sess, token, app_id, app_secret)
-        if ll:
-            token = ll
-            print("🔑 token trocado por LONG-LIVED (páginas derivadas não expiram)")
-            if escrever:
-                _set_env("META_ACCESS_TOKEN", token)
-                print("   ✅ META_ACCESS_TOKEN (long-lived) atualizado no .env")
-        print(f"   validade do token de usuário: {_validade(sess, token, app_id, app_secret)}")
+    if indefinidos:
+        print(f"\n   ({indefinidos} produto(s) da fila sem palavra-chave nem "
+              f"cache — a IA do roteador decidiria o nicho na produção; este "
+              f"diagnóstico não chama a IA pra não gastar.)")
+
+    if problemas:
+        print("\n⚠️  O que está travando:\n")
+        for p in problemas:
+            print(f"   • {p}\n")
     else:
-        print("⚠️  Sem FACEBOOK_APP_ID / FACEBOOK_APP_SECRET no .env → NÃO dá pra fazer")
-        print("   long-lived, e os PAGE_TOKEN vão expirar de novo. Ponha os 2 no .env.")
-
-    # valida
-    r = sess.get(f"{GRAPH}/me", params={"access_token": token, "fields": "id,name"}, timeout=30)
-    me = r.json()
-    if "id" not in me:
-        print("❌ Token inválido: " + _erro(me))
-        return 1
-    print(f"Token de: {me.get('name')} (id {me.get('id')})")
-
-    # lista páginas + IG ligado a cada uma
-    r = sess.get(f"{GRAPH}/me/accounts", timeout=30, params={
-        "access_token": token,
-        "fields": "id,name,access_token,instagram_business_account{id,username,name}",
-        "limit": 50,
-    })
-    dados = r.json()
-    paginas = dados.get("data") or []
-    if not paginas:
-        print("\n❌ Nenhuma página listada. " + (_erro(dados) or ""))
-        print("   → Provável: o token é de PÁGINA (não de usuário) ou falta")
-        print("     pages_show_list. Gere um TOKEN DE USUÁRIO com as permissões.")
-        return 1
-
-    print(f"\n📄 {len(paginas)} página(s) encontrada(s):\n")
-    print("=" * 62)
-    resumo = []
-    for pg in paginas:
-        nome = pg.get("name", "?")
-        pid = str(pg.get("id"))
-        ptok = pg.get("access_token") or ""
-        ig = pg.get("instagram_business_account") or {}
-        ig_id = str(ig.get("id") or "")
-        ig_user = ig.get("username") or ""
-        slug = _slug(nome)
-        print(f"• {nome}")
-        print(f"    FACEBOOK_PAGE_ID  : {pid}")
-        print(f"    INSTAGRAM_USER_ID : {ig_id or '(sem IG ligado)'}")
-        print(f"    Instagram         : @{ig_user}" if ig_user else "    Instagram         : (nenhum)")
-        print(f"    PAGE_TOKEN_{slug} : {_mascara(ptok)}")
-        if escrever and ptok:
-            _set_env(f"PAGE_TOKEN_{slug}", ptok)
-            print(f"    ✅ gravado PAGE_TOKEN_{slug} no .env")
-        print("-" * 62)
-        resumo.append((nome, pid, ig_id, ig_user, slug))
-
-    print("\n📋 COLA ISTO PRA MIM (é seguro — sem tokens):")
-    for nome, pid, ig_id, ig_user, slug in resumo:
-        print(f"   {nome} | page_id={pid} | ig_id={ig_id} | @{ig_user} | env=PAGE_TOKEN_{slug}")
-
-    if not escrever:
-        print("\nℹ️  Rode com  --escrever  pra gravar os PAGE_TOKEN_* no .env.")
+        print("\n✅ nenhuma conta parada por configuração.\n")
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(olhar(sys.argv[1] if len(sys.argv) > 1 else ""))

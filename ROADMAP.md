@@ -6699,6 +6699,71 @@ em vez de substituir. Não quebra nada (são comentários), mas o arquivo já es
 com mais comentário duplicado do que cron, e um dia isso esconde uma linha de
 verdade. Anotado; não mexido.
 
+### 🐾 A CONTA PET NUNCA POSTOU — e o vigia não sabia dizer por quê (25/08)
+
+O Dre trouxe o alerta: `[publicado] @topshoppet_: NENHUM post nos últimos
+3 dia(s)`. A conta existe, o vigia a enxerga, e ela nunca publicou nada.
+
+**Onde a resposta estava escrita o tempo todo:** em `daemon_maestro.py:795`,
+num comentário meu de 11/08:
+
+> ⚠️ CONTA COM `"ativa": false` FICA DE FORA (…). Quando o Dre zerou
+> `producao_minima_por_conta` pra drenar a esteira, `moda` e `pet` (cadastradas
+> no dia anterior, sem postar ainda, estoque 0/6) viraram as ÚNICAS contas com
+> `falta > 0` — a produção inteira passaria a servir duas contas que não
+> publicam. **Cadastrar a conta e ligar a produção dela são duas decisões
+> diferentes.**
+
+Ou seja: a hipótese forte é que `pet` está `"ativa": false` desde 11/08 e nunca
+foi religada. Não é bug — é uma decisão antiga que ninguém desfez.
+
+**A armadilha estrutural, que é o que importa aqui:** `"ativa": false` é
+INVISÍVEL em toda ferramenta que não seja o daemon. Varri o repo inteiro: o
+campo tem **um único leitor em produção**, o `_nichos_das_contas()`. O vigia lê
+o `contas.json` todo e reporta a conta como parada; a produção filtra e pula.
+As duas estão certas — só que uma diz "a conta existe e está parada" e a outra
+nunca soube que devia produzir. Quem lê os dois relatórios conclui que há um
+bug, e não há.
+
+⚠️ E note o efeito colateral: `ativa` bloqueia só a PRODUÇÃO, não a postagem.
+Se existisse pacote pronto, ele sairia. Não sai porque nunca foi feito.
+
+**`diag_contas.py`** — novo, responde "em que ponto da esteira a conta parou"
+sem chute. Uma linha por conta: `ativa`, produtos na fila, pacotes prontos,
+último post — e uma seção "o que está travando" que nomeia a causa (desligada /
+sem insumo / encalhada na postagem).
+
+    .venv/bin/python diag_contas.py
+    .venv/bin/python diag_contas.py pet
+
+Quatro decisões que valem mais que o script:
+
+1. **Reusa `roteador_contas`, não reimplementa.** Duas regras de "que nicho é
+   este produto" divergem com o tempo e o diagnóstico passa a descrever um
+   sistema que não existe.
+2. **Mas NÃO chama a IA.** `nicho_do_produto()` cai no Gemini quando nenhuma
+   palavra-chave bate. Rodar um diagnóstico não pode custar uma rajada de
+   chamadas pagas sobre a fila inteira — uso palavra-chave (grátis, idêntica à
+   produção) e só LEIO o cache que a produção já gravou. O resto vira `+N?`.
+3. **Os indefinidos entram no `geral`.** Sem isso o script gritava "geral sem
+   produto na fila" — acusando de fome exatamente a conta que come as sobras.
+4. **Conta inexistente não pode dar ✅.** `diag_contas.py pet` numa máquina cujo
+   `contas.json` não tem pet agora fala isso em voz alta e sai com código 1.
+   Tabela vazia + "nenhuma conta parada" vira "está tudo bem" na cabeça de quem
+   lê — a pior resposta possível pra pergunta feita.
+
+**Erro que eu cometi escrevendo e peguei rodando, não lendo:** procurei o nome
+do produto em `item["nome"]`. O item da fila não tem `nome` — tem `produto`
+(termo de busca) e `campeao` (nome real), e o sistema inteiro lê
+`campeao or produto`. Resultado: 24 de 24 produtos "indefinidos" e o
+diagnóstico acusaria fila vazia em TODA conta. Um diagnóstico errado é pior que
+diagnóstico nenhum, porque ele encerra a investigação.
+📌 **Erro de campo é erro silencioso: não estoura, só zera.** Ferramenta nova
+tem que ser rodada contra dado real antes de virar fonte de verdade.
+
+⚠️ O `contas.json` do repo tem 4 contas (`geral`, `beleza`, `tech`, `casa`) — o
+da VPS tem 6. **O diagnóstico só vale rodado na VPS.**
+
 ## 📌 Referência rápida (infra)
 
 - **VPS:** Contabo · daemon `jarvis.service` (`python -m agents.daemon_maestro`)
