@@ -16,12 +16,25 @@
 #   pronto_para_postar/  tem pacote pronto esperando?
 #   historico            o pacote saiu ou está encalhado?
 #
-# ⚠️ E O CASO MAIS TRAIÇOEIRO É O `"ativa": false`, porque ele é INVISÍVEL em
-# toda ferramenta que não seja esta. O vigia lê o contas.json inteiro e reporta
-# a conta; a produção filtra por `ativa` e pula. As duas estão certas — só que
-# uma diz "a conta existe e está parada" e a outra nunca soube que devia
-# produzir. Quem lê os dois relatórios conclui que há um bug, e não há: há uma
-# decisão antiga que ninguém desfez.
+# ⚠️ E EU CHUTEI ERRADO ANTES DE MEDIR. Achei que era `"ativa": false` — a
+# causa estava até documentada no daemon desde 11/08 — e a primeira rodada
+# mostrou pet com `ativa: sim`, 4 pacotes PRONTOS e o último post 19 dias
+# atrás. A causa documentada era a causa ANTIGA. Por isso este arquivo existe:
+# a explicação plausível e a explicação verdadeira se pareciam demais.
+#
+# ⚠️ O QUE ELE TEM QUE SEPARAR, e são coisas bem diferentes:
+#
+#   desligada  `"ativa": false` — invisível em toda ferramenta menos o daemon.
+#              O vigia reporta a conta como parada; a produção nem soube dela.
+#   sem insumo nada na fila, nada pronto — o problema está ANTES da postagem.
+#   com fome   pacote pronto e a vez não vem. Com `post_por_conta` DESLIGADO o
+#              daemon posta 1 pacote por slot NO TOTAL: quem tem estoque
+#              pequeno nunca alcança a frente de uma fila funda.
+#   órfã       pacote pronto sem `conta.json` legível. Não tem destino: só
+#              envelhece na esteira até o expurgo por validade.
+#
+# As três últimas parecem idênticas de fora — "a conta não posta" — e pedem
+# ações opostas. Confundi-las custa dias.
 #
 # USO (na VPS):
 #   .venv/bin/python diag_contas.py
@@ -29,11 +42,12 @@
 
 import json
 import sys
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parent
 PRONTO = BASE / "pronto_para_postar"
+CONFIG = BASE / "shared" / "content_plans" / "agendador_config.json"
 LEDGER = BASE / "shared" / "posts_ledger.jsonl"
 METRICAS = BASE / "shared" / "metricas_posts.jsonl"
 
@@ -59,22 +73,67 @@ def _nicho_da_chave(chave: str, conta: dict) -> str:
     return (conta.get("nicho") or "geral") if chave == "_default" else chave
 
 
-def _pacotes_por_nicho() -> dict:
-    """Pastas prontas em `pronto_para_postar/`, por nicho do slug."""
-    cont = {}
+def _pacotes_por_conta(contas: dict) -> tuple:
+    """({nicho: [(idade_dias, slug)]}, órfãos) — lendo o `conta.json` do pacote.
+
+    ⚠️ A PRIMEIRA VERSÃO DISTO CHUTAVA O NICHO PELO NOME DA PASTA, e o chute
+    reportou 427 pacotes em 'geral' — número que não queria dizer nada, porque
+    o default do chute ERA 'geral'. Todo pacote sem nicho no nome caía ali.
+
+    A verdade mora em `pronto_para_postar/<slug>/conta.json`, que é exatamente
+    de onde o daemon lê (`_conta_do_slug`). E ler do mesmo lugar tem uma
+    consequência que o chute escondia: pacote com conta.json ilegível é ÓRFÃO
+    pro daemon também — `_conta_do_slug` devolve "?" e TODOS eles viram uma
+    "conta" só no rodízio de `_um_por_conta_sob_teto`. Um órfão sai por slot,
+    não importa quantos sejam. Contar isso à parte é o ponto do diagnóstico."""
+    por_nicho, orfaos = {}, []
     if not PRONTO.is_dir():
-        return cont
+        return por_nicho, orfaos
+
+    # handle -> nicho, pra traduzir o que o conta.json grava
+    de_handle = {}
+    for chave, conta in contas.items():
+        if isinstance(conta, dict):
+            h = str(conta.get("handle") or "").lower().lstrip("@")
+            if h:
+                de_handle[h] = _nicho_da_chave(chave, conta)
+
+    agora = datetime.now().timestamp()
     for p in PRONTO.iterdir():
         if not (p.is_dir() and (p / "video.mp4").exists()):
             continue
-        # o nicho vem no nome da pasta; sem ele o pacote cai em geral
-        nicho = "geral"
-        for parte in p.name.lower().replace("-", "_").split("_"):
-            if parte in ("beleza", "tech", "casa", "pet", "moda", "geral"):
-                nicho = parte
-                break
-        cont.setdefault(nicho, []).append(p)
-    return cont
+        idade = (agora - p.stat().st_mtime) / 86400
+        d = _json(p / "conta.json", None)
+        if not isinstance(d, dict):
+            orfaos.append((idade, p.name))
+            continue
+        nicho = str(d.get("nicho") or "").strip().lower()
+        if not nicho:
+            h = str(d.get("handle") or "").lower().lstrip("@")
+            nicho = de_handle.get(h, "")
+        if not nicho:
+            orfaos.append((idade, p.name))
+            continue
+        por_nicho.setdefault(nicho, []).append((idade, p.name))
+    return por_nicho, orfaos
+
+
+def _modo_postagem() -> dict:
+    """Como o daemon escolhe o que postar. É o que decide se dá pra passar fome.
+
+    ⚠️ `post_por_conta` é OPT-IN. Desligado, o `ciclo_postagem` posta UM pacote
+    por slot — `_prontos_nao_postados()[0]` — e conta nenhuma tem vaga
+    reservada. Com a esteira funda, a conta de estoque pequeno simplesmente
+    nunca chega na frente da fila. Não é erro de config nem token vencido: é a
+    fila comendo o slot."""
+    cfg = _json(CONFIG, {}) or {}
+    return {
+        "por_conta": bool(cfg.get("post_por_conta")),
+        "teto": cfg.get("posts_por_dia_semana")
+                or cfg.get("max_posts_por_conta_dia", 3),
+        "validade": int(cfg.get("fila_validade_dias", 7) or 0),
+        "achou": CONFIG.exists(),
+    }
 
 
 def _fila_por_nicho() -> tuple:
@@ -173,21 +232,38 @@ def _ultimos_posts(contas: dict) -> dict:
     return ultimo
 
 
+def _dias_desde(data: str) -> int:
+    """Dias entre `data` (YYYY-MM-DD) e hoje. Sem data = 9999, que é 'nunca'."""
+    try:
+        a, m, d = (int(x) for x in data[:10].split("-"))
+        return (date.today() - date(a, m, d)).days
+    except Exception:
+        return 9999
+
+
 def olhar(so_esta: str = "") -> int:
     contas = _contas()
     if not contas:
         print("❌ contas.json ausente ou ilegível — nada a diagnosticar.")
         return 2
 
-    pacotes = _pacotes_por_nicho()
+    pacotes, orfaos = _pacotes_por_conta(contas)
     fila, indefinidos = _fila_por_nicho()
     ultimo = _ultimos_posts(contas)
+    modo = _modo_postagem()
     hoje = str(date.today())
 
-    print(f"\n🔍 {len(contas)} conta(s) no contas.json  ·  {hoje}\n")
+    print(f"\n🔍 {len(contas)} conta(s) no contas.json  ·  {hoje}")
+    if not modo["achou"]:
+        print("   ⚠️  agendador_config.json não encontrado — modo de postagem "
+              "desconhecido (rode na VPS).")
+    else:
+        print(f"   postagem: {'1 POR CONTA por slot (balanceado)' if modo['por_conta'] else '❌ 1 POR SLOT no total (clássico) — sem vaga reservada por conta'}"
+              f"  ·  teto {modo['teto']}  ·  validade {modo['validade']}d")
+    print()
     print(f"   {'nicho':<8} {'handle':<20} {'ativa':<7} {'fila':>5} "
-          f"{'prontos':>8}  último post")
-    print("   " + "─" * 66)
+          f"{'prontos':>8} {'+velho':>7}  último post")
+    print("   " + "─" * 74)
 
     problemas, achei = [], 0
     for chave, conta in contas.items():
@@ -209,9 +285,10 @@ def olhar(so_esta: str = "") -> int:
         # justamente a conta que come as sobras.
         talvez = indefinidos if nicho == "geral" else 0
         col = f"{nf}+{talvez}?" if talvez else str(nf)
+        velho = f"{max(i for i, _ in prontos):.0f}d" if prontos else "-"
         print(f"   {nicho:<8} {conta.get('handle',''):<20} "
               f"{'sim' if ativa else '❌ NÃO':<7} {col:>5} {len(prontos):>8}"
-              f"  {visto or 'NUNCA'}")
+              f" {velho:>7}  {visto or 'NUNCA'}")
 
         if not ativa:
             problemas.append(
@@ -226,11 +303,28 @@ def olhar(so_esta: str = "") -> int:
                 f"{nicho}: ativa, mas SEM produto na fila e SEM pacote pronto. "
                 f"Ou o roteador não tem palavra-chave que mande produto pra cá, "
                 f"ou o coletor não trouxe nada do assunto.")
-        elif prontos and visto != hoje:
-            problemas.append(
-                f"{nicho}: {len(prontos)} pacote(s) PRONTO(S) e sem post hoje — "
-                f"o gargalo é a POSTAGEM, não a produção. Olhe token e limite "
-                f"diário dessa conta.")
+        elif prontos and _dias_desde(visto) >= 2:
+            # ⚠️ o corte é 2 dias, não "não postou hoje". A pirâmide tem dia de
+            # volume baixo e domingo é 0 — alarmar por um dia sem post faria o
+            # diagnóstico gritar toda segunda-feira de manhã, e alarme que toca
+            # sozinho é alarme que ninguém lê.
+            d = _dias_desde(visto)
+            quanto = f"{d} dias sem post" if visto else "e NUNCA postou"
+            if not modo["por_conta"]:
+                problemas.append(
+                    f"{nicho}: {len(prontos)} pacote(s) PRONTO(S), o mais velho "
+                    f"com {velho}, {quanto}. Com `post_por_conta` "
+                    f"DESLIGADO o daemon posta 1 pacote por slot no total — não "
+                    f"há vaga reservada por conta, e quem tem estoque pequeno "
+                    f"nunca chega na frente da fila. Isto é FOME, não token "
+                    f"vencido: o pacote está pronto e a vez não vem.")
+            else:
+                problemas.append(
+                    f"{nicho}: {len(prontos)} pacote(s) PRONTO(S), o mais velho "
+                    f"com {velho}, {quanto} — com o rodízio por conta "
+                    f"LIGADO. Aí o gargalo é a publicação em si: veja o token "
+                    f"dessa conta e o `fila_problema/` (pacote que a Meta recusa "
+                    f"queima a vaga da conta naquele slot).")
 
     # ⚠️ tabela vazia + "nenhuma conta parada" seria a pior resposta possível:
     # a conta perguntada nem existe no arquivo, e é exatamente por isso que ela
@@ -241,6 +335,24 @@ def olhar(so_esta: str = "") -> int:
               f"nicho tem outro nome, ou o arquivo aqui está atrasado em "
               f"relação ao da VPS — rode este diagnóstico NA VPS.\n")
         return 1
+
+    if orfaos and not so_esta:
+        velho = max(i for i, _ in orfaos)
+        print(f"\n   ⚠️  {len(orfaos)} pacote(s) SEM conta.json legível "
+              f"(mais velho: {velho:.0f}d)")
+        for i, nome in sorted(orfaos, reverse=True)[:3]:
+            print(f"      {i:>5.0f}d  {nome[:56]}")
+        problemas.append(
+            f"órfãos: {len(orfaos)} pacote(s) prontos sem `conta.json` legível"
+            + (". Pro daemon TODOS eles são a MESMA conta — `_conta_do_slug` "
+               "devolve '?' e o rodízio de `_um_por_conta_sob_teto` tira UM por "
+               "slot, não importa quantos sejam."
+               if modo["por_conta"] else
+               ". No modo clássico eles entram na fila única como qualquer "
+               "outro, e como são os mais VELHOS a drenagem por idade os põe "
+               "na frente — eles comem o slot das contas de estoque pequeno.")
+            + " E o pacote sem conta.json não tem destino: envelhece na esteira "
+              "até o expurgo por validade levar embora.")
 
     if indefinidos:
         print(f"\n   ({indefinidos} produto(s) da fila sem palavra-chave nem "

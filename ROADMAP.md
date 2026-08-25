@@ -6714,8 +6714,52 @@ num comentário meu de 11/08:
 > publicam. **Cadastrar a conta e ligar a produção dela são duas decisões
 > diferentes.**
 
-Ou seja: a hipótese forte é que `pet` está `"ativa": false` desde 11/08 e nunca
-foi religada. Não é bug — é uma decisão antiga que ninguém desfez.
+Fechei a hipótese: `pet` está `"ativa": false` desde 11/08 e nunca foi religada.
+
+### ❌ E A HIPÓTESE ESTAVA ERRADA — a medição derrubou (25/08)
+
+Rodado na VPS, `pet` veio **`ativa: sim`, 4 pacotes PRONTOS, último post
+06/08** — 19 dias, não 3. A causa que eu tinha achado documentada era a causa
+**antiga**: em algum momento pet foi religada, a produção voltou a servi-la, e
+o pacote passou a ser feito e a não sair.
+
+📌 **A explicação plausível e a explicação verdadeira se pareciam demais.** Eu
+tinha um comentário meu, datado, descrevendo exatamente o sintoma — e isso é
+justamente o que torna o chute perigoso: ele vem com prova. O que derrubou não
+foi raciocínio melhor, foi rodar contra o estado real.
+
+**O quadro que apareceu:**
+
+    nicho    ativa   fila  prontos   último post
+    geral    sim   11+13?      427    2026-08-24
+    beleza   sim      29        0     2026-08-24
+    tech     sim      52        0     2026-08-25
+    casa     sim      58        1     2026-08-24
+    pet      sim       6        4     2026-08-06   ← 19 dias
+    moda     sim      32        1     2026-08-25
+
+**E o "427 em geral" era artefato do MEU diagnóstico**, não um fato: eu chutava
+o nicho pelo nome da pasta e o *default do chute era `geral`*. Todo pacote sem
+nicho no nome caía ali. A verdade mora no `pronto_para_postar/<slug>/conta.json`
+— exatamente de onde o daemon lê (`_conta_do_slug`).
+📌 **Número cujo default é o próprio valor reportado não é medição, é eco.**
+
+**A causa real, lendo `ciclo_postagem`:** `post_por_conta` é **opt-in**.
+Desligado, o daemon posta **1 pacote por slot no total** — `prontos[0]` — e
+conta nenhuma tem vaga reservada. Com a esteira funda e a drenagem por idade
+(`_prontos_nao_postados`, que com fila funda inverte pra FIFO), quem tem
+estoque pequeno **nunca alcança a frente**. Pet tem 4 pacotes atrás de
+centenas. Não é token vencido nem conta desligada: **é fome**.
+
+⚠️ E tem o agravante dos **órfãos**: pacote sem `conta.json` legível devolve
+`"?"` no `_conta_do_slug`. No modo balanceado todos eles contam como UMA conta
+só e sai um por slot; no clássico, sendo os mais velhos, a drenagem por idade
+os põe na frente e eles comem o slot de quem tem pouco. Pacote órfão não tem
+destino — envelhece até o expurgo por validade.
+
+Por isso o `diag_contas.py` agora separa quatro estados que de fora parecem o
+mesmo "a conta não posta" e pedem ações **opostas**: desligada / sem insumo /
+com fome / órfã.
 
 **A armadilha estrutural, que é o que importa aqui:** `"ativa": false` é
 INVISÍVEL em toda ferramenta que não seja o daemon. Varri o repo inteiro: o
