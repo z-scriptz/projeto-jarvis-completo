@@ -240,12 +240,28 @@ def _fundo(plano: dict, item: dict = None, papel: str = "") -> str:
         # produto no meio; esses dois slides não querem a mesma foto que os
         # slides de erro. A biblioteca do Dre já separa assim, e ignorar isso
         # aqui faria o fecho de todo carrossel de `erros` pegar foto de erro.
+        nicho = plano.get("nicho", "geral")
+        # ⚠️ PRIMEIRO O ASSUNTO, DEPOIS O RODÍZIO. O índice sabe o que cada
+        # foto MOSTRA; se o slide fala de "abrir os galhos da árvore" e existe
+        # uma foto de árvore no acervo, sortear entre dez é jogar fora a
+        # informação que já está em disco. Foi o defeito de 25/08: "escolher a
+        # árvore" saiu com foto de cesto, "abrir os galhos" com escritório.
+        # Sem índice, ou sem palavra em comum, cai no rodízio de antes.
         alvo = ""
-        if papel:
-            alvo = fundo_do_nicho(plano.get("nicho", "geral"), papel)
+        assunto = " ".join(str(x) for x in
+                           ((item or {}).get("titulo"), (item or {}).get("linha"),
+                            (item or {}).get("rotulo")) if x)
+        if assunto:
+            try:
+                from fundo_ia import combinar
+                alvo = combinar(nicho, papel or plano.get("formato", ""),
+                                assunto)
+            except Exception:
+                alvo = ""
+        if not alvo and papel:
+            alvo = fundo_do_nicho(nicho, papel)
         if not alvo:
-            alvo = fundo_do_nicho(plano.get("nicho", "geral"),
-                                  plano.get("formato", ""))
+            alvo = fundo_do_nicho(nicho, plano.get("formato", ""))
         if alvo:
             return _b64(alvo)
     except Exception:

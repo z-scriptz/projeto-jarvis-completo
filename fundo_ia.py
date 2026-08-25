@@ -397,6 +397,64 @@ def importar(nicho: str, origens: list, formato: str = "") -> int:
 MEMORIA_FUNDO = BASE_DIR / "shared" / "fundos_recentes.json"
 
 
+_STOP = {"de", "da", "do", "das", "dos", "e", "ou", "um", "uma", "uns", "umas",
+         "o", "a", "os", "as", "que", "em", "no", "na", "nos", "nas", "por",
+         "para", "pra", "com", "sem", "seu", "sua", "seus", "suas", "voce",
+         "vc", "mais", "menos", "muito", "isso", "isto", "esse", "essa",
+         "aquele", "ser", "ter", "faz", "fazer", "esta", "estao", "nao",
+         "sim", "ja", "ainda", "todo", "toda", "todos", "todas", "cada"}
+
+
+def _palavras(txt: str) -> set:
+    import unicodedata
+    t = unicodedata.normalize("NFKD", (txt or "").lower())
+    t = "".join(c for c in t if not unicodedata.combining(c))
+    return {p for p in re.findall(r"[a-z]{3,}", t) if p not in _STOP}
+
+
+def combinar(nicho: str, formato: str, assunto: str) -> str:
+    """A imagem do acervo que MAIS TEM A VER com o assunto do slide.
+
+    ⚠️ A BUSCA É DE TEXTO, NÃO DE IA — e é isso que a torna viável. O índice já
+    guarda o que cada foto mostra; aqui só se conta quantas palavras do slide
+    aparecem na descrição e nas tags. Custo: microssegundos, por post. Fazer
+    isso com uma chamada de modelo a cada slide seria ~2.900 chamadas por mês
+    pra escolher entre 10 fotos que já estão descritas em disco.
+
+    ⚠️ E EMPATE VOLTA PRO RODÍZIO, de propósito. Sem isso, o melhor par
+    texto↔foto de cada formato sairia em TODO carrossel daquele formato — a
+    coerência subiria e a variedade morreria, que é o defeito que a gente
+    passou uma semana consertando. O índice desempata; ele não manda sozinho."""
+    idx = _indice()
+    if not idx or not assunto:
+        return ""
+    alvo = _palavras(assunto)
+    if not alvo:
+        return ""
+    candidatas = _todas(nicho)
+    if formato:
+        so_fmt = [c for c in candidatas
+                  if c.parent.name == _canon(formato)]
+        candidatas = so_fmt or candidatas
+
+    placar = []
+    for arq in candidatas:
+        d = idx.get(str(arq.relative_to(FUNDOS)))
+        if not d:
+            continue
+        dela = _palavras(d.get("desc", "")) | set(d.get("tags") or [])
+        n = len(alvo & dela)
+        if n:
+            placar.append((n, str(arq)))
+    if not placar:
+        return ""
+    melhor = max(p[0] for p in placar)
+    # ⚠️ TODAS AS EMPATADAS NO TOPO, e o rodízio escolhe entre elas. Pegar
+    # `max()` direto devolveria sempre o mesmo arquivo pro mesmo assunto.
+    topo = [c for n, c in placar if n == melhor]
+    return _rodizio(nicho + "|busca", topo)
+
+
 def fundo_do_nicho(nicho: str, formato: str = "") -> str:
     """Um fundo do acervo do nicho. "" quando não há nenhum.
 
@@ -406,20 +464,30 @@ def fundo_do_nicho(nicho: str, formato: str = "") -> str:
     vezes por semana na MESMA conta. Guardando os últimos 3, os mesmos 6 fundos
     rendem o que 12 renderiam no sorteio — ou seja, **metade das imagens pra
     gerar**. É a mesma mecânica do rodízio dos fechos e do 1º comentário."""
-    arqs = [str(a) for a in existentes(nicho, formato)]
+    return _rodizio(nicho, [str(a) for a in existentes(nicho, formato)])
+
+
+def _rodizio(chave: str, arqs: list) -> str:
+    """Escolhe de `arqs` evitando os últimos usados sob `chave`.
+
+    ⚠️ EXTRAÍDO DE DENTRO DO `fundo_do_nicho` (25/08) pra que a busca semântica
+    use A MESMA memória em vez de reimplementar a dela. Duas memórias de
+    rodízio no mesmo módulo seriam duas verdades sobre "o que já saiu" — e a
+    segunda repetiria o que a primeira acabou de usar, com a aparência de estar
+    funcionando."""
     if not arqs:
         return ""
     try:
         mem = json.loads(MEMORIA_FUNDO.read_text(encoding="utf-8"))
     except Exception:
         mem = {}
-    recentes = mem.get(nicho, [])
+    recentes = mem.get(chave, [])
     novos = [a for a in arqs if a not in recentes]
     escolha = random.choice(novos or arqs)
     try:
         # lembra no máximo METADE do acervo: guardar demais esvazia a lista de
         # candidatos e o rodízio vira ordem fixa, que é o defeito oposto
-        mem[nicho] = ([escolha] + recentes)[:max(1, min(3, len(arqs) // 2))]
+        mem[chave] = ([escolha] + recentes)[:max(1, min(3, len(arqs) // 2))]
         MEMORIA_FUNDO.parent.mkdir(parents=True, exist_ok=True)
         MEMORIA_FUNDO.write_text(json.dumps(mem, ensure_ascii=False, indent=2),
                                  encoding="utf-8")
@@ -681,6 +749,119 @@ FORMATOS_BIBLIOTECA = [
     "erros", "curiosidade", "comparacao", "antes_depois", "checklist",
     "lista", "produto", "problema_solucao", "nao_compre", "cta",
 ]
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ÍNDICE SEMÂNTICO — o que cada imagem MOSTRA
+#
+# ⚠️ O DIAGNÓSTICO QUE O DRE E O CHATGPT FIZERAM JUNTOS (25/08): o render está
+# resolvido, o gargalo virou a ESCOLHA DA IMAGEM. Num carrossel de casa saiu:
+#     "escolher a árvore"     → foto de cesto com manta
+#     "abrir os galhos"       → foto de escritório com luminária
+#     checklist da árvore     → foto de guarda-roupa antes/depois
+# Texto e imagem contando duas histórias diferentes, o que mata retenção.
+#
+# A biblioteca por formato resolveu METADE do problema: ela garante que um
+# carrossel de `erros` pegue fotos da pasta `erros`. Mas dentro da pasta o
+# sorteio continua cego — e a frase do Dre nomeia o que falta: *"se o Jarvis
+# ver a imagem e conseguir interpretar, vai ser um passo absurdo"*.
+#
+# ⚠️ E O CUSTO É O PONTO DE PROJETO. Perguntar a uma IA "qual destas 10 fotos
+# combina com este slide?" a cada render seria uma chamada por SLIDE, todo dia,
+# em 6 contas — o mesmo erro do fundo gerado por post que a gente já rejeitou.
+# Aqui a visão passa UMA VEZ POR IMAGEM, na vida: descreve, guarda no índice, e
+# daí em diante a escolha é comparação de texto, que custa zero.
+#
+#     230 imagens × 1 chamada  =  custo fixo, pago uma vez
+#     8 slides × 2 posts/dia × 6 contas × 30 dias = 2.880 chamadas/mês evitadas
+INDICE = FUNDOS / "indice.json"
+
+
+def _indice() -> dict:
+    try:
+        return json.loads(INDICE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _descrever(caminho: Path) -> dict:
+    """Uma frase e umas tags do que a foto MOSTRA. {} quando não deu."""
+    chave = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not chave:
+        return {}
+    try:
+        from google import genai
+        from google.genai import types
+        cli = genai.Client(api_key=chave)
+        r = cli.models.generate_content(
+            model=os.environ.get("GEMINI_MODELO_TXT", "gemini-2.5-flash"),
+            contents=[
+                types.Part.from_bytes(data=caminho.read_bytes(),
+                                      mime_type="image/jpeg"),
+                "Descreva em portugues o que esta foto MOSTRA, para escolher "
+                "fundo de post. Responda SO um JSON:\n"
+                '{"desc": "<uma frase curta e concreta>",\n'
+                ' "tags": ["<objeto>", "<comodo/lugar>", "<acao>", "..."]}\n'
+                "As tags sao substantivos simples em portugues, ate 8, "
+                "so o que aparece de fato na imagem.",
+            ])
+        m = re.search(r"\{.*\}", (r.text or ""), re.S)
+        d = json.loads(m.group(0)) if m else {}
+        return {"desc": str(d.get("desc") or "")[:200],
+                "tags": [str(t).lower().strip() for t in (d.get("tags") or [])
+                         if str(t).strip()][:8]}
+    except Exception as e:
+        log.info(f"   ℹ️  não descrevi {caminho.name}: {str(e)[:70]}")
+        return {}
+
+
+def indexar(nicho: str = "", limite: int = 0) -> int:
+    """Descreve as imagens ainda não descritas. Retomável de propósito.
+
+    ⚠️ RETOMÁVEL PORQUE SÃO CENTENAS E A REDE CAI. Se o índice fosse refeito do
+    zero a cada execução, uma queda no meio de 230 imagens jogaria fora tudo o
+    que já foi pago. Cada imagem é gravada assim que descrita; rodar de novo
+    continua de onde parou, e `--limite` deixa provar com 5 antes de soltar."""
+    idx = _indice()
+    alvos = []
+    nichos = [nicho] if nicho else list(CENARIOS)
+    for n in nichos:
+        for arq in _todas(n):
+            if str(arq.relative_to(FUNDOS)) not in idx:
+                alvos.append(arq)
+    if limite:
+        alvos = alvos[:limite]
+    if not alvos:
+        print(f"✅ nada a fazer — {len(idx)} imagem(ns) já descritas.")
+        return 0
+
+    print(f"🔎 descrevendo {len(alvos)} imagem(ns)"
+          + (f" (limite {limite})" if limite else "") + "\n")
+    feitas = 0
+    for arq in alvos:
+        rel = str(arq.relative_to(FUNDOS))
+        d = _descrever(arq)
+        if not d.get("desc"):
+            print(f"  ⚠️  {rel}: sem descrição — paro por aqui")
+            break                      # mesmo motivo do `gerar()`
+        idx[rel] = d
+        INDICE.parent.mkdir(parents=True, exist_ok=True)
+        INDICE.write_text(json.dumps(idx, ensure_ascii=False, indent=1),
+                          encoding="utf-8")
+        feitas += 1
+        print(f"  ✅ {rel}\n     {d['desc'][:88]}\n     {', '.join(d['tags'])}")
+    print(f"\n{'✅' if feitas else '⚠️ '} {feitas} descrita(s). "
+          f"Índice: {len(idx)} imagem(ns) em {INDICE}")
+    return 0 if feitas else 1
+
+
+def _todas(nicho: str) -> list:
+    """Todas as imagens do nicho, raiz e subpastas."""
+    base = _pasta(nicho)
+    if not base.exists():
+        return []
+    return sorted(a for a in base.rglob("*")
+                  if a.is_file() and a.suffix.lower() in EXTENSOES)
 
 
 def contato(nicho: str, saida=None) -> int:
@@ -1184,6 +1365,12 @@ def main() -> int:
     # `nargs="?"` + `const=""`: `--do-plano` sozinho pega a pasta mais recente
     p.add_argument("--arvore", metavar="RAIZ",
                    help="importa uma árvore inteira <nicho>/<formato>/ de uma vez")
+    p.add_argument("--indexar", metavar="NICHO", nargs="?", const="",
+                   help="descreve o que cada imagem MOSTRA (1x por imagem)")
+    p.add_argument("--limite", type=int, default=0,
+                   help="com --indexar, para depois de N imagens")
+    p.add_argument("--buscar", nargs=2, metavar=("NICHO", "ASSUNTO"),
+                   help="mostra qual imagem o índice escolheria")
     p.add_argument("--lotes", metavar="PASTA",
                    help="reconstrói os blocos de download pela hora do arquivo")
     p.add_argument("--tamanho", type=int, default=10,
@@ -1199,6 +1386,23 @@ def main() -> int:
                    help="1 imagem por slide, do texto do slide (Gemini). "
                         "Sem argumento, usa o carrossel mais recente.")
     a = p.parse_args()
+
+    if a.indexar is not None:
+        return indexar(a.indexar, a.limite)
+
+    if a.buscar:
+        n, assunto = a.buscar
+        r = combinar(n, a.formato, assunto)
+        idx = _indice()
+        if not r:
+            print(f"⚠️  nada casou com '{assunto}' em '{n}'"
+                  + (f"/{a.formato}" if a.formato else "")
+                  + (f"  ({len(idx)} no índice)" if idx else
+                     "  — índice vazio, rode --indexar"))
+            return 1
+        d = idx.get(str(Path(r).relative_to(FUNDOS)), {})
+        print(f"🎯 {r}\n   {d.get('desc','')}\n   {', '.join(d.get('tags') or [])}")
+        return 0
 
     if a.lotes:
         return lotes(a.lotes, a.tamanho)

@@ -6053,6 +6053,61 @@ essa pergunta não teria como ser feita.**
 suplemento): o Dre disse que já resolveu isso por outro caminho. Fica anotado que
 foi decisão dele, não esquecimento — pra ninguém reintroduzir achando que faltou.
 
+#### 🔎 ÍNDICE SEMÂNTICO — a imagem escolhida pelo ASSUNTO do slide (25/08)
+
+O Dre e o ChatGPT chegaram no mesmo diagnóstico: **o render está resolvido, o
+gargalo virou a escolha da imagem.** No carrossel de casa saiu:
+
+    "escolher a árvore"   → foto de cesto com manta
+    "abrir os galhos"     → foto de escritório com luminária
+    checklist da árvore   → guarda-roupa antes/depois
+
+Texto e imagem contando duas histórias diferentes. A biblioteca por formato
+resolveu METADE: garante que um carrossel de `erros` pegue da pasta `erros`.
+**Dentro da pasta o sorteio continuava cego** — e a frase do Dre nomeia o que
+faltava: *"se o Jarvis ver a imagem e conseguir interpretar, vai ser um passo
+absurdo"*.
+
+⚠️ **E O CUSTO É O PONTO DE PROJETO, não detalhe.** Perguntar a uma IA "qual
+destas 10 fotos combina com este slide?" a cada render seria **uma chamada por
+SLIDE**, todo dia, em 6 contas:
+
+    8 slides × 2 posts/dia × 6 contas × 30 dias  =  2.880 chamadas/mês
+    230 imagens × 1 chamada                      =  custo fixo, pago uma vez
+
+É o mesmo erro do fundo gerado por post que a gente já tinha rejeitado. Então a
+visão passa **uma vez por imagem, na vida**: descreve, guarda em
+`assets/fundos/indice.json`, e daí em diante a escolha é **comparação de
+texto** — microssegundos.
+
+    fundo_ia.py --indexar tech --limite 5    # prova com 5 antes de soltar
+    fundo_ia.py --indexar                    # todas as que faltam
+    fundo_ia.py --buscar casa "abrir os galhos" --formato passo_a_passo
+
+⚠️ **RETOMÁVEL, porque são centenas e a rede cai.** Cada imagem é gravada assim
+que descrita; refazer do zero jogaria fora o que já foi pago.
+
+⚠️ **EMPATE VOLTA PRO RODÍZIO, de propósito.** Sem isso o melhor par
+texto↔foto de cada formato sairia em TODO carrossel daquele formato: a
+coerência subiria e a variedade morreria — o defeito que custou uma semana pra
+consertar. **O índice desempata; ele não manda sozinho.**
+
+⚠️ **E O `_rodizio()` FOI EXTRAÍDO pra que a busca use A MESMA memória.** Duas
+memórias de rodízio no mesmo módulo seriam duas verdades sobre "o que já saiu",
+e a segunda repetiria o que a primeira acabou de usar — parecendo funcionar.
+
+**Medido no caso real** (os 4 slides da árvore de Natal, com título + corpo
+como o render manda):
+
+    "onde tudo vai"        → canto de sala vazio com tomada
+    "defina a árvore"      → árvore de natal montada ao lado do sofá
+    "volume começando de baixo" → mãos abrindo os galhos de baixo
+    "toques finais"        → árvore montada
+
+Quatro de quatro. Só com o título, dois de quatro casavam — **é o corpo do
+slide que carrega os substantivos concretos**, e por isso o `assunto` soma
+título + linha + rótulo.
+
 #### 🌗 O VÉU NÃO DESCREVE A FOTO — DESCREVE O QUE VAI SER LIDO EM CIMA (25/08)
 
 O Dre: *"achei o CTA final muito escuro pra ler, as letras pretas se esconderam
