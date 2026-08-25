@@ -203,6 +203,31 @@ def publicar_um(nicho: str, cfg: dict = None, dry_run: bool = False,
             log.error(f"   ❌ {nicho}: plano.json ilegível ({str(e)[:80]})")
             return {"ok": False, "motivo": "plano"}
 
+    # ⚠️ NICHO SEM ACERVO RENDERIZA CARROSSEL SEM FUNDO, E EM SILÊNCIO (25/08).
+    # `fundo_do_nicho()` devolve "" quando a pasta do nicho está vazia — não
+    # levanta nada. As composições que pedem foto ficam com o buraco, e o
+    # carrossel vai ao ar feio em vez de não ir.
+    #
+    # Isso importa AGORA porque a @topshoppet_ vai estrear no carrossel, e a
+    # biblioteca de pet ainda não foi gerada. A primeira aparição de uma conta
+    # com slides quebrados é pior que a conta continuar parada mais uns dias.
+    #
+    # ⚠️ A imagem SOB MEDIDA (`fundos/NN.png` na pasta do plano) conta como
+    # acervo: o `_imagem_propria()` tem prioridade máxima no render, então um
+    # plano que traz as próprias imagens não depende da biblioteca do nicho.
+    try:
+        import fundo_ia as FI
+        tem_acervo = bool(FI.existentes(nicho))
+    except Exception:
+        tem_acervo = True          # na dúvida não bloqueia a esteira que já roda
+    proprias = (pasta / "fundos")
+    if not tem_acervo and not (proprias.is_dir() and any(proprias.iterdir())):
+        log.warning(f"   ⏭️  {nicho}: sem NENHUM fundo — nem biblioteca em "
+                    f"fundos/{nicho}/ nem imagens próprias em {proprias.name}/. "
+                    f"Não publico slides sem fundo; gere a biblioteca do nicho "
+                    f"antes de ligar o carrossel dele.")
+        return {"ok": False, "motivo": "sem_fundo"}
+
     if plano is None:
         try:
             import carrossel_brain as CB
