@@ -1123,6 +1123,46 @@ def aplicar_lotes(arquivo) -> int:
     return 0 if total else 1
 
 
+def _nichos_conhecidos() -> set:
+    """Os nichos que o sistema realmente atende — do contas.json, mais 'geral'.
+
+    Lê do contas.json em vez de manter uma lista aqui porque a lista aqui
+    envelheceria: pet e moda existiram semanas no contas.json antes de qualquer
+    outro arquivo saber deles."""
+    # ⚠️ UNIÃO, não substituição. Se o contas.json estiver ilegível — ou se o
+    # Dre estiver montando a biblioteca de um nicho ANTES de criar a conta,
+    # que é a ordem natural — recusar um nicho válido bloquearia uma
+    # importação boa. Errar pro lado de aceitar aqui custa uma pasta a mais;
+    # errar pro lado de recusar custa a importação que ele veio fazer.
+    nichos = {"geral", "beleza", "tech", "casa", "pet", "moda"}
+    try:
+        c = json.loads((BASE_DIR / "contas.json").read_text(encoding="utf-8"))
+        for chave, conta in c.items():
+            if isinstance(conta, dict):
+                nichos.add((conta.get("nicho") or "geral") if chave == "_default"
+                           else chave.lower())
+    except Exception:
+        pass
+    return nichos
+
+
+def _nicho_da_pasta(nome: str) -> str:
+    """'fundos-casa' → 'casa'. Nome desconhecido → "" (e quem chama recusa).
+
+    ⚠️ O `--arvore` pegava `nicho_dir.name.lower()` CRU, e em 25/08 o Dre rodou
+    `--arvore ~/fundos-chatgpt` numa árvore cujas pastas se chamam
+    `fundos-casa`, `fundos-tech`… Resultado: nasceu um acervo em
+    `fundos/fundos-casa/` com 10 imagens que NENHUM carrossel jamais leria,
+    porque o nicho se chama `casa`. E o comando disse "✅ 10 imagem(ns)
+    importada(s)" — sucesso completo, efeito zero.
+
+    📌 Importar pra um nome que não existe é o pior tipo de falha: ela se
+    parece com sucesso e só aparece semanas depois, como "por que esse nicho
+    não tem fundo?". Por isso aqui o desconhecido é RECUSADO, não criado."""
+    n = re.sub(r"^fundos?[-_]", "", str(nome or "").strip().lower())
+    return n if n in _nichos_conhecidos() else ""
+
+
 def importar_arvore(raiz) -> int:
     """Importa `<raiz>/<nicho>/<formato>/*` de uma vez só.
 
@@ -1135,9 +1175,16 @@ def importar_arvore(raiz) -> int:
     if not raiz.is_dir():
         print(f"❌ não achei a pasta {raiz}")
         return 1
-    total, vazias = 0, []
+    total, vazias, recusadas = 0, [], []
     for nicho_dir in sorted(d for d in raiz.iterdir() if d.is_dir()):
-        nicho = nicho_dir.name.lower()
+        nicho = _nicho_da_pasta(nicho_dir.name)
+        if not nicho:
+            recusadas.append(nicho_dir.name)
+            continue
+        if nicho != nicho_dir.name.lower():
+            # o mapeamento tem que APARECER: importação silenciosa pra outro
+            # nome é como o defeito nasceu.
+            print(f"\n📂 {nicho_dir.name}  →  nicho '{nicho}'")
         subs = sorted(d for d in nicho_dir.iterdir() if d.is_dir())
         soltas = [a for a in nicho_dir.iterdir()
                   if a.is_file() and a.suffix.lower() in EXTENSOES]
@@ -1153,6 +1200,13 @@ def importar_arvore(raiz) -> int:
             print(f"\n📂 {nicho}/{sub.name}  →  {_canon(sub.name)}")
             total += importar(nicho, [sub], sub.name)
     print(f"\n{'✅' if total else '⚠️ '} {total} imagem(ns) importada(s).")
+    if recusadas:
+        print(f"\n❌ {len(recusadas)} pasta(s) IGNORADA(S) — o nome não "
+              f"corresponde a nenhum nicho: {', '.join(recusadas[:8])}"
+              f"{'…' if len(recusadas) > 8 else ''}")
+        print(f"   nichos válidos: {', '.join(sorted(_nichos_conhecidos()))}")
+        print(f"   (renomeie a pasta, ou use "
+              f"`--importar <nicho> --de <pasta> --formato <formato>`)")
     if vazias:
         # não é erro: pasta vazia é formato que ainda não foi gerado. Mas
         # precisa aparecer, senão some no meio de 60 linhas de sucesso.
