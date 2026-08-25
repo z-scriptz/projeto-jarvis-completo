@@ -863,9 +863,15 @@ def lotes(pasta, tamanho: int = 10, saida=None) -> int:
                       "arquivos": [str(a) for a in bloco]}
         _folha(bloco, saida / f"{nome}.jpg",
                f"{nome}  -  {len(bloco)} imagens  -  "
-               f"{time.strftime('%d/%m %H:%M', time.localtime(bloco[0].stat().st_mtime))}")
+               f"{time.strftime('%d/%m %H:%M', time.localtime(_quando_baixou(bloco[0])))}")
+        # ⚠️ MESMA FONTE DE HORA QUE O AGRUPAMENTO. Na 1ª rodada o corte já
+        # usava a hora do NOME e o display ainda lia `mtime`: as 27 folhas
+        # saíram todas com "17:51–17:55", que é a hora do `scp`. O agrupamento
+        # estava CERTO e o relatório dizia o contrário — eu mesmo desconfiei do
+        # próprio código olhando aquilo. Diagnóstico que mente é pior que
+        # diagnóstico nenhum, e esta é a terceira vez que anoto isso.
         print(f"  🗂️  {nome}.jpg   "
-              f"{time.strftime('%d/%m %H:%M', time.localtime(bloco[0].stat().st_mtime))}"
+              f"{time.strftime('%d/%m %H:%M', time.localtime(_quando_baixou(bloco[0])))}"
               f"  ({len(bloco)})")
 
     arq = saida / "lotes.json"
