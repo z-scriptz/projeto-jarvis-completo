@@ -6910,6 +6910,69 @@ tem que ser rodada contra dado real antes de virar fonte de verdade.
 ⚠️ O `contas.json` do repo tem 4 contas (`geral`, `beleza`, `tech`, `casa`) — o
 da VPS tem 6. **O diagnóstico só vale rodado na VPS.**
 
+### 🐾 A CAUSA DO PET, no fim: não há de onde tirar vídeo (25/08)
+
+Quatro hipóteses minhas caíram antes desta. A resposta estava num arquivo que
+ninguém sabia que existia:
+
+    🌐 APIs: Pexels ❌ (sem PEXELS_API_KEY), Pixabay ❌ (sem PIXABAY_API_KEY)
+    📊 Score após ciclo: 0/100 (objetivo: 60)
+    Status: sem_assets → sem_assets
+
+**Como os outros nichos produzem, então?** `orchestrator.py:320`:
+
+```python
+video_ja_pronto = fonte == "hunter" and produto.get("video_path")
+```
+
+Produto vindo do **hunter já chega com vídeo**. Todo o resto depende do
+`asset_autopilot_agent` buscar B-roll de banco — e o projeto não usa banco de
+vídeo, por decisão do Dre. Os 2 produtos de pet não vêm do hunter. **Não existe
+caminho pelo qual eles possam virar vídeo.**
+
+Então a cadeia inteira estava certa e o sistema mentiu em dois pontos:
+
+**1. `❌ erro técnico — seguindo pro próximo`.** A saída da etapa ia inteira pro
+`.log` em disco e NADA dela ia pro journal. Quem investigava lia "erro técnico"
+e não tinha para onde ir.
+📌 **Erro escrito só em disco é erro invisível** — quem investiga lê o journal,
+não `outputs/<data>/run_<hora>/<slug>/tentativa_N/`.
+→ `rodar_etapa` agora despeja as últimas 12 linhas da etapa que falhou.
+
+**2. `não há produto desses nichos na fila`.** Impressa sempre que sobrava
+QUALQUER déficit, inclusive quando parte tinha acabado de ser atendida. `pet:4`
+com alvo 6 significa que **2 produtos de pet foram escolhidos** — o log dizia o
+oposto e me mandou investigar a coleta, que estava perfeita.
+📌 **Mensagem de log que descreve a causa errada é pior que log nenhum: não
+deixa a investigação em branco, manda ela pro lado oposto.**
+
+**3. E ninguém lia o próprio estado.** O `production_runner_agent` gravava
+`status="erro"` a cada falha e a seleção nunca consultava isso — os mesmos 2
+produtos impossíveis eram escolhidos ~130 vezes por dia, por semanas.
+→ `_em_quarentena()`: **cooldown de 24h, não banimento**. Falha transitória se
+cura sozinha no dia seguinte; o produto impossível queima 1 ciclo por dia em vez
+de 130. Banir de vez exigiria acertar de primeira a diferença entre "impossível"
+e "deu ruim agora", que é o que ninguém sabe no momento da falha.
+
+**Decisão do Dre:** pet volta pelo **carrossel**, que não precisa de B-roll —
+usa a biblioteca de fundos + foto do produto, ambas prontas. A fonte de vídeo
+para pet fica para depois.
+
+### ↩️ E EU TIVE QUE ESCREVER O DESFAZER (25/08)
+
+O `limpar_esteira.py` com o corte errado de 7 dias mandou **410 pastas / 5,1 GB**
+pra `fila_vencida/` — 206 já postadas (certo) e ~184 que o daemon considerava
+postáveis (erro meu). O Dre pediu a volta.
+
+`restaurar_esteira.py` devolve só o que foi levado por engano: não postado e
+dentro da validade real. O que salvou a operação: **`shutil.move` no mesmo
+filesystem é um rename, então o mtime foi preservado** — a idade de cada pacote
+continua sendo a real. Se o mtime tivesse sido reescrito, tudo voltaria "novo" e
+a validade do daemon passaria a mentir por mais 27 dias.
+
+⚠️ Ele tira o sufixo de desambiguação antes de comparar com o histórico de
+postados; sem isso um pacote postado voltaria como se nunca tivesse ido ao ar.
+
 ## 📌 Referência rápida (infra)
 
 - **VPS:** Contabo · daemon `jarvis.service` (`python -m agents.daemon_maestro`)

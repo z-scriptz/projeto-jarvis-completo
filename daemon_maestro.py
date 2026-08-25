@@ -914,6 +914,57 @@ def _priorizar_por_estoque(candidatos: list, quantidade: int, cfg: dict) -> list
     return escolhidos
 
 
+def _em_quarentena(nome: str, horas: int = 24) -> bool:
+    """O produto falhou na produção há menos de `horas`?
+
+    ⚠️ NASCEU DE UM LOOP QUE RODOU POR SEMANAS (25/08). Os 2 únicos produtos de
+    pet falhavam no autopilot (`sem_assets`: o projeto não usa banco de vídeo,
+    e eles não vêm do hunter, então não há de onde tirar B-roll). O
+    `production_runner_agent` gravava `status="erro"` no estado a cada
+    tentativa — e NINGUÉM lia isso na hora de escolher o que produzir. Então
+    eles eram escolhidos de novo a cada ciclo, ~130 vezes por dia, sempre com o
+    mesmo fim.
+
+    ⚠️ É COOLDOWN, NÃO BANIMENTO, e a diferença é o que mantém isto seguro:
+    falha transitória (API fora, timeout) se cura sozinha no dia seguinte; o
+    produto impossível de verdade queima UM ciclo por dia em vez de 130. Banir
+    para sempre exigiria acertar de primeira a diferença entre "impossível" e
+    "deu ruim agora", que é justamente o que ninguém sabe no momento da falha.
+    """
+    try:
+        from shared import production_state as _ps
+    except Exception:
+        try:
+            import production_state as _ps
+        except Exception:
+            return False        # sem estado, não filtra nada
+    try:
+        reg = _ps.obter_produto(nome) or {}
+        if reg.get("status") not in ("erro", "precisa_revisar"):
+            return False
+        quando = datetime.fromisoformat(str(reg.get("ultima_execucao") or ""))
+        return (datetime.now() - quando).total_seconds() < horas * 3600
+    except Exception:
+        return False
+
+
+def _sem_quarentena(produtos: list, cfg: dict) -> list:
+    """Tira os que falharam há pouco, e DIZ quantos tirou.
+
+    ⚠️ Filtro silencioso aqui reproduziria o problema que ele resolve: a conta
+    ficaria sem produzir e o log não contaria por quê."""
+    horas = int((cfg or {}).get("quarentena_falha_horas", 24) or 0)
+    if horas <= 0:
+        return produtos
+    passam = [p for p in produtos if not _em_quarentena(p.get("nome", ""), horas)]
+    if len(passam) < len(produtos):
+        barrados = [p.get("nome", "")[:40] for p in produtos if p not in passam]
+        log.info(f"   🚧 {len(produtos) - len(passam)} produto(s) em quarentena "
+                 f"({horas}h desde a última falha): {', '.join(barrados[:3])}"
+                 + (" …" if len(barrados) > 3 else ""))
+    return passam
+
+
 def _carregar_produtos_para_produzir(quantidade: int, cfg: dict | None = None) -> list:
     """
     Carrega produtos pra produzir, priorizando o relatório validado
@@ -936,7 +987,8 @@ def _carregar_produtos_para_produzir(quantidade: int, cfg: dict | None = None) -
                     })
             if produtos:
                 # mina_ouro já vem primeiro no relatório ordenado
-                return _priorizar_por_estoque(produtos, quantidade, cfg)
+                return _priorizar_por_estoque(_sem_quarentena(produtos, cfg),
+                                             quantidade, cfg)
         except Exception as e:
             log.warning(f"   ⚠️  erro lendo validacao_fila ({e})")
 
@@ -950,7 +1002,8 @@ def _carregar_produtos_para_produzir(quantidade: int, cfg: dict | None = None) -
                 nome = item.get("produto") if isinstance(item, dict) else item
                 if nome:
                     produtos.append({"nome": nome, "comissao_valor": 0})
-            return _priorizar_por_estoque(produtos, quantidade, cfg)
+            return _priorizar_por_estoque(_sem_quarentena(produtos, cfg),
+                                             quantidade, cfg)
         except Exception as e:
             log.warning(f"   ⚠️  erro lendo produtos_fila ({e})")
 
