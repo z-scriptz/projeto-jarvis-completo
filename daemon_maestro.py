@@ -891,8 +891,24 @@ def _priorizar_por_estoque(candidatos: list, quantidade: int, cfg: dict) -> list
 
     faltando = ", ".join(f"{n}:{q}" for n, q in sorted(falta.items()) if q > 0)
     if faltando:
-        log.info(f"   🔎 ainda faltam pacotes ({faltando}) mas não há produto "
-                 "desses nichos na fila — produzindo o que dá")
+        # ⚠️ ESTA FRASE MENTIU E CUSTOU UMA INVESTIGAÇÃO INTEIRA (25/08). Ela
+        # dizia "não há produto desses nichos na fila" sempre que sobrava
+        # QUALQUER déficit — inclusive quando parte dele tinha acabado de ser
+        # atendida. O log repetiu por semanas "não há produto de pet na fila"
+        # enquanto os 2 produtos de pet eram escolhidos a cada ciclo e falhavam
+        # na produção. Quem lesse o log procuraria o defeito na COLETA, que
+        # estava perfeita, em vez de na esteira.
+        #
+        # 📌 Mensagem de log que descreve a causa ERRADA é pior que log nenhum:
+        # ela não deixa a investigação em branco, ela a manda pro lado oposto.
+        quantos = len(escolhidos)
+        log.info(f"   🔎 déficit não coberto ({faltando}) — "
+                 + (f"escolhi {quantos} produto(s) neste ciclo, mas não há "
+                    f"produto suficiente desses nichos na fila"
+                    if quantos else
+                    "nenhum produto desses nichos na fila")
+                 + ". ⚠️ déficit que não cai entre ciclos é sinal de produto "
+                   "escolhido que FALHA na produção, não de fila vazia")
     if adiados:
         log.info(f"   ⏭️  {adiados} produto(s) adiado(s): a conta deles já está no alvo")
     return escolhidos

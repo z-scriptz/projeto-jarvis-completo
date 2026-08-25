@@ -118,6 +118,27 @@ def rodar_etapa(nome: str, modulo: str, args: list, timeout: int,
             status = "falha"
         log.info(f"         {_icone(status)} {nome}: {status} "
                  f"(exit {exit_code}, {dur:.0f}s)")
+        if status == "falha":
+            # ⚠️ O ERRO ESTAVA SENDO ENGOLIDO, e isso custou semanas (25/08).
+            # A saída da etapa ia inteira pro .log em disco e NADA dela ia pro
+            # journal. O daemon anunciava "❌ erro técnico — seguindo pro
+            # próximo" e seguia. Resultado: a @topshoppet_ tentou produzir os
+            # mesmos 2 produtos a cada 11 minutos por semanas, falhou sempre, e
+            # nenhuma ferramenta conseguia dizer POR QUÊ — o vigia via conta
+            # parada, a produção via déficit, e a causa estava num arquivo que
+            # ninguém sabia que existia.
+            #
+            # 📌 Erro escrito só em disco é erro invisível: quem investiga lê o
+            # journal, não `outputs/<data>/run_<hora>/<slug>/tentativa_N/`.
+            cauda = [l for l in (proc.stdout or "").splitlines() if l.strip()][-12:]
+            if cauda:
+                log.warning(f"         ↳ últimas linhas de {nome} "
+                            f"(log completo: {log_file}):")
+                for linha in cauda:
+                    log.warning(f"           │ {linha[:200]}")
+            else:
+                log.warning(f"         ↳ {nome} não imprimiu nada — "
+                            f"exit {exit_code} sem saída ({log_file})")
         return {"etapa": nome, "exit_code": exit_code, "status": status,
                 "duracao_seg": round(dur, 1), "log": str(log_file)}
 
