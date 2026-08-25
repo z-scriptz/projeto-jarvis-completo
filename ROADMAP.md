@@ -6814,6 +6814,55 @@ vazia. E o comentário do próprio `_prontos_nao_postados` raciocina com validad
 candidato no `validacao_fila.json` (não no produtos_fila)? Quantos pacotes estão
 vivos de verdade? A validade é 7 escolhido ou 7 por omissão?
 
+### 🚨 A VALIDADE É 27 — e meu "7 por omissão" quase custou 184 pacotes (25/08)
+
+Resposta da pergunta acima, vinda do log do daemon: **nenhuma das duas.**
+
+    🗑️  8 pacote(s) além de 27 dias → fila_vencida/
+
+`DEFAULTS["fila_validade_dias"] = 27`, e `carregar_config()` **mescla o arquivo
+por cima do DEFAULTS**. Eu lia o `agendador_config.json` cru, não achava a
+chave, e aplicava um default meu de 7.
+
+📌 **Ler o JSON cru é ler metade da config.** A maioria das chaves nunca é
+escrita no arquivo — vive só no `DEFAULTS`. Quem lê o arquivo e aplica um
+default próprio descreve uma configuração que não existe em lugar nenhum.
+
+📌 **Default inventado é pior que default ausente.** O ausente dá erro; o
+inventado dá um número plausível e errado. E aqui o número plausível
+**autorizava uma operação irreversível**: o `limpar_esteira --aplicar` com corte
+de 7 teria tirado da esteira **184 pacotes que o daemon considera postáveis**.
+
+**Três coisas que eu afirmei e estavam erradas:**
+
+| eu disse | verdade |
+|---|---|
+| "esteira 90% morta, 43 vivos de 433" | ~220 vivos; o corte de 7 é que matava no papel |
+| "o expurgo do daemon não está rodando" | está — o log mostra ele movendo por 27d |
+| "184 pacotes de produção desperdiçada" | são vivos; o desperdício real é bem menor |
+
+**O que sobrou de achado verdadeiro, e não é pouco:** **206 pacotes JÁ POSTADOS
+continuam na esteira.** O `_expurgar_vencidos()` filtra por **idade**, não por
+já ter cumprido a função — então o pacote postado só sai quando envelhece 27
+dias. Metade da esteira é material que já foi ao ar.
+
+**O `limpar_esteira.py` foi refeito em cima disso.** Agora são **quatro montes**,
+não dois, porque as razões pedem conversas diferentes:
+
+- **postado** — lixo natural, e o buraco que ninguém tapava
+- **vencido** — passou dos 27d sem ir ao ar; é a produção desperdiçada de verdade
+- **editorial** — VIVO pro daemon, mas além do corte que o Dre pedir (`--dias`)
+- **vivo** — fica
+
+⚠️ O corte editorial é **opt-in via `--dias`, nunca herdado de default**. Tirar
+material que o daemon ainda considera bom é decisão de conteúdo, não manutenção
+— e foi assumindo um default meu que eu quase apresentei 184 pacotes vivos como
+lixo, com o Dre prestes a confirmar achando que confirmava um diagnóstico.
+
+E as duas ferramentas agora leem a validade de `daemon_maestro._validade_dias()`.
+Se não conseguirem importar o daemon, **param e dizem** — não chutam um corte
+para mover pasta de produção.
+
 **A armadilha estrutural, que é o que importa aqui:** `"ativa": false` é
 INVISÍVEL em toda ferramenta que não seja o daemon. Varri o repo inteiro: o
 campo tem **um único leitor em produção**, o `_nichos_das_contas()`. O vigia lê

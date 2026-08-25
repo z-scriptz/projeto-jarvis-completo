@@ -66,6 +66,41 @@ def _json(caminho: Path, padrao):
         return padrao
 
 
+def config_real() -> dict:
+    """A config EFETIVA — a mesma que o daemon usa.
+
+    ⚠️ LER O JSON CRU É LER METADE DA CONFIG. `carregar_config()` mescla o
+    arquivo por cima de `DEFAULTS`, e a maioria das chaves nunca é escrita no
+    arquivo: vive só no DEFAULTS. Quem lê o arquivo e aplica um default próprio
+    inventa uma configuração que não existe em lugar nenhum.
+
+    ⚠️ E FOI EXATAMENTE O QUE EU FIZ (25/08). Li o arquivo, não achei
+    `fila_validade_dias`, e apliquei 7 — enquanto `DEFAULTS` diz **27**. Meu
+    relatório passou a chamar de "morto" todo pacote entre 7 e 27 dias: 184
+    pacotes que o daemon considera perfeitamente vivos. O log do daemon é que
+    entregou o erro, dizendo `8 pacote(s) além de 27 dias → fila_vencida/`.
+
+    📌 Default inventado é pior que default ausente: o ausente dá erro, o
+    inventado dá um número plausível e errado."""
+    for mod in ("agents.daemon_maestro", "daemon_maestro"):
+        try:
+            import importlib
+            dm = importlib.import_module(mod)
+            cfg = dict(dm.carregar_config())
+            cfg["_fonte"] = f"{mod}.carregar_config() (DEFAULTS + arquivo)"
+            return cfg
+        except Exception:
+            continue
+    # ⚠️ Sem o daemon eu NÃO invento default. Devolvo só o arquivo e digo que
+    # está incompleto — número faltando é visível, número errado não é.
+    cfg = _json(CONFIG, {}) or {}
+    if cfg:
+        cfg["_fonte"] = ("⚠️ SÓ O ARQUIVO — não importei o daemon_maestro, "
+                         "então as chaves que vivem no DEFAULTS aparecem "
+                         "zeradas. Rode na VPS.")
+    return cfg
+
+
 def _contas() -> dict:
     return _json(BASE / "contas.json", {}) or {}
 
@@ -140,21 +175,16 @@ def _modo_postagem() -> dict:
     reservada. Com a esteira funda, a conta de estoque pequeno simplesmente
     nunca chega na frente da fila. Não é erro de config nem token vencido: é a
     fila comendo o slot."""
-    cfg = _json(CONFIG, {}) or {}
+    cfg = config_real()
     return {
         "por_conta": bool(cfg.get("post_por_conta")),
         "teto": cfg.get("posts_por_dia_semana")
                 or cfg.get("max_posts_por_conta_dia", 3),
-        "validade": int(cfg.get("fila_validade_dias", 7) or 0),
-        # ⚠️ "7" pode ser o valor escolhido OU o default de quem nunca escreveu
-        # a chave, e a diferença importa: o comentário do _prontos_nao_postados
-        # raciocina com validade 27. Imprimir só o número deixa quem lê achando
-        # que alguém decidiu 7. É o mesmo erro do 'geral': valor igual ao
-        # default não é leitura, é silêncio disfarçado de resposta.
-        "validade_explicita": "fila_validade_dias" in cfg,
-        "alvo_dias": int(cfg.get("estoque_alvo_dias", 3) or 0),
+        "validade": int(cfg.get("fila_validade_dias", 0) or 0),
+        "alvo_dias": int(cfg.get("estoque_alvo_dias", 0) or 0),
         "piso": int(cfg.get("producao_minima_por_conta", 0) or 0),
-        "achou": CONFIG.exists(),
+        "achou": bool(cfg),
+        "fonte": cfg.get("_fonte", "?"),
     }
 
 
@@ -349,12 +379,11 @@ def olhar(so_esta: str = "") -> int:
         print("   ⚠️  agendador_config.json não encontrado — modo de postagem "
               "desconhecido (rode na VPS).")
     else:
-        val = f"{modo['validade']}d" + ("" if modo["validade_explicita"]
-                                        else " (DEFAULT, chave ausente)")
         print(f"   postagem: {'1 POR CONTA por slot (balanceado)' if modo['por_conta'] else '❌ 1 POR SLOT no total (clássico) — sem vaga reservada por conta'}"
               f"  ·  teto {modo['teto']}")
-        print(f"   esteira:  validade {val}  ·  colchão {modo['alvo_dias']}d"
-              f"  ·  piso {modo['piso']}/dia")
+        print(f"   esteira:  validade {modo['validade']}d  ·  colchão "
+              f"{modo['alvo_dias']}d  ·  piso {modo['piso']}/dia")
+        print(f"   config:   {modo['fonte']}")
         print(f"   fila:     {fonte_fila}")
     print()
     print(f"   {'nicho':<8} {'handle':<20} {'ativa':<7} {'fila':>5} "
@@ -454,17 +483,12 @@ def olhar(so_esta: str = "") -> int:
               f"{tp - tv} morto(s) ({(tp - tv) * 100 // max(tp, 1)}%)")
         if tp - tv > tv:
             problemas.append(
-                f"esteira: {tp - tv} de {tp} pacotes estão MORTOS (postados ou "
-                f"vencidos) e continuam ocupando disco. A validade em vigor é "
-                f"{modo['validade']}d"
-                + ("" if modo["validade_explicita"] else
-                   " — e é o DEFAULT, ninguém escreveu `fila_validade_dias`. O "
-                   "comentário do próprio `_prontos_nao_postados` raciocina com "
-                   "27. Se 7 não foi uma escolha, a esteira está vencendo cerca "
-                   "de quatro vezes mais rápido do que o projeto supunha")
-                + f". Com a esteira nesse tamanho e o ritmo real de postagem, o "
-                f"pacote vence antes de chegar a vez dele — produzir mais não "
-                f"resolve, só aumenta a pilha que vai vencer.")
+                f"esteira: {tp - tv} de {tp} pacotes estão MORTOS (já postados "
+                f"ou além dos {modo['validade']}d de validade) e continuam "
+                f"ocupando disco. Pacote POSTADO nunca é limpo por ninguém: o "
+                f"`_expurgar_vencidos()` filtra por idade, não por já ter "
+                f"cumprido a função, então ele só sai quando envelhece. "
+                f"Use o `limpar_esteira.py`.")
 
     prod, real, divs = _rota_da_producao()
     if divs:
