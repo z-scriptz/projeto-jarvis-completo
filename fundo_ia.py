@@ -1221,15 +1221,43 @@ def rotular(arquivo, nicho: str, espec: str) -> int:
         return 1
 
     grupos = [g.strip() for g in espec.split(",") if g.strip()]
-    if len(grupos) != len(FORMATOS_BIBLIOTECA):
+
+    # ⚠️ DOIS MODOS, E O EXPLÍCITO EXISTE PORQUE O POSICIONAL NÃO BASTOU (26/08).
+    # O posicional assume que cada formato virou um lote — verdade em tech, casa
+    # e beleza. Mas em moda o `lote-43` tem 2 imagens e o `lote-48` tem 6: as
+    # gerações não saíram todas com 10, e o agrupamento por tempo não tem como
+    # saber onde um formato acaba. Forçar o ciclo ali desloca TODOS os formatos
+    # seguintes em um, e o erro só apareceria no carrossel semanas depois.
+    #
+    # Com `formato=lotes` quem sabe informa, e o programa não adivinha nada.
+    explicito = any("=" in g for g in grupos)
+    if explicito:
+        pares = []
+        for g in grupos:
+            if "=" not in g:
+                print(f"❌ '{g}' não tem '='. Misturar os dois modos daria um "
+                      f"resultado que parece certo e não é — ou TODOS os grupos "
+                      f"são `formato=lotes`, ou nenhum é.")
+                return 1
+            fmt, lotes_do = g.split("=", 1)
+            fmt = _canon(fmt.strip())
+            if fmt not in [_canon(f) for f in FORMATOS_BIBLIOTECA]:
+                print(f"❌ formato '{fmt}' não existe.\n"
+                      f"   válidos: {', '.join(FORMATOS_BIBLIOTECA)}")
+                return 1
+            pares.append((fmt, lotes_do.strip()))
+    elif len(grupos) != len(FORMATOS_BIBLIOTECA):
         print(f"⚠️  você deu {len(grupos)} grupo(s) e existem "
               f"{len(FORMATOS_BIBLIOTECA)} formatos.\n"
               f"   ordem: {', '.join(FORMATOS_BIBLIOTECA)}\n"
-              f"   use `+` pra juntar lotes partidos: 38+39")
+              f"   use `+` pra juntar lotes partidos: 38+39\n"
+              f"   ou diga formato por formato: erros=41 curiosidade=42+43 …")
         return 1
+    else:
+        pares = list(zip(FORMATOS_BIBLIOTECA, grupos))
 
     faltando, escritos = [], 0
-    for formato, grupo in zip(FORMATOS_BIBLIOTECA, grupos):
+    for formato, grupo in pares:
         for parte in grupo.split("+"):
             nome = f"lote-{int(parte.strip()):02d}"
             if nome not in mapa:
