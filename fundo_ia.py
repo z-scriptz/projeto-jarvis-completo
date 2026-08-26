@@ -1197,6 +1197,60 @@ def casar_lotes(arquivo, limiar: int = 8) -> int:
     return 0
 
 
+def rotular(arquivo, nicho: str, espec: str) -> int:
+    """Rotula um nicho inteiro numa linha: `--rotular beleza 29,30,...,38+39`.
+
+    ⚠️ POR QUE ISTO É SEGURO AGORA E NÃO ERA ANTES (26/08): o `--casar-lotes`
+    reconstruiu tech e casa a partir do acervo e mostrou a ordem em que os
+    formatos foram gerados — e ela é EXATAMENTE a `FORMATOS_BIBLIOTECA`, nos
+    dois nichos. Não é palpite sobre o hábito do Dre: são 20 lotes de evidência.
+
+    ⚠️ O `+` EXISTE PORQUE O AGRUPAMENTO PARTE GERAÇÕES. O corte dos lotes é
+    por buraco de tempo, então uma geração lenta vira dois blocos (`lote-38` com
+    5 e `lote-39` com 5). Sem uma forma de dizer "estes dois são o mesmo
+    formato", a contagem desanda do ponto do corte em diante e TODOS os
+    formatos seguintes saem deslocados em um — o tipo de erro que só aparece
+    no carrossel, semanas depois, como "por que o fundo não combina?".
+
+    Escreve no lotes.json; quem confere é o `--aplicar-lotes` depois."""
+    arq = Path(arquivo).expanduser()
+    try:
+        mapa = json.loads(arq.read_text(encoding="utf-8"))
+    except Exception as e:
+        print(f"❌ não li {arq}: {e}")
+        return 1
+
+    grupos = [g.strip() for g in espec.split(",") if g.strip()]
+    if len(grupos) != len(FORMATOS_BIBLIOTECA):
+        print(f"⚠️  você deu {len(grupos)} grupo(s) e existem "
+              f"{len(FORMATOS_BIBLIOTECA)} formatos.\n"
+              f"   ordem: {', '.join(FORMATOS_BIBLIOTECA)}\n"
+              f"   use `+` pra juntar lotes partidos: 38+39")
+        return 1
+
+    faltando, escritos = [], 0
+    for formato, grupo in zip(FORMATOS_BIBLIOTECA, grupos):
+        for parte in grupo.split("+"):
+            nome = f"lote-{int(parte.strip()):02d}"
+            if nome not in mapa:
+                faltando.append(nome)
+                continue
+            mapa[nome]["nicho"] = nicho
+            mapa[nome]["formato"] = formato
+            escritos += 1
+            print(f"   {nome}  →  {nicho}/{formato}")
+
+    if faltando:
+        print(f"\n❌ não existem no arquivo: {', '.join(faltando)} — "
+              f"nada foi gravado.")
+        return 1
+
+    arq.write_text(json.dumps(mapa, ensure_ascii=False, indent=2),
+                   encoding="utf-8")
+    print(f"\n✅ {escritos} lote(s) rotulado(s) como '{nicho}'.")
+    return 0
+
+
 def aplicar_lotes(arquivo) -> int:
     """Lê o `lotes.json` já rotulado e importa cada bloco pro lugar certo."""
     arq = Path(arquivo).expanduser()
@@ -1544,6 +1598,10 @@ def main() -> int:
                    help="com --indexar, para depois de N imagens")
     p.add_argument("--buscar", nargs=2, metavar=("NICHO", "ASSUNTO"),
                    help="mostra qual imagem o índice escolheria")
+    p.add_argument("--rotular", nargs=3, dest="rotular",
+                   metavar=("JSON", "NICHO", "LOTES"),
+                   help="rotula um nicho inteiro: --rotular lotes.json beleza "
+                        "29,30,31,32,33,34,35,36,37,38+39")
     p.add_argument("--casar-lotes", metavar="ARQUIVO", dest="casar_lotes",
                    help="preenche nicho/formato dos lotes que já estão no acervo")
     p.add_argument("--lotes", metavar="PASTA",
@@ -1582,6 +1640,8 @@ def main() -> int:
     if a.lotes:
         return lotes(a.lotes, a.tamanho)
 
+    if a.rotular:
+        return rotular(*a.rotular)
     if a.casar_lotes:
         return casar_lotes(a.casar_lotes)
     if a.aplicar_lotes:
