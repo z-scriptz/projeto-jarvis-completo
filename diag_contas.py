@@ -501,17 +501,16 @@ def olhar(so_esta: str = "") -> int:
         print(f"      nome real:   "
               + ", ".join(f"{k}={v}" for k, v in sorted(real.items())))
         problemas.append(
-            f"roteamento: {len(divs)} produto(s) são COBRADOS de uma conta e "
-            f"ENTREGUES em outra. Quem escolhe o que produzir lê o campo "
-            f"`produto`, o termo de busca genérico "
-            f"(`_carregar_produtos_para_produzir` monta {{'nome': p['produto']}}); "
-            f"quem monta o pacote lê `campeao`, o nome real. Então "
-            f"`_priorizar_por_estoque` desconta o déficit da conta A — 'já "
-            f"produzi pra ela' — e o `conta.json` do pacote sai com a conta B. "
-            f"A conta A nunca enche, a conta B recebe pacote que não pediu, e "
-            f"as duas parecem estar funcionando. É o candidato número 1 pra "
-            f"explicar por que o `geral` acumula pacote sem ter produto na "
-            f"fila: ele é o destino de quem perdeu o nicho no caminho.")
+            f"roteamento: {len(divs)} produto(s) recebem nicho DIFERENTE "
+            f"conforme o campo lido. A escolha do que produzir lê `produto`, o "
+            f"termo de busca genérico (`_carregar_produtos_para_produzir` monta "
+            f"{{'nome': p['produto']}}); o hunter, que grava o `conta.json` do "
+            f"pacote, lê `campeao.get('nome')`, o nome real. "
+            f"⚠️ ISTO É UMA MEDIÇÃO, NÃO UM DIAGNÓSTICO FECHADO: os dois campos "
+            f"divergem, mas não está verificado que o MESMO produto percorre os "
+            f"dois caminhos — o hunter descobre produto por conta própria, e a "
+            f"fila validada é outra entrada. Antes de 'consertar', trace um "
+            f"produto específico da fila até o `conta.json` do pacote dele.")
 
     if orfaos and not so_esta:
         velho = max(i for i, _ in orfaos)

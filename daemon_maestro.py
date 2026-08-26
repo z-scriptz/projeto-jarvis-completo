@@ -948,6 +948,9 @@ def _em_quarentena(nome: str, horas: int = 24) -> bool:
         return False
 
 
+_ULTIMA_QUARENTENA = None       # assinatura do último aviso impresso
+
+
 def _sem_quarentena(produtos: list, cfg: dict) -> list:
     """Tira os que falharam há pouco, e DIZ quantos tirou.
 
@@ -959,9 +962,18 @@ def _sem_quarentena(produtos: list, cfg: dict) -> list:
     passam = [p for p in produtos if not _em_quarentena(p.get("nome", ""), horas)]
     if len(passam) < len(produtos):
         barrados = [p.get("nome", "")[:40] for p in produtos if p not in passam]
-        log.info(f"   🚧 {len(produtos) - len(passam)} produto(s) em quarentena "
-                 f"({horas}h desde a última falha): {', '.join(barrados[:3])}"
-                 + (" …" if len(barrados) > 3 else ""))
+        # ⚠️ SÓ FALA QUANDO MUDA. Esta função é chamada a cada volta do daemon, e
+        # a primeira versão despejava a mesma linha de 53 produtos a cada 60
+        # segundos — 1440 linhas/dia de um fato que não mudou. Log repetido não
+        # informa: ele afoga o que é novo, que é exatamente o que eu precisei
+        # garimpar ontem pra achar a causa do pet.
+        global _ULTIMA_QUARENTENA
+        assinatura = (len(barrados), tuple(sorted(barrados)[:5]))
+        if assinatura != _ULTIMA_QUARENTENA:
+            _ULTIMA_QUARENTENA = assinatura
+            log.info(f"   🚧 {len(barrados)} produto(s) em quarentena "
+                     f"({horas}h desde a última falha): {', '.join(barrados[:3])}"
+                     + (" …" if len(barrados) > 3 else ""))
     return passam
 
 
