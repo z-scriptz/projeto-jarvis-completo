@@ -1091,6 +1091,112 @@ def _folha(fotos: list, alvo: Path, titulo: str) -> None:
     folha.save(alvo, "JPEG", quality=82, optimize=True)
 
 
+def _dhash(caminho) -> int:
+    """Assinatura de CONTEÚDO, resistente à conversão pra JPEG.
+
+    ⚠️ O `_digestao()` (sha1 dos bytes) não serve aqui, e a razão é o próprio
+    import: ele converte PNG→JPEG q88 e redimensiona. Os bytes mudam, a imagem
+    não. Comparar bytes diria "nenhuma destas 516 já está no acervo" com 226
+    delas lá dentro.
+
+    dHash: reduz a 9x8 em cinza e guarda se cada pixel é mais claro que o
+    vizinho da direita — 64 bits que sobrevivem a compressão e reescala."""
+    from PIL import Image
+    img = Image.open(caminho).convert("L").resize((9, 8), Image.LANCZOS)
+    px = img.tobytes()          # 'L' → 1 byte por pixel, em linha
+    bits = 0
+    for linha in range(8):
+        base = linha * 9
+        for col in range(8):
+            bits = (bits << 1) | (1 if px[base + col] > px[base + col + 1] else 0)
+    return bits
+
+
+def casar_lotes(arquivo, limiar: int = 8) -> int:
+    """Preenche `nicho`/`formato` dos lotes que JÁ estão no acervo.
+
+    ⚠️ POR QUE ISTO PAGA O PRÓPRIO CUSTO (25/08): o Dre subiu 516 imagens
+    soltas e o `--lotes` fez 55 blocos pra rotular na mão. Só que casa e tech
+    JÁ tinham sido importados e organizados por formato — 226 daquelas imagens
+    já têm nicho e formato decididos, guardados na estrutura de pastas do
+    acervo. Rotular de novo à mão seria redigitar informação que o disco tem.
+
+    E o que sobra vale mais que o tempo economizado: sabendo que lote-22 é
+    `casa/erros` e lote-23 é `casa/lista`, aparece a ORDEM em que o ChatGPT
+    gerou os formatos — e essa ordem se repete nos nichos que ainda faltam
+    rotular. Vira conferência, não adivinhação.
+
+    Só preenche o que ficou acima do limiar de confiança; o resto continua em
+    branco, porque um palpite silencioso aqui manda uma foto de cozinha pro
+    acervo de beleza e ninguém descobre até o carrossel sair."""
+    arq = Path(arquivo).expanduser()
+    try:
+        mapa = json.loads(arq.read_text(encoding="utf-8"))
+    except Exception as e:
+        print(f"❌ não li {arq}: {e}")
+        return 1
+
+    print("🔎 lendo o acervo já organizado…")
+    acervo = []          # (hash, nicho, formato)
+    for nicho_dir in sorted(d for d in FUNDOS.iterdir() if d.is_dir()):
+        for img in nicho_dir.rglob("*"):
+            if not (img.is_file() and img.suffix.lower() in EXTENSOES):
+                continue
+            fmt = img.parent.name if img.parent != nicho_dir else ""
+            try:
+                acervo.append((_dhash(img), nicho_dir.name, fmt))
+            except Exception:
+                continue
+    if not acervo:
+        print("⚠️  acervo vazio — nada com que casar.")
+        return 1
+    print(f"   {len(acervo)} imagem(ns) no acervo\n")
+
+    casados, restantes = 0, []
+    for nome in sorted(mapa):
+        info = mapa[nome]
+        if info.get("nicho"):
+            continue                       # já rotulado à mão: não mexo
+        votos = {}
+        arquivos = info.get("arquivos") or []
+        for caminho in arquivos:
+            try:
+                h = _dhash(caminho)
+            except Exception:
+                continue
+            melhor, dist = None, 65
+            for ha, n, f in acervo:
+                d = bin(h ^ ha).count("1")
+                if d < dist:
+                    melhor, dist = (n, f), d
+            if melhor and dist <= limiar:
+                votos[melhor] = votos.get(melhor, 0) + 1
+        if not votos:
+            restantes.append(nome)
+            continue
+        (n, f), quantos = max(votos.items(), key=lambda kv: kv[1])
+        # maioria simples do lote, não da imagem: bloco de 10 é homogêneo por
+        # construção (foi UMA geração), então voto isolado é ruído.
+        if quantos * 2 > len(arquivos):
+            info["nicho"], info["formato"] = n, f
+            info["_ja_no_acervo"] = f"{quantos}/{len(arquivos)}"
+            casados += 1
+            print(f"   ✅ {nome}  →  {n}/{f or '(raiz)'}   "
+                  f"({quantos}/{len(arquivos)} já no acervo)")
+        else:
+            restantes.append(nome)
+
+    arq.write_text(json.dumps(mapa, ensure_ascii=False, indent=2),
+                   encoding="utf-8")
+    print(f"\n✅ {casados} lote(s) preenchido(s) automaticamente.")
+    if restantes:
+        print(f"⬜ {len(restantes)} lote(s) ainda pra rotular à mão: "
+              f"{', '.join(restantes[:10])}{'…' if len(restantes) > 10 else ''}")
+    print(f"\n   ⚠️  CONFIRA o {arq.name} antes de aplicar — o casamento é por "
+          f"semelhança, não por identidade.")
+    return 0
+
+
 def aplicar_lotes(arquivo) -> int:
     """Lê o `lotes.json` já rotulado e importa cada bloco pro lugar certo."""
     arq = Path(arquivo).expanduser()
@@ -1438,6 +1544,8 @@ def main() -> int:
                    help="com --indexar, para depois de N imagens")
     p.add_argument("--buscar", nargs=2, metavar=("NICHO", "ASSUNTO"),
                    help="mostra qual imagem o índice escolheria")
+    p.add_argument("--casar-lotes", metavar="ARQUIVO", dest="casar_lotes",
+                   help="preenche nicho/formato dos lotes que já estão no acervo")
     p.add_argument("--lotes", metavar="PASTA",
                    help="reconstrói os blocos de download pela hora do arquivo")
     p.add_argument("--tamanho", type=int, default=10,
@@ -1474,6 +1582,8 @@ def main() -> int:
     if a.lotes:
         return lotes(a.lotes, a.tamanho)
 
+    if a.casar_lotes:
+        return casar_lotes(a.casar_lotes)
     if a.aplicar_lotes:
         return aplicar_lotes(a.aplicar_lotes)
 
