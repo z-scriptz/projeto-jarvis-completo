@@ -1175,6 +1175,19 @@ def importar_arvore(raiz) -> int:
     if not raiz.is_dir():
         print(f"❌ não achei a pasta {raiz}")
         return 1
+    # ⚠️ IMAGEM SOLTA NA RAIZ DA ÁRVORE ERA IGNORADA EM SILÊNCIO. O laço abaixo
+    # só percorre DIRETÓRIOS — quem largasse os PNGs direto em `~/fundos/` via
+    # "⚠️ 0 imagem(ns) importada(s)" e nenhuma explicação. Não dá pra adivinhar
+    # o nicho de um arquivo solto (é justamente o que a pasta diz), então aqui
+    # eu não chuto: eu conto e mando usar o `--importar`, que pede o nicho.
+    soltas_raiz = [a for a in raiz.iterdir()
+                   if a.is_file() and a.suffix.lower() in EXTENSOES]
+    if soltas_raiz:
+        print(f"⚠️  {len(soltas_raiz)} imagem(ns) solta(s) na raiz de {raiz.name}/ "
+              f"— o --arvore só lê <nicho>/<formato>/, então elas ficaram de "
+              f"fora.\n   Pra essas, diga o nicho: "
+              f"`--importar <nicho> --de {raiz}` (+ `--formato <formato>`)")
+
     total, vazias, recusadas = 0, [], []
     for nicho_dir in sorted(d for d in raiz.iterdir() if d.is_dir()):
         nicho = _nicho_da_pasta(nicho_dir.name)
