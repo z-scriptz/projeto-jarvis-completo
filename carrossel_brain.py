@@ -1035,20 +1035,60 @@ def montar_plano(nicho: str, formato: str = "", fotos_em: Path = None) -> dict:
     #
     # 📌 Trabalho que o sistema não consulta é trabalho que não existe, e ele
     # não avisa: só fica pior do que poderia, em silêncio.
+    # ⚠️ E O PAPEL DO SLIDE GANHA DO FORMATO DO CARROSSEL. Um carrossel `lista`
+    # tem slides que não são lista: o resumo é um checklist, o fecho é um CTA.
+    # Puxar tudo de `lista/` deixa `checklist/` e `cta/` sem uso — que é
+    # metade da biblioteca parada. O `slides_html` já faz isso para produto e
+    # CTA (`papel="produto"`, `papel="cta"`); aqui faltava o resumo.
+    def _pasta_do_slide(s):
+        return "checklist" if s.get("tipo") == "resumo" else formato
+
     try:
-        from fundo_ia import existentes
-        acervo = [str(x) for x in existentes(nicho, formato)]
+        from fundo_ia import existentes, combinar
     except Exception:
-        acervo = []
-    if acervo:
-        random.shuffle(acervo)
-        fila = list(acervo)
+        existentes = combinar = None
+
+    if existentes:
+        usados = set()
+        caches = {}
         for s in slides:
+            # produto e CTA são resolvidos no render, que já sabe o papel deles
             if s.get("tipo") == "produto":
                 continue
-            if not fila:
-                fila = list(acervo)
-            s["fundo"] = fila.pop(0)
+            pasta = _pasta_do_slide(s)
+            if pasta not in caches:
+                caches[pasta] = [str(x) for x in existentes(nicho, pasta)]
+                random.shuffle(caches[pasta])
+            acervo = caches[pasta]
+            if not acervo:
+                continue
+
+            # ⚠️ SEMÂNTICA PRIMEIRO, SORTEIO DEPOIS — e nesta ordem porque o
+            # sorteio estava ANULANDO a semântica. O `_fundo()` do slides_html
+            # sabe buscar pelo assunto (`combinar`), mas só chega lá quando o
+            # slide NÃO tem `fundo` definido. Como aqui a gente preenchia todos,
+            # a busca por assunto nunca rodava para capa, quebra e resumo: eles
+            # levavam o que o embaralhamento desse. Resultado medido em 26/08 —
+            # slide "Capa Luxo com Pulseira Samsung" com um projetor no fundo.
+            escolha = ""
+            assunto = " ".join(str(x) for x in (s.get("titulo"), s.get("linha"),
+                                                s.get("rotulo")) if x)
+            if combinar and assunto:
+                try:
+                    achado = combinar(nicho, pasta, assunto)
+                    if achado and achado not in usados:
+                        escolha = achado
+                except Exception:
+                    pass
+            if not escolha:
+                # ⚠️ a variedade DENTRO do carrossel continua valendo: não
+                # adianta o acervo ter 10 fotos se as 7 páginas do post
+                # mostrarem a mesma sala. Só que agora ela é o desempate, não
+                # a regra.
+                livres = [a for a in acervo if a not in usados] or acervo
+                escolha = livres[0]
+            usados.add(escolha)
+            s["fundo"] = escolha
 
     # ⚠️ O `aviso` SÓ VALE SE ALGUÉM LER. Pedir ao modelo que sinalize quando
     # o formato não cabe no assunto e depois ignorar o campo é pior que não
