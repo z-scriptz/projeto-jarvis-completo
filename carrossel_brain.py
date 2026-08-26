@@ -724,6 +724,19 @@ Por isso a ordem e:
               so deu dicas nao e CTA, e propaganda colada no fim.
               Nada de "siga para mais dicas".
 
+A QUEBRA (slide 2) NAO E UMA SEGUNDA CAPA. Ela pertence a promessa da capa e
+comeca a cumpri-la. Pode aumentar a tensao — nao pode trocar o assunto nem
+anunciar uma contagem diferente.
+  capa:   "Eu nao esperava essa mudanca na bancada"
+  ✗ ruim: "3 erros que baguncavam sua beleza"   (promessa NOVA, outra historia)
+  ✓ bom:  "Antes eu perdia 10 minutos procurando batom"   (ja e a historia)
+Se a capa promete um NUMERO, a quebra nao pode citar outro.
+
+PROMESSA = ENTREGA: o numero da capa e o numero de itens que voce vai
+entregar em "slides" e em "resumo". Prometeu 5, entregue 5. Nao existe
+"5 produtos" com 3 slides de produto — quem arrasta esperando cinco e recebe
+tres aprende que este perfil promete mais do que cumpre.
+
 DESTAQUE EM COR: marque com *asteriscos* a parte da CAPA que deve sair
 colorida — 1 a 3 palavras, o miolo da frase, nunca a frase toda.
 Ex: "5 ERROS QUE ESTAO *ACABANDO COM SUA BATERIA*"
@@ -731,7 +744,7 @@ Ex: "5 ERROS QUE ESTAO *ACABANDO COM SUA BATERIA*"
 RESPONDA SO COM JSON, sem cerca de codigo, neste formato exato:
 {{"capa": "<o gancho, com *destaque* marcado>",
   "capa_sub": "<uma linha menor embaixo do gancho, pode ser vazia>",
-  "quebra": {{"titulo": "<aumenta a tensao, NAO entrega a resposta>",
+  "quebra": {{"titulo": "<CONTINUA a promessa da capa; nao cria outra>",
              "linha": "<uma linha de apoio, pode ser vazia>"}},
   "slides": [{{"rotulo": "<curto, ex ERRO 1 — pode ser vazio>",
                "produto": <o NUMERO do produto da lista acima sobre o qual
@@ -861,6 +874,45 @@ def _cta_do_conteudo(d: dict, slides: list, formato: str) -> dict:
     return {"titulo": titulo, "linhas": linhas}
 
 
+_RX_NUM_CAPA = re.compile(r"(?<!\d)([2-9]|1\d)(?!\d)")
+
+
+def _casar_promessa(hook: str, slides: list) -> str:
+    """Se a capa promete um número, ele passa a ser o que o carrossel entrega.
+
+    ⚠️ A REGRA JÁ ESTAVA NO PROMPT E O MODELO AINDA ERRAVA (26/08): a capa do
+    tech dizia "5 produtos que eu queria ter conhecido antes" e o resumo
+    listava 3. Corrigi a origem — o ângulo agora usa a contagem real — mas o
+    modelo escreve a capa com liberdade e pode pôr outro número lá dentro.
+
+    📌 Regra que só existe no prompt é pedido, não garantia. Esta é a terceira
+    vez que anoto isso neste arquivo: o `CTA_PADRAO` prometia link em post sem
+    produto e nenhuma instrução de prompt resolveu — quem resolveu foi o
+    `_cta_do_conteudo` olhando o que havia sido escrito. Aqui é o mesmo.
+
+    Conta os slides que ENTREGAM (produto ou com rótulo do tipo "ERRO 2"), não
+    os de texto solto, e reescreve o número da capa se divergir. Não mexe em
+    capa sem número — nem toda capa promete contagem, e inventar uma seria
+    estragar um gancho bom."""
+    achado = _RX_NUM_CAPA.search(hook or "")
+    if not achado:
+        return hook
+    entregues = sum(1 for s in slides
+                    if s.get("tipo") == "produto"
+                    or re.search(r"\d", str(s.get("rotulo") or "")))
+    if entregues < 2:
+        # sem itens numeráveis não dá pra afirmar divergência: o número da capa
+        # pode ser parte da frase ("2 minutos", "24 horas"), e trocar isso
+        # estragaria o gancho.
+        return hook
+    prometido = int(achado.group(1))
+    if prometido == entregues:
+        return hook
+    log.info(f"   🔢 a capa prometia {prometido} e o carrossel entrega "
+             f"{entregues} — reescrevi o número (promessa = entrega)")
+    return hook[:achado.start()] + str(entregues) + hook[achado.end():]
+
+
 def _handle(nicho: str) -> str:
     try:
         c = json.loads((BASE_DIR / "contas.json").read_text(encoding="utf-8"))
@@ -893,8 +945,25 @@ def montar_plano(nicho: str, formato: str = "", fotos_em: Path = None) -> dict:
             f"❌ '{formato}' precisa de ao menos 2 produtos COM FOTO do nicho "
             f"'{nicho}', e achei {len(produtos)}.\n"
             f"   Rode:  .venv/bin/python preencher_fotos.py")
+    # ⚠️ PROMESSA TEM QUE SER A ENTREGA, e aqui ela não era (26/08).
+    # `quantos` é o que o formato PEDE; `produtos` é o que a fila REALMENTE
+    # tinha com foto — e podem diferir. O ângulo usava o número pedido, então a
+    # capa saía "5 produtos que eu queria ter conhecido antes" num carrossel
+    # que entregava 3. Medido no teste de tech: capa prometia 5, o resumo
+    # listava 3.
+    #
+    # 📌 Isso é pior que defeito estético: quem arrasta esperando cinco e
+    # recebe três aprende que o perfil promete mais do que cumpre — e esse é
+    # exatamente o aprendizado que mata retenção num perfil novo.
+    #
+    # O número agora sai do que existe. Se a fila só deu 3, a capa diz 3.
+    n_real = len(produtos) if quantos > 1 else int(cfg.get("passos", 3))
+    n_real = max(2, n_real)         # "1 produto que..." não é gancho de lista
+    if quantos > 1 and n_real != quantos:
+        log.info(f"   🔢 pedi {quantos} produto(s), a fila deu {len(produtos)} "
+                 f"— o gancho vai prometer {n_real}, não {quantos}")
     angulo = random.choice(cfg["angulos"]).format(
-        n=max(quantos, int(cfg.get("passos", 3))),
+        n=n_real,
         contexto=f"com {nicho}" if nicho and nicho != "geral" else "")
 
     d = _via_gemini(formato, nicho, produtos, angulo) or \
@@ -953,9 +1022,22 @@ def montar_plano(nicho: str, formato: str = "", fotos_em: Path = None) -> dict:
     # vezes, mas nunca em sequência).
     # O slide de PRODUTO fica de fora: ali a foto é o produto, e um cenário
     # atrás dele brigaria com a coisa que a pessoa precisa ver.
+    # ⚠️ O `formato` FALTAVA AQUI, E ISSO ANULAVA A BIBLIOTECA INTEIRA (26/08).
+    # `existentes(nicho)` sem formato lê SÓ a raiz do nicho — 10 imagens
+    # genéricas. As 100 organizadas em `fundos/<nicho>/<formato>/`, que o Dre
+    # passou três dias gerando exatamente pra isso, nunca eram consultadas.
+    #
+    # E o sintoma não parecia um bug de código: os carrosséis saíam bonitos,
+    # com fundo do nicho certo. A crítica veio como julgamento estético —
+    # "imagem bonita de Casa em vez de imagem que representa esta frase" — e
+    # era literalmente isso: sem o formato, não há como a imagem representar a
+    # frase, porque a única coisa que ligava uma à outra era a pasta.
+    #
+    # 📌 Trabalho que o sistema não consulta é trabalho que não existe, e ele
+    # não avisa: só fica pior do que poderia, em silêncio.
     try:
         from fundo_ia import existentes
-        acervo = [str(x) for x in existentes(nicho)]
+        acervo = [str(x) for x in existentes(nicho, formato)]
     except Exception:
         acervo = []
     if acervo:
@@ -1002,11 +1084,12 @@ def montar_plano(nicho: str, formato: str = "", fotos_em: Path = None) -> dict:
                     f"{aviso[:160]}")
 
     cta = _cta_do_conteudo(d, slides, formato)
+    hook = _casar_promessa(d.get("capa") or angulo, slides)
 
     return {
         "nicho": nicho, "handle": conta, "formato": formato,
         "motivo_do_formato": motivo, "reserva": bool(d.get("reserva")),
-        "capa": {"hook": _cortar(d.get("capa") or angulo),
+        "capa": {"hook": _cortar(hook),
                  "sub": _cortar(d.get("capa_sub") or "", 10),
                  "foto": next((p["foto"] for p in produtos if p.get("foto")), "")},
         "slides": slides, "cta": cta, "aviso": aviso,
