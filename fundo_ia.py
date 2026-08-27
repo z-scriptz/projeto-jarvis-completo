@@ -1249,8 +1249,21 @@ _ASSINATURAS = {
 }
 
 
-def _adivinhar_lote(arquivos: list, nichos: list) -> dict:
-    """Pergunta à visão de que nicho e formato é um lote. {} se não souber."""
+_MIMES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+          ".webp": "image/webp"}
+
+
+def _adivinhar_lote(arquivos: list, nichos: list, avisar=None) -> dict:
+    """Pergunta à visão de que nicho e formato é um lote. {} se não souber.
+
+    ⚠️ O MIME VEM DA EXTENSÃO, e não é detalhe: os arquivos do `lotes.json` são
+    os PNGs ORIGINAIS baixados do ChatGPT, não os JPEG do acervo. Eu mandava
+    `image/jpeg` fixo, a API recusava, o `except` devolvia {} — e o relatório
+    mostrava "confiança 0/10" nos 22 lotes.
+
+    📌 E esse é o pior tipo de falha: ela se disfarça de resposta legítima. "O
+    modelo não teve certeza" e "a chamada nem aconteceu" saíram idênticos na
+    tela, e eu teria concluído que a visão não serve pra isso."""
     key = os.getenv("GEMINI_API_KEY", "")
     if not key or not arquivos:
         return {}
@@ -1267,9 +1280,18 @@ def _adivinhar_lote(arquivos: list, nichos: list) -> dict:
         from google import genai
         from google.genai import types
         cli = genai.Client(api_key=key)
-        partes = [types.Part.from_bytes(data=Path(a).read_bytes(),
-                                        mime_type="image/jpeg")
-                  for a in arquivos[:3]]
+        partes = []
+        for a in arquivos[:3]:
+            alvo = Path(a)
+            mime = _MIMES.get(alvo.suffix.lower())
+            if not mime or not alvo.exists():
+                continue
+            partes.append(types.Part.from_bytes(data=alvo.read_bytes(),
+                                                mime_type=mime))
+        if not partes:
+            if avisar:
+                avisar(f"nenhum arquivo legível em {arquivos[:1]}")
+            return {}
         r = cli.models.generate_content(
             model=os.getenv("VISAO_MODELO", "gemini-2.0-flash"),
             contents=partes + [pergunta])
@@ -1278,7 +1300,12 @@ def _adivinhar_lote(arquivos: list, nichos: list) -> dict:
             txt = txt.split("```")[1].lstrip("json").strip()
         d = json.loads(txt)
         return d if isinstance(d, dict) else {}
-    except Exception:
+    except Exception as e:
+        # ⚠️ o erro PRECISA aparecer: sem isto, uma falha sistemática (chave
+        # errada, mime recusado, cota estourada) é indistinguível de "o modelo
+        # não soube", e a conclusão vira "essa ideia não funciona".
+        if avisar:
+            avisar(str(e)[:120])
         return {}
 
 
@@ -1312,10 +1339,16 @@ def sugerir_lotes(arquivo, minimo: int = 6) -> int:
 
     print(f"🔮 palpitando {len(pendentes)} lote(s) — confiança mínima "
           f"{minimo}/10\n")
-    gravados, fracos = 0, []
+    gravados, fracos, erros = 0, [], []
+
+    def _avisar(msg):
+        if not erros:                      # o primeiro basta pra diagnosticar
+            print(f"   ⚠️  a visão falhou: {msg}")
+        erros.append(msg)
+
     for nome in pendentes:
         arqs = mapa[nome].get("arquivos") or []
-        d = _adivinhar_lote(arqs, nichos)
+        d = _adivinhar_lote(arqs, nichos, _avisar)
         conf = int(d.get("confianca") or 0)
         nicho, fmt = str(d.get("nicho") or ""), _canon(str(d.get("formato") or ""))
         ok = (nicho in nichos
@@ -1332,6 +1365,11 @@ def sugerir_lotes(arquivo, minimo: int = 6) -> int:
 
     arq.write_text(json.dumps(mapa, ensure_ascii=False, indent=2),
                    encoding="utf-8")
+    if erros:
+        print(f"\n❌ {len(erros)} de {len(pendentes)} lote(s) NEM CHEGARAM a "
+              f"ser avaliados — a chamada de visão falhou. Isso não é o modelo "
+              f"em dúvida; é erro técnico, e o relatório acima mostra esses "
+              f"como confiança 0.")
     print(f"\n✅ {gravados} lote(s) preenchido(s) por palpite.")
     if fracos:
         print(f"⬜ {len(fracos)} sem confiança suficiente, continuam em branco: "
