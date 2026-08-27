@@ -1372,6 +1372,31 @@ def sugerir_lotes(arquivo, minimo: int = 6) -> int:
 
     arq.write_text(json.dumps(mapa, ensure_ascii=False, indent=2),
                    encoding="utf-8")
+    # ⚠️ O MODELO VÊ UM LOTE POR VEZ, ENTÃO NÃO PODE PERCEBER ISTO. Cada nicho
+    # tem UM lote por formato — foi assim que o Dre gerou. Duas reivindicações
+    # do mesmo `<nicho>/<formato>` significam que pelo menos uma está errada, e
+    # as duas podem vir com 10/10 porque, isoladamente, ambas parecem certas.
+    #
+    # 📌 A checagem que a IA não consegue fazer é justamente a que não precisa
+    # de IA: é contagem. Confiança alta em cada peça não garante consistência
+    # do conjunto — e o conjunto é onde mora o erro que custa caro.
+    ocupacao = {}
+    for nome, info in mapa.items():
+        if info.get("nicho") and info.get("formato"):
+            ocupacao.setdefault(
+                f"{info['nicho']}/{_canon(info['formato'])}", []).append(nome)
+    colisoes = {k: v for k, v in ocupacao.items() if len(v) > 1}
+    if colisoes:
+        print(f"\n⚠️  {len(colisoes)} formato(s) reivindicado(s) por mais de um "
+              f"lote — pelo menos um está errado:")
+        for destino, quais in sorted(colisoes.items()):
+            marcas = ", ".join(
+                f"{n}{'(palpite ' + str(mapa[n]['_palpite']) + ')' if mapa[n].get('_palpite') else ''}"
+                for n in quais)
+            print(f"      {destino:26} ← {marcas}")
+        print("      (lote partido pelo tempo é legítimo aqui — veja se são "
+              "vizinhos, tipo 38 e 39)")
+
     if erros:
         print(f"\n❌ {len(erros)} de {len(pendentes)} lote(s) NEM CHEGARAM a "
               f"ser avaliados — a chamada de visão falhou. Isso não é o modelo "
