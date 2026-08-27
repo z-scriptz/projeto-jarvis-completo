@@ -29,7 +29,6 @@
 #
 #   python3 qa_foto.py <arquivo>...    # inspeciona na mão
 
-import base64
 import hashlib
 import json
 import os
@@ -56,6 +55,10 @@ PESOS = {
     "print_marketplace":   -4,   # captura de tela da listagem
 }
 PISO = 0            # abaixo disto, reprova
+
+_MIMES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+          ".webp": "image/webp"}
+_AVISADO = False    # o primeiro erro basta pra diagnosticar
 
 
 def _digestao(caminho) -> str:
@@ -108,17 +111,33 @@ def _perguntar(caminho: Path) -> dict:
         from google.genai import types
         cli = genai.Client(api_key=key)
         r = cli.models.generate_content(
-            model=os.getenv("QA_FOTO_MODELO", "gemini-2.0-flash"),
+            # ⚠️ mesma variável que o resto do projeto usa pra visão. Uma
+            # config própria aqui envelheceria sozinha — foi assim que o
+            # `gemini-2.0-flash` aposentado derrubou o --sugerir-lotes.
+            model=os.environ.get("GEMINI_MODELO_TXT", "gemini-2.5-flash"),
             contents=[types.Part.from_bytes(
                           data=Path(caminho).read_bytes(),
-                          mime_type="image/jpeg"),
+                          mime_type=_MIMES.get(Path(caminho).suffix.lower(),
+                                               "image/jpeg")),
                       _PERGUNTA])
         txt = (r.text or "").strip()
         if txt.startswith("```"):
             txt = txt.split("```")[1].lstrip("json").strip()
         d = json.loads(txt)
         return d if isinstance(d, dict) else {}
-    except Exception:
+    except Exception as e:
+        # ⚠️ ESTE AVISO É OBRIGATÓRIO PORQUE ESTA FUNÇÃO APROVA NA DÚVIDA. Com
+        # a visão fora do ar, `aprovada()` passa a devolver True pra tudo — o
+        # QA some e o log fica idêntico ao de um dia em que nenhuma foto era
+        # ruim. Um modelo aposentado derrubou o `--sugerir-lotes` do mesmo
+        # jeito, e só apareceu porque alguém foi conferir.
+        # 📌 Guarda-costas que falha calado é pior que não ter guarda-costas:
+        # você continua andando achando que está protegido.
+        global _AVISADO
+        if not _AVISADO:
+            _AVISADO = True
+            print(f"⚠️  qa_foto: a visão falhou ({str(e)[:110]}) — "
+                  f"APROVANDO TUDO até isso ser resolvido", file=sys.stderr)
         return {}
 
 

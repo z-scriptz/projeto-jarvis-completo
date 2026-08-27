@@ -1293,7 +1293,14 @@ def _adivinhar_lote(arquivos: list, nichos: list, avisar=None) -> dict:
                 avisar(f"nenhum arquivo legível em {arquivos[:1]}")
             return {}
         r = cli.models.generate_content(
-            model=os.getenv("VISAO_MODELO", "gemini-2.0-flash"),
+            # ⚠️ A MESMA VARIÁVEL DO `_descrever`, de propósito. Eu tinha
+            # criado uma `VISAO_MODELO` própria com `gemini-2.0-flash` — que
+            # foi APOSENTADO, e o 404 derrubou os 22 lotes. O `_descrever`
+            # roda no mesmo dia com o mesmo tipo de chamada e funciona; não
+            # havia motivo pra ter uma segunda configuração, só pra ela
+            # envelhecer sozinha.
+            # 📌 Duas variáveis pro mesmo recurso viram uma desatualizada.
+            model=os.environ.get("GEMINI_MODELO_TXT", "gemini-2.5-flash"),
             contents=partes + [pergunta])
         txt = (r.text or "").strip()
         if txt.startswith("```"):
