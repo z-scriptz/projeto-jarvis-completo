@@ -1244,14 +1244,39 @@ def _fecho_perfil(plano, p, cta, handle, total):
 
 
 def _fecho_ajudou(plano, p, cta, handle, total):
-    """carlamarquete: texto gigante, sem enfeite. Funciona porque é direto."""
+    """carlamarquete: texto gigante, sem enfeite. Funciona porque é direto.
+
+    ⚠️ A FRASE ERA CRAVADA AQUI, e por isso este fecho saía igual em TODO
+    carrossel de qualquer conta: "se esse post te ajudou, aproveita e me
+    segue". O `_cta_do_conteudo()` do brain escrevia um fecho a partir do que
+    os slides mostraram — e este desenho jogava fora e usava o texto fixo.
+
+    📌 É a MESMA família do `CTA_PADRAO["linhas"]`, que prometia link em post
+    sem produto: texto escrito no código depois do modelo. Nenhuma regra de
+    prompt alcança isso, porque o prompt já terminou quando esta função roda.
+    Terceiro caso que eu encontro; o padrão é sempre "o desenho tem um texto
+    próprio e ignora o que o cérebro decidiu".
+
+    Agora a frase do brain manda. A fixa vira reserva — o layout continua o
+    mesmo, o que muda é de quem é a frase."""
     import html as _h
+    bruto = ((cta or {}).get("titulo") or "").strip()
+    if bruto:
+        # ⚠️ escapa os PEDAÇOS, não o texto inteiro antes de fatiar: escapar e
+        # depois cortar produziria `&amp;` partido no meio numa frase com "&".
+        # a segunda metade sai mais apagada; sem ela o texto vira uma parede só
+        pedacos = bruto.split(",", 1)
+        corpo = (f"{_h.escape(pedacos[0])},"
+                 f"<span style=\"opacity:.75\">{_h.escape(pedacos[1])}</span>"
+                 if len(pedacos) == 2 else _h.escape(bruto))
+    else:
+        corpo = ("se esse post te ajudou, "
+                 "<span style=\"opacity:.75\">aproveita e me segue</span>")
     return f"""<div class="slide" style="background:{p['acento']};
      color:{p['clarinho']};justify-content:center">
   <div class="mancha" style="width:900px;height:900px;left:-320px;top:-260px;
        background:rgba(255,255,255,.08)"></div>
-  <h1 id="titulo" style="font-size:118px">se esse post te ajudou,
-    <span style="opacity:.75">aproveita e me segue</span></h1>
+  <h1 id="titulo" style="font-size:118px">{corpo}</h1>
   <div class="rodape"><div class="arroba">{handle}</div>
     <div class="pag" style="opacity:.6">{total:02d} / {total:02d}</div></div>
 </div>"""
