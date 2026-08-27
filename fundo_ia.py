@@ -455,6 +455,30 @@ def combinar(nicho: str, formato: str, assunto: str) -> str:
     return _rodizio(nicho + "|busca", topo)
 
 
+def combinar_com_forca(nicho: str, formato: str, assunto: str) -> tuple:
+    """(caminho, força) — quantas palavras o assunto e a imagem têm em comum.
+
+    ⚠️ A FORÇA ERA CALCULADA E JOGADA FORA, e ela é a informação mais útil que
+    esta busca produz. `combinar()` devolvia só o caminho, então quem chamava
+    não tinha como distinguir "achei a foto exata do assunto" de "achei uma que
+    divide a palavra 'produto' com ele". As duas voltavam iguais.
+
+    E é essa diferença que decide quando o acervo NÃO serve: força 0 ou 1
+    significa que a biblioteca não tem a imagem daquela frase — o caso do
+    projetor num acervo `tech/produto/` onde nenhuma das dez fala de projeção.
+    Nesse ponto, insistir no acervo é escolher a menos errada; o certo é gerar.
+
+    📌 Medida que existe e não sai da função não serve pra decidir nada."""
+    escolha = combinar(nicho, formato, assunto)
+    if not escolha:
+        return "", 0
+    idx = _indice()
+    alvo = _palavras(assunto)
+    d = idx.get(str(Path(escolha).relative_to(FUNDOS)), {})
+    dela = _palavras(d.get("desc", "")) | set(d.get("tags") or [])
+    return escolha, len(alvo & dela)
+
+
 def fundo_do_nicho(nicho: str, formato: str = "") -> str:
     """Um fundo do acervo do nicho. "" quando não há nenhum.
 
@@ -1493,6 +1517,68 @@ def do_plano(pasta=None, seco: bool = False) -> int:
     if feitos:
         print(f"\n✅ {feitos} imagem(ns) em {saida}")
     return 0 if (feitos or seco) else 1
+
+
+def completar_fracos(plano: dict, pasta, piso: int = 2, teto: int = 3) -> int:
+    """Gera imagem SÓ pros slides que a biblioteca não atende. Devolve quantas.
+
+    ⚠️ ESTE É O MEIO-TERMO ENTRE OS DOIS EXTREMOS. Usar sempre o acervo dá o
+    caso do projetor: `tech/produto/` tem dez imagens e nenhuma fala de
+    projeção, então o rodízio entrega "a menos errada" — um smartphone. Gerar
+    sempre resolve a semântica e joga fora a biblioteca inteira, além de custar
+    uma imagem por slide em todo carrossel de todas as seis contas.
+    O critério é a FORÇA do casamento: onde o acervo tem a foto da frase, ele
+    ganha; onde não tem, o Gemini entra.
+    O `teto` existe porque um carrossel em que TODOS os slides foram gerados
+    não é mais um carrossel com biblioteca — e porque um piso mal calibrado não
+    pode virar uma conta alta sem ninguém perceber.
+
+    ⚠️ NÃO SUBSTITUI O QUE JÁ ESTÁ BOM. Ele grava em `<pasta>/fundos/NN.png`,
+    que o `_imagem_propria()` do render trata como prioridade máxima — então o
+    slide fraco passa a usar a imagem gerada e os outros seguem com o acervo,
+    sem que este arquivo precise saber como o render escolhe."""
+    pasta = Path(pasta)
+    nicho = plano.get("nicho", "geral")
+    formato = plano.get("formato", "")
+    saida = pasta / "fundos"
+
+    fracos = []
+    for k, sl in enumerate(plano.get("slides") or [], start=2):
+        # o slide de produto mostra o produto: quem manda ali é o `qa_foto`
+        if sl.get("tipo") == "produto":
+            continue
+        assunto = " ".join(str(x) for x in (sl.get("titulo"), sl.get("linha"),
+                                            sl.get("rotulo")) if x)
+        if not assunto:
+            continue
+        try:
+            _, forca = combinar_com_forca(nicho, formato, assunto)
+        except Exception:
+            continue
+        if forca < piso:
+            fracos.append((k, forca, sl.get("titulo") or "",
+                           sl.get("linha") or ""))
+
+    if not fracos:
+        print("✅ o acervo atende todos os slides — nada a gerar.")
+        return 0
+
+    fracos.sort(key=lambda x: x[1])          # os mais fracos primeiro
+    fracos = fracos[:max(0, teto)]
+    print(f"🎯 {len(fracos)} slide(s) sem imagem à altura no acervo "
+          f"(piso {piso}):\n")
+    saida.mkdir(parents=True, exist_ok=True)
+    feitos = 0
+    for n, forca, titulo, apoio in fracos:
+        print(f"  slide {n:02d} · força {forca} · {titulo[:44]}")
+        erro = _gemini_imagem(prompt_do_slide(nicho, titulo, apoio),
+                              saida / f"{n:02d}.png")
+        if erro:
+            print(f"     ❌ {erro}")
+            break
+        feitos += 1
+        print(f"     ✅ {n:02d}.png")
+    return feitos
 
 
 def _direcao_visual(nicho: str, alvos: list) -> dict:

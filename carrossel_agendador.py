@@ -249,6 +249,27 @@ def publicar_um(nicho: str, cfg: dict = None, dry_run: bool = False,
             log.error(f"   ❌ {nicho}: não montei o plano ({str(e)[:100]})")
             return {"ok": False, "motivo": "plano"}
 
+    # ⚠️ O GEMINI ENTRA SÓ ONDE O ACERVO NÃO ALCANÇA, e é OPT-IN. Quando a
+    # biblioteca não tem a foto daquela frase — `tech/produto/` com dez imagens
+    # e nenhuma de projeção — o rodízio entrega a menos errada. Aqui o slide
+    # fraco ganha uma imagem feita a partir do próprio texto dele.
+    # Desligado por padrão porque custa por imagem, em seis contas, todo dia:
+    # ligar é uma decisão de orçamento, não um default.
+    if cfg.get("carrossel_gerar_fracos"):
+        try:
+            from fundo_ia import completar_fracos
+            n = completar_fracos(plano, pasta,
+                                 piso=int(cfg.get("carrossel_piso_semantico", 2)),
+                                 teto=int(cfg.get("carrossel_max_geradas", 3)))
+            if n:
+                log.info(f"   🎨 {nicho}: {n} fundo(s) gerado(s) pro que o "
+                         f"acervo não cobria")
+        except Exception as e:
+            # ⚠️ falhar aqui NÃO pode impedir o post: sem imagem gerada o
+            # carrossel sai com o acervo, que é o comportamento de sempre.
+            log.warning(f"   ⚠️  {nicho}: não gerei os fundos fracos "
+                        f"({str(e)[:80]}) — sigo com o acervo")
+
     try:
         import carrossel_render as CR
         arquivos = CR.renderizar(plano, pasta)

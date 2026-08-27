@@ -780,7 +780,9 @@ RESPONDA SO COM JSON, sem cerca de codigo, neste formato exato:
   "resumo": ["<item 1, curtissimo>", "<item 2>", "..."],
   "cta": "<a frase do ultimo slide, contextual>",
   "legenda": "<2 a 4 linhas pra legenda do post>",
-  "aviso": "<vazio; so preencha se o formato pedido nao couber no assunto>"}}
+  "aviso": "<vazio; SO preencha se o FORMATO pedido nao couber no assunto.
+            NAO use pra relatar que voce seguiu uma regra: 'ajustei a capa
+            pra 3' nao e aviso, e obediencia. Este campo e medido.>"}}
 
 Gere exatamente {passos} objeto(s) em "slides" e {passos} item(ns) em "resumo".
 
