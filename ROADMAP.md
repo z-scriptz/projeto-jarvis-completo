@@ -7027,6 +7027,42 @@ Placar medido: catálogo poluído **-6** (reprova), pessoa usando o produto
 **Estado da biblioteca:** casa 116 · tech 110 · beleza 109 · moda 42 —
 índice semântico com 397 imagens. Faltam pet e geral (24 lotes).
 
+### 🏷️ 30 IMAGENS DE MODA ENTRARAM COMO PET (27/08)
+
+O `--rotular` foi rodado com `erros=45,curiosidade=46,comparacao=47` — números
+que **eu escrevi como exemplo, dentro de um bloco de comando**. O Dre rodou, com
+razão: estava executável e com valores concretos. Os lotes 45-47 são a
+continuação de MODA, e araras, closets, tênis e blazers viraram `pet/`.
+
+📌 **QUARTA VEZ HOJE que um placeholder meu virou comando.** As três primeiras
+só deram erro na tela (`...` inválido, JSON colado no shell). Esta escreveu
+dado errado no disco, com o carrossel JÁ LIGADO — a @topshoppet_ ia puxar foto
+de closet.
+📌 **Regra nova: quando eu não sei os valores certos, a forma do comando vai
+FORA de bloco executável, e eu digo explicitamente o que falta.** Bloco com
+número concreto é uma instrução para rodar, não uma ilustração.
+
+⚠️ E o estrago não parava no disco: o `--indexar` já tinha descrito as 30, então
+a busca semântica passaria a responder "closet organizado" para um slide sobre
+cachorro — **com confiança**, porque o índice não sabe que está errado.
+📌 **Importar para o lugar errado é pior que não importar:** a ferramenta diz
+"✅ 30 importadas", tudo parece ter dado certo, e o defeito só aparece semanas
+depois como "por que esse carrossel tem foto estranha?".
+
+**`--esquecer <nicho>/<formato>`** desfaz: tira os arquivos, tira as entradas do
+índice e limpa o rótulo no `lotes.json` — esse último porque sem ele o próximo
+`--aplicar-lotes` reimportaria o mesmo erro, calado. Mexe no índice ANTES dos
+arquivos: se falhar no meio, é melhor sobrar arquivo sem descrição do que
+descrição apontando para arquivo que não existe.
+
+Nada irrecuperável: os PNGs originais seguem em `~/fundos` e o `lotes.json`
+guarda o caminho de cada um. O que sai é a cópia convertida, não a fonte.
+
+**E as descrições do índice deram o rótulo certo de graça:** lote-46 era um item
+por foto com fundo limpo (`moda/produto`), lote-47 era incômodo + o que resolve
+(`moda/problema_solucao`). Quem descreveu as imagens erradas foi quem apontou
+onde elas deviam estar.
+
 ### 💸 O SLIDE DE RESUMO GERAVA IMAGEM SOBRE NADA (27/08)
 
 Primeira rodada do `completar_fracos` no pet, com a geração ligada:
