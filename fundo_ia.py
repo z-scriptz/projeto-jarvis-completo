@@ -1341,6 +1341,93 @@ def sugerir_lotes(arquivo, minimo: int = 6) -> int:
     return 0
 
 
+def esquecer(alvo: str, lotes_json=None) -> int:
+    """Tira do acervo E do índice um `<nicho>/<formato>` importado errado.
+
+    ⚠️ EXISTE PORQUE IMPORTAR ERRADO É PIOR QUE NÃO IMPORTAR (27/08). Trinta
+    imagens de MODA — araras, closets, tênis, blazers — entraram como `pet/`
+    porque o rótulo apontava os lotes errados. E o estrago não para no disco:
+    o `--indexar` já descreveu todas, então a busca semântica passaria a
+    responder "closet organizado" para um slide sobre cachorro, com confiança.
+
+    ⚠️ NÃO APAGA NADA QUE NÃO DÊ PRA REFAZER. Os PNGs originais continuam em
+    `~/fundos`, e o `lotes.json` guarda o caminho de cada um — então esquecer
+    aqui é seguro: basta rotular certo e aplicar de novo. O que sai é a CÓPIA
+    convertida, não a fonte.
+
+    E limpa o rótulo no `lotes.json` junto, senão o `--aplicar-lotes` seguinte
+    reimportaria exatamente o mesmo erro, calado."""
+    alvo = str(alvo).strip().strip("/")
+    if "/" not in alvo:
+        print("❌ diga `nicho/formato`, ex.: pet/erros")
+        return 2
+    nicho, formato = alvo.split("/", 1)
+    pasta = _pasta(nicho, formato)
+    if not pasta.is_dir():
+        print(f"❌ não existe: {pasta}")
+        return 2
+
+    fotos = [a for a in pasta.iterdir()
+             if a.is_file() and a.suffix.lower() in EXTENSOES]
+    if not fotos:
+        print(f"⚠️  {alvo} já está vazio.")
+        return 0
+
+    print(f"\n🗑️  {alvo}: {len(fotos)} imagem(ns) saindo do acervo")
+    for a in fotos[:3]:
+        print(f"      {a.name}")
+    if len(fotos) > 3:
+        print(f"      … e mais {len(fotos) - 3}")
+
+    # 1) o índice primeiro: se a remoção falhar no meio, é melhor sobrar
+    #    arquivo sem descrição do que descrição sem arquivo — a busca
+    #    devolveria um caminho que não existe.
+    idx = _indice()
+    chaves = [str(a.relative_to(FUNDOS)) for a in fotos]
+    tirados = sum(1 for c in chaves if idx.pop(c, None) is not None)
+    if tirados:
+        try:
+            INDICE.write_text(json.dumps(idx, ensure_ascii=False, indent=2),
+                              encoding="utf-8")
+        except Exception as e:
+            print(f"❌ não regravei o índice: {e}")
+            return 1
+    print(f"   🔎 {tirados} entrada(s) fora do índice")
+
+    for a in fotos:
+        try:
+            a.unlink()
+        except Exception as e:
+            print(f"   ⚠️  {a.name}: {str(e)[:60]}")
+    try:
+        pasta.rmdir()
+    except Exception:
+        pass
+
+    # 2) e o rótulo, senão o próximo --aplicar-lotes refaz o mesmo erro
+    limpos = 0
+    alvo_json = Path(lotes_json).expanduser() if lotes_json else \
+        BASE_DIR / "pronto_carrossel" / "lotes" / "lotes.json"
+    if alvo_json.exists():
+        try:
+            mapa = json.loads(alvo_json.read_text(encoding="utf-8"))
+            for nome, info in mapa.items():
+                if (info.get("nicho") == nicho
+                        and _canon(info.get("formato") or "") == _canon(formato)):
+                    info["nicho"] = info["formato"] = ""
+                    info.pop("_palpite", None)
+                    limpos += 1
+            if limpos:
+                alvo_json.write_text(json.dumps(mapa, ensure_ascii=False,
+                                                indent=2), encoding="utf-8")
+        except Exception as e:
+            print(f"   ⚠️  não limpei o lotes.json: {str(e)[:60]}")
+    print(f"   🏷️  {limpos} lote(s) voltaram a ficar sem rótulo\n")
+    print(f"✅ {alvo} esquecido. Os PNGs originais seguem intactos — "
+          f"rotule certo e rode --aplicar-lotes de novo.")
+    return 0
+
+
 def rotular(arquivo, nicho: str, espec: str) -> int:
     """Rotula um nicho inteiro numa linha: `--rotular beleza 29,30,...,38+39`.
 
@@ -1848,6 +1935,8 @@ def main() -> int:
                    help="com --indexar, para depois de N imagens")
     p.add_argument("--buscar", nargs=2, metavar=("NICHO", "ASSUNTO"),
                    help="mostra qual imagem o índice escolheria")
+    p.add_argument("--esquecer", metavar="NICHO/FORMATO",
+                   help="tira do acervo e do índice o que foi importado errado")
     p.add_argument("--sugerir-lotes", metavar="ARQUIVO", dest="sugerir_lotes",
                    help="palpita nicho/formato dos lotes em branco (visão)")
     p.add_argument("--minimo", type=int, default=6,
@@ -1894,6 +1983,8 @@ def main() -> int:
     if a.lotes:
         return lotes(a.lotes, a.tamanho)
 
+    if a.esquecer:
+        return esquecer(a.esquecer)
     if a.sugerir_lotes:
         return sugerir_lotes(a.sugerir_lotes, a.minimo)
     if a.rotular:
