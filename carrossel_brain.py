@@ -471,6 +471,31 @@ def _produtos_do_nicho(nicho: str, quantos: int, fotos_em: Path = None,
         if exige_foto and not foto and fotos_em is not None:
             log.info(f"   ⏭️  sem foto, fora da vitrine: {_nome(p)[:44]}")
             continue
+
+        # ⚠️ FOTO DE CATÁLOGO COM PROPAGANDA DENTRO NÃO ENTRA. A da Shopee vem
+        # com "Cor Exclusiva", selo, ícones de benefício e a marca da loja
+        # cravados nos pixels — nenhum CSS conserta, e o slide vira o design do
+        # vendedor dentro do nosso. Aqui a gente não tenta consertar a imagem:
+        # troca de produto. A fila tem ~59 com foto, então recusar uma é barato.
+        #
+        # ⚠️ E SÓ RECUSA QUANDO SOBRA ALTERNATIVA. Se já estivermos no fim da
+        # lista, um slide com foto poluída ainda é melhor que um carrossel com
+        # menos peças do que prometeu — a trava de promessa = entrega vale mais
+        # que a estética de um slide.
+        if foto:
+            try:
+                from qa_foto import aprovada, nota
+                if not aprovada(foto):
+                    restam = len(ordenados) - ordenados.index(p) - 1
+                    if restam > 0 and len(saida) + restam >= quantos:
+                        placar, fatos = nota(foto)
+                        log.info(f"   🚫 foto reprovada ({placar:+d}): "
+                                 f"{_nome(p)[:40]} — troco de produto")
+                        continue
+                    log.info(f"   ⚠️  foto reprovada mas sem substituto: "
+                             f"{_nome(p)[:40]} — mantive")
+            except Exception:
+                pass
         saida.append({"nome": _nome(p), "preco": _preco(p), "foto": foto,
                       "link": p.get("link", "")})
 

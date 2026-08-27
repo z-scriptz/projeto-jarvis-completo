@@ -6973,6 +6973,60 @@ a validade do daemon passaria a mentir por mais 27 dias.
 ⚠️ Ele tira o sufixo de desambiguação antes de comparar com o histórico de
 postados; sem isso um pacote postado voltaria como se nunca tivesse ido ao ar.
 
+### 🎠 O CARROSSEL VIROU PUBLICÁVEL — quatro defeitos, um deles invisível (26/08)
+
+Revisão externa nos três nichos completos apontou quatro coisas. Três eram
+Brain; a quarta não era defeito de código nenhum — era código que **nunca era
+alcançado**.
+
+**1. A biblioteca de formatos estava desligada.** `montar_plano` chamava
+`existentes(nicho)` **sem o formato**, que lê só a raiz: 10 imagens genéricas.
+As 100 por nicho em `fundos/<nicho>/<formato>/` — três dias de geração — nunca
+foram consultadas.
+📌 **Trabalho que o sistema não consulta é trabalho que não existe, e ele não
+avisa: só fica pior do que poderia, em silêncio.** A crítica chegou como
+julgamento estético ("imagem bonita de Casa em vez de imagem que representa
+esta frase") e era literalmente isso — sem o formato, a única coisa ligando
+imagem e frase era a pasta.
+
+**2. E o meu primeiro conserto não bastou.** Passei o formato, mas o brain
+**pré-atribuía** `s["fundo"]` embaralhando o acervo — e `_fundo()` usa esse
+valor com prioridade. A busca semântica (`combinar`) e o roteamento por papel
+já existiam no `slides_html` e **nunca rodavam** para capa, quebra e resumo.
+Agora: semântica primeiro, sorteio como desempate, variedade preservada.
+📌 Duas soluções boas podem se anular: a de cima não sabia que a de baixo
+existia.
+
+**3. Promessa ≠ entrega.** A capa dizia "5 produtos" e o carrossel entregava 3,
+porque o ângulo usava `quantos` (o que o formato pede) e não o que a fila deu
+com foto. Travado em dois pontos: a origem usa a contagem real, e
+`_casar_promessa` reescreve o número da capa se ainda divergir.
+📌 **Regra que só existe no prompt é pedido, não garantia** — terceira vez que
+anoto isso; o `CTA_PADRAO` ensinou primeiro.
+
+**4. Slide 2 virava segunda capa.** A regra do Dre de 22/08 (a quebra aumenta a
+tensão sem entregar a resposta) continua valendo — o que ela não pode é trocar
+o assunto ou anunciar outra contagem. Reconciliado, não substituído.
+
+**`qa_foto.py`** fecha o último: a foto de catálogo com "Cor Exclusiva", selo,
+ícones e marca da loja cravados nos pixels. Nenhum CSS conserta, então o
+sistema **troca de produto** em vez de tentar salvar a imagem.
+⚠️ Três decisões que sustentam isso:
+- **O modelo diz o que VÊ; o placar é código.** Perguntar "nota de 0 a 10"
+  devolve número que muda de humor e não se audita. A visão responde só fatos
+  observáveis; os pesos moram em `PESOS`, em Python, ajustáveis sem tocar em
+  prompt.
+- **Aprova na dúvida.** Sem `GEMINI_API_KEY`, ou com a API fora, ele passa
+  tudo. Reprovar quando não sabe pararia a esteira das seis contas em silêncio.
+- **Só troca quando sobra substituto.** No fim da lista, foto poluída ainda é
+  melhor que carrossel entregando menos do que prometeu.
+
+Placar medido: catálogo poluído **-6** (reprova), pessoa usando o produto
+**+5** (passa).
+
+**Estado da biblioteca:** casa 116 · tech 110 · beleza 109 · moda 42 —
+índice semântico com 397 imagens. Faltam pet e geral (24 lotes).
+
 ## 📌 Referência rápida (infra)
 
 - **VPS:** Contabo · daemon `jarvis.service` (`python -m agents.daemon_maestro`)
