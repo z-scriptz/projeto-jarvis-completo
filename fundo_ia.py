@@ -1221,6 +1221,126 @@ def casar_lotes(arquivo, limiar: int = 8) -> int:
     return 0
 
 
+# ⚠️ AS ASSINATURAS SAÍRAM DO ACERVO, NÃO DA MINHA CABEÇA. Elas foram escritas
+# lendo as descrições que o `--indexar` gerou para os nichos já rotulados — é
+# por isso que `cta` fala em X vermelho e rejeição, coisa que eu jamais teria
+# adivinhado do nome do formato. Definição inventada classificaria pelo que o
+# formato DEVERIA ser; estas classificam pelo que o Dre de fato gerou.
+_ASSINATURAS = {
+    "erros":            "bagunça, desordem, algo derramado, quebrado ou fora "
+                        "do lugar; a cena de uma coisa que deu errado",
+    "curiosidade":      "close-up, textura, detalhe intrigante, produto sendo "
+                        "revelado; foto bonita e enigmática, sem bagunça",
+    "comparacao":       "DUAS opções lado a lado — duas pessoas, dois estilos, "
+                        "dois conjuntos — pra escolher entre elas",
+    "antes_depois":     "a MESMA cena dividida: um lado ruim/sujo/bagunçado e "
+                        "o outro arrumado; é transformação, não escolha",
+    "checklist":        "lista, caderno, prancheta ou caixinhas de marcar; "
+                        "itens dispostos como etapas a cumprir",
+    "lista":            "VÁRIOS itens espalhados numa coleção, sem lista "
+                        "escrita e sem par de comparação; vitrine de opções",
+    "produto":          "UM produto sozinho em destaque, fundo limpo, luz de "
+                        "estúdio; retrato do objeto",
+    "problema_solucao": "um incômodo mostrado junto do item que resolve ele",
+    "nao_compre":       "algo gasto, estragado ou que deu errado DEPOIS de "
+                        "comprado; alerta sobre uma escolha ruim",
+    "cta":              "rejeição explícita — X vermelho, expressão de "
+                        "desgosto, alguém recusando ou largando o produto",
+}
+
+
+def _adivinhar_lote(arquivos: list, nichos: list) -> dict:
+    """Pergunta à visão de que nicho e formato é um lote. {} se não souber."""
+    key = os.getenv("GEMINI_API_KEY", "")
+    if not key or not arquivos:
+        return {}
+    fmts = "\n".join(f"  {f}: {d}" for f, d in _ASSINATURAS.items())
+    pergunta = (
+        "Estas imagens sao de UM MESMO lote: mesmo nicho e mesmo formato.\n\n"
+        f"NICHOS: {', '.join(nichos)}\n\nFORMATOS:\n{fmts}\n\n"
+        "⚠️ `comparacao` e DUAS opcoes pra escolher; `antes_depois` e a MESMA "
+        "cena transformada. `lista` e colecao solta; `checklist` tem lista "
+        "escrita. `nao_compre` e arrependimento; `cta` e recusa explicita.\n\n"
+        'Responda SO JSON: {"nicho": "<um>", "formato": "<um>", '
+        '"confianca": <0 a 10>}')
+    try:
+        from google import genai
+        from google.genai import types
+        cli = genai.Client(api_key=key)
+        partes = [types.Part.from_bytes(data=Path(a).read_bytes(),
+                                        mime_type="image/jpeg")
+                  for a in arquivos[:3]]
+        r = cli.models.generate_content(
+            model=os.getenv("VISAO_MODELO", "gemini-2.0-flash"),
+            contents=partes + [pergunta])
+        txt = (r.text or "").strip()
+        if txt.startswith("```"):
+            txt = txt.split("```")[1].lstrip("json").strip()
+        d = json.loads(txt)
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
+def sugerir_lotes(arquivo, minimo: int = 6) -> int:
+    """Preenche os lotes sem rótulo com o palpite da visão, pra CONFERÊNCIA.
+
+    ⚠️ ISTO SUGERE, NÃO DECIDE. O `--casar-lotes` afirma, porque compara com o
+    que já está no acervo: é identidade. Aqui é julgamento sobre imagem nova, e
+    julgamento erra — `comparacao` e `antes_depois` são visualmente parecidos,
+    `nao_compre` e `cta` também. Por isso cada palpite vem com a confiança do
+    modelo, os de confiança baixa NÃO são gravados, e o relatório manda olhar a
+    folha antes de aplicar.
+
+    📌 O que economiza o dia não é acertar tudo: é reduzir 24 decisões em
+    branco a 24 conferências de sim/não."""
+    arq = Path(arquivo).expanduser()
+    try:
+        mapa = json.loads(arq.read_text(encoding="utf-8"))
+    except Exception as e:
+        print(f"❌ não li {arq}: {e}")
+        return 1
+    if not os.getenv("GEMINI_API_KEY"):
+        print("❌ sem GEMINI_API_KEY — este comando é de visão.")
+        return 2
+
+    nichos = sorted(_nichos_conhecidos())
+    pendentes = [n for n in sorted(mapa) if not mapa[n].get("nicho")]
+    if not pendentes:
+        print("✅ nenhum lote sem rótulo.")
+        return 0
+
+    print(f"🔮 palpitando {len(pendentes)} lote(s) — confiança mínima "
+          f"{minimo}/10\n")
+    gravados, fracos = 0, []
+    for nome in pendentes:
+        arqs = mapa[nome].get("arquivos") or []
+        d = _adivinhar_lote(arqs, nichos)
+        conf = int(d.get("confianca") or 0)
+        nicho, fmt = str(d.get("nicho") or ""), _canon(str(d.get("formato") or ""))
+        ok = (nicho in nichos
+              and fmt in [_canon(f) for f in FORMATOS_BIBLIOTECA]
+              and conf >= minimo)
+        marca = "✅" if ok else "⬜"
+        print(f"   {marca} {nome}  {nicho or '?'}/{fmt or '?'}  "
+              f"confiança {conf}/10  ({len(arqs)} img)")
+        if ok:
+            mapa[nome].update(nicho=nicho, formato=fmt, _palpite=conf)
+            gravados += 1
+        else:
+            fracos.append(nome)
+
+    arq.write_text(json.dumps(mapa, ensure_ascii=False, indent=2),
+                   encoding="utf-8")
+    print(f"\n✅ {gravados} lote(s) preenchido(s) por palpite.")
+    if fracos:
+        print(f"⬜ {len(fracos)} sem confiança suficiente, continuam em branco: "
+              f"{', '.join(fracos[:8])}{'…' if len(fracos) > 8 else ''}")
+    print("\n   ⚠️  CONFIRA na folha de contato antes do --aplicar-lotes. "
+          "Os campos com `_palpite` foram adivinhados, não medidos.")
+    return 0
+
+
 def rotular(arquivo, nicho: str, espec: str) -> int:
     """Rotula um nicho inteiro numa linha: `--rotular beleza 29,30,...,38+39`.
 
@@ -1728,6 +1848,10 @@ def main() -> int:
                    help="com --indexar, para depois de N imagens")
     p.add_argument("--buscar", nargs=2, metavar=("NICHO", "ASSUNTO"),
                    help="mostra qual imagem o índice escolheria")
+    p.add_argument("--sugerir-lotes", metavar="ARQUIVO", dest="sugerir_lotes",
+                   help="palpita nicho/formato dos lotes em branco (visão)")
+    p.add_argument("--minimo", type=int, default=6,
+                   help="com --sugerir-lotes, confiança mínima pra gravar")
     p.add_argument("--rotular", nargs=3, dest="rotular",
                    metavar=("JSON", "NICHO", "LOTES"),
                    help="rotula um nicho inteiro: --rotular lotes.json beleza "
@@ -1770,6 +1894,8 @@ def main() -> int:
     if a.lotes:
         return lotes(a.lotes, a.tamanho)
 
+    if a.sugerir_lotes:
+        return sugerir_lotes(a.sugerir_lotes, a.minimo)
     if a.rotular:
         return rotular(*a.rotular)
     if a.casar_lotes:
