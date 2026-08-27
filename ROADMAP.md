@@ -7027,6 +7027,27 @@ Placar medido: catálogo poluído **-6** (reprova), pessoa usando o produto
 **Estado da biblioteca:** casa 116 · tech 110 · beleza 109 · moda 42 —
 índice semântico com 397 imagens. Faltam pet e geral (24 lotes).
 
+### 💸 O SLIDE DE RESUMO GERAVA IMAGEM SOBRE NADA (27/08)
+
+Primeira rodada do `completar_fracos` no pet, com a geração ligada:
+
+    slide 02 · força 0 · A gente faz por amor, mas *eles sofrem*
+    slide 06 · força 0 ·
+    slide 03 · força 1 · Forçar abraços e beijos
+
+O título em branco no slide 06 era o sintoma. **O slide de resumo não tem
+`titulo` nem `linha` — tem `itens`**, e eu montava o assunto só dos três
+primeiros campos. Sobrava o rótulo "SALVA ISSO", que não casa com nada: força
+0, e o prompt saía **vazio**. Uma imagem paga gerada a partir de nada, em todo
+carrossel, para sempre.
+
+O `do_plano()` já tratava `itens` desde o dia em que o checklist de mamadeira
+saiu sobre potes de cozinha. Eu não reusei a regra dele.
+
+📌 **Custo que nasce de um campo esquecido não aparece como erro:** a imagem é
+gerada, o slide fica bonito, e ninguém liga o gasto à causa. Só apareceu porque
+o log imprime o título e ele veio vazio.
+
 ## 📌 Referência rápida (infra)
 
 - **VPS:** Contabo · daemon `jarvis.service` (`python -m agents.daemon_maestro`)

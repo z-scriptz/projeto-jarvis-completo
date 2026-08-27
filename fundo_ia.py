@@ -1547,17 +1547,33 @@ def completar_fracos(plano: dict, pasta, piso: int = 2, teto: int = 3) -> int:
         # o slide de produto mostra o produto: quem manda ali é o `qa_foto`
         if sl.get("tipo") == "produto":
             continue
-        assunto = " ".join(str(x) for x in (sl.get("titulo"), sl.get("linha"),
-                                            sl.get("rotulo")) if x)
-        if not assunto:
+        # ⚠️ O SLIDE DE RESUMO NÃO TEM `titulo` NEM `linha` — ele tem `itens`, e
+        # a primeira versão disto não sabia: o assunto dele virava só o rótulo
+        # "SALVA ISSO", dava força 0 por não casar com nada, e o prompt saía
+        # VAZIO. Medido na 1ª rodada do pet (27/08): "slide 06 · força 0 · " —
+        # o título em branco no log era o sintoma. Uma imagem paga gerada a
+        # partir de nada, em todo carrossel, para sempre.
+        #
+        # 📌 Custo que nasce de um campo esquecido não aparece como erro: a
+        # imagem é gerada, o slide fica bonito, e ninguém liga o gasto à causa.
+        # O `do_plano()` já tratava `itens` — eu é que não reusei a regra dele.
+        if sl.get("itens"):
+            assunto = " · ".join(str(x) for x in sl["itens"][:4])
+            apoio = "cena de contexto, o texto entra num cartão por cima"
+        else:
+            assunto = " ".join(str(x) for x in (sl.get("titulo"), sl.get("linha"),
+                                                sl.get("rotulo")) if x)
+            apoio = sl.get("linha") or ""
+        if not assunto.strip():
             continue
         try:
             _, forca = combinar_com_forca(nicho, formato, assunto)
         except Exception:
             continue
         if forca < piso:
-            fracos.append((k, forca, sl.get("titulo") or "",
-                           sl.get("linha") or ""))
+            # ⚠️ o texto que vai pro gerador é o ASSUNTO, não o `titulo`: no
+            # resumo o titulo é "" e mandar isso gera uma imagem sobre nada.
+            fracos.append((k, forca, assunto, apoio))
 
     if not fracos:
         print("✅ o acervo atende todos os slides — nada a gerar.")
