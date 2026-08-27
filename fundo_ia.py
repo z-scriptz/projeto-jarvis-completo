@@ -1274,8 +1274,14 @@ def _adivinhar_lote(arquivos: list, nichos: list, avisar=None) -> dict:
         "⚠️ `comparacao` e DUAS opcoes pra escolher; `antes_depois` e a MESMA "
         "cena transformada. `lista` e colecao solta; `checklist` tem lista "
         "escrita. `nao_compre` e arrependimento; `cta` e recusa explicita.\n\n"
+        # ⚠️ O `o_que_vejo` VEM NA MESMA CHAMADA, e é ele que torna a
+        # conferência humana rápida. Sem descrição, o relatório dá um palpite
+        # que só dá pra checar abrindo a folha de contato — e são 22. Com uma
+        # linha do que está na imagem, o Dre lê e decide na hora. Custo zero:
+        # é o mesmo request.
         'Responda SO JSON: {"nicho": "<um>", "formato": "<um>", '
-        '"confianca": <0 a 10>}')
+        '"confianca": <0 a 10>, '
+        '"o_que_vejo": "<ate 12 palavras sobre o ASSUNTO das imagens>"}')
     try:
         from google import genai
         from google.genai import types
@@ -1339,7 +1345,13 @@ def sugerir_lotes(arquivo, minimo: int = 6) -> int:
         return 2
 
     nichos = sorted(_nichos_conhecidos())
-    pendentes = [n for n in sorted(mapa) if not mapa[n].get("nicho")]
+    # ⚠️ REAVALIA O QUE ELE MESMO PALPITOU, nunca o que foi medido. Lote sem
+    # nicho entra por estar vazio; lote COM `_palpite` entra porque aquele
+    # rótulo é opinião, não fato — e é justamente entre opiniões que nascem as
+    # colisões que o relatório aponta. O que veio do `--casar-lotes` (identidade
+    # com o acervo) ou da mão do Dre não tem `_palpite` e fica intocado.
+    pendentes = [n for n in sorted(mapa)
+                 if not mapa[n].get("nicho") or mapa[n].get("_palpite")]
     if not pendentes:
         print("✅ nenhum lote sem rótulo.")
         return 0
@@ -1362,8 +1374,9 @@ def sugerir_lotes(arquivo, minimo: int = 6) -> int:
               and fmt in [_canon(f) for f in FORMATOS_BIBLIOTECA]
               and conf >= minimo)
         marca = "✅" if ok else "⬜"
-        print(f"   {marca} {nome}  {nicho or '?'}/{fmt or '?'}  "
-              f"confiança {conf}/10  ({len(arqs)} img)")
+        visto = str(d.get("o_que_vejo") or "")[:58]
+        print(f"   {marca} {nome}  {(nicho + '/' + fmt) if nicho else '?':<26}"
+              f" {conf:>2}/10 {len(arqs):>3}img  {visto}")
         if ok:
             mapa[nome].update(nicho=nicho, formato=fmt, _palpite=conf)
             gravados += 1
