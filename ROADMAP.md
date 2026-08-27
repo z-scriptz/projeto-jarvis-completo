@@ -7024,8 +7024,31 @@ sistema **troca de produto** em vez de tentar salvar a imagem.
 Placar medido: catálogo poluído **-6** (reprova), pessoa usando o produto
 **+5** (passa).
 
-**Estado da biblioteca:** casa 116 · tech 110 · beleza 109 · moda 42 —
-índice semântico com 397 imagens. Faltam pet e geral (24 lotes).
+**Estado da biblioteca (27/08): COMPLETA.** 620 imagens indexadas nos seis
+nichos, organizadas por formato. As descrições do índice confirmam cada pasta —
+`pet/erros` tem gato arranhando sofá e ração derramada, `geral/antes_depois` tem
+dois celulares (um quebrado, um novo), `moda/cta` tem mulher recusando camiseta
+com X vermelho.
+
+**Como os 66 lotes foram rotulados sem abrir 66 folhas de contato:**
+
+1. `--casar-lotes` reconheceu 27 por **identidade** — dHash contra o acervo já
+   organizado. Não é palpite: é a mesma imagem.
+2. `--sugerir-lotes` palpitou o resto por **assinatura visual**, com as
+   definições de formato tiradas das descrições que o `--indexar` já tinha
+   gerado. `cta` virou "X vermelho, expressão de recusa" porque é isso que o
+   acervo mostra, não porque o nome sugere.
+3. O relatório trouxe **o que o modelo viu** na mesma chamada, o que reduziu
+   22 decisões em branco a 22 conferências de sim/não.
+4. A **checagem de colisão** apontou 11 formatos reivindicados por dois lotes —
+   coisa que o modelo não pode ver, porque avalia um lote por vez.
+   📌 A checagem que a IA não consegue fazer é a que não precisa de IA: é
+   contagem. Confiança alta em cada peça não garante consistência do conjunto.
+5. E o **reenquadramento que fechou o dia**: colisão só é grave quando o NICHO
+   está errado. Moda dentro de pet envenena a busca semântica; dois lotes no
+   mesmo formato do nicho certo só deixam a pasta com 20 imagens em vez de 10 —
+   isso é sobra, não defeito. Com isso, os 11 conflitos viraram 4 nichos
+   trocados, todos denunciados pela hora do arquivo.
 
 ### 🏷️ 30 IMAGENS DE MODA ENTRARAM COMO PET (27/08)
 
