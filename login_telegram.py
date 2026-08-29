@@ -86,7 +86,14 @@ def conferir(api_id: int, api_hash: str) -> int:
     ⚠️ `connect()` + `is_user_authorized()`, nunca `start()`. O `start()` é
     justamente o que pergunta o telefone quando não há sessão, e num terminal
     ele ficaria esperando você digitar. Conferir não pode ter efeito."""
-    from telethon import TelegramClient
+    # ⚠️ `telethon.sync`, NÃO `telethon`. O TelegramClient normal devolve
+    # corrotina em tudo: `connect()`, `is_user_authorized()` e `get_me()` saem
+    # como objetos não-aguardados, e o erro só aparece quando alguém lê um
+    # atributo do resultado ("'coroutine' object has no attribute 'username'").
+    # 📌 Chamada assíncrona não-aguardada não estoura onde foi feita — estoura
+    # depois, longe, parecendo outro problema. E o `start()` funciona mesmo
+    # assim, o que fez o login DAR CERTO e o script parecer quebrado.
+    from telethon.sync import TelegramClient
     cli = TelegramClient(str(SESSAO), api_id, api_hash)
     try:
         cli.connect()
@@ -118,7 +125,7 @@ def entrar(api_id: int, api_hash: str) -> int:
              "código no app e alguém tem que digitar.")
         _log("   Não coloque este script no cron.")
         return 2
-    from telethon import TelegramClient
+    from telethon.sync import TelegramClient    # ver a nota em `conferir`
     SESSAO.parent.mkdir(parents=True, exist_ok=True)
     cli = TelegramClient(str(SESSAO), api_id, api_hash)
     try:
