@@ -399,6 +399,73 @@ def _resgatar_foto(produto: dict) -> str:
         return ""
 
 
+# ⚠️ COMPARAR EXIGE DUAS COISAS QUE COMPETEM. O formato `comparacao` pegava os
+# dois primeiros produtos do nicho e perguntava "qual faz mais sentido pra
+# você?". Em 29/08 isso pôs um QUADRO DE MEMÓRIAS DO BEBÊ contra uma CAIXA
+# TÉRMICA DE LAZER, com a capa prometendo "um custa o dobro, vale o
+# investimento?". Os dois são de `casa` e não competem por nada: ninguém
+# escolhe entre a lembrança do filho e a cerveja gelada.
+#
+# 📌 Formato não é template, é uma AFIRMAÇÃO sobre os produtos. `lista` afirma
+# só "estes existem" e aceita qualquer par; `comparacao` afirma "estes dois
+# disputam o seu dinheiro pelo mesmo fim" — e isso pode ser FALSO. Formato cuja
+# premissa o código não confere é formato que publica mentira de vez em quando.
+#
+# A medida é a mesma que o `fundo_ia.combinar_com_forca` já usa pra casar
+# imagem com assunto: palavras em comum. Aqui não se inventa métrica nova.
+_PARADAS = {
+    # ligação e unidade — não dizem que tipo de produto é
+    "para", "pra", "com", "sem", "dos", "das", "por", "seu", "sua", "mais",
+    "unidade", "unidades", "pecas", "peca", "tamanho", "cores", "modelo",
+    # embalagem: "Jogo de Panelas" e "Jogo de Ferramentas" não são o mesmo
+    # tipo de coisa só porque as duas são um "jogo"
+    "jogo", "kit", "conjunto", "combo", "pacote",
+    # adjetivo de anúncio — cola em qualquer produto da Shopee
+    "novo", "nova", "original", "premium", "profissional", "portatil",
+    "recarregavel", "eletrico", "eletrica", "automatico", "inteligente",
+    "qualidade", "resistente", "luxo", "barato", "promocao",
+}
+
+
+def _sem_acento(s: str) -> str:
+    import unicodedata
+    return "".join(c for c in unicodedata.normalize("NFKD", s)
+                   if not unicodedata.combining(c))
+
+
+def _termos(nome: str) -> set:
+    """As palavras que dizem QUE COISA é o produto.
+
+    Fora: ligação, unidade, embalagem e adjetivo de anúncio (ver `_PARADAS`),
+    número solto ("5L", "59") e palavra curta — "air" de "Air Fryer" some, mas
+    "fryer" fica, que é o que identifica o produto."""
+    import re
+    palavras = re.split(r"[^0-9a-z]+", _sem_acento(nome or "").lower())
+    return {p for p in palavras
+            if len(p) >= 4 and not p.isdigit() and p not in _PARADAS}
+
+
+def _par_comparavel(candidatos: list) -> tuple:
+    """(a, b, termo) do primeiro par que compartilha um termo — ou None.
+
+    ⚠️ VARRE OS CANDIDATOS NA ORDEM, e isso é de propósito: `_candidatos_do_nicho`
+    já entrega a fila do nicho inteira, então o par escolhido continua sendo o
+    mais "de cima" possível, só que agora entre os que de fato se comparam.
+
+    ⚠️ NENHUM PAR NÃO É ERRO. Fila de nicho com produtos todos diferentes é o
+    caso NORMAL — quem chama tem que ter um plano B, e o plano B é trocar de
+    formato, nunca publicar a comparação mesmo assim."""
+    termos = [(p, _termos(_nome(p))) for p in candidatos]
+    for i, (pa, ta) in enumerate(termos):
+        if not ta:
+            continue
+        for pb, tb in termos[i + 1:]:
+            comum = ta & tb
+            if comum:
+                return pa, pb, sorted(comum)[0]
+    return None
+
+
 def _candidatos_do_nicho(nicho: str) -> list:
     """TODOS os produtos do nicho, sem cortar em `quantos`.
 
@@ -431,7 +498,7 @@ def _candidatos_do_nicho(nicho: str) -> list:
 
 
 def _produtos_do_nicho(nicho: str, quantos: int, fotos_em: Path = None,
-                       exige_foto: bool = False) -> list:
+                       exige_foto: bool = False, ordem: list = None) -> list:
     """Produtos do nicho, com nome/preço/foto local quando houver.
 
     ⚠️ QUEM JÁ TEM FOTO NA FILA VEM PRIMEIRO. É o conserto de maior efeito e
@@ -439,7 +506,11 @@ def _produtos_do_nicho(nicho: str, quantos: int, fotos_em: Path = None,
     acervo, faltava ESCOLHER quem tem. Num formato de vitrine (lista,
     comparação) um slide sem foto é meia peça — ali o produto sem foto nem
     entra, e é melhor um carrossel de 4 com foto do que de 5 com buraco."""
-    candidatos = _candidatos_do_nicho(nicho)
+    # `ordem` = candidatos já escolhidos por quem chamou (hoje: o par comparável
+    # do formato `comparacao`). Quando vem, ela manda — e o resto do corpo
+    # continua igual, inclusive o QA de foto, que precisa poder vetar mesmo um
+    # produto que alguém pediu nominalmente.
+    candidatos = ordem if ordem else _candidatos_do_nicho(nicho)
     if not candidatos:
         log.warning(f"   ⚠️  nenhum produto do nicho '{nicho}' na fila")
         return []
@@ -960,11 +1031,30 @@ def montar_plano(nicho: str, formato: str = "", fotos_em: Path = None) -> dict:
     cfg = FORMATOS[formato]
     log.info(f"   🧠 formato '{formato}' — {motivo}")
 
+    # ⚠️ A PREMISSA DO `comparacao` É CONFERIDA ANTES, NÃO DEPOIS. Ver
+    # `_par_comparavel`: comparar dois produtos que não competem pelo mesmo fim
+    # publica uma pergunta sem resposta ("quadro do bebê ou caixa térmica?").
+    # Quando não há par, o certo é TROCAR DE FORMATO — `lista` afirma só "estes
+    # existem", que é verdade sobre qualquer par — e nunca publicar assim mesmo.
+    ordem = None
+    if formato == "comparacao":
+        par = _par_comparavel(_candidatos_do_nicho(nicho))
+        if par:
+            ordem = [par[0], par[1]]
+            log.info(f"   🔗 comparação legítima por '{par[2]}': "
+                     f"{_nome(par[0])[:32]} × {_nome(par[1])[:32]}")
+        else:
+            log.info(f"   ↔️  nenhum par comparável em '{nicho}' — "
+                     f"'comparacao' vira 'lista' (comparar coisas que não "
+                     f"competem é pergunta sem resposta)")
+            formato, cfg = "lista", FORMATOS["lista"]
+
     quantos = int(cfg.get("produtos", 1))
     # em vitrine a foto não é enfeite, é o slide: `lista` e `comparacao` só
     # aceitam produto com foto. Nos formatos de frase ela é opcional.
     vitrine = formato in ("lista", "comparacao")
-    produtos = _produtos_do_nicho(nicho, quantos, fotos_em, exige_foto=vitrine)
+    produtos = _produtos_do_nicho(nicho, quantos, fotos_em, exige_foto=vitrine,
+                                  ordem=ordem)
     if vitrine and len(produtos) < 2:
         # 1 slide de produto não é lista nem comparação — e o uploader recusa
         # carrossel com menos de 2 filhos de qualquer jeito
