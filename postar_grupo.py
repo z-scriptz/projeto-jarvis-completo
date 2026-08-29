@@ -29,6 +29,30 @@ PAUSA_SEG = 4.0         # respiro entre posts
 JANELA_INICIO = 7       # 07:00 — antes disso, não posta
 JANELA_FIM = 21         # 21:00 — a partir das 22:00, não posta
 
+# ⚠️ A FILA NÃO ESTÁ ORDENADA POR QUALIDADE — ESTÁ ORDENADA POR CHEGADA (29/08).
+# Este arquivo dizia, num comentário, que "a fila já vem mais novo primeiro" e
+# postava `novos[:quantos]` confiando nisso. Os dois lados da afirmação estavam
+# errados de uma vez:
+#   · `piloto.py` documenta que o gravador da mineração faz `fila.insert(0, …)`
+#     ~11 VEZES POR DIA, e `repescagem.py:440` faz `fila.append(…)` no outro
+#     extremo. O topo é "quem chegou por último", não "o melhor";
+#   · e mesmo que fosse novidade, novidade não é qualidade. O grupo recebia o
+#     que a última rodada de mineração empurrou pra cima.
+# O dado pra escolher direito SEMPRE ESTEVE NO ITEM: `curar_fila` copia classe,
+# score, vendas e comissão pra dentro de cada entrada da fila, e ninguém aqui
+# lia nenhum deles.
+# 📌 Ordem herdada é ordem que ninguém escolheu: se este script quer o melhor
+# produto, ele é quem tem que ordenar — não dá pra terceirizar isso pra um
+# invariante que outro arquivo pode quebrar sem saber que existimos.
+ORDEM_CLASSE = {"mina_ouro": 0, "ok": 1, "fraco": 2, "deserto": 3}
+
+# ⚠️ CLASSE AUSENTE NÃO REPROVA, SÓ NÃO PROMOVE. `repescagem.py` devolve
+# produtos pra fila sem `classe`, sem `score` e sem `vendas` — ele tem link,
+# foto e preço e nada mais. Um corte duro por classe apagaria esses produtos do
+# grupo pra sempre, em silêncio, e o log ficaria igual ao de um dia sem
+# repescagem. Eles ficam ATRÁS de quem tem número, nunca fora.
+SEM_CLASSE = 4
+
 
 def _carregar_env():
     for cand in (BASE_DIR / ".env", Path(".env")):
@@ -105,6 +129,46 @@ def _salvar_postados(links: list):
         _log(f"aviso: não consegui salvar o estado ({str(e)[:60]})")
 
 
+def _num(v) -> float:
+    """Número do campo, 0 quando não dá. A fila mistura int, str e ausência."""
+    try:
+        return float(str(v).replace(",", ".").strip() or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _qualidade(item: dict) -> tuple:
+    """Chave de ordenação: melhor primeiro.
+
+    A ordem é a MESMA que o `validar_fila` já usa pra classificar (classe, e
+    score dentro da classe) — aqui ela não é reinventada, só é finalmente
+    aplicada na hora de escolher. Vendas e comissão entram como desempate
+    porque `score` empata bastante entre produtos parecidos.
+    """
+    classe = str(item.get("classe") or "").strip()
+    return (ORDEM_CLASSE.get(classe, SEM_CLASSE),
+            -_num(item.get("score")),
+            -_num(item.get("vendas")),
+            -_num(item.get("comissao_valor")))
+
+
+def _porque(item: dict) -> str:
+    """Os números que fizeram este produto subir — pra caber no log.
+
+    ⚠️ SEM ISSO A ORDENAÇÃO É INVERIFICÁVEL. Uma lista ordenada e uma lista
+    embaralhada têm exatamente a mesma aparência no log ("✅ nome do produto"),
+    e foi por isso que a escolha por chegada durou tanto sem ninguém notar.
+    """
+    classe = str(item.get("classe") or "") or "sem classe"
+    vendas, com = _num(item.get("vendas")), _num(item.get("comissao_valor"))
+    partes = [classe]
+    if vendas:
+        partes.append(f"{vendas:.0f} vendas")
+    if com:
+        partes.append(f"R$ {com:.2f} com.")
+    return " · ".join(partes)
+
+
 def _faixa_horaria():
     """(inicio, fim) em horas. .env manda; valor torto cai no padrão."""
     def _h(nome, padrao):
@@ -170,10 +234,14 @@ def _rodar():
     ja = set(estado.get("links", []) if isinstance(estado, dict) else [])
 
     # candidatos: tem link, tem foto (grupo sem foto fica feio), e ainda não postado.
-    # a fila já vem "mais novo primeiro" — mantemos essa ordem (deal fresco primeiro).
     novos = [it for it in fila
              if isinstance(it, dict) and it.get("link") and it.get("imagem")
              and it["link"] not in ja]
+    # …e o MELHOR primeiro. Ver ORDEM_CLASSE lá em cima pra por que a ordem que
+    # a fila chega não serve. `sort` é estável, então produtos empatados em tudo
+    # mantêm a ordem de chegada entre si — o desempate final continua sendo
+    # "chegou antes", que é o único critério honesto quando não há número.
+    novos.sort(key=_qualidade)
 
     if not novos:
         _log("nenhum achadinho novo pra postar (todos já foram) ✔")
@@ -184,7 +252,11 @@ def _rodar():
     destino = _CANAL or os.environ.get("TELEGRAM_CHAT_ID", "?")
     _log(f"destino: {destino}" + ("  (TELEGRAM_CANAL_ID)" if _CANAL
                                   else "  (TELEGRAM_CHAT_ID — sem canal definido)"))
-    _log(f"{len(novos)} novos na fila · postando até {quantos} nesta rodada")
+    _log(f"{len(novos)} novos na fila · postando até {quantos} nesta rodada "
+         f"(os melhores primeiro)")
+    for it in novos[:quantos]:
+        _log(f"   → {str(it.get('campeao') or it.get('produto') or '')[:44]:46} "
+             f"{_porque(it)}")
     postados_agora = 0
     for it in novos[:quantos]:
         produto = {
