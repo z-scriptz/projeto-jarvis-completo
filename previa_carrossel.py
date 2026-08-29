@@ -145,12 +145,29 @@ def enviar(pasta: Path, tok: str, chat: str) -> bool:
                 pass
 
 
+def _quando(pasta: Path) -> float:
+    """Quando o CONTEÚDO desta pasta foi escrito por último.
+
+    ⚠️ NÃO É O MTIME DA PASTA, e essa diferença mandou o carrossel errado no
+    primeiro uso real (29/08). O mtime de um diretório só muda quando uma
+    entrada é criada ou apagada dentro dele. O `--refazer` sobrescreve
+    `01.jpg`…`07.jpg` com os MESMOS nomes: os arquivos ficam novos, o diretório
+    não muda, e "a pasta mais recente" continua apontando pro carrossel antigo.
+    📌 Data de pasta responde "quando a pasta nasceu", não "quando o conteúdo
+    mudou" — e era a segunda pergunta que estava sendo feita."""
+    try:
+        return max((f.stat().st_mtime for f in pasta.glob("*.jpg")),
+                   default=pasta.stat().st_mtime)
+    except OSError:
+        return 0.0
+
+
 def _ultimos(n: int) -> list:
-    """As n pastas mais recentes de pronto_carrossel/, mais nova primeiro."""
+    """As n pastas com conteúdo mais recente, mais nova primeiro."""
     if not PRONTO.exists():
         return []
     pastas = [p for p in PRONTO.iterdir() if p.is_dir()]
-    pastas.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    pastas.sort(key=_quando, reverse=True)
     return pastas[:max(1, n)]
 
 
