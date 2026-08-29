@@ -7107,6 +7107,134 @@ saiu sobre potes de cozinha. Eu não reusei a regra dele.
 gerada, o slide fica bonito, e ninguém liga o gasto à causa. Só apareceu porque
 o log imprime o título e ele veio vazio.
 
+### 🎠 O CARROSSEL ESTREOU — e a chamada dele se apagava a cada deploy (29/08)
+
+O carrossel nunca postou desde que foi construído. `carrossel_ligado: true` no
+config, agenda correta, módulo funcionando — e nenhuma linha de log em lugar
+nenhum, porque **o código não existia pra falhar**.
+
+A chamada a `carrossel_agendador.ciclo()` não morava no `daemon_maestro.py`. Ela
+era INJETADA por `patch_carrossel_daemon.py` direto em
+`agents/daemon_maestro.py` — que é exatamente o arquivo que o deploy sobrescreve
+(`git show FETCH_HEAD:daemon_maestro.py > agents/...`). Medido: `grep -c
+carrossel agents/daemon_maestro.py` deu **0**; depois do conserto, 9.
+
+📌 **Patch aplicado no destino do deploy é patch com data de validade.** Se a
+chamada precisa sobreviver, ela nasce no arquivo versionado.
+
+Às 15:30 do mesmo dia: `🎠 slot 15:30: 6 publicado(s)`, zero falha, 13 imagens
+geradas no total.
+
+### 🚨 EU AFIRMEI CINCO VEZES ANTES DE MEDIR (29/08)
+
+O dia começou com "nenhuma conta postou reels". Errei a causa cinco vezes:
+
+1. limite da Graph API da Meta — era o limite do CHAT, o Dre esclareceu
+2. `ciclo_producao` estourando e matando `ciclo_postagem` — o log mostrou a
+   postagem rodando às 09:05, refutado
+3. ranqueei a fila do grupo com dados de teste que eu inventei — os 54 itens
+   reais tinham `classe` vazia, o commit era inerte
+4. descartei o "TopShopToday" como artefato do Telegram porque `grep Today` não
+   achou nada no render — o grep estava certo e a conclusão errada: o texto
+   estava dentro da imagem gerada
+5. `float(p["preco"])` na faixa de preço — estourou em `'R$ 139,80'`
+
+E os Reels nunca tinham parado: 5/5 no Instagram às 09:00. Era sábado, não
+quinta, e sábado tem um slot só.
+
+📌 **Meu grep de diagnóstico escondeu o erro que eu procurava.** Filtrei por
+`💸|🔢|🚫|🎬|🎨` e um traceback não tem nenhum desses emoji. Quem rodou sem o
+filtro foi o Dre.
+
+### 💰 A FILA NÃO TINHA NÚMERO NENHUM — e ninguém sabia (29/08)
+
+O `postar_grupo` cortava `novos[:quantos]` na ordem da fila, apoiado num
+comentário que dizia "a fila já vem mais novo primeiro". As duas metades estavam
+erradas: `piloto.py` documenta `fila.insert(0, …)` ~11x/dia e `repescagem.py`
+faz `append` no outro extremo — o topo é quem chegou por último. E novidade não
+é qualidade.
+
+Ordenar não adiantou: **dos 54 disponíveis, 54 sem classe.** O
+`telegram_repurpose_hunter` gravava `classe: ""` e descartava vendas, rating e
+comissão — que vinham na MESMA resposta da API de afiliado que ele já buscava
+pra pegar a foto, e só quando faltava foto.
+
+Depois do conserto + `enriquecer_fila.py`: **45 mina_ouro, 100 ok, 81 fraco.**
+
+📌 **Campo que a API já devolve e o gravador não guarda é dado que custou a
+chamada e vai fazer falta numa decisão que ninguém liga a esta linha.**
+
+### 🔌 CINCO CAMADAS ATÉ A CAUSA: por que 36 posts/dia não fechava (29/08)
+
+Pergunta do Dre: "36 por dia no grupo, dá?". A resposta desceu camada por
+camada, e cada uma parecia ser a resposta:
+
+1. o cron entrega 14/dia → não é ele, a fila repõe 16/dia
+2. dos 16, só 8,3 prestam → não é qualidade, é volume de origem
+3. o volume não cresce porque o hunter gira uma lista fixa de canais
+4. a lista é fixa porque a descoberta de canais **nunca rodou uma vez sequer**
+5. e ela nunca rodou porque faltava um login de dois minutos
+
+O `descobridor_grupos` falhava **três vezes por dia, todos os dias**, com
+`Please enter your phone (or bot token)` seguido de EOF: Telethon sem sessão,
+caindo no login interativo dentro de um daemon. Custo: `grupos_descoberta_max:
+5` × 3 horários = **até 15 canais/dia** que nunca entraram.
+
+O hunter escondeu o problema porque **não depende disso** — ele lê as prévias
+públicas do t.me por HTTP e nunca precisou de login.
+
+📌 **O sintoma não era "descoberta com erro", era A FILA NÃO CRESCER** — a três
+camadas de distância, sem nada no log ligando as duas coisas.
+
+### 🎨 MANDAR MANCHETE PRO GERADOR FAZ ELE DESENHAR MANCHETE (29/08)
+
+O slide 02 do carrossel de `casa` saiu com **"TWO WAYS TO DOCUMENT THE EARLY
+YEARS"** queimado no pixel, em inglês, atravessando o cabeçalho de um post em
+português.
+
+`prompt_do_slide` já pedia "sem nenhum texto, sem palavras, sem letras". Não
+adianta: o `completar_fracos` mandava o TÍTULO do slide como assunto, e quando o
+assunto é uma frase de manchete, desenhar a manchete é a leitura mais óbvia do
+pedido. O `do_plano` já traduzia cada frase numa cena via `_direcao_visual`;
+este caminho — o que o carrossel usa de verdade — pulava a etapa.
+
+📌 **A correção não é pedir mais forte pra não escrever; é parar de mandar texto
+que pede pra ser escrito.**
+
+### 💸 R$ 54,98 AO LADO DE R$ 2.288,00 (29/08)
+
+Primeiro slot real: o carrossel de `pet` pôs uma cama de R$ 54,98 e um robô de
+R$ 2.288,00 sob a capa "3 coisas que eu compraria de novo sem pensar", num
+perfil de **achadinhos**. 41 vezes de distância.
+
+A regra NÃO é teto por nicho: no mesmo slot, `beleza` saiu com R$ 69,90 · 79,90
+· 199,09 e está certo — a capa diz "parecem caros mas custam pouco". Um teto de
+R$150 mataria esse post por um defeito que ele não tem.
+
+📌 **O problema nunca foi o valor absoluto, foi a DISTÂNCIA entre eles.** Regra
+sobre o item isolado não enxerga isso; a regra tem que ser sobre o conjunto. A
+âncora é a mediana — um outlier em qualquer ponta não a move, então ele é o
+excluído em vez de excluir os demais.
+
+E a primeira versão **derrubou o post inteiro** num preço formatado.
+📌 **O que melhora o post e o que permite o post são camadas diferentes: a de
+cima pode falhar sozinha, e falhar sozinha quer dizer não fazer nada.**
+
+### 📣 "SIGA NOSSOS CANAIS" IA PRO TOPO DO GRUPO (29/08)
+
+A fila vem de canais do Telegram, e a divulgação do próprio canal entra nela
+como produto. "SIGA NOSSOS CANAIS" estava lá com link real, 181 vendas e 13% de
+comissão — classificado **mina_ouro**, ou seja, o ranking novo o mandaria pro
+topo do grupo dos clientes.
+
+`nome_de_produto_ruim` não pegava: contar palavras úteis falha porque "NOSSOS"
+não estava em lista nenhuma e segurava o nome sozinho. O sinal certo é a FORMA
+da frase — **nome de produto não começa com imperativo**.
+
+E o `postar_grupo` era o único publicador que não chamava a regra, enquanto o
+`whatsapp_playwright` já chamava. Meia regra em cada superfície é como esse caso
+passou.
+
 ## 📌 Referência rápida (infra)
 
 - **VPS:** Contabo · daemon `jarvis.service` (`python -m agents.daemon_maestro`)
