@@ -1874,10 +1874,39 @@ def completar_fracos(plano: dict, pasta, piso: int = 2, teto: int = 3) -> int:
     print(f"🎯 {len(fracos)} slide(s) sem imagem à altura no acervo "
           f"(piso {piso}):\n")
     saida.mkdir(parents=True, exist_ok=True)
+
+    # ⚠️ A DIREÇÃO VISUAL FALTAVA AQUI, E ISSO ESCREVIA INGLÊS NO SLIDE (29/08).
+    # O `do_plano` (linha ~1789) traduz cada frase numa CENA antes de gerar;
+    # este caminho — que é o que o carrossel usa de verdade — mandava o TÍTULO
+    # cru pro modelo de imagem. Manchete entra, manchete sai desenhada: o slide
+    # 02 do casa veio com "TWO WAYS TO DOCUMENT THE EARLY YEARS" queimado no
+    # pixel, atravessando o cabeçalho, num carrossel em português.
+    #
+    # ⚠️ E O "SEM NENHUM TEXTO" DO PROMPT NÃO SALVA. `prompt_do_slide` já pede
+    # "sem palavras, sem letras, sem logotipos" — e o modelo escreveu assim
+    # mesmo. Negativa não vence instrução positiva: quando o assunto É uma
+    # frase de manchete, desenhar a manchete é a leitura mais óbvia do pedido.
+    # 📌 A correção não é pedir mais forte pra não escrever; é parar de mandar
+    # texto que pede pra ser escrito.
+    #
+    # Custa uma chamada de TEXTO por carrossel — fração de uma imagem — e é a
+    # mesma função, não uma cópia: regra duplicada é a armadilha deste projeto.
+    try:
+        direcao = _direcao_visual(nicho, [(n, t, a) for n, _f, t, a in fracos])
+    except Exception:
+        direcao = {}
+    if direcao:
+        print(f"   🎬 direção visual: {len(direcao)} cena(s) traduzidas\n")
+
     feitos = 0
     for n, forca, titulo, apoio in fracos:
         print(f"  slide {n:02d} · força {forca} · {titulo[:44]}")
-        erro = _gemini_imagem(prompt_do_slide(nicho, titulo, apoio),
+        # ⚠️ SEM DIREÇÃO, CAI NO TEXTO CRU — que é o comportamento antigo, com
+        # o defeito antigo. É de propósito: uma chamada de texto que falhou não
+        # pode impedir o slide de ter fundo. Mas o log diz quantas vieram, pra
+        # "0 cena(s)" não se confundir com "não precisou".
+        erro = _gemini_imagem(prompt_do_slide(nicho, direcao[n]) if n in direcao
+                              else prompt_do_slide(nicho, titulo, apoio),
                               saida / f"{n:02d}.png")
         if erro:
             print(f"     ❌ {erro}")
