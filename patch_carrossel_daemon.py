@@ -2,6 +2,14 @@
 # -*- coding: utf-8 -*-
 # patch_carrossel_daemon.py - liga o ciclo do CARROSSEL no daemon_maestro.
 #
+# ⚠️ APOSENTADO EM 29/08 — A CHAMADA AGORA NASCE NO `daemon_maestro.py`.
+# Este script injetava as 4 linhas em `agents/daemon_maestro.py`, que e
+# EXATAMENTE o arquivo que o deploy sobrescreve. Cada deploy apagava o patch, e
+# o carrossel parava sem log nenhum: o codigo nao existia mais pra falhar. Ele
+# continua idempotente (nao duplica nada se voce rodar), mas nao ha mais o que
+# aplicar. Mantido so pelo `--desfazer`, pros .bak antigos.
+# 📌 Patch aplicado no destino do deploy e patch com data de validade.
+#
 # TRES LINHAS, e e de proposito: o daemon_maestro posta em 6 contas, todo dia,
 # ha meses. Toda a logica do carrossel mora no `carrossel_agendador.py`; aqui a
 # gente so acrescenta a chamada, dentro de um try/except. Se o modulo novo

@@ -1500,6 +1500,30 @@ def rodar_um_ciclo(cfg: dict, estado: dict, hist: dict, dry_run: bool,
     if so in ("", "postar"):
         resumo["postagem"] = ciclo_postagem(cfg, hist, dry_run)
 
+    # 4) CARROSSEL (horários próprios, fora dos slots do Reel)
+    #
+    # ⚠️ ISTO JÁ MOROU FORA DAQUI, E POR ISSO O CARROSSEL NUNCA POSTOU (29/08).
+    # A chamada era INJETADA por `patch_carrossel_daemon.py` direto em
+    # `agents/daemon_maestro.py` — que é exatamente o arquivo que o deploy
+    # sobrescreve (`git show FETCH_HEAD:daemon_maestro.py > agents/...`). Todo
+    # deploy apagava o patch, e o sintoma era o pior possível: nenhum erro,
+    # nenhum log, nenhuma linha de carrossel em lugar nenhum — porque o código
+    # não existia mais. `carrossel_ligado: true` ficava no config sem ninguém
+    # pra ler.
+    # 📌 Patch aplicado no destino do deploy é patch com data de validade. Se
+    # a chamada precisa sobreviver, ela nasce no arquivo versionado.
+    #
+    # ⚠️ O try/except É A RAZÃO DE ISTO PODER FICAR AQUI. O daemon posta em 6
+    # contas há meses; o carrossel nasceu semana passada. Se o módulo novo
+    # explodir, os Reels continuam saindo — que é a única coisa que não pode
+    # parar. O ciclo também nasce desligado (`carrossel_ligado`, default false).
+    if so in ("", "postar", "carrossel"):
+        try:
+            import carrossel_agendador
+            resumo["carrossel"] = carrossel_agendador.ciclo(cfg, dry_run)
+        except Exception as e:
+            log.warning(f"   ⚠️  ciclo do carrossel pulado: {str(e)[:100]}")
+
     return resumo
 
 
