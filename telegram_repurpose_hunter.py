@@ -1466,13 +1466,30 @@ def _registrar_no_site(nome: str, link: str, imagem: str = "",
     # cortes aqui criaria duas verdades que divergem no dia em que alguém
     # ajustar uma — é a armadilha do arquivo da raiz contra o do pacote, que
     # este projeto já pagou uma vez.
+    #
+    # ⚠️ DOIS CAMINHOS DE IMPORT, e isso não é zelo: na VPS os módulos rodam
+    # como `agents.<nome>` e no repositório como `<nome>`. A 1ª versão tentava
+    # só `validar_fila` dentro de um `except: classe = ""` — e o resultado,
+    # medido no mesmo dia, foi 41 produtos gravados com vendas e comissão
+    # CERTAS e classe vazia, sem uma linha de erro no log.
+    # 📌 `except` que devolve o valor "não sei" transforma falha de import em
+    # dado plausível. O erro somem; o registro errado fica.
     classe = ""
     if dados.get("ok"):
-        try:
-            from validar_fila import _classificar
-            classe = _classificar({"ok": True, "campeao": dados})
-        except Exception:
-            classe = ""      # sem regra, sem palpite: vazio é "não sei"
+        for _mod in ("validar_fila", "agents.validar_fila"):
+            try:
+                import importlib
+                classe = importlib.import_module(_mod)._classificar(
+                    {"ok": True, "campeao": dados}) or ""
+                break
+            except Exception:
+                continue
+        if not classe:
+            # O produto entra mesmo assim — barrar o acervo por causa da
+            # classificação seria trocar um problema pequeno por um grande.
+            # Mas o aviso sai, porque foi o silêncio que custou os 41.
+            log.warning("   ⚠️  não classifiquei '%s' (regra do validar_fila "
+                        "indisponível) — entra sem classe", nome[:40])
     try:
         import json as _json
         fila = []

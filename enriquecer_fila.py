@@ -83,12 +83,34 @@ def _precisa(item: dict) -> bool:
     return not all(c in item for c in CAMPOS)
 
 
-def _classe_de(dados: dict) -> str:
-    """A regra é do `validar_fila`, importada. Copiar os cortes aqui criaria
-    duas verdades que divergem no dia em que alguém ajustar uma."""
+def _regra():
+    """A função `_classificar` do `validar_fila` — ou None se não achar.
+
+    ⚠️ DOIS CAMINHOS DE IMPORT, porque o projeto vive nos dois: na VPS os
+    módulos rodam como `agents.<nome>` e no repositório como `<nome>`. Eu
+    escrevi este mesmo padrão no `limpar_esteira` e no `diag_contas` e depois
+    usei só um caminho aqui — resultado medido em 29/08: 41 produtos gravados
+    com vendas e comissão corretas e classe VAZIA, sem uma linha de erro.
+
+    ⚠️ E DEVOLVE None EM VEZ DE CHUTAR. A versão anterior era
+    `except Exception: return ""`, e "" é indistinguível de "produto sem
+    classe" — o guarda falhou calado e escreveu 41 registros errados que
+    pareciam certos. Quem chama TEM que tratar o None, não assumir.
+    📌 Regra que não carregou não é regra permissiva: é ausência de regra, e
+    ausência de regra tem que parar o trabalho, não deixá-lo passar."""
+    for mod in ("validar_fila", "agents.validar_fila"):
+        try:
+            import importlib
+            return getattr(importlib.import_module(mod), "_classificar")
+        except Exception:
+            continue
+    return None
+
+
+def _classe_de(dados: dict, regra) -> str:
+    """A classe deste produto pelos números dele. `regra` vem do `_regra()`."""
     try:
-        from validar_fila import _classificar
-        return _classificar({"ok": True, "campeao": dados})
+        return regra({"ok": True, "campeao": dados}) or ""
     except Exception:
         return ""
 
@@ -139,6 +161,38 @@ def rodar(limite: int, aplicar: bool, pausa: float,
         _log(f"❌ {FILA} vazia ou ilegível")
         return 1
 
+    regra = _regra()
+    if regra is None:
+        # ⚠️ PARA, não continua sem classificar. Foi assim que 41 produtos
+        # foram gravados com número certo e classe vazia: seguir sem a regra
+        # produz um arquivo que parece enriquecido e não é.
+        _log("❌ não consegui carregar `_classificar` do validar_fila "
+             "(tentei 'validar_fila' e 'agents.validar_fila').")
+        _log("   Sem a regra eu classificaria tudo como vazio — que é o bug "
+             "que este aviso existe pra impedir. Nada foi tocado.")
+        return 2
+
+    # ── PASSO 1, DE GRAÇA: quem JÁ tem os números e está sem classe.
+    # ⚠️ CLASSIFICAR NÃO CUSTA CHAMADA — a conta é local, sobre dados que já
+    # estão no arquivo. Misturar isto com a consulta foi o que fez os 41
+    # produtos ficarem sem classe e, pior, INELEGÍVEIS pra uma segunda rodada:
+    # `_precisa` olha se os campos existem, e eles existiam.
+    # 📌 Buscar dado e decidir sobre ele são passos diferentes; juntar os dois
+    # faz a falha de um esconder o resultado do outro.
+    reclass = 0
+    for item in fila:
+        if not isinstance(item, dict) or str(item.get("classe") or "").strip():
+            continue
+        if _precisa(item):
+            continue                      # sem número, é assunto do passo 2
+        c = _classe_de(item, regra)
+        if c:
+            item["classe"] = c
+            reclass += 1
+    if reclass:
+        _log(f"🔁 {reclass} produto(s) já tinham os números e ganharam classe "
+             f"sem gastar chamada")
+
     alvos = [i for i in fila if isinstance(i, dict) and i.get("link")
              and _precisa(i)]
     if so_disponiveis:
@@ -153,7 +207,15 @@ def rodar(limite: int, aplicar: bool, pausa: float,
          f"vou consultar={min(len(alvos), limite)}")
     _log(f"antes:  {dict(_distribuicao(fila))}")
     if not alvos:
-        _log("✅ nada a enriquecer")
+        if reclass and aplicar:
+            _gravar(fila)
+            _log(f"depois: {dict(_distribuicao(fila))}")
+            _log(f"💾 gravado: {reclass} reclassificado(s), 0 chamada(s)")
+        elif reclass:
+            _log(f"depois: {dict(_distribuicao(fila))}")
+            _log(f"🧪 SIMULAÇÃO — {reclass} reclassificado(s). Use --aplicar.")
+        else:
+            _log("✅ nada a enriquecer")
         return 0
 
     feitos, falhos = 0, 0
@@ -172,7 +234,7 @@ def rodar(limite: int, aplicar: bool, pausa: float,
             # classificou este produto, a palavra dele vale mais que a nossa:
             # ele viu a mineração inteira, nós vimos um anúncio.
             if not str(item.get("classe") or "").strip():
-                item["classe"] = _classe_de(d)
+                item["classe"] = _classe_de(d, regra)
             if not item.get("imagem"):
                 item["imagem"] = d.get("imagem") or ""
             feitos += 1
@@ -185,12 +247,14 @@ def rodar(limite: int, aplicar: bool, pausa: float,
 
     _log(f"depois: {dict(_distribuicao(fila))}")
     if not aplicar:
-        _log(f"🧪 SIMULAÇÃO — {feitos} enriquecido(s), {falhos} sem resposta. "
+        _log(f"🧪 SIMULAÇÃO — {feitos} enriquecido(s), "
+             f"{reclass} reclassificado(s), {falhos} sem resposta. "
              f"Nada foi gravado. Use --aplicar.")
         return 0
-    if feitos:
+    if feitos or reclass:
         _gravar(fila)
-        _log(f"💾 gravado: {feitos} enriquecido(s), {falhos} sem resposta")
+        _log(f"💾 gravado: {feitos} enriquecido(s), "
+             f"{reclass} reclassificado(s), {falhos} sem resposta")
     else:
         _log(f"nada gravado ({falhos} sem resposta)")
     return 0
