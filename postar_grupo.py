@@ -233,10 +233,34 @@ def _rodar():
     estado = _carregar_json(POSTADOS, {})
     ja = set(estado.get("links", []) if isinstance(estado, dict) else [])
 
+    # ⚠️ O NOME PRECISA SERVIR PRA UM CLIENTE, e este script era o único
+    # publicador que não conferia isso (29/08). A fila vem de grupos do
+    # Telegram, e a divulgação do próprio canal entra nela como se fosse
+    # produto: "SIGA NOSSOS CANAIS" estava lá com link real, 181 vendas e 13%
+    # de comissão — classificado `mina_ouro`, ou seja, o ranking o mandaria
+    # pro TOPO e o grupo receberia isso como achadinho.
+    #
+    # A regra mora em `shared/termos.py` e é IMPORTADA, nunca copiada — o
+    # `whatsapp_playwright` já a usava, e ter meia regra em cada superfície é
+    # exatamente como esse caso passou. Sem ela, não filtra: na dúvida
+    # publicar é melhor que parar o grupo, e o defeito volta a ser visível.
+    try:
+        from shared.termos import nome_de_produto_ruim
+    except Exception as e:
+        _log(f"aviso: sem shared/termos ({str(e)[:60]}) — não filtro nomes")
+        nome_de_produto_ruim = lambda _n: False
+
     # candidatos: tem link, tem foto (grupo sem foto fica feio), e ainda não postado.
     novos = [it for it in fila
              if isinstance(it, dict) and it.get("link") and it.get("imagem")
              and it["link"] not in ja]
+    antes = len(novos)
+    novos = [it for it in novos
+             if not nome_de_produto_ruim(str(it.get("campeao")
+                                             or it.get("produto") or ""))]
+    if antes != len(novos):
+        _log(f"{antes - len(novos)} descartado(s): o nome não serve pra "
+             f"mostrar a um cliente")
     # …e o MELHOR primeiro. Ver ORDEM_CLASSE lá em cima pra por que a ordem que
     # a fila chega não serve. `sort` é estável, então produtos empatados em tudo
     # mantêm a ordem de chegada entre si — o desempate final continua sendo

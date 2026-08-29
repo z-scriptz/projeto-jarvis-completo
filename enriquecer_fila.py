@@ -62,6 +62,10 @@ except Exception:                    # sem a trava, seguir é melhor que parar
 # produz item que parece completo e não é lido por ninguém.
 CAMPOS = ("vendas", "rating", "comissao_rate", "comissao_valor")
 
+# Dias antes de reperguntar por um produto cuja consulta falhou. Anúncio sai do
+# ar e volta; o que não pode é pagar a mesma falha toda rodada.
+RETENTAR_APOS = 7
+
 
 def _log(m):
     print(f"   {m}", flush=True)
@@ -74,13 +78,46 @@ def _carregar(caminho: Path, padrao):
         return padrao
 
 
-def _precisa(item: dict) -> bool:
-    """Falta número neste produto?
+def _tem_numeros(item: dict) -> bool:
+    """Este produto já foi MEDIDO? (pergunta de fato, sem política)
+
+    ⚠️ SEPARADA DO `_precisa` DEPOIS DE ELE ME MORDER. Eu tinha só o
+    `_precisa`, e quando acrescentei a memória de falha ele passou a devolver
+    False por DOIS motivos diferentes: "já tem número" e "falhou faz pouco,
+    não pergunta agora". O passo de reclassificação lia `not _precisa(...)`
+    como "tem número" e classificou como `fraco` um produto sem medição
+    nenhuma — vendas 0 e comissão 0 porque os campos não existiam.
+    📌 `fraco` é uma afirmação: "eu medi e é ruim". Dizer isso sobre o que
+    nunca foi medido é o mesmo erro do default inventado — um valor plausível
+    no lugar de "não sei"."""
+    return all(c in item for c in CAMPOS)
+
+
+def _precisa(item: dict, agora: float = None) -> bool:
+    """Vale gastar uma chamada com este produto agora? (pergunta de política)
 
     ⚠️ `vendas: 0` NÃO é ausência — é um produto medido que não vendeu, e
     consultar de novo toda rodada seria pagar pela mesma resposta pra sempre. A
-    pergunta é se a CHAVE existe, não se o valor é verdadeiro."""
-    return not all(c in item for c in CAMPOS)
+    pergunta é se a CHAVE existe, não se o valor é verdadeiro.
+
+    ⚠️ E FALHA TAMBÉM É RESPOSTA. Na 1ª rodada real, 51 produtos não
+    resolveram (link morto, produto fora do ar, plataforma que não é Shopee) —
+    e a rodada seguinte tentou os MESMOS 51, um por um, 1,5s cada, até o Dre
+    dar Ctrl+C. Sem memória do fracasso, cada execução paga 77s pra reaprender
+    o que já sabia.
+    📌 Tentativa que não deixa registro condena todas as próximas a repeti-la.
+
+    A memória tem validade: anúncio sai do ar e volta, e `RETENTAR_APOS` dias
+    depois a gente pergunta de novo. Esquecer é diferente de nunca ter sabido.
+    """
+    if _tem_numeros(item):
+        return False
+    ultima = item.get("api_falhou_ts") or 0
+    if ultima:
+        agora = agora if agora is not None else time.time()
+        if (agora - float(ultima)) < RETENTAR_APOS * 86400:
+            return False
+    return True
 
 
 def _regra():
@@ -183,8 +220,10 @@ def rodar(limite: int, aplicar: bool, pausa: float,
     for item in fila:
         if not isinstance(item, dict) or str(item.get("classe") or "").strip():
             continue
-        if _precisa(item):
-            continue                      # sem número, é assunto do passo 2
+        if not _tem_numeros(item):
+            continue        # ⚠️ `_tem_numeros`, NÃO `not _precisa`: o segundo
+                            # também é False pra quem falhou há pouco, e isso
+                            # classificava como `fraco` quem nunca foi medido
         c = _classe_de(item, regra)
         if c:
             item["classe"] = c
@@ -224,7 +263,11 @@ def rodar(limite: int, aplicar: bool, pausa: float,
         nome = str(item.get("campeao") or item.get("produto") or "")[:40]
         if not d:
             falhos += 1
-            _log(f"?  {nome:42} (sem resposta da API)")
+            # ⚠️ MARCA A FALHA NO ITEM. Sem isto a próxima rodada refaz
+            # exatamente esta chamada, e a seguinte também — ver `_precisa`.
+            item["api_falhou_ts"] = int(time.time())
+            _log(f"?  {nome:42} (sem resposta da API — só reconsulto em "
+                 f"{RETENTAR_APOS}d)")
         else:
             for c in CAMPOS:
                 item[c] = d.get(c) or 0
@@ -237,6 +280,7 @@ def rodar(limite: int, aplicar: bool, pausa: float,
                 item["classe"] = _classe_de(d, regra)
             if not item.get("imagem"):
                 item["imagem"] = d.get("imagem") or ""
+            item.pop("api_falhou_ts", None)   # deu certo: a marca não vale mais
             feitos += 1
             _log(f"✅ {nome:42} {item['classe'] or 'sem classe':10} "
                  f"{item['vendas']:>6} vendas · "
@@ -251,7 +295,7 @@ def rodar(limite: int, aplicar: bool, pausa: float,
              f"{reclass} reclassificado(s), {falhos} sem resposta. "
              f"Nada foi gravado. Use --aplicar.")
         return 0
-    if feitos or reclass:
+    if feitos or reclass or falhos:
         _gravar(fila)
         _log(f"💾 gravado: {feitos} enriquecido(s), "
              f"{reclass} reclassificado(s), {falhos} sem resposta")

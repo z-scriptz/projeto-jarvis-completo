@@ -24,7 +24,25 @@ LIXO_BUSCA = {"shorts", "short", "reels", "reel", "tiktok", "viral", "achadinho"
 # Preposição e artigo não identificam produto nenhum e ainda gastam vaga das
 # 5 palavras que a busca aceita.
 LIGACAO = {"de", "da", "do", "dos", "das", "para", "pra", "com", "em", "no",
-           "na", "nos", "nas", "e", "o", "a", "os", "as", "um", "uma", "por"}
+           "na", "nos", "nas", "e", "o", "a", "os", "as", "um", "uma", "por",
+           # possessivo também não identifica produto — e "NOSSOS" sozinho
+           # segurava "SIGA NOSSOS CANAIS" de pé como se fosse nome válido
+           "nosso", "nossos", "nossa", "nossas", "meu", "meus", "minha",
+           "minhas", "seu", "sua", "seus", "suas"}
+
+# ⚠️ VERBO DE CHAMADA NO COMEÇO — é convite, não produto. Contar palavras não
+# resolve esta classe: "SIGA NOSSOS CANAIS" tem três palavras e passava por
+# uma só delas ("NOSSOS") não estar em nenhuma lista. O sinal aqui é a FORMA
+# da frase, não o vocabulário dela: nome de produto não começa com imperativo.
+#
+# Medido em 29/08: essa mensagem estava na fila do hunter com link real, 181
+# vendas e 13% de comissão — classificada `mina_ouro`, o que a punha no TOPO
+# do ranking novo do grupo.
+CHAMADA_INICIAL = {"siga", "sigam", "segue", "seguir", "inscreva", "inscrevam",
+                   "inscreve", "participe", "participa", "entre", "entra",
+                   "clique", "clica", "acesse", "acessa", "confira", "confere",
+                   "aproveite", "aproveita", "corre", "chama", "manda",
+                   "compartilhe", "compartilha", "marque", "marca", "curta"}
 
 # Quantas palavras mandar pra busca.
 PALAVRAS_BUSCA = 5
@@ -40,7 +58,21 @@ GENERICO = {"produto", "produtos", "item", "itens", "busca", "buscas", "alta",
             "ofertas", "promo", "promocao", "promoção", "achado", "achadinho",
             "achadinhos", "link", "novo", "nova", "top", "vendido", "vendidos",
             "mil", "viral", "tendencia", "tendência", "destaque", "video",
-            "vídeo", "curto", "curta", "desconto", "barato", "barata"}
+            "vídeo", "curto", "curta", "desconto", "barato", "barata",
+            # ⚠️ CHAMADA DE CANAL — a fila do hunter vem de grupos do Telegram,
+            # e mensagem de divulgação do próprio canal entra nela como se
+            # fosse produto. Medido em 29/08: "SIGA NOSSOS CANAIS" estava na
+            # fila com link real, 181 vendas e 13% de comissão, classificado
+            # `mina_ouro` — ou seja, o ranking novo o mandaria pro TOPO e o
+            # grupo receberia isso como achadinho. Três palavras úteis, nenhum
+            # filtro pegava.
+            # 📌 Acrescentar palavra aqui é seguro por construção: o nome só é
+            # reprovado quando NADA sobra. "Suporte de Canal" continua passando
+            # por causa de "suporte" — some o nome que é SÓ chamada.
+            "siga", "sigam", "segue", "seguir", "canal", "canais",
+            "inscreva", "inscrevam", "participe", "comunidade", "membros",
+            "telegram", "whatsapp", "zap", "vip", "exclusivo", "gratis",
+            "grátis", "clique", "confira", "acesse", "aproveite"}
 
 
 def nome_de_produto_ruim(nome: str) -> bool:
@@ -79,6 +111,10 @@ def nome_de_produto_ruim(nome: str) -> bool:
     if re.match(r"^https?://", n, re.I) or re.match(r"^[\w-]+\.\w{2,}/", n):
         return True
     if re.search(r"\bmil\s+vendidos?\b", n, re.I):
+        return True
+    # começa com verbo de chamada → é convite, não produto (ver CHAMADA_INICIAL)
+    primeira = re.sub(r"[^\wÀ-ÿ]", "", n.split()[0] if n.split() else "").lower()
+    if primeira in CHAMADA_INICIAL:
         return True
 
     uteis = []
