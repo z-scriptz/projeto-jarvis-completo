@@ -1027,6 +1027,51 @@ def _handle(nicho: str) -> str:
         return ""
 
 
+# ⚠️ UM CARROSSEL SÓ PODE MISTURAR PREÇOS QUE CONVERSAM (29/08). O primeiro
+# slot real pôs, no mesmo post de `pet`, uma cama de R$ 54,98 ao lado de um robô
+# de R$ 2.288,00 — 41 vezes de distância — sob a capa "3 coisas que eu compraria
+# de novo sem pensar", num perfil de ACHADINHOS. Quem arrasta esperando achado e
+# vê isso aprende que o perfil chama de achadinho qualquer coisa.
+#
+# ⚠️ E A REGRA NÃO É UM TETO FIXO POR NICHO. No mesmo slot, `beleza` saiu com
+# R$ 69,90 · R$ 79,90 · R$ 199,09 e está CERTO: a capa diz "parecem caros mas
+# custam pouco" e os três conversam. Um teto de R$150 mataria esse post por um
+# defeito que ele não tem.
+# 📌 O problema nunca foi o valor absoluto, foi a DISTÂNCIA entre eles. Regra
+# sobre o item isolado não enxerga isso; a regra tem que ser sobre o conjunto.
+FAIXA_FATOR = 4.0        # quantas vezes o mais caro pode custar o mediano
+
+
+def _faixa_coerente(produtos: list, fator: float = None) -> list:
+    """Tira do conjunto quem está fora da faixa de preço dos outros.
+
+    A âncora é a MEDIANA, não o primeiro nem o mais barato: um único produto
+    fora de faixa — em qualquer das duas pontas — não move a mediana, então ele
+    é o excluído em vez de excluir os demais.
+
+    ⚠️ PREÇO 0 NÃO É PREÇO BAIXO, É PREÇO DESCONHECIDO. Boa parte da fila entra
+    sem preço, e tratar 0 como valor faria a mediana desabar e reprovaria os
+    produtos legítimos. Quem não tem preço passa sempre — é o mesmo princípio
+    do `classe` vazia: ausência de medição não pode virar veredito."""
+    fator = FAIXA_FATOR if fator is None else fator
+    precos = sorted(float(p.get("preco") or 0) for p in produtos
+                    if float(p.get("preco") or 0) > 0)
+    if len(precos) < 3:
+        # com dois preços não existe "fora da faixa": não dá pra saber qual dos
+        # dois é o estranho, e chutar tiraria o produto certo metade das vezes.
+        return produtos
+    meio = precos[len(precos) // 2]
+    saida = []
+    for p in produtos:
+        v = float(p.get("preco") or 0)
+        if v <= 0 or (meio / fator) <= v <= (meio * fator):
+            saida.append(p)
+        else:
+            log.info(f"   💸 fora da faixa (R$ {v:.2f} vs mediana "
+                     f"R$ {meio:.2f}): {p.get('nome', '')[:38]}")
+    return saida
+
+
 def montar_plano(nicho: str, formato: str = "", fotos_em: Path = None) -> dict:
     conta = _handle(nicho)
     if formato:
@@ -1063,6 +1108,20 @@ def montar_plano(nicho: str, formato: str = "", fotos_em: Path = None) -> dict:
     vitrine = formato in ("lista", "comparacao")
     produtos = _produtos_do_nicho(nicho, quantos, fotos_em, exige_foto=vitrine,
                                   ordem=ordem)
+    # ⚠️ FILTRA ANTES DO `n_real`, e essa ordem é o que faz a capa continuar
+    # honesta: `n_real` sai de `len(produtos)`, então tirar um produto aqui
+    # transforma "3 achadinhos" em "2 achadinhos" sozinho. Filtrar depois
+    # devolveria o defeito de 26/08 — capa prometendo mais do que a entrega.
+    coerentes = _faixa_coerente(produtos)
+    if len(coerentes) >= 2:
+        produtos = coerentes
+    elif len(coerentes) < len(produtos):
+        # ⚠️ NÃO DEIXA O FILTRO ESVAZIAR O POST. Se sobrar menos de 2, o
+        # carrossel não existiria — e um post com um preço destoante é melhor
+        # que post nenhum. O aviso sai porque isso é sinal de fila com preços
+        # espalhados demais naquele nicho, que se conserta na mineração.
+        log.info(f"   💸 a faixa de preço deixaria só {len(coerentes)} "
+                 f"produto(s) — mantendo os {len(produtos)}")
     if vitrine and len(produtos) < 2:
         # 1 slide de produto não é lista nem comparação — e o uploader recusa
         # carrossel com menos de 2 filhos de qualquer jeito
