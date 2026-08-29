@@ -1435,14 +1435,44 @@ def _registrar_no_site(nome: str, link: str, imagem: str = "",
     """
     if not link:
         return
-    # Mesma condição de antes: só bate na API quando falta a foto. Assim esta
-    # mudança não acrescenta NENHUMA chamada nova — o preço vem de carona na
-    # resposta que já era buscada. Produto que chega com foto entra sem preço e
-    # ganha o dele no primeiro health-check do deploy_site, poucas horas depois.
-    if not imagem and plataforma == "shopee":
-        d = _dados_oficiais_do_link(link)      # API de afiliado Shopee
-        imagem = d.get("imagem") or ""
-        preco = preco or d.get("preco") or 0.0
+    # ⚠️ AQUI MORRIAM OS NÚMEROS QUE DECIDEM TUDO DEPOIS (29/08). A chamada só
+    # acontecia `if not imagem`, e do que ela devolvia a gente guardava foto e
+    # preço — `vendas`, `rating`, `comissao_rate` e `comissao_valor` vinham na
+    # MESMA resposta e eram descartados na linha seguinte. `classe` era gravada
+    # literalmente vazia.
+    #
+    # O estrago aparece longe daqui: o `postar_grupo` tinha que escolher "os
+    # melhores achadinhos" sem nenhum número pra comparar, e a esteira dos
+    # Reels idem. Medido em 29/08: dos 54 produtos disponíveis pro grupo, 54
+    # sem classe. Um ranking sobre isso ordena tudo empatado — que é o mesmo
+    # que não ordenar.
+    #
+    # 📌 Campo que a API já devolve e o gravador não guarda é dado que custou
+    # a chamada e vai fazer falta numa decisão que ninguém liga a esta linha.
+    #
+    # ⚠️ ISTO ACRESCENTA CHAMADA, e é uma troca consciente. Antes: zero chamada
+    # nova, e nenhum produto classificado. Agora: uma chamada por produto NOVO
+    # (não por leitura, não por post) — o hunter registra dezenas por dia, não
+    # milhares. O comentário anterior se orgulhava de não custar nada; ele
+    # também não entregava nada.
+    dados = {}
+    if plataforma == "shopee":
+        dados = _dados_oficiais_do_link(link)      # API de afiliado Shopee
+        imagem = imagem or dados.get("imagem") or ""
+        preco = preco or dados.get("preco") or 0.0
+
+    # ⚠️ A REGRA DE CLASSE É IMPORTADA, NUNCA COPIADA. `validar_fila` é quem
+    # define o que é mina_ouro (100+ vendas E 10%+ de comissão). Reescrever os
+    # cortes aqui criaria duas verdades que divergem no dia em que alguém
+    # ajustar uma — é a armadilha do arquivo da raiz contra o do pacote, que
+    # este projeto já pagou uma vez.
+    classe = ""
+    if dados.get("ok"):
+        try:
+            from validar_fila import _classificar
+            classe = _classificar({"ok": True, "campeao": dados})
+        except Exception:
+            classe = ""      # sem regra, sem palpite: vazio é "não sei"
     try:
         import json as _json
         fila = []
@@ -1456,9 +1486,23 @@ def _registrar_no_site(nome: str, link: str, imagem: str = "",
         fila = [i for i in fila if isinstance(i, dict) and i.get("link") != link]
         fila.insert(0, {
             "produto": nome, "campeao": nome, "link": link,
-            "imagem": imagem or "", "classe": "", "plataforma": plataforma,
+            "imagem": imagem or "", "classe": classe, "plataforma": plataforma,
             "origem": origem or "",   # URL Shopee p/ reetiquetar o link (canal Telegram)
             "preco": float(preco or 0.0),   # 1ª leitura; vira média com o tempo
+            # ⚠️ MESMOS NOMES DE CAMPO QUE O `curar_fila` GRAVA. Quem lê a fila
+            # (postar_grupo, carrossel_brain, bio_page_builder, daemon_maestro)
+            # já procura por estes nomes — inventar `n_vendas` ou `comissao`
+            # aqui produziria um item que parece completo e não é lido por
+            # ninguém, que é a pior falha possível: silenciosa e plausível.
+            "vendas": int(dados.get("vendas") or 0),
+            "rating": float(dados.get("rating") or 0),
+            "comissao_rate": float(dados.get("comissao_rate") or 0),
+            "comissao_valor": float(dados.get("comissao_valor") or 0),
+            # identidade do anúncio — sem ela, quem precisa (preencher_fotos,
+            # deploy_site) tem que seguir o link curto e descobrir de novo, e
+            # o link curto não carrega o id. Guardar aqui é de graça.
+            "item_id": str(dados.get("item_id") or ""),
+            "shop_id": str(dados.get("shop_id") or ""),
             "ts": int(time.time()),
         })
         _anotar_preco(link, preco, nome)
