@@ -420,6 +420,14 @@ _PARADAS = {
     # embalagem: "Jogo de Panelas" e "Jogo de Ferramentas" não são o mesmo
     # tipo de coisa só porque as duas são um "jogo"
     "jogo", "kit", "conjunto", "combo", "pacote",
+    # ⚠️ FUNÇÃO NÃO É TIPO — encontrado na 1ª rodada real (29/08), não nos meus
+    # casos de teste. O par legítimo saiu, mas casado por 'porta': "Porta
+    # Retrato" × "Porta Temperos" também casariam, e são o mesmo erro do quadro
+    # contra a caixa térmica com outra palavra. Estas dizem o que o produto FAZ
+    # ("suporte de X"), e o X é que identifica.
+    # 📌 Tirar não perde par bom: quem é de fato do mesmo tipo compartilha
+    # TAMBÉM o substantivo — os dois porta-retratos ainda casam por 'retrato'.
+    "porta", "suporte", "capa", "case", "organizador", "protetor",
     # adjetivo de anúncio — cola em qualquer produto da Shopee
     "novo", "nova", "original", "premium", "profissional", "portatil",
     "recarregavel", "eletrico", "eletrica", "automatico", "inteligente",
