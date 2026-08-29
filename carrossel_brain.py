@@ -1042,6 +1042,32 @@ def _handle(nicho: str) -> str:
 FAIXA_FATOR = 4.0        # quantas vezes o mais caro pode custar o mediano
 
 
+def _preco(v) -> float:
+    """O preço como número. 0 quando não dá — e 0 quer dizer "não sei".
+
+    ⚠️ A FILA GUARDA PREÇO EM TRÊS FORMATOS. `float(p["preco"])` estourou na
+    primeira execução real com `could not convert string to float: 'R$ 139,80'`
+    e derrubou o carrossel inteiro. O campo vem como float (139.8), como string
+    de número ("139.80") e como string JÁ FORMATADA ("R$ 1.234,56"), porque
+    passa por gravadores diferentes.
+
+    Vírgula é decimal e ponto é milhar quando os dois aparecem. Com só ponto,
+    trato como decimal — "1.234" vira 1.234 em vez de 1234, o que erra pra
+    menos num caso raro e só desloca a mediana de leve; o contrário
+    transformaria R$ 9,90 em R$ 990 e reprovaria produto bom."""
+    if isinstance(v, (int, float)):
+        return float(v)
+    s = re.sub(r"[^\d,.]", "", str(v or ""))
+    if not s:
+        return 0.0
+    if "," in s:
+        s = s.replace(".", "").replace(",", ".")
+    try:
+        return float(s)
+    except ValueError:
+        return 0.0
+
+
 def _faixa_coerente(produtos: list, fator: float = None) -> list:
     """Tira do conjunto quem está fora da faixa de preço dos outros.
 
@@ -1054,8 +1080,8 @@ def _faixa_coerente(produtos: list, fator: float = None) -> list:
     produtos legítimos. Quem não tem preço passa sempre — é o mesmo princípio
     do `classe` vazia: ausência de medição não pode virar veredito."""
     fator = FAIXA_FATOR if fator is None else fator
-    precos = sorted(float(p.get("preco") or 0) for p in produtos
-                    if float(p.get("preco") or 0) > 0)
+    precos = sorted(v for v in (_preco(p.get("preco")) for p in produtos)
+                    if v > 0)
     if len(precos) < 3:
         # com dois preços não existe "fora da faixa": não dá pra saber qual dos
         # dois é o estranho, e chutar tiraria o produto certo metade das vezes.
@@ -1063,7 +1089,7 @@ def _faixa_coerente(produtos: list, fator: float = None) -> list:
     meio = precos[len(precos) // 2]
     saida = []
     for p in produtos:
-        v = float(p.get("preco") or 0)
+        v = _preco(p.get("preco"))
         if v <= 0 or (meio / fator) <= v <= (meio * fator):
             saida.append(p)
         else:
@@ -1112,7 +1138,16 @@ def montar_plano(nicho: str, formato: str = "", fotos_em: Path = None) -> dict:
     # honesta: `n_real` sai de `len(produtos)`, então tirar um produto aqui
     # transforma "3 achadinhos" em "2 achadinhos" sozinho. Filtrar depois
     # devolveria o defeito de 26/08 — capa prometendo mais do que a entrega.
-    coerentes = _faixa_coerente(produtos)
+    # ⚠️ FILTRO OPCIONAL NUNCA PODE DERRUBAR O POST. A 1ª versão estourou num
+    # preço formatado ("R$ 139,80") e o carrossel inteiro morreu com "não montei
+    # o plano" — um refinamento de qualidade apagou a publicação.
+    # 📌 O que melhora o post e o que permite o post são camadas diferentes: a
+    # de cima pode falhar sozinha, e falhar sozinha quer dizer não fazer nada.
+    try:
+        coerentes = _faixa_coerente(produtos)
+    except Exception as e:
+        log.warning(f"   ⚠️  faixa de preço pulada ({str(e)[:80]})")
+        coerentes = produtos
     if len(coerentes) >= 2:
         produtos = coerentes
     elif len(coerentes) < len(produtos):
