@@ -370,6 +370,36 @@ def _grupo() -> str:
     return (os.environ.get("WHATSAPP_GRUPO", "") or "").strip()
 
 
+def _grupos() -> list:
+    """Todos os grupos que recebem o achadinho. Nomes EXATOS, separados por `;`.
+
+    ⚠️ NASCEU DA ESTRATÉGIA DE LOTAR VÁRIOS GRUPOS (29/08). Grupo do WhatsApp
+    para em ~1024 membros; passar disso exige grupo novo, e o Dre quer encher
+    quantos couberem. Cada achadinho vai pra TODOS — são audiências separadas,
+    não uma lista fatiada.
+
+    ⚠️ SEPARADOR É `;`, NÃO VÍRGULA. Nome de grupo de achadinho leva vírgula com
+    frequência ("Achadinhos, Ofertas e Cupons") e o split silencioso partiria o
+    nome em dois grupos que não existem — o script procuraria, não acharia,
+    tiraria print e pararia. Erro de configuração que se disfarça de erro de
+    interface é o pior de diagnosticar.
+
+    Aceita `WHATSAPP_GRUPO` (singular) como está hoje, pra não quebrar o .env
+    de quem já roda com um grupo só."""
+    bruto = (os.environ.get("WHATSAPP_GRUPOS", "") or "").strip()
+    if bruto:
+        nomes = [g.strip() for g in bruto.split(";") if g.strip()]
+        # nomes repetidos mandariam a mesma mensagem duas vezes pro mesmo lugar
+        vistos, saida = set(), []
+        for n in nomes:
+            if n.lower() not in vistos:
+                vistos.add(n.lower())
+                saida.append(n)
+        return saida
+    um = _grupo()
+    return [um] if um else []
+
+
 def _avisar(texto: str, imagem: Path = None):
     """Manda pro Telegram privado — mesma via que o ceo_agent usa. É por aqui
     que chega o QR do login e o print de quando algo quebra."""
@@ -513,7 +543,38 @@ def _marcar_slot(estado: dict, t: int) -> None:
 
 
 def _enviados_hoje(estado: dict) -> int:
+    """Quantos ACHADINHOS já saíram hoje — não quantas mensagens.
+
+    ⚠️ ERAM A MESMA COISA ATÉ EXISTIR MAIS DE UM GRUPO (29/08). Com um grupo
+    só, 1 achadinho = 1 mensagem e ninguém precisava distinguir. Com cinco
+    grupos, o mesmo achadinho vira 5 mensagens — e se o teto continuasse
+    contando mensagens, `MAX_DIA=6` passaria a significar **um achadinho por
+    dia**, matando a cadência de conteúdo sem nenhum aviso.
+    📌 Contador que muda de significado quando o sistema cresce é pior que
+    contador errado: ele estava certo, e continua parecendo certo."""
     return int(estado.get("por_dia", {}).get(str(date.today()), 0))
+
+
+def _mensagens_hoje(estado: dict) -> int:
+    """Mensagens de verdade enviadas hoje, somando todos os grupos.
+
+    Este é o número que importa pro risco: o que chama atenção é volume e
+    ritmo de robô, e é ele que multiplica quando você acrescenta grupo."""
+    return int(estado.get("msgs_por_dia", {}).get(str(date.today()), 0))
+
+
+def _teto_mensagens() -> int:
+    """Teto DURO de mensagens/dia, somando os grupos.
+
+    ⚠️ EXISTE PORQUE O TETO DE ACHADINHOS DEIXOU DE LIMITAR O VOLUME. Antes,
+    `MAX_DIA=6` garantia no máximo 6 mensagens; agora garante 6 achadinhos, que
+    com 8 grupos são 48 mensagens. O número que o WhatsApp enxerga é o segundo.
+    Padrão generoso o bastante pra não atrapalhar (6 achadinhos × 5 grupos) e
+    baixo o bastante pra um erro de config não virar centena de mensagens."""
+    try:
+        return int(float(os.environ.get("WHATSAPP_MAX_MSG_DIA", "30")))
+    except (TypeError, ValueError):
+        return 30
 
 
 def _reais(valor) -> str:
@@ -2256,9 +2317,10 @@ def login():
 def enviar(quantos: int, teste: bool = False) -> int:
     from playwright.sync_api import sync_playwright
 
-    grupo = _grupo()
-    if not grupo:
-        _log("WHATSAPP_GRUPO vazio no .env — preciso do NOME EXATO do grupo")
+    grupos = _grupos()
+    if not grupos:
+        _log("WHATSAPP_GRUPOS (ou WHATSAPP_GRUPO) vazio no .env — preciso do "
+             "NOME EXATO de cada grupo, separados por ';'")
         return 2
 
     fila = _carregar_json(FILA, [])
@@ -2298,66 +2360,124 @@ def enviar(quantos: int, teste: bool = False) -> int:
             # sem esta espera o seletor falha por a interface ainda montar
             pagina.wait_for_timeout(4000)
             _fechar_modal(pagina)  # o "Novidades do WhatsApp Web" cobre a busca
-            aberto = _abrir_grupo(pagina, grupo)
-            if aberto is None:
-                caminho = _print_erro(pagina, "não achei a caixa de busca")
-                _avisar("WhatsApp: não achei a busca NEM o grupo na lista. "
-                        "Rode --diag pra ver os campos da página.", caminho)
-                return 1
-            if not aberto:
-                caminho = _print_erro(pagina, f"grupo '{grupo}' não apareceu na busca")
-                _avisar(f"WhatsApp: não achei o grupo '{grupo}'. "
-                        "Confira o NOME EXATO em WHATSAPP_GRUPO no .env.", caminho)
-                return 1
 
-            enviados = 0
+            # ⚠️ UM GRUPO QUE SOME NÃO PODE CALAR OS OUTROS (29/08). Antes isto
+            # era `return 1` na hora: com um grupo só, não achar o grupo era
+            # mesmo o fim da rodada. Com vários, um nome digitado errado no
+            # .env — ou um grupo em que a conta foi removida — apagaria o envio
+            # dos outros quatro, e o log diria só "não achei o grupo X".
+            # É a mesma lição do slot de Reels da @topshoptech_: falha de um
+            # destino custava o slot inteiro da conta.
+            abertos, perdidos = [], []
+            for g in grupos:
+                r = _abrir_grupo(pagina, g)
+                if r:
+                    abertos.append(g)
+                else:
+                    perdidos.append(g)
+            if perdidos:
+                caminho = _print_erro(
+                    pagina, f"não achei: {', '.join(perdidos)[:80]}")
+                _avisar(f"WhatsApp: não achei {len(perdidos)} grupo(s): "
+                        f"{', '.join(perdidos)}. Confira o NOME EXATO em "
+                        f"WHATSAPP_GRUPOS no .env (separador é ;).", caminho)
+            if not abertos:
+                _log("nenhum grupo alcançável — paro por aqui")
+                return 1
+            if len(abertos) > 1:
+                _log(f"{len(abertos)} grupo(s): {', '.join(abertos)}")
+
+            enviados = 0        # achadinhos concluídos
+            msgs = 0            # mensagens de verdade (achadinho × grupo)
+            parar = False
+            hoje = str(date.today())
             for i, it in enumerate(alvo):
                 texto = _mensagem(it)
                 if teste:
-                    _log(f"   [seco] mandaria {'COM foto' if COM_FOTO else 'SÓ LINK'}:"
-                         f"\n{texto}\n")
+                    _log(f"   [seco] mandaria {'COM foto' if COM_FOTO else 'SÓ LINK'}"
+                         f" pra {len(abertos)} grupo(s):\n{texto}\n")
                     enviados += 1
                     continue
 
-                foi = False
-                if COM_FOTO:
-                    # caminho antigo, desligado por padrão (ver COM_FOTO no topo).
-                    # Se a foto falhar em qualquer etapa, cai no texto — que
-                    # ainda vende.
-                    foto = _baixar_foto(it.get("imagem", ""))
-                    if foto:
-                        foi = _enviar_com_foto(pagina, foto, texto)
-                        try:
-                            foto.unlink()
-                        except Exception:
-                            pass
-
-                if not foi:
-                    # se a prévia de imagem não fechou, digitar aqui escreveria
-                    # a legenda DENTRO dela — melhor pular este item que postar
-                    # torto. Com COM_FOTO=0 nunca há prévia, mas a checagem é
-                    # barata e protege quem religar a foto.
-                    if COM_FOTO and _achar(pagina, SEL_PREVIA, timeout=2500):
-                        _print_erro(pagina, "a prévia não fechou — pulo este item")
+                # ⚠️ O MESMO ACHADINHO VAI PRA TODOS OS GRUPOS. São audiências
+                # separadas, não uma lista fatiada — quem está no grupo 2 não
+                # viu o que foi pro grupo 1.
+                foi_em = 0
+                for g in abertos:
+                    if _mensagens_hoje(estado) + msgs >= _teto_mensagens():
+                        _log(f"   teto de mensagens do dia ({_teto_mensagens()}) "
+                             f"— paro aqui, o resto fica pra amanhã")
+                        parar = True
                         break
-                    if not _enviar_texto(pagina, texto):
-                        break
+                    if not _abrir_grupo(pagina, g):
+                        # some no meio da rodada (renomeado, removeram a conta):
+                        # segue pros outros. Config errada não é falha de envio.
+                        _log(f"   ⏭️  {g}: sumiu no meio da rodada, pulo")
+                        continue
 
-                enviados += 1
-                ja.add(it["link"])
-                estado["links"] = list(ja)
-                estado.setdefault("por_dia", {})
-                hoje = str(date.today())
-                estado["por_dia"][hoje] = estado["por_dia"].get(hoje, 0) + 1
-                _salvar_estado(estado)
-                _log(f"   ✅ {(it.get('campeao') or it.get('produto', ''))[:44]}")
+                    foi = False
+                    if COM_FOTO:
+                        # caminho antigo, desligado por padrão (ver COM_FOTO no
+                        # topo). Se a foto falhar em qualquer etapa, cai no
+                        # texto — que ainda vende.
+                        foto = _baixar_foto(it.get("imagem", ""))
+                        if foto:
+                            foi = _enviar_com_foto(pagina, foto, texto)
+                            try:
+                                foto.unlink()
+                            except Exception:
+                                pass
 
-                if i < len(alvo) - 1:
+                    if not foi:
+                        # se a prévia de imagem não fechou, digitar aqui
+                        # escreveria a legenda DENTRO dela — melhor parar que
+                        # postar torto. Com COM_FOTO=0 nunca há prévia, mas a
+                        # checagem é barata e protege quem religar a foto.
+                        if COM_FOTO and _achar(pagina, SEL_PREVIA, timeout=2500):
+                            _print_erro(pagina, "a prévia não fechou — paro")
+                            parar = True
+                            break
+                        # ⚠️ FALHA DE ENVIO PARA TUDO, diferente de grupo não
+                        # encontrado. Não achar um grupo é problema de config e
+                        # os outros seguem; `_enviar_texto` falhando quer dizer
+                        # que a PÁGINA quebrou — seletor que sumiu, sessão
+                        # caindo — e daí em diante nenhum clique é confiável.
+                        # A regra da casa é parar na primeira dúvida.
+                        if not _enviar_texto(pagina, texto):
+                            parar = True
+                            break
+
+                    foi_em += 1
+                    msgs += 1
+                    estado.setdefault("msgs_por_dia", {})
+                    estado["msgs_por_dia"][hoje] = \
+                        estado["msgs_por_dia"].get(hoje, 0) + 1
+                    _salvar_estado(estado)
+                    _log(f"   ✅ {g}: "
+                         f"{(it.get('campeao') or it.get('produto', ''))[:38]}")
+
                     espera = random.uniform(PAUSA_MIN, PAUSA_MAX)
                     _log(f"   (aguardando {espera:.0f}s)")
                     time.sleep(espera)
 
-            _log(f"{'simularia' if teste else 'enviei'} {enviados} mensagem(ns).")
+                # ⚠️ SÓ MARCA COMO ENVIADO SE SAIU EM ALGUM LUGAR. Marcar antes
+                # do envio perderia o achadinho pra sempre numa rodada que
+                # quebrou no meio — ele nunca mais seria candidato. E marcar uma
+                # vez só (não por grupo) é o certo: o registro é "este produto
+                # já foi ao ar", não "foi ao ar no grupo X".
+                if foi_em:
+                    enviados += 1
+                    ja.add(it["link"])
+                    estado["links"] = list(ja)
+                    estado.setdefault("por_dia", {})
+                    estado["por_dia"][hoje] = estado["por_dia"].get(hoje, 0) + 1
+                    _salvar_estado(estado)
+                if parar:
+                    break
+
+            _log(f"{'simularia' if teste else 'enviei'} {enviados} achadinho(s)"
+                 + (f" em {len(abertos)} grupo(s) = {msgs} mensagem(ns)"
+                    if not teste and len(abertos) > 1 else ""))
             return 0
         except Exception as e:
             caminho = _print_erro(pagina, f"erro inesperado: {str(e)[:90]}")
