@@ -1337,18 +1337,64 @@ def _fecho_salva(plano, p, cta, handle, total):
 </div>"""
 
 
+def _fecho_grupo(plano, p, cta, handle, total):
+    """O fecho de ANÚNCIO. Fora do rodízio — só sai quando pedido.
+
+    ⚠️ OS OUTROS CINCO ESTÃO ERRADOS NUM ANÚNCIO (29/08). Eles pedem seguir,
+    comentar ou salvar — que é o certo no orgânico, onde quem vê já está no
+    perfil e o objetivo é relacionamento. No tráfego pago quem vê é gente que
+    nunca ouviu falar de você, e o que você comprou foi UM clique: pedir
+    comentário gasta esse clique em outra coisa.
+    Medido no 1º slot: os carrosséis fecharam com "Segue pra não perder o
+    próximo" e "Comenta LINK que eu te mando" — os dois trabalhariam contra
+    um anúncio cujo objetivo é levar pro grupo.
+
+    ⚠️ E AQUI O TEXTO É FIXO DE PROPÓSITO, ao contrário dos outros. Nos demais
+    o texto vem do cérebro (`cta["titulo"]`), e ter hardcode ali já custou caro
+    — foi o defeito do `_fecho_ajudou`. Neste é diferente: o destino de um
+    anúncio não é escolha editorial, é o objetivo da campanha. Se o cérebro
+    inventasse a chamada aqui, o criativo poderia divergir da landing e do
+    botão do Meta, que é o pior tipo de incoerência num funil pago.
+
+    ⚠️ NÃO ENTRA EM `MODELOS_FECHO`. Se entrasse, o rodízio o sortearia num
+    post orgânico e o perfil pediria pra entrar num grupo do nada."""
+    import html as _h
+    foto = _fundo(plano)
+    camada = (f'<div class="fotocheia" style="background-image:url({foto});'
+              f'filter:saturate(.35) contrast(1.1) brightness(.72)"></div>'
+              f'<div class="fade" style="inset:0;background:linear-gradient('
+              f'180deg,#0b0d12aa 0%,#0b0d12ee 100%)"></div>'
+              ) if foto else ""
+    return f"""<div class="slide" style="background:#0b0d12;color:#eef1f5">
+  {camada}
+  <div class="mancha" style="width:780px;height:780px;right:-230px;
+       bottom:-280px;background:rgba(37,211,102,.16)"></div>
+  <div class="rotulo" style="color:#25d366;opacity:.95">GRUPO GRATUITO</div>
+  <h1 id="titulo" style="margin-top:auto;font-size:104px">
+    Entra no grupo do WhatsApp</h1>
+  <p class="corpo" style="margin-top:38px;opacity:.92">
+    Achadinhos da Shopee todo dia, com o link. De graça.</p>
+  <div class="rodape"><div class="arroba">{handle}</div>
+    <div class="pag" style="opacity:.62">{total:02d} / {total:02d}</div></div>
+</div>"""
+
+
 MODELOS_FECHO = {
     "comente": _fecho_comente, "perfil": _fecho_perfil,
     "ajudou": _fecho_ajudou, "perfil_certo": _fecho_perfil_certo,
     "salva": _fecho_salva,
 }
 
+# ⚠️ SEPARADO DO RODÍZIO. `MODELOS_FECHO` é o que o sorteio pode escolher;
+# estes só saem quando alguém pede por nome (`CARR_FECHO=grupo`).
+FECHOS_SOB_PEDIDO = {"grupo": _fecho_grupo}
+
 
 def _escolher_fecho(conta: str) -> str:
     """Rodízio com memória — nunca o mesmo da vez anterior naquela conta."""
     import random
     forcado = os.environ.get("CARR_FECHO", "").strip()
-    if forcado in MODELOS_FECHO:
+    if forcado in MODELOS_FECHO or forcado in FECHOS_SOB_PEDIDO:
         return forcado
     try:
         mem = json.loads(FECHO_MEMORIA.read_text(encoding="utf-8"))
@@ -1374,7 +1420,10 @@ def _html_fecho(plano: dict, total: int) -> str:
     handle = _h.escape(plano.get("handle") or "")
     modelo = _escolher_fecho(plano.get("handle", ""))
     log.info(f"   🎬 fecho '{modelo}'")
-    corpo = MODELOS_FECHO[modelo](plano, p, cta, handle, total)
+    # sob pedido primeiro: o de anúncio não está no rodízio (ver
+    # FECHOS_SOB_PEDIDO) e só chega aqui quando alguém o nomeou
+    funcao = FECHOS_SOB_PEDIDO.get(modelo) or MODELOS_FECHO[modelo]
+    corpo = funcao(plano, p, cta, handle, total)
 
     # ⚠️ A FOTO DO FECHO ENTRA AQUI, NOS CINCO MODELOS DE UMA VEZ. Os modelos
     # nasceram sem foto (eram cor chapada) e o `--do-plano` passou a gerar uma
