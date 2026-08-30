@@ -25,6 +25,7 @@
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -65,11 +66,30 @@ def _credenciais() -> tuple:
     return tok, chat
 
 
+_FOTO_ORIGEM = re.compile(r"^produto_\d+$")
+
+
 def _slides(pasta: Path) -> list:
-    """Os JPGs numerados, em ordem. `produto_*.jpg` fica de fora: são as fotos
-    de origem que o render consome, não slides."""
+    """As imagens a enviar, em ordem.
+
+    Num carrossel são os JPGs NUMERADOS (01, 02…), e `produto_1.jpg` fica de
+    fora: são as fotos de origem que o render consome, não slides.
+
+    ⚠️ MAS NEM TODA PASTA É CARROSSEL (30/08). O `criativo_anuncio` grava
+    `produto.jpg` e `curadoria.jpg` — peças únicas, sem numeração — e esta
+    função devolvia lista vazia pra elas. Pior: eu escrevi
+    `previa_carrossel.py criativos_anuncio` no cabeçalho daquele arquivo sem
+    rodar o par uma vez.
+    📌 Ferramenta que só reconhece a forma pra qual nasceu vira obstáculo na
+    segunda forma — e o dono descobre isso quando já mandou o comando.
+
+    Sem numerados, manda o que houver. `produto_1.jpg` continua fora pelo
+    padrão `produto_<número>`; `produto.jpg` (sem número) é peça, e entra."""
+    numerados = sorted(p for p in pasta.glob("*.jpg") if p.stem.isdigit())
+    if numerados:
+        return numerados
     return sorted(p for p in pasta.glob("*.jpg")
-                  if p.stem.isdigit())
+                  if not _FOTO_ORIGEM.match(p.stem))
 
 
 def _legenda(pasta: Path) -> str:
@@ -101,7 +121,7 @@ def enviar(pasta: Path, tok: str, chat: str) -> bool:
     """Um álbum por carrossel. True se o Telegram aceitou."""
     fotos = _slides(pasta)
     if not fotos:
-        _log(f"❌ {pasta.name}: nenhum slide numerado (01.jpg, 02.jpg…)")
+        _log(f"❌ {pasta.name}: nenhum .jpg pra mandar")
         return False
     fotos = fotos[:MAX_ALBUM]
     import requests
