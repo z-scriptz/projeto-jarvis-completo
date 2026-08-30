@@ -166,83 +166,161 @@ def _cards(produtos: list) -> str:
         preco = _reais(_num(p.get("preco")))
         # ponto de milhar no padrão brasileiro: 4931 -> 4.931
         vendas = f"{int(p.get('vendas') or 0):,}".replace(",", ".")
+        # ⚠️ O NÚMERO DE VENDAS FICA SOBRE A FOTO, não embaixo. É ele que
+        # diferencia esta página das dos concorrentes — nenhum deles mede
+        # produto — e informação que diferencia não pode ficar no rodapé do
+        # card, onde o olho já passou batido.
         linhas.append(
             f'<figure class="c">'
+            f'<span class="v">{vendas} vendas</span>'
             f'<img src="{_esc(p.get("imagem"))}" alt="{nome}" loading="lazy">'
-            f'<figcaption><b>{preco}</b>'
-            f'<span>{vendas} vendas</span></figcaption>'
+            f'<figcaption><div class="n">{nome}</div><b>{preco}</b></figcaption>'
             f'</figure>')
-    return ('<h2>Alguns dos últimos achadinhos</h2>'
+    return ('<h2>O que entrou no grupo essa semana</h2>'
             '<div class="grade">' + "".join(linhas) + '</div>')
 
 
-def _pagina(url: str, produtos: list) -> str:
-    """A landing. Curta: quem veio do anúncio decide em segundos.
+def _estatisticas() -> dict:
+    """Números reais da fila pra página. {} se não der pra medir.
 
-    ⚠️ O BOTÃO APARECE DUAS VEZES, em cima e no fim. Quem já decidiu clica no
-    primeiro sem rolar; quem foi convencido pelos produtos encontra o segundo
-    onde acabou de se convencer. Um botão só custa uma das duas metades.
+    ⚠️ SÓ NÚMERO QUE EXISTE. A tentação numa landing é escrever "+10.000
+    membros satisfeitos" e seguir a vida. Aqui os três números saem do
+    `produtos_fila.json` e podem ser conferidos: quantos produtos foram
+    MEDIDOS pela API da Shopee, quantos passaram no corte, e quantas vendas
+    esses aprovados somam.
+    📌 Número inventado numa landing de anúncio pago é publicidade enganosa —
+    e num nicho onde todo mundo inventa, o verificável é o diferencial."""
+    try:
+        itens = json.loads(FILA.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if not isinstance(itens, list):
+        return {}
+    medidos = [i for i in itens if isinstance(i, dict) and i.get("classe")]
+    bons = [i for i in medidos if i["classe"] in ("mina_ouro", "ok")]
+    if len(medidos) < 20:
+        # amostra pequena vira número sem graça ("12 analisados") e enfraquece
+        # em vez de convencer. Melhor a seção não existir.
+        return {}
+    return {"medidos": len(medidos), "bons": len(bons),
+            "vendas": sum(int(i.get("vendas") or 0) for i in bons)}
+
+
+def _mil(n: int) -> str:
+    return f"{int(n):,}".replace(",", ".")
+
+
+def _barra_stats(st: dict) -> str:
+    if not st:
+        return ""
+    return (
+        '<div class="stats">'
+        f'<div><b>{_mil(st["medidos"])}</b><span>produtos analisados</span></div>'
+        f'<div><b>{_mil(st["bons"])}</b><span>passaram no corte</span></div>'
+        f'<div><b>{_mil(st["vendas"])}</b><span>vendas somadas</span></div>'
+        '</div>')
+
+
+def _pagina(url: str, produtos: list) -> str:
+    """A landing.
+
+    ⚠️ O BOTÃO É FIXO NO RODAPÉ, além do de cima. Num anúncio de tráfego a
+    pessoa chega no celular e decide rolando; CTA que sai da tela junto com o
+    scroll obriga a rolar de volta, e uma parte não rola. O fixo acompanha.
 
     ⚠️ NENHUMA FRASE AFIRMA O QUE NÃO ACONTECEU. Sem "a gente testou", sem "eu
-    uso" — o que a página diz é o que é verdade: garimpamos, selecionamos, e
-    os números ao lado de cada produto são da API da Shopee. Num anúncio pago
-    afirmação falsa deixa de ser deselegante e vira problema com o CONAR."""
+    uso", sem contador de membros inventado. O que a página diz é verdade
+    verificável: garimpamos, medimos, e os números vêm da API da Shopee. Em
+    anúncio pago afirmação falsa vira problema com o CONAR."""
     href = _esc(url)
+    st = _estatisticas()
     return f"""<!doctype html>
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
-<title>Grupo de achadinhos da Shopee</title>
+<meta name="theme-color" content="#0b0d12">
+<title>Achadinhos da Shopee — grupo gratuito no WhatsApp</title>
 <style>
- *{{box-sizing:border-box}}
- body{{margin:0;background:#0f1115;color:#f2f2f2;
-      font:16px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}}
- .w{{max-width:560px;margin:0 auto;padding:28px 18px 40px}}
- h1{{font-size:29px;line-height:1.2;margin:0 0 12px;letter-spacing:-.02em}}
- h1 b{{color:#25d366}}
- p.sub{{color:#b7bcc4;margin:0 0 22px}}
- h2{{font-size:15px;text-transform:uppercase;letter-spacing:.08em;
-    color:#8b929c;margin:34px 0 14px;font-weight:600}}
- .cta{{display:block;background:#25d366;color:#08130c;text-decoration:none;
-      text-align:center;font-weight:700;font-size:18px;padding:16px;
-      border-radius:13px}}
- .cta:active{{transform:scale(.99)}}
- .obs{{color:#7d848d;font-size:13px;text-align:center;margin:10px 0 0}}
+ *{{box-sizing:border-box;-webkit-tap-highlight-color:transparent}}
+ body{{margin:0;background:#0b0d12;color:#eef1f5;
+      font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+      padding-bottom:92px}}
+ .w{{max-width:520px;margin:0 auto;padding:0 18px}}
+ header{{padding:30px 0 0}}
+ .selo{{display:inline-flex;align-items:center;gap:7px;background:#16341f;
+       color:#4ade80;font-size:12.5px;font-weight:600;letter-spacing:.03em;
+       padding:6px 12px;border-radius:99px;margin-bottom:16px}}
+ .selo i{{width:7px;height:7px;border-radius:99px;background:#25d366;
+         display:block}}
+ h1{{font-size:31px;line-height:1.15;margin:0 0 14px;letter-spacing:-.025em;
+    font-weight:800}}
+ h1 em{{font-style:normal;color:#25d366}}
+ .sub{{color:#a8b0bb;margin:0;font-size:17px}}
+ .cta{{display:block;background:#25d366;color:#062a14;text-decoration:none;
+      text-align:center;font-weight:800;font-size:17.5px;padding:17px;
+      border-radius:14px;box-shadow:0 6px 20px rgba(37,211,102,.22)}}
+ .cta:active{{transform:translateY(1px)}}
+ .obs{{color:#767e8a;font-size:13px;text-align:center;margin:11px 0 0}}
+ .stats{{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;
+        margin:26px 0 6px;text-align:center}}
+ .stats div{{background:#141821;border-radius:12px;padding:13px 6px}}
+ .stats b{{display:block;font-size:20px;color:#fff;letter-spacing:-.02em}}
+ .stats span{{font-size:11.5px;color:#7d8593;line-height:1.35;display:block;
+             margin-top:3px}}
+ h2{{font-size:13px;text-transform:uppercase;letter-spacing:.1em;
+    color:#7d8593;margin:34px 0 13px;font-weight:700}}
  .grade{{display:grid;grid-template-columns:1fr 1fr;gap:11px}}
- .c{{margin:0;background:#171a21;border-radius:12px;overflow:hidden}}
- .c img{{width:100%;aspect-ratio:1;object-fit:cover;display:block}}
- .c figcaption{{padding:9px 10px;font-size:14px;display:flex;
-               justify-content:space-between;align-items:baseline;gap:6px}}
- .c b{{color:#25d366}}
- .c span{{color:#8b929c;font-size:12px}}
- ul{{list-style:none;padding:0;margin:0 0 26px}}
- li{{padding:7px 0 7px 26px;position:relative;color:#dfe3e8}}
- li:before{{content:"✓";position:absolute;left:0;color:#25d366;font-weight:700}}
+ .c{{margin:0;background:#141821;border-radius:14px;overflow:hidden;
+    position:relative}}
+ .c img{{width:100%;aspect-ratio:1;object-fit:cover;display:block;
+        background:#1c212b}}
+ .c .v{{position:absolute;top:8px;left:8px;background:rgba(6,10,16,.82);
+       color:#4ade80;font-size:11px;font-weight:700;padding:4px 8px;
+       border-radius:99px;backdrop-filter:blur(4px)}}
+ .c figcaption{{padding:10px 11px 12px}}
+ .c .n{{font-size:12.5px;color:#98a1ae;line-height:1.35;height:2.7em;
+       overflow:hidden;margin-bottom:5px}}
+ .c b{{color:#fff;font-size:17px;letter-spacing:-.02em}}
+ ul{{list-style:none;padding:0;margin:0}}
+ li{{padding:9px 0 9px 30px;position:relative;color:#d5dae1;
+    border-bottom:1px solid #171c25}}
+ li:last-child{{border:0}}
+ li:before{{content:"✓";position:absolute;left:2px;top:9px;color:#25d366;
+          font-weight:800}}
+ .fixo{{position:fixed;left:0;right:0;bottom:0;padding:12px 18px 16px;
+       background:linear-gradient(to top,#0b0d12 62%,rgba(11,13,18,0));
+       z-index:9}}
+ .fixo .w{{padding:0}}
 </style>
 </head>
 <body>
 <div class="w">
-  <h1>Achadinhos da Shopee, <b>todo dia</b>, no seu WhatsApp</h1>
-  <p class="sub">A gente garimpa e manda no grupo só o que vale a pena — com o
-  link direto. Entrar é de graça.</p>
+  <header>
+    <span class="selo"><i></i>Grupo gratuito no WhatsApp</span>
+    <h1>Os achadinhos da Shopee que <em>passam no filtro</em></h1>
+    <p class="sub">Todo dia a gente analisa o que aparece e manda no grupo
+    só o que tem tração de verdade — com o link direto.</p>
+  </header>
 
-  <a class="cta" href="{href}">Entrar no grupo</a>
-  <p class="obs">Grupo silenciável · saia quando quiser</p>
-
-  <h2>O que você recebe</h2>
-  <ul>
-    <li>Produtos com avaliação boa e preço que faz sentido</li>
-    <li>O link direto, sem precisar procurar</li>
-    <li>Poucas mensagens por dia — nada de inundar seu WhatsApp</li>
-  </ul>
+  {_barra_stats(st)}
 
   {_cards(produtos)}
 
-  <p class="obs" style="margin:26px 0 12px">Pronto pra economizar?</p>
-  <a class="cta" href="{href}">Entrar no grupo</a>
+  <h2>Como funciona</h2>
+  <ul>
+    <li>Só entra produto com boa avaliação e preço que faz sentido</li>
+    <li>O link vai junto — você não precisa procurar</li>
+    <li>Poucas mensagens por dia, sem inundar seu WhatsApp</li>
+    <li>Silencie ou saia quando quiser</li>
+  </ul>
+
+  <p class="obs" style="margin:30px 0 0">Entrar é de graça.</p>
 </div>
+
+<div class="fixo"><div class="w"><a class="cta" href="{href}">
+Entrar no grupo</a></div></div>
 </body>
 </html>
 """
