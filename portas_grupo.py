@@ -71,6 +71,17 @@ BASE_DIR = Path(__file__).resolve().parent
 DESTINOS = BASE_DIR / "shared" / "portas_grupo.json"
 FILA = BASE_DIR / "shared" / "produtos_fila.json"
 QUANTOS_PRODUTOS = 6
+
+# ⚠️ OS NICHOS SÃO OS DAS SEIS CONTAS — e são verdade, não enfeite. O Dre pediu
+# uma esteira animada com marcas de loja (Shein, Amazon, Temu, Mercado Livre).
+# Duas coisas impediram:
+#   · a fila é 100% Shopee hoje; listar as outras seria afirmação falsa na
+#     primeira dobra de uma página de anúncio pago;
+#   · e marca gráfica de terceiro numa página que vende entrada no grupo sugere
+#     parceria que não existe. Nome em texto, dizendo de onde vem o achadinho,
+#     é uso descritivo e é normal; logo cravado é outra conversa.
+# A faixa roda o que a operação REALMENTE cobre, e dá o mesmo efeito visual.
+NICHOS = ("casa", "beleza", "pet", "tech", "moda", "cozinha", "organização")
 # mesmo endereço que o deploy_site usa — o site é um clone à parte, no
 # repositório do GitHub Pages que serve o topshopoficial.com.br
 SITE_REPO = Path(os.environ.get("TOPSHOP_SITE_DIR",
@@ -129,7 +140,49 @@ def _esc(t) -> str:
             .replace(">", "&gt;").replace('"', "&quot;"))
 
 
-def _achadinhos(quantos: int = QUANTOS_PRODUTOS) -> list:
+def _itens() -> list:
+    """A fila crua. Uma leitura por execução — `_achadinhos`, `_lojas` e
+    `_estatisticas` olham o mesmo arquivo e não faz sentido abrir três vezes."""
+    try:
+        d = json.loads(FILA.read_text(encoding="utf-8"))
+        return d if isinstance(d, list) else []
+    except Exception:
+        return []
+
+
+def _lojas(itens: list) -> list:
+    """As lojas que a fila REALMENTE tem, pelo campo `plataforma`.
+
+    ⚠️ SAI DO DADO, NÃO DE UMA LISTA FIXA. Assim, no dia em que a mineração
+    trouxer Mercado Livre ou Amazon, a página passa a dizer isso sozinha — e
+    enquanto não trouxer, ela não promete o que não entrega."""
+    nomes = {"shopee": "Shopee", "amazon": "Amazon",
+             "mercadolivre": "Mercado Livre", "magalu": "Magalu",
+             "aliexpress": "AliExpress", "shein": "Shein", "temu": "Temu"}
+    vistas = []
+    for i in itens:
+        if not isinstance(i, dict):
+            continue
+        k = str(i.get("plataforma") or "").strip().lower()
+        # `tiktok` aparece na fila como FONTE DE VÍDEO, não como loja — entra
+        # aqui e a página passaria a dizer que vende achadinho do TikTok.
+        if k in nomes and nomes[k] not in vistas:
+            vistas.append(nomes[k])
+    return vistas or ["Shopee"]
+
+
+def _faixa(itens: list) -> str:
+    """A esteira que corre sozinha. CSS puro — sem JS, sem imagem, sem request.
+
+    ⚠️ O CONTEÚDO É DUPLICADO DE PROPÓSITO. A animação desloca a metade da
+    largura; sem a segunda cópia, a faixa some da tela e volta do zero, com um
+    salto visível a cada volta."""
+    itens_txt = list(NICHOS) + [f"achadinhos da {l}" for l in _lojas(itens)]
+    fita = "".join(f"<span>{_esc(t)}</span>" for t in itens_txt)
+    return f'<div class="faixa"><div class="fita">{fita}{fita}</div></div>'
+
+
+def _achadinhos(quantos: int = QUANTOS_PRODUTOS, itens: list = None) -> list:
     """Os melhores da fila, pra página mostrar do que o grupo é feito.
 
     ⚠️ SÓ ENTRA QUEM TEM NÚMERO. A página exibe vendas e preço; produto sem
@@ -140,12 +193,7 @@ def _achadinhos(quantos: int = QUANTOS_PRODUTOS) -> list:
     ⚠️ E A ORDEM É A MESMA DO GRUPO. Se a página promete os melhores e o grupo
     entrega outra coisa, a promessa quebra na primeira mensagem — que é o mesmo
     defeito de capa que o carrossel teve em 26/08, em outra superfície."""
-    try:
-        itens = json.loads(FILA.read_text(encoding="utf-8"))
-    except Exception:
-        return []
-    if not isinstance(itens, list):
-        return []
+    itens = _itens() if itens is None else itens
     bons = [i for i in itens
             if isinstance(i, dict) and i.get("imagem") and i.get("link")
             and str(i.get("classe") or "") in ("mina_ouro", "ok")
@@ -173,14 +221,14 @@ def _cards(produtos: list) -> str:
         linhas.append(
             f'<figure class="c">'
             f'<span class="v">{vendas} vendas</span>'
-            f'<img src="{_esc(p.get("imagem"))}" alt="{nome}" loading="lazy">'
+            f'<img src="{_esc(p.get("imagem"))}" alt="" loading="lazy">'
             f'<figcaption><div class="n">{nome}</div><b>{preco}</b></figcaption>'
             f'</figure>')
     return ('<h2>O que entrou no grupo essa semana</h2>'
             '<div class="grade">' + "".join(linhas) + '</div>')
 
 
-def _estatisticas() -> dict:
+def _estatisticas(itens: list = None) -> dict:
     """Números reais da fila pra página. {} se não der pra medir.
 
     ⚠️ SÓ NÚMERO QUE EXISTE. A tentação numa landing é escrever "+10.000
@@ -190,12 +238,7 @@ def _estatisticas() -> dict:
     esses aprovados somam.
     📌 Número inventado numa landing de anúncio pago é publicidade enganosa —
     e num nicho onde todo mundo inventa, o verificável é o diferencial."""
-    try:
-        itens = json.loads(FILA.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
-    if not isinstance(itens, list):
-        return {}
+    itens = _itens() if itens is None else itens
     medidos = [i for i in itens if isinstance(i, dict) and i.get("classe")]
     bons = [i for i in medidos if i["classe"] in ("mina_ouro", "ok")]
     if len(medidos) < 20:
@@ -221,7 +264,7 @@ def _barra_stats(st: dict) -> str:
         '</div>')
 
 
-def _pagina(url: str, produtos: list) -> str:
+def _pagina(url: str, produtos: list, itens: list) -> str:
     """A landing.
 
     ⚠️ O BOTÃO É FIXO NO RODAPÉ, além do de cima. Num anúncio de tráfego a
@@ -233,7 +276,7 @@ def _pagina(url: str, produtos: list) -> str:
     verificável: garimpamos, medimos, e os números vêm da API da Shopee. Em
     anúncio pago afirmação falsa vira problema com o CONAR."""
     href = _esc(url)
-    st = _estatisticas()
+    st = _estatisticas(itens)
     return f"""<!doctype html>
 <html lang="pt-BR">
 <head>
@@ -244,9 +287,33 @@ def _pagina(url: str, produtos: list) -> str:
 <title>Achadinhos da Shopee — grupo gratuito no WhatsApp</title>
 <style>
  *{{box-sizing:border-box;-webkit-tap-highlight-color:transparent}}
- body{{margin:0;background:#0b0d12;color:#eef1f5;
+ body{{margin:0;background:#0b0d12;color:#eef1f5;position:relative;
       font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
-      padding-bottom:92px}}
+      padding-bottom:92px;overflow-x:hidden}}
+ /* ⚠️ AURORA EM CSS, NÃO IMAGEM. Fundo chamativo sem um único request extra:
+    quem vem de anúncio no 4G abandona antes de a imagem chegar, e aí o clique
+    foi pago e perdido. `pointer-events:none` pra não engolir o toque no botão. */
+ body::before{{content:"";position:fixed;inset:-30% -30% auto -30%;height:70vh;
+      pointer-events:none;z-index:0;filter:blur(64px);opacity:.85;
+      background:radial-gradient(40% 48% at 20% 26%,#25d36688,transparent 72%),
+                 radial-gradient(36% 44% at 82% 14%,#3b82f666,transparent 72%),
+                 radial-gradient(30% 38% at 60% 52%,#a855f744,transparent 72%);
+      animation:aurora 16s ease-in-out infinite alternate}}
+ @keyframes aurora{{to{{transform:translate3d(0,7%,0) scale(1.12)}}}}
+ @media (prefers-reduced-motion:reduce){{
+   body::before{{animation:none}} .fita{{animation:none}} }}
+ .w{{position:relative;z-index:1}}
+ /* a esteira: o wrapper corta, a fita anda. Ver `_faixa` pro porquê da cópia */
+ .faixa{{overflow:hidden;margin:22px -18px 0;
+        -webkit-mask-image:linear-gradient(90deg,transparent,#000 12%,
+                           #000 88%,transparent);
+        mask-image:linear-gradient(90deg,transparent,#000 12%,#000 88%,
+                   transparent)}}
+ .fita{{display:flex;width:max-content;animation:corre 26s linear infinite}}
+ .fita span{{flex:none;padding:7px 15px;margin-right:9px;border-radius:99px;
+            background:#151a23;color:#9aa3b0;font-size:13.5px;font-weight:600;
+            white-space:nowrap;text-transform:lowercase}}
+ @keyframes corre{{to{{transform:translateX(-50%)}}}}
  .w{{max-width:520px;margin:0 auto;padding:0 18px}}
  header{{padding:30px 0 0}}
  .selo{{display:inline-flex;align-items:center;gap:7px;background:#16341f;
@@ -303,6 +370,8 @@ def _pagina(url: str, produtos: list) -> str:
     <p class="sub">Todo dia a gente analisa o que aparece e manda no grupo
     só o que tem tração de verdade — com o link direto.</p>
   </header>
+
+  {_faixa(itens)}
 
   {_barra_stats(st)}
 
@@ -399,7 +468,8 @@ def rodar(publicar_de_verdade: bool) -> int:
     # ⚠️ CARREGA UMA VEZ, NÃO POR PÁGINA. Todas as portas levam ao mesmo grupo e
     # mostram os mesmos achadinhos; reler a fila por slug seria trabalho igual
     # com resultado idêntico. E carregar aqui deixa o aviso sair uma vez só.
-    produtos = _achadinhos()
+    itens = _itens()
+    produtos = _achadinhos(itens=itens)
     if not produtos:
         _log("⚠️  nenhum produto classificado com foto, preço e vendas na fila "
              "— as páginas saem sem a prova (rode enriquecer_fila.py)")
@@ -411,7 +481,7 @@ def rodar(publicar_de_verdade: bool) -> int:
     feitos = []
     for slug, url in destinos.items():
         destino = SITE_REPO / PASTA / str(slug) / "index.html"
-        conteudo = _pagina(str(url), produtos)
+        conteudo = _pagina(str(url), produtos, itens)
         if publicar_de_verdade:
             destino.parent.mkdir(parents=True, exist_ok=True)
             destino.write_text(conteudo, encoding="utf-8")
