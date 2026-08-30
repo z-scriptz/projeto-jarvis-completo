@@ -158,6 +158,64 @@ def _ja_medidos() -> set:
     return {i for i in ids if i}
 
 
+def _carrosseis() -> list:
+    """Os carrosséis publicados, no formato que o `coletar` espera.
+
+    ⚠️ ELES NUNCA FORAM MEDIDOS, e o motivo é estrutural (30/08). O
+    `ledger_publicados.juntar()` monta a lista de posts LENDO O JOURNAL, à
+    procura do par que o `publish_guard` imprime:
+
+        📤 [instagram] 'slug' — tentativa 1/3
+        ✅ [instagram] publicado: https://...
+
+    O carrossel não passa pelo publish_guard — ele chama o `meta_uploader`
+    direto — então esse par não existe pra ele e o `juntar()` não o enxerga.
+    Seis carrosséis foram ao ar no 1º slot e nenhum entrou na medição.
+
+    📌 Aqui não precisa reconstruir nada do log: o `carrosseis_ledger.jsonl`
+    JÁ tem url, conta, nicho e hook, gravados na hora da publicação. O ledger
+    dos Reels teve que ser garimpado do journal porque não existia; este
+    existe desde o primeiro dia e ninguém lia.
+
+    ⚠️ SÓ QUEM TEM URL. `registrar()` também grava o carrossel montado sem
+    publicar (ensaio pela CLI, ou recusa da Meta) com url vazia — esses não
+    são post e não têm o que medir."""
+    caminho = BASE_DIR / "shared" / "carrosseis_ledger.jsonl"
+    if not caminho.exists():
+        return []
+    saida, vistos = [], set()
+    for ln in caminho.read_text(encoding="utf-8", errors="ignore").splitlines():
+        ln = ln.strip()
+        if not ln:
+            continue
+        try:
+            r = json.loads(ln)
+        except Exception:
+            continue
+        sc = _shortcode(str(r.get("url") or ""))
+        if not sc or sc in vistos:
+            continue
+        vistos.add(sc)
+        ts = int(r.get("ts") or 0)
+        saida.append({
+            "plataforma": "instagram", "id": sc,
+            "data": r.get("data") or time.strftime("%Y-%m-%d", time.localtime(ts)),
+            "hora": time.strftime("%H:%M:%S", time.localtime(ts)) if ts
+                    else "12:00:00",
+            "hook": r.get("hook") or "",
+            # o slug é o que identifica a peça; não há "produto" único num
+            # carrossel de lista, e inventar um seria pior que deixar o slug
+            "produto": r.get("slug") or "",
+            "categoria": r.get("nicho") or "",
+            "url": r.get("url") or "",
+            # ⚠️ marca a origem: sem isto, daqui a um mês ninguém distingue
+            # um carrossel de um Reel dentro do metricas_posts.jsonl, e as
+            # duas coisas têm alcance típico bem diferente.
+            "tipo": "carrossel",
+        })
+    return saida
+
+
 def coletar(horas_min=24, refazer=False, teste=False, limite=0, novos=False):
     from ledger_publicados import juntar
     try:
@@ -168,7 +226,15 @@ def coletar(horas_min=24, refazer=False, teste=False, limite=0, novos=False):
 
     posts = [p for p in juntar()
              if p["plataforma"] == "instagram" and p.get("id")]
-    _log(f"{len(posts)} post(s) do Instagram no ledger")
+    reels = len(posts)
+    # ⚠️ CARROSSEL ENTRA POR OUTRA PORTA — ver `_carrosseis()`. Sem esta linha
+    # o formato inteiro fica fora da medição, e a fase 2 do carrossel_brain
+    # (que decide qual formato usar) nunca sai do lugar.
+    ja_tem = {p["id"] for p in posts}
+    carr = [c for c in _carrosseis() if c["id"] not in ja_tem]
+    posts += carr
+    _log(f"{len(posts)} post(s) do Instagram no ledger "
+         f"({reels} reels · {len(carr)} carrosséis)")
 
     ja = set() if refazer else _ja_medidos()
     corte = time.time() - horas_min * 3600
