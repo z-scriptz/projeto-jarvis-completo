@@ -132,6 +132,27 @@ SEL_CAIXA = ["div[contenteditable='true'][data-tab='10']",
              "div[role='textbox'][data-tab='10']"]
 SEL_LOGADO = ["div[data-testid='chat-list']", "#pane-side", "div[aria-label*='Lista de conversas']"]
 
+# ⚠️ SEM ISTO, "AINDA CARREGANDO" ERA REPORTADO COMO "SESSÃO CAÍDA" (30/08).
+# O ciclo só perguntava "a lista de conversas apareceu em 25s?" e, no não,
+# gritava "a sessão caiu, rode --login". O print que ele mesmo tira provou o
+# contrário: splash do WhatsApp com a BARRA DE PROGRESSO no meio — sessão viva,
+# sincronizando. Se estivesse deslogado o print teria QR.
+#
+# 📌 Timeout não é diagnóstico. "Não achei em 25s" tem pelo menos três causas
+# (deslogado / carregando / marcação mudou) e o código escolhia sempre a mais
+# assustadora — a única que manda o dono escanear QR à toa, que é justamente o
+# comportamento que faz o WhatsApp desconfiar da conta.
+#
+# A sincronização demora MAIS depois de mexer nas conversas (apagar tudo, criar
+# grupo) — exatamente o que tinha acabado de acontecer.
+SEL_CARREGANDO = ["[role='progressbar']", "progress",
+                  "div[data-testid='startup-progressbar']"]
+
+# ⚠️ SEM O `canvas` PELADO do SEL_QR: aqui a pergunta é "existe QR?", e um
+# canvas qualquer na tela de carregamento responderia que sim, trocando
+# "carregando" por "deslogado" e desfazendo a correção acima.
+SEL_QR_ESTRITO = ["canvas[aria-label*='scan' i]", "div[data-ref] canvas"]
+
 # O input de arquivo do WhatsApp Web é escondido (o clique no "+" é só
 # enfeite). set_input_files funciona direto nele, sem abrir menu nenhum — é
 # menos passo e menos coisa pra mudar de layout.
@@ -1018,6 +1039,53 @@ def _digitavel(nome: str) -> str:
 
 def _norm(s: str) -> str:
     return " ".join((s or "").split()).strip().lower()
+
+
+def _estado_sessao(pagina, timeout=25000) -> str:
+    """'logado' | 'qr' | 'carregando' | 'desconhecido'.
+
+    A ordem importa: `logado` primeiro (é o caso normal e o mais barato de
+    confirmar), e só depois as hipóteses do fracasso. As checagens seguintes
+    são curtas de propósito — a essa altura a página já teve o `timeout`
+    inteiro pra montar, e o que se pergunta agora é qual tela está na frente."""
+    if _achar(pagina, SEL_LOGADO, timeout=timeout):
+        return "logado"
+    if _achar(pagina, SEL_QR_ESTRITO, timeout=1500):
+        return "qr"
+    if _achar(pagina, SEL_CARREGANDO, timeout=1500):
+        return "carregando"
+    return "desconhecido"
+
+
+def _esperar_sessao(pagina, primeiro=25000, extra=90000) -> str:
+    """Espera a sessão ficar utilizável, dando mais tempo a quem está de fato
+    carregando — e só a esse.
+
+    Esticar o timeout pra todo mundo custaria 90s em cada falha real de login.
+    Esticar só quando a barra de progresso está na tela custa 0 no caso ruim e
+    resolve o caso que estava sendo diagnosticado errado."""
+    est = _estado_sessao(pagina, timeout=primeiro)
+    if est != "carregando":
+        return est
+    _log(f"⏳ sessão viva, ainda sincronizando — dou mais {extra // 1000}s "
+         f"(apagar conversas e criar grupo deixa isso demorado)")
+    if _achar(pagina, SEL_LOGADO, timeout=extra):
+        return "logado"
+    return _estado_sessao(pagina, timeout=1500)
+
+
+def _falar_do_estado(est: str) -> str:
+    """A frase que descreve o problema — e que aponta pro conserto CERTO.
+
+    ⚠️ Mandar "rode --login" quando a sessão está viva não é só ruído: escanear
+    QR sem precisar é o padrão que faz o WhatsApp desconfiar da conta."""
+    return {
+        "qr": "sessão caída (QR na tela) — precisa logar de novo",
+        "carregando": "o WhatsApp não terminou de sincronizar a tempo; a sessão "
+                      "está viva, tentar de novo costuma resolver",
+        "desconhecido": "não achei nem lista, nem QR, nem barra de progresso — "
+                        "pode ser marcação nova do WhatsApp Web",
+    }.get(est, est)
 
 
 def _achar_grupo(pagina, grupo: str):
@@ -2205,8 +2273,9 @@ def diag_anexo():
         try:
             pagina.goto("https://web.whatsapp.com", timeout=60000)
             pagina.wait_for_timeout(6000)
-            if not _achar(pagina, SEL_LOGADO, timeout=45000):
-                _log("não estou logado — rode --login")
+            est = _esperar_sessao(pagina, primeiro=45000)
+            if est != "logado":
+                _log(_falar_do_estado(est))
                 return 1
             _fechar_modal(pagina)
             if not _abrir_grupo(pagina, grupo):
@@ -2300,8 +2369,9 @@ def diagnostico():
         ctx.add_init_script(_STEALTH_JS)
         try:
             pagina.goto("https://web.whatsapp.com", timeout=60000)
-            if not _achar(pagina, SEL_LOGADO, timeout=25000):
-                _print_erro(pagina, "não está logado — rode --login primeiro")
+            est = _esperar_sessao(pagina)
+            if est != "logado":
+                _print_erro(pagina, _falar_do_estado(est))
                 return 1
             _log("logado. deixando a interface assentar (6s)...")
             pagina.wait_for_timeout(6000)
@@ -2402,10 +2472,16 @@ def enviar(quantos: int, teste: bool = False) -> int:
         ctx.add_init_script(_STEALTH_JS)
         try:
             pagina.goto("https://web.whatsapp.com", timeout=60000)
-            if not _achar(pagina, SEL_LOGADO, timeout=25000):
-                caminho = _print_erro(pagina, "sessão caída — precisa logar de novo")
-                _avisar("WhatsApp: a sessão caiu. Rode:\n"
-                        "  .venv/bin/python whatsapp_playwright.py --login", caminho)
+            est = _esperar_sessao(pagina)
+            if est != "logado":
+                motivo = _falar_do_estado(est)
+                caminho = _print_erro(pagina, motivo)
+                # só manda escanear QR quando o QR está mesmo lá
+                conserto = ("Rode:\n  .venv/bin/python whatsapp_playwright.py "
+                            "--login" if est == "qr"
+                            else "Não precisa logar de novo — o próximo slot "
+                                 "tenta sozinho.")
+                _avisar(f"WhatsApp: {motivo}\n{conserto}", caminho)
                 return 1
 
             # a lista de conversas aparece antes da busca ficar utilizável;
