@@ -102,6 +102,26 @@ def main():
     if not args.remover and args.valor is None:
         p.error("informe o valor, ou use --remover")
 
+    # ⚠️ VALOR COM QUEBRA DE LINHA É PERDA SILENCIOSA (30/08). O Dre colou
+    #     env_set.py WHATSAPP_GRUPOS 'Grupo #1;Grupo #2;
+    #     Grupo #3'
+    # com um Enter no meio das aspas. O shell passou a string inteira, o arquivo
+    # ficou com o valor em DUAS linhas, e todo carregador do projeto lê linha a
+    # linha e pula o que não tem `=`:
+    #     if not linha or linha.startswith("#") or "=" not in linha: continue
+    # Resultado: o grupo #3 sumiu do .env sem uma palavra, o env_set imprimiu
+    # ✅, e o sintoma só apareceria como "só postou em 2 grupos".
+    #
+    # 📌 É exatamente a falha que este arquivo existe pra impedir — "o comando
+    # dá certo, o arquivo muda, o comportamento não" — só que por outra porta.
+    # Um guard de duas linhas fecha a porta.
+    if args.valor is not None and ("\n" in args.valor or "\r" in args.valor):
+        _log(f"❌ o valor de {args.chave} tem quebra de linha.")
+        _log("   O .env é lido linha a linha: o que vier depois do Enter seria")
+        _log("   descartado em silêncio. Repita o comando com tudo numa linha")
+        _log("   só (nada foi alterado).")
+        return 2
+
     onde = _ocorrencias(linhas, args.chave)
     shutil.copy2(ENV, ENV.with_suffix(".env.bak_envset"))
 
