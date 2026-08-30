@@ -334,6 +334,24 @@ PAUSA_MAX = float(os.environ.get("WHATSAPP_PAUSA_MAX", "120"))
 HORA_INI = int(float(os.environ.get("WHATSAPP_HORA_INI", "7")))
 HORA_FIM = int(float(os.environ.get("WHATSAPP_HORA_FIM", "21")))
 
+# ⚠️ ATÉ 30/08 UM ACHADINHO ERA QUEIMADO PARA SEMPRE. `estado["links"]` era uma
+# lista sem data, e `_candidatos` cortava tudo que estivesse nela — então cada
+# produto valia UM envio na vida inteira do grupo. Com um grupo pequeno isso
+# passava despercebido; virou teto duro quando a pergunta passou a ser "72 por
+# dia". A conta que denunciou: a esteira repõe ~11 bons/dia, e sem repost esses
+# 11 são o máximo absoluto de conteúdo diário, com qualquer catálogo.
+#
+# 21 dias é o intervalo em que o grupo já rodou membros novos suficientes e
+# quem viu não lembra. WHATSAPP_REPOST_DIAS=0 volta o comportamento antigo
+# (nunca repete), pra quem quiser.
+#
+# 📌 A migração CARIMBA os links antigos com a data de hoje, de propósito. Ler
+# a lista antiga como "sem data = pode repetir" liberaria centenas de produtos
+# de uma vez na primeira rodada depois do deploy — o grupo levaria uma enxurrada
+# de repetição e a culpa pareceria do WhatsApp. Carimbado, nada repete nos
+# primeiros 21 dias e o recurso entra sozinho, no ritmo certo.
+REPOST_DIAS = int(float(os.environ.get("WHATSAPP_REPOST_DIAS", "21")))
+
 # ⚠️ DESLIGADO POR PADRÃO DESDE 19/08 — o anexo de foto vira FIGURINHA.
 #
 # Histórico curto pra ninguém religar sem saber o que está religando: seis
@@ -438,6 +456,40 @@ def _salvar_estado(estado: dict):
         os.replace(tmp, ESTADO)
     except Exception as e:
         _log(f"não consegui gravar o estado: {e}")
+
+
+def _enviados_em(estado: dict) -> dict:
+    """{link: quando foi ao ar pela última vez}, em epoch.
+
+    Migra o formato antigo — `links`, uma lista pelada — carimbando com AGORA.
+    Ver o comentário de REPOST_DIAS: carimbar com agora é o que impede a
+    enxurrada de repetição na primeira rodada depois do deploy."""
+    mapa = estado.get("enviados_em")
+    if not isinstance(mapa, dict):
+        mapa = {}
+    sem_data = [l for l in (estado.get("links") or []) if l and l not in mapa]
+    if sem_data:
+        agora = int(time.time())
+        for l in sem_data:
+            mapa[l] = agora
+        estado["enviados_em"] = mapa
+        _salvar_estado(estado)
+        _log(f"🗓️  {len(sem_data)} link(s) antigo(s) sem data — carimbados com "
+             f"hoje; voltam a ficar livres em {REPOST_DIAS} dia(s)")
+    return mapa
+
+
+def _bloqueados(estado: dict) -> set:
+    """Os links que NÃO podem ir ao ar agora.
+
+    ⚠️ Isto substituiu `set(estado["links"])`, e a diferença é o tempo: antes a
+    resposta era "já foi alguma vez", agora é "foi RECENTE". Com REPOST_DIAS=0
+    as duas voltam a ser a mesma coisa."""
+    mapa = _enviados_em(estado)
+    if REPOST_DIAS <= 0:
+        return set(mapa)
+    limite = time.time() - REPOST_DIAS * 86400
+    return {l for l, ts in mapa.items() if float(ts or 0) >= limite}
 
 
 def _dentro_da_janela() -> bool:
@@ -2331,7 +2383,7 @@ def enviar(quantos: int, teste: bool = False) -> int:
     estado = _carregar_json(ESTADO, {})
     if not isinstance(estado, dict):
         estado = {}
-    ja = set(estado.get("links", []))
+    ja = _bloqueados(estado)
 
     resta_dia = MAX_DIA - _enviados_hoje(estado)
     if resta_dia <= 0:
@@ -2468,7 +2520,15 @@ def enviar(quantos: int, teste: bool = False) -> int:
                 if foi_em:
                     enviados += 1
                     ja.add(it["link"])
-                    estado["links"] = list(ja)
+                    # ⚠️ A DATA É O REGISTRO; `links` fica só como histórico.
+                    # Gravar `estado["links"] = list(ja)` era o certo quando `ja`
+                    # era o conjunto de tudo que já foi — agora `ja` é só o que
+                    # está BLOQUEADO, e sobrescrever com ele apagaria do
+                    # histórico todo produto que já saiu da quarentena.
+                    estado.setdefault("enviados_em", {})[it["link"]] = \
+                        int(time.time())
+                    estado["links"] = sorted(
+                        set(estado.get("links") or []) | {it["link"]})
                     estado.setdefault("por_dia", {})
                     estado["por_dia"][hoje] = estado["por_dia"].get(hoje, 0) + 1
                     _salvar_estado(estado)
