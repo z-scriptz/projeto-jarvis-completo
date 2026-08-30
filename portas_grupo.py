@@ -29,13 +29,25 @@
 #      app do WhatsApp não há página pra carregar, então esse evento nunca
 #      acontece. Com uma página de verdade no meio, ele volta a existir.
 #
-# ⚠️ REDIRECIONAMENTO, NÃO LANDING PAGE. Nada de "clique aqui para entrar":
-# quem clicou no anúncio já decidiu, e todo passo a mais perde gente. A página
-# some em menos de um segundo.
+# ⚠️ LANDING, NÃO REDIRECIONAMENTO — E A MUDANÇA FOI FORÇADA (29/08). A 1ª
+# versão redirecionava na hora. A Meta continuou recusando: o robô dela SEGUE o
+# redirect e vê `chat.whatsapp.com` no fim, porque ele carrega a página, não só
+# lê a URL digitada.
 #
-# ⚠️ O REDIRECT É `<meta refresh>` + JS, NOS DOIS. O JS é instantâneo; o meta
-# funciona se o JS estiver bloqueado (navegador dentro do app, extensão). Um só
-# dos dois deixa uma fatia do tráfego pago parada numa tela branca.
+# ⚠️ A SAÍDA ÓBVIA É ARMADILHA. Dá pra detectar o robô e servir outra coisa —
+# isso se chama cloaking, viola explicitamente as políticas da Meta, e a punição
+# é banimento da conta de anúncios. Não fazemos.
+#
+# A saída legítima é a página parar de ser um desvio e virar destino: conteúdo
+# de verdade, com um botão que leva ao grupo. É o que os concorrentes fazem
+# (petdeals.com.br é o exemplo que o Dre trouxe), é o que a Meta espera, e de
+# quebra faz a otimização por "visualização da página de destino" funcionar —
+# ela é melhor que clique porque filtra o toque acidental.
+#
+# ⚠️ E A PROVA VEM DA NOSSA PRÓPRIA FILA. A página mostra achadinhos REAIS, com
+# preço e número de vendas que vieram da API de afiliado da Shopee. Não é texto
+# de vendedor: é o que o grupo entrega, com o número do lado. Nenhuma frase aqui
+# afirma coisa que não aconteceu — sem "a gente testou", sem "eu uso".
 #
 # COMO USAR:
 #   1. edite shared/portas_grupo.json  (slug -> link de convite)
@@ -57,6 +69,8 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 DESTINOS = BASE_DIR / "shared" / "portas_grupo.json"
+FILA = BASE_DIR / "shared" / "produtos_fila.json"
+QUANTOS_PRODUTOS = 6
 # mesmo endereço que o deploy_site usa — o site é um clone à parte, no
 # repositório do GitHub Pages que serve o topshopoficial.com.br
 SITE_REPO = Path(os.environ.get("TOPSHOP_SITE_DIR",
@@ -86,32 +100,149 @@ def _valido(slug: str, url: str) -> str:
     return ""
 
 
-def _pagina(url: str) -> str:
-    """O HTML da porta. Curto de propósito: ele existe por meio segundo."""
-    # aspas duplas do HTML e a URL entram cruas em dois contextos (atributo e
-    # string JS), então escapo o que quebraria cada um
-    href = url.replace("&", "&amp;").replace('"', "&quot;")
-    js = url.replace("\\", "\\\\").replace("'", "\\'")
+def _reais(v: float) -> str:
+    """R$ 1.234,56 — mesma formatação do bio_page_builder."""
+    return f"R$ {v:,.2f}".replace(",", "@").replace(".", ",").replace("@", ".")
+
+
+def _num(v) -> float:
+    """Preço como número, aceitando os três formatos que a fila guarda.
+
+    ⚠️ Mesmo motivo do `_preco` do carrossel_brain, que quebrou hoje em
+    'R$ 139,80': o campo passa por gravadores diferentes e chega como float,
+    como string de número e como string já formatada."""
+    if isinstance(v, (int, float)):
+        return float(v)
+    t = re.sub(r"[^\d,.]", "", str(v or ""))
+    if not t:
+        return 0.0
+    if "," in t:
+        t = t.replace(".", "").replace(",", ".")
+    try:
+        return float(t)
+    except ValueError:
+        return 0.0
+
+
+def _esc(t) -> str:
+    return (str(t or "").replace("&", "&amp;").replace("<", "&lt;")
+            .replace(">", "&gt;").replace('"', "&quot;"))
+
+
+def _achadinhos(quantos: int = QUANTOS_PRODUTOS) -> list:
+    """Os melhores da fila, pra página mostrar do que o grupo é feito.
+
+    ⚠️ SÓ ENTRA QUEM TEM NÚMERO. A página exibe vendas e preço; produto sem
+    medição viraria um card mudo no meio dos outros, e um card mudo ao lado de
+    "4.931 vendas" parece produto ruim escondendo o número. Melhor mostrar
+    quatro bons que seis desiguais.
+
+    ⚠️ E A ORDEM É A MESMA DO GRUPO. Se a página promete os melhores e o grupo
+    entrega outra coisa, a promessa quebra na primeira mensagem — que é o mesmo
+    defeito de capa que o carrossel teve em 26/08, em outra superfície."""
+    try:
+        itens = json.loads(FILA.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    if not isinstance(itens, list):
+        return []
+    bons = [i for i in itens
+            if isinstance(i, dict) and i.get("imagem") and i.get("link")
+            and str(i.get("classe") or "") in ("mina_ouro", "ok")
+            and int(i.get("vendas") or 0) > 0 and _num(i.get("preco")) > 0]
+    bons.sort(key=lambda i: (0 if i.get("classe") == "mina_ouro" else 1,
+                             -int(i.get("vendas") or 0)))
+    return bons[:quantos]
+
+
+def _cards(produtos: list) -> str:
+    if not produtos:
+        # ⚠️ SEM PRODUTO, A SEÇÃO SOME — não vira grade vazia. Página de anúncio
+        # com buraco visível custa mais caro que página curta.
+        return ""
+    linhas = []
+    for p in produtos:
+        nome = _esc(p.get("campeao") or p.get("produto") or "")[:70]
+        preco = _reais(_num(p.get("preco")))
+        # ponto de milhar no padrão brasileiro: 4931 -> 4.931
+        vendas = f"{int(p.get('vendas') or 0):,}".replace(",", ".")
+        linhas.append(
+            f'<figure class="c">'
+            f'<img src="{_esc(p.get("imagem"))}" alt="{nome}" loading="lazy">'
+            f'<figcaption><b>{preco}</b>'
+            f'<span>{vendas} vendas</span></figcaption>'
+            f'</figure>')
+    return ('<h2>Alguns dos últimos achadinhos</h2>'
+            '<div class="grade">' + "".join(linhas) + '</div>')
+
+
+def _pagina(url: str, produtos: list) -> str:
+    """A landing. Curta: quem veio do anúncio decide em segundos.
+
+    ⚠️ O BOTÃO APARECE DUAS VEZES, em cima e no fim. Quem já decidiu clica no
+    primeiro sem rolar; quem foi convencido pelos produtos encontra o segundo
+    onde acabou de se convencer. Um botão só custa uma das duas metades.
+
+    ⚠️ NENHUMA FRASE AFIRMA O QUE NÃO ACONTECEU. Sem "a gente testou", sem "eu
+    uso" — o que a página diz é o que é verdade: garimpamos, selecionamos, e
+    os números ao lado de cada produto são da API da Shopee. Num anúncio pago
+    afirmação falsa deixa de ser deselegante e vira problema com o CONAR."""
+    href = _esc(url)
     return f"""<!doctype html>
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<!-- ⚠️ noindex: estas páginas são porta de entrada de anúncio, não conteúdo.
-     Indexadas, competiriam com a vitrine na busca e apareceriam soltas. -->
 <meta name="robots" content="noindex,nofollow">
-<meta http-equiv="refresh" content="0;url={href}">
-<title>Entrando no grupo…</title>
+<title>Grupo de achadinhos da Shopee</title>
 <style>
-  body{{margin:0;min-height:100vh;display:flex;align-items:center;
-       justify-content:center;background:#111;color:#fff;
-       font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}}
-  a{{color:#25d366}}
+ *{{box-sizing:border-box}}
+ body{{margin:0;background:#0f1115;color:#f2f2f2;
+      font:16px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}}
+ .w{{max-width:560px;margin:0 auto;padding:28px 18px 40px}}
+ h1{{font-size:29px;line-height:1.2;margin:0 0 12px;letter-spacing:-.02em}}
+ h1 b{{color:#25d366}}
+ p.sub{{color:#b7bcc4;margin:0 0 22px}}
+ h2{{font-size:15px;text-transform:uppercase;letter-spacing:.08em;
+    color:#8b929c;margin:34px 0 14px;font-weight:600}}
+ .cta{{display:block;background:#25d366;color:#08130c;text-decoration:none;
+      text-align:center;font-weight:700;font-size:18px;padding:16px;
+      border-radius:13px}}
+ .cta:active{{transform:scale(.99)}}
+ .obs{{color:#7d848d;font-size:13px;text-align:center;margin:10px 0 0}}
+ .grade{{display:grid;grid-template-columns:1fr 1fr;gap:11px}}
+ .c{{margin:0;background:#171a21;border-radius:12px;overflow:hidden}}
+ .c img{{width:100%;aspect-ratio:1;object-fit:cover;display:block}}
+ .c figcaption{{padding:9px 10px;font-size:14px;display:flex;
+               justify-content:space-between;align-items:baseline;gap:6px}}
+ .c b{{color:#25d366}}
+ .c span{{color:#8b929c;font-size:12px}}
+ ul{{list-style:none;padding:0;margin:0 0 26px}}
+ li{{padding:7px 0 7px 26px;position:relative;color:#dfe3e8}}
+ li:before{{content:"✓";position:absolute;left:0;color:#25d366;font-weight:700}}
 </style>
 </head>
 <body>
-<p>Abrindo o grupo… <a href="{href}">toque aqui se não abrir</a></p>
-<script>location.replace('{js}');</script>
+<div class="w">
+  <h1>Achadinhos da Shopee, <b>todo dia</b>, no seu WhatsApp</h1>
+  <p class="sub">A gente garimpa e manda no grupo só o que vale a pena — com o
+  link direto. Entrar é de graça.</p>
+
+  <a class="cta" href="{href}">Entrar no grupo</a>
+  <p class="obs">Grupo silenciável · saia quando quiser</p>
+
+  <h2>O que você recebe</h2>
+  <ul>
+    <li>Produtos com avaliação boa e preço que faz sentido</li>
+    <li>O link direto, sem precisar procurar</li>
+    <li>Poucas mensagens por dia — nada de inundar seu WhatsApp</li>
+  </ul>
+
+  {_cards(produtos)}
+
+  <p class="obs" style="margin:26px 0 12px">Pronto pra economizar?</p>
+  <a class="cta" href="{href}">Entrar no grupo</a>
+</div>
 </body>
 </html>
 """
@@ -187,10 +318,22 @@ def rodar(publicar_de_verdade: bool) -> int:
         _log("nada foi gerado — corrija o JSON e rode de novo")
         return 1
 
+    # ⚠️ CARREGA UMA VEZ, NÃO POR PÁGINA. Todas as portas levam ao mesmo grupo e
+    # mostram os mesmos achadinhos; reler a fila por slug seria trabalho igual
+    # com resultado idêntico. E carregar aqui deixa o aviso sair uma vez só.
+    produtos = _achadinhos()
+    if not produtos:
+        _log("⚠️  nenhum produto classificado com foto, preço e vendas na fila "
+             "— as páginas saem sem a prova (rode enriquecer_fila.py)")
+    else:
+        _log(f"{len(produtos)} achadinho(s) na prova: "
+             + ", ".join(str(p.get('campeao') or p.get('produto'))[:22]
+                         for p in produtos[:3]) + "…")
+
     feitos = []
     for slug, url in destinos.items():
         destino = SITE_REPO / PASTA / str(slug) / "index.html"
-        conteudo = _pagina(str(url))
+        conteudo = _pagina(str(url), produtos)
         if publicar_de_verdade:
             destino.parent.mkdir(parents=True, exist_ok=True)
             destino.write_text(conteudo, encoding="utf-8")
