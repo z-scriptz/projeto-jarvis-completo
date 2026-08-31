@@ -159,3 +159,78 @@ def termo_de_busca(bruto: str) -> str:
         if len(uteis) >= PALAVRAS_BUSCA:
             break                            # termo curto acha; termo longo não
     return " ".join(uteis)
+
+
+# ── nome que o cliente vê ──────────────────────────────────────────────────
+# ⚠️ NASCEU DO MINERADOR DE WHATSAPP (31/08). Com o reetiquetar funcionando, o
+# nome que entra na fila passou a ser o TÍTULO CRU DA SHOPEE, escrito pelo
+# vendedor pra ranquear na busca dele — não pra ser lido:
+#
+#   "Coloração Semi Permanente TRUSS LOURO MEDIO PEROLA 7.89 60G ⚠️ ATENÇÃO –
+#    LEIA ANTES DE COMPRAR"
+#   "MEDOOSI-Apontador De Lápis Elétrico USB Automático/Material De Papelaria
+#    Para De Cor Mecânica Crianças Artistas - 8028"
+#
+# Isso vai pro grupo do WhatsApp e pro site do jeito que está. `nome_de_produto_ruim`
+# reprova rótulo interno ("Produto com busca alta"), mas estes aqui não são
+# ruins — são REAIS e mal escritos, e reprovar jogaria fora produto bom.
+#
+# 📌 Reprovar e limpar são respostas diferentes pra problemas diferentes. Aqui o
+# certo é limpar: cortar o recado do vendedor, tirar o SKU do fim e parar num
+# tamanho que cabe numa mensagem.
+AVISOS_VENDEDOR = (
+    "atenção", "atencao", "leia antes", "leia com atenção", "envio imediato",
+    "envio em ate", "envio em até", "frete grátis", "frete gratis",
+    "últimas unidades", "ultimas unidades", "compre agora", "promoção imperdível",
+    "promocao imperdivel", "aproveite", "garanta o seu", "pronta entrega",
+    "12x sem juros", "menor preço", "menor preco",
+)
+
+_RE_SKU = re.compile(r"[\s\-–—]+[-–—]?\s*\d{3,6}\s*$")
+_RE_ESPACO = re.compile(r"\s+")
+
+
+def _sem_acento(s: str) -> str:
+    """Comparação de texto sem depender de acento — o vendedor escreve
+    "ATENÇÃO", "ATENCAO" e "Atenção" na mesma vitrine."""
+    import unicodedata
+    return "".join(c for c in unicodedata.normalize("NFD", s or "")
+                   if unicodedata.category(c) != "Mn")
+
+
+def nome_para_cliente(nome: str, limite: int = 70) -> str:
+    """O título da loja, legível numa mensagem.
+
+    Corta no primeiro aviso de vendedor, tira SKU do fim e encurta em borda de
+    palavra. Nunca devolve vazio: se a limpeza comer tudo, volta o original
+    encurtado — nome feio ainda vende, nome vazio não.
+    """
+    t = _RE_ESPACO.sub(" ", (nome or "").strip())
+    if not t:
+        return ""
+    original = t
+
+    # 1) o ⚠️ é a fronteira mais confiável: vendedor nenhum põe emoji de alerta
+    #    no meio do nome do produto
+    for marca in ("⚠️", "⚠", "🚨", "❗"):
+        if marca in t:
+            t = t.split(marca, 1)[0]
+
+    # 2) avisos escritos: corta na PRIMEIRA ocorrência, comparando sem acento
+    baixo = _sem_acento(t.lower())
+    corte = len(t)
+    for aviso in AVISOS_VENDEDOR:
+        pos = baixo.find(_sem_acento(aviso))
+        if pos > 0:                      # > 0: aviso no começo é o nome todo
+            corte = min(corte, pos)
+    t = t[:corte]
+
+    # 3) SKU/código no fim ("- 8028", "--3926")
+    t = _RE_SKU.sub("", t)
+    t = t.strip(" -–—/|,;:.")
+
+    if len(t) < 8:                       # a limpeza exagerou
+        t = original
+    if len(t) > limite:
+        t = t[:limite].rsplit(" ", 1)[0].rstrip(" -–—/|,;:.") + "…"
+    return t.strip()

@@ -121,6 +121,16 @@ _carregar_env()
 # morrendo em `TypeError: 'bool' object does not support the context manager
 # protocol`, de 15 em 15 minutos, com o grupo em 0/24.
 # 📌 `grep travar` antes de criar a função custava cinco segundos.
+# ⚠️ IMPORTADO do `shared/termos.py`, que é a casa das regras de nome do
+# projeto (`nome_de_produto_ruim` mora lá). Sem ele o minerador não para: nome
+# feio ainda vende, e derrubar a rodada inteira por causa de um módulo de
+# apresentação seria trocar 20 produtos por zero.
+try:
+    from shared.termos import nome_para_cliente as _nome_cliente
+except Exception:
+    def _nome_cliente(n, limite=70):
+        return " ".join((n or "").split())[:limite]
+
 try:
     from shared.trava import travar
 except Exception:
@@ -800,10 +810,19 @@ def _aproveitar(texto: str, hunter, shopee, teste: bool, autor: str = "",
              f"{erro_link[:150] or 'sem motivo na resposta'}")
         return "sem_link", termo
 
-    registrar(c.get("nome", termo), link, c.get("imagem", ""),
+    # ⚠️ O NOME QUE CHEGA AQUI É O TÍTULO CRU DA SHOPEE, escrito pro algoritmo
+    # de busca do vendedor e não pra ser lido. Medido na primeira rodada boa:
+    # "Coloração ... 60G ⚠️ ATENÇÃO – LEIA ANTES DE COMPRAR" e
+    # "MEDOOSI-Apontador ... Artistas - 8028" entraram na fila assim, e é assim
+    # que iriam pro grupo e pro site.
+    # 📌 `nome_de_produto_ruim` REPROVA rótulo interno; estes não são ruins, são
+    # reais e mal escritos — reprovar jogaria fora produto bom. Limpar e
+    # reprovar são respostas diferentes pra problemas diferentes.
+    nome = _nome_cliente(c.get("nome", termo))
+    registrar(nome, link, c.get("imagem", ""),
               plataforma="shopee", origem=url,
               preco=tratar_preco(c.get("preco", 0)))
-    return "ok", c.get("nome", termo)[:52]
+    return "ok", nome[:52]
 
 
 def rodar(teste: bool, diag: bool) -> int:
