@@ -229,11 +229,20 @@ async (op) => {
   // quase nada. O painel certo é o que CONTÉM as mensagens — então em vez de
   // procurar por aí, subo a partir de uma mensagem de verdade até achar o
   // ancestral que rola. Não tem como pegar outro.
+  // ⚠️ "TEM OVERFLOW" NÃO É "ROLA" (31/08, 3ª tentativa neste mesmo ponto). O
+  // ancestral que eu escolhia passava no teste de scrollHeight e mesmo assim
+  // não se mexia — então a única prova que vale é EMPURRAR e ver se o número
+  // muda. Testa e desfaz, antes de decidir.
   let sc = null;
   const ancora = main.querySelector('div[data-id]');
   for (let n = ancora && ancora.parentElement; n && n !== document.body;
        n = n.parentElement) {
-    if (n.clientHeight > 160 && n.scrollHeight > n.clientHeight + 40) { sc = n; break; }
+    if (!(n.clientHeight > 160 && n.scrollHeight > n.clientHeight + 40)) continue;
+    const t0 = n.scrollTop;
+    n.scrollTop = t0 > 0 ? t0 - 20 : 20;
+    const mexeu = n.scrollTop !== t0;
+    n.scrollTop = t0;                       // devolve como estava
+    if (mexeu) { sc = n; break; }
   }
 
   // ⚠️ E O WHATSAPP RECICLA O DOM: rolando pra cima ele MONTA as mensagens
@@ -261,10 +270,11 @@ async (op) => {
   };
 
   colher();
-  let paradas = 0;
+  let paradas = 0, passos = 0;
   for (let i = 0; sc && i < op.voltas && vistos.size < op.limite; i++) {
     const antes = vistos.size, topo = sc.scrollTop, alt = sc.scrollHeight;
     sc.scrollTop = Math.max(0, sc.scrollTop - sc.clientHeight * 0.82);
+    passos++;
     await new Promise(r => setTimeout(r, op.pausa));
     // ⚠️ SUBIR PEDE MENSAGEM AO SERVIDOR, e isso não é instantâneo. Quando o
     // painel CRESCE, é sinal de que chegou lote novo — vale esperar mais um
@@ -275,10 +285,16 @@ async (op) => {
     // 3 e não 2: com carregamento lento, duas rodadas quietas seguidas
     // acontecem sem a conversa ter terminado
     if (vistos.size === antes) { if (++paradas >= 3) break; } else paradas = 0;
-    if (topo <= 0) break;          // já está no começo da conversa
+    // ⚠️ O `break` ANTIGO OLHAVA O scrollTop DE ANTES DE ROLAR: com o painel já
+    // em zero ele saía na PRIMEIRA volta, e por isso subir VOLTAS de 14 pra 60
+    // não mudou um número sequer. O fim da conversa é "empurrei e não andou",
+    // não "estava em zero quando cheguei".
+    if (sc.scrollTop === topo) break;
   }
   return {itens: Array.from(vistos.values()).slice(-op.limite),
-          total: vistos.size, rolou: !!sc};
+          total: vistos.size, rolou: !!sc, passos: passos,
+          painel: sc ? {alto: sc.clientHeight, rolo: sc.scrollHeight,
+                        topo: sc.scrollTop} : null};
 }
 """
 
@@ -466,6 +482,14 @@ def _ler_grupo(pagina, grupo: str, limite: int) -> list:
               if i.get("id") and i.get("texto") and not i.get("meu")]
     itens = [i for i in brutos if not _do_sistema(i)]
     total = int(r.get("total") or 0)
+    # ⚠️ SEM ISTO EU ADIVINHEI DUAS VEZES. "16 linhas" não diz se a rolagem
+    # rodou, se parou cedo ou se o grupo tem 16 mesmo — e foi por falta desse
+    # número que subir VOLTAS de 14 pra 60 pareceu não fazer efeito, quando na
+    # verdade o laço saía na 1ª volta.
+    pn = r.get("painel") or {}
+    _log(f"   ↕️  {r.get('passos', 0)} passo(s) de rolagem · "
+         f"painel {pn.get('alto', '?')}px de {pn.get('rolo', '?')}px · "
+         f"parou em {pn.get('topo', '?')} · {total} linha(s)")
     if not r.get("rolou"):
         # ⚠️ sem o painel rolável a leitura fica presa na primeira tela — é
         # exatamente o defeito de 31/08, e ele precisa gritar em vez de sair
