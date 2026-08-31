@@ -65,6 +65,44 @@ BASE_DIR = Path(__file__).resolve().parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
+
+def _importar(nomes: list, atributos: list):
+    """As funções de outro módulo, tentando os dois caminhos de import.
+
+    ⚠️ DOIS CAMINHOS, SEMPRE. No repositório os arquivos são planos; na VPS o
+    hunter mora em `agents/`. Um import só funciona num dos dois lugares, e o
+    sintoma do errado é "módulo não encontrado" no meio da madrugada."""
+    ultimo = None
+    for nome in nomes:
+        try:
+            import importlib
+            mod = importlib.import_module(nome)
+            return [getattr(mod, a) for a in atributos]
+        except Exception as e:
+            ultimo = e
+            continue
+    raise ImportError(f"não achei {nomes}: {ultimo}")
+
+
+# ⚠️ O .ENV PRECISA SER LIDO ANTES DE QUALQUER `os.environ.get` DESTE ARQUIVO,
+# E EU CAÍ NESSA NA PRIMEIRA EXECUÇÃO (30/08). O `--fontes` disse
+# "WHATSAPP_FONTES vazio no .env" com a chave gravada na linha 106: rodar do
+# terminal não carrega o .env — só o systemd carrega — e o carregador só era
+# alcançado lá embaixo, junto com as outras peças, DEPOIS de `_fontes()` já ter
+# lido um ambiente vazio.
+#
+# 📌 É a mesma armadilha que o `whatsapp_playwright` documenta nas constantes
+# dele ("rodavam antes do .env ser lido") e que o `env_set.py` inteiro existe
+# pra evitar. Não bastou estar escrita: eu escrevi um arquivo novo e entrei
+# nela de novo, porque a ordem que importa é a de EXECUÇÃO, não a do texto.
+#
+# Importar o `whatsapp_playwright` já basta: ele chama `_carregar_env()` na
+# carga. A chamada explícita fica porque depender de efeito colateral de import
+# alheio é o tipo de coisa que some num refactor sem ninguém notar.
+_carregar_env, = _importar(["whatsapp_playwright", "agents.whatsapp_playwright"],
+                           ["_carregar_env"])
+_carregar_env()
+
 # ⚠️ TETO POR RODADA PORQUE CADA PRODUTO É UMA CHAMADA DE API. Sem ele, entrar
 # num grupo movimentado numa segunda de manhã queima a cota do dia numa rodada
 # e as outras voltam de mãos vazias sem explicar por quê.
@@ -86,21 +124,6 @@ def _log(m):
 
 
 # ── o que vem de outros módulos ──────────────────────────────────────────
-# ⚠️ DOIS CAMINHOS DE IMPORT, SEMPRE. No repositório os arquivos são planos; na
-# VPS o hunter mora em `agents/`. Um import só funciona num dos dois lugares, e
-# o sintoma do errado é "módulo não encontrado" no meio da madrugada.
-def _importar(nomes: list, atributos: list):
-    for nome in nomes:
-        try:
-            import importlib
-            mod = importlib.import_module(nome)
-            return [getattr(mod, a) for a in atributos]
-        except Exception as e:
-            ultimo = e
-            continue
-    raise ImportError(f"não achei {nomes}: {ultimo}")
-
-
 def _pecas():
     """As funções emprestadas, ou um erro que diz qual faltou.
 
