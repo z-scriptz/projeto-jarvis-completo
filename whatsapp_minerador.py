@@ -668,7 +668,32 @@ def _diagnosticar(pagina, grupo: str) -> None:
 
 
 # ── o miolo ──────────────────────────────────────────────────────────────
-def _aproveitar(texto: str, hunter, shopee, teste: bool, autor: str = "") -> tuple:
+# ⚠️ IMPORTADO, NÃO COPIADO — é a lição do `travar` de hoje de manhã. O
+# `_subids` já carrega o contrato POSICIONAL que o resto do sistema lê:
+# [canal, nicho, produto, FONTE, vídeo], e o `metricas_agent._fonte()` lê o
+# índice 3 como fonte. Reescrever aqui uma versão "igualzinha" é como as duas
+# travas: divergem no primeiro conserto e ninguém percebe.
+# 📌 O slot da FONTE é o que dá valor de verdade: com o nome do grupo-fonte
+# ali, o CEO passa a saber QUAL grupo do concorrente gera venda — e aí dá pra
+# entrar em mais grupos como aquele e sair dos que não pagam.
+try:
+    _subids, = _importar(["produzir_tiktok", "agents.produzir_tiktok"], ["_subids"])
+except Exception:
+    import re as _re_sub
+
+    def _subids(canal, nicho, nome, fonte="", video=""):
+        """Reserva: mesma regra (só alfanumérico, ≤16), pro caso de o
+        `produzir_tiktok` não estar no caminho de import da VPS."""
+        def _s(x, padrao):
+            return _re_sub.sub(r"[^A-Za-z0-9]", "", str(x or ""))[:16] or padrao
+        ids = [_s(canal, "x"), _s(nicho, "geral"), _s(nome, "prod")]
+        if str(fonte or "").strip():
+            ids.append(_s(fonte, "fonte"))
+        return ids
+
+
+def _aproveitar(texto: str, hunter, shopee, teste: bool, autor: str = "",
+                fonte: str = "") -> tuple:
     """(status, detalhe). status ∈ {ok, sem_termo, sem_busca, so_fracos, sem_link}.
 
     ⚠️ `sem_shopee` SUMIU DE PROPÓSITO. Ele juntava duas coisas opostas — "a
@@ -754,9 +779,15 @@ def _aproveitar(texto: str, hunter, shopee, teste: bool, autor: str = "") -> tup
     # 📌 `link_gerado` nem existe no `minerar_oportunidades` — era um fallback
     # que eu copiei do hunter sem conferir se o campo era real. Ele nunca
     # salvou nada; só disfarçava a falha de mais um `or`.
+    #
+    # ⚠️ E O MOTIVO ERA `sub_ids=["wa_mina", "wa_grupo"]`: a Shopee rejeita
+    # `_`, `-` e espaço com `error [11001]: invalid sub id`. A regra está
+    # escrita em DOIS lugares do projeto — `produzir_tiktok._subids` e
+    # `tiktok_coletor._subid` — com o número do erro no comentário. Quarta vez
+    # hoje que a resposta já estava no repositório e eu não procurei.
     link, erro_link = "", ""
     try:
-        r = gerar_link(url, sub_ids=["wa_mina", "wa_grupo"])
+        r = gerar_link(url, sub_ids=_subids("wa", "", c.get("nome", termo), fonte))
         if isinstance(r, dict):
             link = r.get("short_link") or r.get("link") or ""
             erro_link = str(r.get("erro") or "")
@@ -864,7 +895,7 @@ def rodar(teste: bool, diag: bool) -> int:
                         try:
                             status, det = _aproveitar(
                                 m["texto"], hunter, shopee, teste,
-                                m.get("autor", ""))
+                                m.get("autor", ""), g)
                         except Exception as e:
                             _log(f"   ⚠️ {type(e).__name__}: {str(e)[:80]}")
                             marcar_falha(canal, m["id"])
