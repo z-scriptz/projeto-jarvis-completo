@@ -492,6 +492,44 @@ def _metricas(produtos: list) -> tuple:
     return len(produtos), lojas, medio
 
 
+def _mural_html(produtos: list) -> str:
+    """O mural do topo: três colunas de produto DERIVANDO devagar.
+
+    ⚠️ ESTE É O MOVIMENTO QUE VOLTOU, E ELE É O OPOSTO DO QUE SAIU (31/08). A
+    versão anterior tinha bolhas desfocadas girando atrás do texto: movimento
+    ambiente, sem referente, que não informa nada — a assinatura de página
+    gerada. Aqui o que se move É O CATÁLOGO. A mesma técnica (transform
+    infinito) muda de significado quando o que desliza é a mercadoria: vira
+    vitrine de rua, não protetor de tela.
+
+    📌 `aria-hidden` + `pointer-events:none` de propósito. Estes cards repetem
+    produto que já está na grade logo abaixo; se fossem clicáveis, o mesmo link
+    apareceria duas vezes na página — dobrando o link no HTML (ruim pro Google)
+    e partindo a métrica de clique em dois lugares. Quem quer clicar rola 300px
+    e acha o card de verdade, com preço e botão.
+
+    Só produto COM foto entra: card sem imagem no mural vira retângulo cinza
+    deslizando, que é exatamente a cara de placeholder que a gente quer evitar.
+    """
+    com_foto = [p for p in produtos if (p.get("imagem") or "").strip()][:18]
+    if len(com_foto) < 6:
+        return ""          # mural ralo é pior que mural nenhum
+    colunas, n = [], len(com_foto)
+    for c in range(3):
+        fatia = com_foto[c * n // 3:(c + 1) * n // 3]
+        if not fatia:
+            continue
+        tijolos = "".join(
+            f'<i style="background-image:url(\'{html.escape(p["imagem"])}\')"></i>'
+            for p in fatia)
+        # duplicado pra emendar sem salto: a animação anda 50% e reinicia
+        colunas.append(
+            f'<div class="mcol" style="--dur:{34 + c * 6}s">'
+            f'<div class="mfita">{tijolos}{tijolos}</div></div>')
+    return ('<div class="mural" aria-hidden="true">' + "".join(colunas)
+            + '<span class="mfade"></span></div>')
+
+
 def _vitrine_html(produtos: list) -> str:
     """Controles + grade. Os cards vêm prontos do servidor (aparecem no Google
     e funcionam sem JS); o JS só mostra e esconde na hora de filtrar."""
@@ -535,6 +573,7 @@ def gerar_site(produtos: list) -> str:
     og = (produtos[0].get("imagem", "") if produtos else "") or ""
     grupo_topo = GRUPO_WHATSAPP or GRUPO_TELEGRAM or INSTAGRAM
     return _TEMPLATE.replace("{{VITRINE}}", _vitrine_html(produtos))\
+                    .replace("{{MURAL}}", _mural_html(produtos))\
                     .replace("{{GRUPOS}}", _grupos_html())\
                     .replace("{{GRUPO_TOPO}}", html.escape(grupo_topo))\
                     .replace("{{TOTAL}}", str(total))\
@@ -794,6 +833,91 @@ footer a{border-bottom:1px solid var(--linha)}
   *{animation:none!important;transition-duration:.01ms!important}
   .js .card,.js .reveal{opacity:1;transform:none}
 }
+
+/* ══ MOVIMENTO ════════════════════════════════════════════════════════════
+   ⚠️ A PRIMEIRA CORREÇÃO EXAGEROU (31/08). Tirar o visual de IA virou tirar
+   TODO o movimento, e o site ficou correto e sem graça — "uma lápide", nas
+   palavras do Dre, e ele tinha razão.
+   📌 A linha não é entre "com" e "sem" animação. É entre movimento AMBIENTE
+   (bolha girando sozinha, brilho seguindo o mouse no vazio, gradiente varrendo
+   texto) — que não informa nada e é a assinatura do gerador — e movimento
+   FUNCIONAL, que responde ao dedo, ao scroll ou a um estado que mudou. O
+   primeiro saiu e não volta. O segundo é o que faz parecer produto caro. */
+
+/* ── capa: o texto de um lado, o CATÁLOGO derivando do outro ────────────── */
+.capa{display:grid;grid-template-columns:1.02fr .98fr;gap:clamp(20px,4vw,54px);
+  align-items:center;padding:clamp(18px,3vw,44px) 0 clamp(16px,2.4vw,30px)}
+.olho{display:inline-flex;align-items:center;gap:8px;font-size:11.5px;font-weight:700;
+  letter-spacing:.15em;text-transform:uppercase;color:var(--muted);margin-bottom:15px}
+.olho::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--marca)}
+.capa h1{font-size:clamp(30px,4.6vw,52px);font-weight:800;font-stretch:110%;
+  line-height:1.03;letter-spacing:-.04em;text-wrap:balance}
+.capa h1 em{font-style:normal;color:var(--marca)}
+.capa .sub{color:var(--muted);font-size:clamp(14px,1.6vw,16.5px);margin-top:14px;
+  max-width:44ch}
+
+.mural{position:relative;height:min(60vh,470px);overflow:hidden;border-radius:20px;
+  display:grid;grid-template-columns:repeat(3,1fr);gap:10px;
+  pointer-events:none;-webkit-mask-image:linear-gradient(#000 62%,transparent);
+  mask-image:linear-gradient(#000 62%,transparent)}
+.mcol{overflow:hidden}
+.mfita{display:flex;flex-direction:column;gap:10px;
+  animation:deriva var(--dur,38s) linear infinite}
+.mcol:nth-child(2) .mfita{animation-direction:reverse}
+@keyframes deriva{to{transform:translateY(-50%)}}
+.mfita i{display:block;aspect-ratio:1;border-radius:13px;background:#F4F5F7;
+  background-size:cover;background-position:center;border:1px solid var(--linha);
+  flex:none}
+.mfade{position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(180deg,transparent 55%,var(--bg))}
+@media(max-width:900px){
+  .capa{grid-template-columns:1fr;gap:16px;padding-top:10px}
+  /* no celular o mural vira uma FAIXA: uma tira de 96px que dá o recado sem
+     empurrar o produto pra fora da primeira tela */
+  .mural{height:96px;grid-template-columns:1fr;border-radius:14px;
+    -webkit-mask-image:none;mask-image:none}
+  .mcol:nth-child(n+2){display:none}
+  .mfita{flex-direction:row;animation-name:derivaX;--dur:30s}
+  @keyframes derivaX{to{transform:translateX(-50%)}}
+  .mfita i{width:96px;height:96px;aspect-ratio:auto}
+  .mfade{background:linear-gradient(90deg,transparent 80%,var(--bg))}
+}
+
+/* ── header em vidro ao rolar ───────────────────────────────────────────── */
+.topo.colado{background:rgba(11,12,15,.72);
+  backdrop-filter:blur(22px) saturate(150%);
+  -webkit-backdrop-filter:blur(22px) saturate(150%)}
+
+/* ── card: responde ao dedo ─────────────────────────────────────────────── */
+.card{transform-style:preserve-3d;
+  transition:opacity .4s,transform .32s cubic-bezier(.22,.7,.2,1),
+    border-color .22s,background .22s,box-shadow .32s}
+.card:hover{border-color:var(--linha2);background:var(--sup2);
+  box-shadow:0 18px 44px rgba(0,0,0,.42)}
+.card .foto img{transition:opacity .35s,transform .5s cubic-bezier(.22,.7,.2,1)}
+.card:hover .foto img.ok{transform:scale(1.07)}
+.card .ver span{display:inline-block;transition:transform .28s}
+.card:hover .ver span{transform:translateX(4px)}
+/* entrada em cascata, escalonada por POSIÇÃO na grade e não por índice global:
+   o card 40 não deve esperar 40 passos pra aparecer quando você rola até ele */
+.js .card{opacity:0;transform:translateY(16px) scale(.985)}
+.js .card.dentro{opacity:1;transform:none}
+/* o filtro re-anima a saída: bater display:none faz a grade PISCAR, e é a
+   diferença entre "o site respondeu" e "o site engasgou" */
+.card.saindo{opacity:0;transform:scale(.96);pointer-events:none}
+
+/* ── fitas com inércia: o cursor vira mão ao arrastar ───────────────────── */
+.fita-rolo{scroll-behavior:smooth;cursor:grab}
+.fita-rolo.arrastando{cursor:grabbing;scroll-behavior:auto;scroll-snap-type:none}
+.fita-rolo.arrastando .chip,.fita-rolo.arrastando .loja{pointer-events:none}
+
+/* ── números que sobem quando VOCÊ chega neles ──────────────────────────── */
+.prova b{font-variant-numeric:tabular-nums}
+
+@media(prefers-reduced-motion:reduce){
+  .mfita{animation:none!important}
+  .card.saindo{opacity:1;transform:none}
+}
 </style>
 </head>
 <body>
@@ -825,6 +949,22 @@ footer a{border-bottom:1px solid var(--linha)}
 </div>
 
 <main class="wrap">
+
+  <!-- ⚠️ O HERÓI VOLTOU, MAS DE OUTRA ESPÉCIE. O antigo era institucional:
+       título de 84px, três números contando e uma moldura girando com o mouse,
+       tudo ENTRE a pessoa e o produto. Este é feito DE produto — o mural à
+       direita é o catálogo derivando. O conceito de herói nunca foi o problema;
+       o problema era um herói que não mostrava mercadoria. -->
+  <section class="capa">
+    <div>
+      <span class="olho">Social commerce discovery</span>
+      <h1>O que você viu no vídeo, <em>achou aqui</em>.</h1>
+      <p class="sub">A gente garimpa nos vídeos, confere o preço e deixa o link
+         pronto. Você só procura o que viu.</p>
+    </div>
+    {{MURAL}}
+  </section>
+
   <section id="produtos">
     {{VITRINE}}
   </section>
@@ -940,16 +1080,43 @@ var st = {plat: 'todos', cat: 'todos', q: ''};
 var cards = [].slice.call(document.querySelectorAll('.card'));
 var semRes = document.getElementById('sem-res');
 
+/* ⚠️ FILTRAR COM display:none FAZ A GRADE PISCAR. O card some no mesmo frame
+   e os vizinhos saltam pro lugar dele — parece engasgo, não resposta. Aqui a
+   saída é animada (.saindo) e só depois vira .esconde; a volta re-escalona a
+   entrada. É a diferença entre "o site respondeu" e "o site travou".
+   Sem JS a grade nasce inteira e o filtro simplesmente não existe. */
+var pintando = null;
 function aplicar(){
-  var visiveis = 0;
+  var visiveis = 0, entrando = [];
   cards.forEach(function(c){
     var ok = (st.plat === 'todos' || c.dataset.plataforma === st.plat)
           && (st.cat === 'todos' || c.dataset.categoria === st.cat)
           && (!st.q || (c.dataset.busca || '').indexOf(st.q) > -1);
-    c.classList.toggle('esconde', !ok);
-    if (ok) visiveis++;
+    if (ok){
+      visiveis++;
+      if (c.classList.contains('esconde')){
+        c.classList.remove('esconde');
+        c.classList.add('saindo');       /* nasce encolhido e cresce */
+        entrando.push(c);
+      }
+    } else if (!c.classList.contains('esconde')) {
+      c.classList.add('saindo');
+    }
   });
   if (semRes) semRes.style.display = visiveis ? 'none' : '';
+
+  clearTimeout(pintando);
+  requestAnimationFrame(function(){
+    entrando.forEach(function(c, i){
+      setTimeout(function(){ c.classList.remove('saindo'); }, Math.min(i, 10) * 22);
+    });
+  });
+  /* só tira do fluxo depois que a saída terminou */
+  pintando = setTimeout(function(){
+    cards.forEach(function(c){
+      if (c.classList.contains('saindo')) c.classList.add('esconde');
+    });
+  }, 300);
 }
 
 var caixaLojas = document.getElementById('filtros-plat');
@@ -1007,6 +1174,82 @@ if (inp) inp.addEventListener('focus', function(){
   if (matchMedia('(max-width:600px)').matches && scrollY < 8)
     setTimeout(function(){ scrollTo({top: 40, behavior: 'smooth'}); }, 60);
 });
+/* ── card acompanhando o dedo, discretamente ─────────────────────────────
+   ⚠️ 2.5° E NÃO 7°. A versão antiga inclinava 7 graus e ficava com cara de
+   cartinha de RPG girando — movimento chamando atenção pra si. Nesta faixa o
+   olho não vê "animação", vê que o card TEM peso. Só em ponteiro fino: no
+   celular não existe hover e o cálculo por toque só atrapalha o scroll. */
+if (!calmo && fino) cards.forEach(function(c){
+  c.addEventListener('pointermove', function(e){
+    var r = c.getBoundingClientRect();
+    var x = (e.clientX - r.left) / r.width - .5, y = (e.clientY - r.top) / r.height - .5;
+    c.style.transform = 'perspective(900px) rotateX(' + (-y * 2.5).toFixed(2) +
+      'deg) rotateY(' + (x * 2.5).toFixed(2) + 'deg) translateY(-4px)';
+  });
+  c.addEventListener('pointerleave', function(){ c.style.transform = ''; });
+});
+
+/* ── fitas de categoria arrastáveis, com inércia ─────────────────────────
+   O navegador já dá inércia ao dedo no celular. O que falta é o DESKTOP, onde
+   arrastar não faz nada e a fita parece travada — então aqui a gente empresta
+   o mesmo gesto pro mouse, e solta com velocidade decrescente. */
+document.querySelectorAll('.fita-rolo').forEach(function(f){
+  var baixo = false, x0 = 0, e0 = 0, v = 0, ultimo = 0, quadro;
+  f.addEventListener('pointerdown', function(e){
+    if (e.pointerType === 'touch') return;   /* o celular já sabe fazer isso */
+    baixo = true; x0 = e.clientX; e0 = f.scrollLeft; v = 0; ultimo = e.clientX;
+    cancelAnimationFrame(quadro); f.classList.add('arrastando');
+  });
+  addEventListener('pointermove', function(e){
+    if (!baixo) return;
+    f.scrollLeft = e0 - (e.clientX - x0);
+    v = e.clientX - ultimo; ultimo = e.clientX;
+  });
+  addEventListener('pointerup', function(){
+    if (!baixo) return;
+    baixo = false; f.classList.remove('arrastando');
+    (function desliza(){
+      if (Math.abs(v) < .4) return;
+      f.scrollLeft -= v; v *= .93;          /* atrito */
+      quadro = requestAnimationFrame(desliza);
+    })();
+  });
+});
+
+/* ── números subindo QUANDO VOCÊ CHEGA NELES ─────────────────────────────
+   ⚠️ Isto já existiu e eu tirei junto com o resto — mas o defeito não era o
+   número subir: era subir no carregamento, longe dos olhos, num herói que
+   ninguém pediu. Disparado por chegada, o movimento tem causa: você rolou até
+   ali, e o número reage. O valor certo está no HTML desde sempre, então sem JS
+   (ou com reduced-motion) a página mostra o número final e pronto. */
+var obsNum = new IntersectionObserver(function(ents){
+  ents.forEach(function(en){
+    if (!en.isIntersecting) return;
+    var el = en.target, alvo = parseInt(el.textContent, 10) || 0;
+    obsNum.unobserve(el);
+    if (calmo || !alvo) return;
+    var sufixo = el.textContent.replace(/[\d.]/g, ''), t0 = null;
+    requestAnimationFrame(function passo(t){
+      if (!t0) t0 = t;
+      var k = Math.min(1, (t - t0) / 900), e = 1 - Math.pow(1 - k, 3);
+      el.textContent = Math.round(alvo * e) + sufixo;
+      if (k < 1) requestAnimationFrame(passo);
+    });
+  });
+}, {threshold: .6});
+document.querySelectorAll('.prova b').forEach(function(b){ obsNum.observe(b); });
+
+/* ── o mural para quando some da tela ────────────────────────────────────
+   Animação rodando fora da vista gasta bateria e mantém o celular acordado
+   sem nada em troca. */
+var mural = document.querySelector('.mural');
+if (mural) new IntersectionObserver(function(ents){
+  ents.forEach(function(en){
+    mural.querySelectorAll('.mfita').forEach(function(f){
+      f.style.animationPlayState = en.isIntersecting ? 'running' : 'paused';
+    });
+  });
+}).observe(mural);
 </script>
 </body>
 </html>
