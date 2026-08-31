@@ -185,13 +185,56 @@ _JS_MENSAGENS = """
   for (const el of linhas) {
     const id = el.getAttribute('data-id') || '';
     if (!id) continue;
-    const entrada = el.querySelector('.message-in') ||
-                    (el.className || '').includes('message-in');
-    if (!entrada) continue;
+    // ⚠️ EXCLUI SÓ O QUE EU MANDEI, não "inclui só o que reconheço como
+    // recebido". A 1ª versão exigia `.message-in` e devolveu 0 mensagem no
+    // grupo que abriu certo: a classe não estava onde eu supus. Num grupo do
+    // concorrente nós nunca escrevemos, então "recebida" é o caso geral e
+    // "minha" é a exceção — filtrar pela exceção funciona mesmo quando a
+    // marcação muda, e o pior caso é ler uma mensagem nossa num grupo que o
+    // minerador se recusa a visitar de qualquer jeito.
+    const cls = String(el.className || '');
+    const meu = cls.includes('message-out') ||
+                el.querySelector('.message-out') !== null;
     const t = (el.innerText || '').trim();
-    if (t) saida.push({id: id, texto: t.slice(0, 1200)});
+    if (!t) continue;
+    saida.push({id: id, texto: t.slice(0, 1200), meu: meu});
   }
-  return {itens: saida.slice(-limite)};
+  return {itens: saida.slice(-limite), total: linhas.length};
+}
+"""
+
+# ⚠️ O --diag EXISTE PRA NÃO ADIVINHAR DUAS VEZES. Quando a leitura volta
+# vazia, "0 mensagens" não diz se o seletor está errado, se a conversa não
+# carregou ou se o grupo está mesmo quieto. Isto conta cada candidato
+# separadamente e mostra a marcação real — é a mesma ideia do `--diag-anexo`
+# que descobriu, em 19/08, que o input de arquivo solitário era o da figurinha.
+_JS_DIAG = """
+() => {
+  const main = document.querySelector('#main');
+  if (!main) return {erro: 'sem #main — nenhuma conversa aberta'};
+  const conta = (s) => { try { return main.querySelectorAll(s).length; }
+                         catch (e) { return -1; } };
+  const amostra = [];
+  for (const el of Array.from(main.querySelectorAll('div[data-id]')).slice(-3)) {
+    amostra.push({
+      id: (el.getAttribute('data-id') || '').slice(0, 44),
+      classe: String(el.className || '').slice(0, 70),
+      texto: (el.innerText || '').trim().slice(0, 70),
+      filhos_in: el.querySelectorAll('.message-in').length,
+      filhos_out: el.querySelectorAll('.message-out').length,
+    });
+  }
+  return {
+    contagens: {
+      'div[data-id]': conta('div[data-id]'),
+      '[role=row]': conta('div[role="row"]'),
+      '.message-in': conta('.message-in'),
+      '.message-out': conta('.message-out'),
+      'copyable-text': conta('.copyable-text'),
+      'selectable-text': conta('span.selectable-text'),
+    },
+    amostra: amostra,
+  };
 }
 """
 
@@ -215,7 +258,36 @@ def _ler_grupo(pagina, grupo: str, limite: int) -> list:
     if r.get("erro"):
         _log(f"   ⚠️ {grupo}: {r['erro']}")
         return []
-    return [i for i in (r.get("itens") or []) if i.get("id") and i.get("texto")]
+    itens = [i for i in (r.get("itens") or [])
+             if i.get("id") and i.get("texto") and not i.get("meu")]
+    total = int(r.get("total") or 0)
+    if total and not itens:
+        # ⚠️ "0 de 0" e "0 de 137" são problemas diferentes: o primeiro é
+        # conversa que não carregou, o segundo é filtro comendo tudo. Dizer
+        # qual dos dois poupa a próxima meia hora.
+        _log(f"   ⚠️ {grupo}: {total} linha(s) no DOM e nenhuma aproveitável "
+             f"— rode --diag")
+    return itens
+
+
+def _diagnosticar(pagina, grupo: str) -> None:
+    """Mostra a marcação real da conversa, pra corrigir seletor com prova."""
+    try:
+        d = pagina.evaluate(_JS_DIAG) or {}
+    except Exception as e:
+        _log(f"   [diag] {grupo}: falhou ({type(e).__name__} {str(e)[:70]})")
+        return
+    if d.get("erro"):
+        _log(f"   [diag] {grupo}: {d['erro']}")
+        return
+    _log(f"   [diag] {grupo}")
+    for k, v in (d.get("contagens") or {}).items():
+        _log(f"      {k:22} {v}")
+    for a in (d.get("amostra") or []):
+        _log(f"      ─ id={a.get('id')}")
+        _log(f"        classe={a.get('classe')!r}")
+        _log(f"        in={a.get('filhos_in')} out={a.get('filhos_out')}  "
+             f"texto={a.get('texto')!r}")
 
 
 # ── o miolo ──────────────────────────────────────────────────────────────
@@ -320,14 +392,19 @@ def rodar(teste: bool, diag: bool) -> int:
                         # postador. Aqui é ainda menos grave: fonte a menos.
                         _log(f"   ⏭️  {g}: não abri, sigo")
                         continue
+                    if diag:
+                        _diagnosticar(pagina, g)
+                        msgs = _ler_grupo(pagina, g, JANELA_MSGS)
+                        _log(f"      → {len(msgs)} aproveitável(is) pelo filtro")
+                        for m in msgs[-4:]:
+                            _log(f"        {m['id'][:36]}  "
+                                 f"{m['texto'].splitlines()[0][:56]!r}")
+                        contas["lidas"] += len(msgs)
+                        if len(alvos) > 1:
+                            time.sleep(random.uniform(4, 10))
+                        continue
                     msgs = _ler_grupo(pagina, g, JANELA_MSGS)
                     contas["lidas"] += len(msgs)
-                    if diag:
-                        _log(f"   [diag] {g}: {len(msgs)} mensagem(ns)")
-                        for m in msgs[-5:]:
-                            _log(f"      {m['id'][:38]}  "
-                                 f"{m['texto'].splitlines()[0][:60]!r}")
-                        continue
 
                     canal = f"wa:{g}"
                     for m in msgs:

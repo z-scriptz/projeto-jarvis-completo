@@ -1260,12 +1260,24 @@ def _abrir_grupo(pagina, grupo: str):
     if not busca:
         return None  # None = não achei a busca; False = achei mas não o grupo
     busca.click()
+    # ⚠️ LIMPAR ANTES DE DIGITAR, E ISSO SÓ APARECEU COM VÁRIOS GRUPOS (30/08).
+    # A caixa de busca GUARDA o texto da busca anterior. Com um grupo por
+    # rodada — ou com os grupos fixados, achados "direto da lista" sem busca
+    # nenhuma — isso nunca incomodou. No minerador, que abre 4 grupos seguidos
+    # e nenhum está fixado, a 2ª busca virava "OFERTAS RELÂMPAGO…Promos da
+    # Alana #1", que não é grupo nenhum: 1 abriu, 3 "não abri, sigo".
+    # 📌 Estado que sobra de uma iteração é invisível quando só existe uma.
+    pagina.keyboard.press("Control+A")
+    pagina.keyboard.press("Delete")
     # digita SEM emoji: o grupo é "💭 ACHADINHOS VIP TOPSHOP" e o keyboard.type
     # não emite caractere fora do BMP de forma confiável.
     pagina.keyboard.type(_digitavel(grupo), delay=random.randint(60, 140))
     pagina.wait_for_timeout(2200)
     item = _achar_grupo(pagina, grupo)
     if not item:
+        # deixa a caixa limpa mesmo no fracasso, senão o próximo também erra
+        pagina.keyboard.press("Control+A")
+        pagina.keyboard.press("Delete")
         return False
     item.click()
     pagina.wait_for_timeout(1800)
