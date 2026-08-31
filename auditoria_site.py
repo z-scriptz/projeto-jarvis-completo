@@ -348,10 +348,33 @@ def bloco_teto():
     fonte = _primeiro(RAIZ / "telegram_repurpose_hunter.py",
                       RAIZ / "integrations" / "telegram_repurpose_hunter.py")
     if fonte:
-        m = re.search(r"max_itens\s*:\s*int\s*=\s*(\d+)",
-                      fonte.read_text(encoding="utf-8", errors="replace"))
+        texto = fonte.read_text(encoding="utf-8", errors="replace")
+        m = re.search(r"max_itens\s*:\s*int\s*=\s*(\d+)", texto)
         if m:
             teto = int(m.group(1))
+        # ⚠️ `max_itens=0` NÃO É TETO ZERO, É *SEM* TETO (mudou em 15/08). E
+        # este bloco não soube: lendo o 0 ao pé da letra, `n >= 0` é verdade
+        # SEMPRE, então ele acusava "ESTÁ NO TETO" em toda execução, com
+        # qualquer fila — inclusive numa fila de 355 itens cobrindo 20 dias,
+        # que é a prova viva de que nada foi expulso.
+        #
+        # 📌 Auditor desatualizado é pior que auditor ausente: ele produz um ❌
+        # vermelho e convincente sobre um problema que já foi consertado, e
+        # ensina o dono a ignorar o painel inteiro. Foi o que aconteceu em
+        # 31/08 — eu quase mandei o Dre consertar a fila que estava certa.
+        #
+        # Quando o default é 0, o teto real vem do `.env` (FILA_ACERVO_MAX) ou
+        # do default escrito no próprio gravador.
+        if teto == 0:
+            env = os.environ.get("FILA_ACERVO_MAX")
+            if env and env.strip().isdigit():
+                teto = int(env.strip())
+            else:
+                m2 = re.search(r'FILA_ACERVO_MAX"\s*,\s*"(\d+)"', texto)
+                teto = int(m2.group(1)) if m2 else None
+            if teto:
+                _diz(INFO, f"o gravador usa `max_itens=0` = SEM teto próprio; "
+                           f"o teto real do acervo é {teto}")
     if teto is None:
         _diz(INFO, "não achei o `max_itens` no gravador — pulo este bloco")
         return None
@@ -482,8 +505,40 @@ def bloco_funil(com_link, B=None):
     print(f"       {-mortos:>4} escondidos (health-check disse MORTO)")
     print(f"       {-fundidos:>4} fundidos (mesmo itemId, dois links)")
     print(f"       {-mudos:>4} sem foto E sem preço (_vale_mostrar tira da grade)")
+
+    # ⚠️ FALTAVA O ÚLTIMO CORTE, E ELE É O MAIOR DE TODOS (31/08). O
+    # `deploy_site` publica no máximo `VITRINE_MAX_PRODUTOS` (padrão 200) — é o
+    # teto que o roadmap registrou em 15/08 como sendo O lugar onde o limite
+    # deve morar, justamente pra fila poder ser acervo. Este funil ignorava
+    # isso e anunciava 324 esperados contra 180 publicados: "faltam 144", em
+    # vermelho, para um deploy que fez exatamente o que devia.
+    #
+    # 📌 Funil que esquece um filtro não erra um pouco: ele acusa o alvo
+    # errado. A diferença inteira era o teto, e o texto do ❌ mandava procurar
+    # push que falhou.
+    teto_vitrine = None
+    dep = _primeiro(RAIZ / "deploy_site.py")
+    if dep:
+        env = os.environ.get("VITRINE_MAX_PRODUTOS")
+        if env and env.strip().isdigit():
+            teto_vitrine = int(env.strip())
+        else:
+            m = re.search(r'VITRINE_MAX_PRODUTOS"\s*,\s*"(\d+)"',
+                          dep.read_text(encoding="utf-8", errors="replace"))
+            teto_vitrine = int(m.group(1)) if m else None
+    if teto_vitrine and esperado > teto_vitrine:
+        print(f"       {-(esperado - teto_vitrine):>4} acima do teto da vitrine "
+              f"(VITRINE_MAX_PRODUTOS={teto_vitrine})")
+        esperado = teto_vitrine
+
     print(f"       {'':>4} " + "─" * 34)
     print(f"       {esperado:>4} CARDS ESPERADOS na vitrine")
+    if teto_vitrine and esperado >= teto_vitrine:
+        _diz(INFO, f"a vitrine está NO TETO ({teto_vitrine}) — sobra produto "
+                   f"bom na fila que não cabe na página",
+             "não é falha: é onde o limite deve morar (peso da página e "
+             "chamada de health-check). Suba VITRINE_MAX_PRODUTOS se quiser "
+             "mais cards no ar")
     if mudos:
         _diz(INFO, f"{mudos} produto(s) com link mas sem foto e sem preço",
              "o commit conta eles (\"vitrine: N produtos\") e a grade não — é "
