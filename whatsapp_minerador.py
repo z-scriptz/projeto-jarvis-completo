@@ -116,7 +116,12 @@ MINA_GRUPOS = int(float(os.environ.get("WHATSAPP_MINA_GRUPOS", "2")))
 # Quantas mensagens recentes olhar em cada grupo. O `hunter_seen` corta o que
 # já foi visto, então repetir é barato — e a janela precisa ser maior que o
 # volume entre duas rodadas, senão mensagem some antes de ser lida.
-JANELA_MSGS = int(float(os.environ.get("WHATSAPP_MINA_JANELA", "60")))
+JANELA_MSGS = int(float(os.environ.get("WHATSAPP_MINA_JANELA", "120")))
+
+# Quantos passos de rolagem por grupo. Cada passo sobe ~82% da altura do painel
+# e colhe o que apareceu. 14 passos cobrem com folga um dia de grupo movimentado
+# (o Promos da Alana postou 72 em 31/08) sem virar uma sessão que não termina.
+VOLTAS_ROLAGEM = int(float(os.environ.get("WHATSAPP_MINA_VOLTAS", "14")))
 
 
 def _log(m):
@@ -177,34 +182,54 @@ def _proprios() -> set:
 # estável — vira a chave do `hunter_seen`, que é o que impede reprocessar a
 # mesma mensagem e gastar chamada de API duas vezes.
 _JS_MENSAGENS = """
-(limite) => {
+async (op) => {
   const main = document.querySelector('#main');
   if (!main) return {erro: 'sem #main'};
-  const linhas = main.querySelectorAll('div[data-id]');
-  const saida = [];
-  for (const el of linhas) {
-    const id = el.getAttribute('data-id') || '';
-    if (!id) continue;
-    // ⚠️ EXCLUI SÓ O QUE EU MANDEI, não "inclui só o que reconheço como
-    // recebido". A 1ª versão exigia `.message-in` e devolveu 0 mensagem no
-    // grupo que abriu certo: a classe não estava onde eu supus. Num grupo do
-    // concorrente nós nunca escrevemos, então "recebida" é o caso geral e
-    // "minha" é a exceção — filtrar pela exceção funciona mesmo quando a
-    // marcação muda, e o pior caso é ler uma mensagem nossa num grupo que o
-    // minerador se recusa a visitar de qualquer jeito.
-    const cls = String(el.className || '');
-    const meu = cls.includes('message-out') ||
-                el.querySelector('.message-out') !== null;
-    const t = (el.innerText || '').trim();
-    if (!t) continue;
-    // `data-pre-plain-text` é "[HH:MM, DD/MM/AAAA] Fulano: " — só mensagem de
-    // gente tem. Guardo pra saber se dá pra confiar nele como discriminador;
-    // hoje quem separa recado do sistema é a lista de frases, no Python.
-    const p = el.querySelector('[data-pre-plain-text]');
-    saida.push({id: id, texto: t.slice(0, 1200), meu: meu,
-                autor: p ? (p.getAttribute('data-pre-plain-text') || '') : ''});
+
+  // ⚠️ O PAINEL ROLÁVEL NÃO É A JANELA. `mouse.wheel` rola onde o cursor
+  // estiver, e o cursor não estava sobre as mensagens — é por isso que a
+  // versão anterior lia 11 linhas num grupo com 72.
+  let sc = null;
+  for (const d of main.querySelectorAll('div')) {
+    if (d.clientHeight > 240 && d.scrollHeight > d.clientHeight + 80) { sc = d; break; }
   }
-  return {itens: saida.slice(-limite), total: linhas.length};
+
+  // ⚠️ E O WHATSAPP RECICLA O DOM: rolando pra cima ele MONTA as mensagens
+  // antigas e DESCARTA as novas. Ler uma vez depois de rolar devolve só a
+  // última janela — as outras passaram pela tela e já não existem.
+  // 📌 Por isso a colheita acontece a CADA passo, acumulando por data-id. Ler
+  // depois de rolar é ler o que sobrou; ler enquanto rola é ler tudo.
+  const vistos = new Map();
+  const colher = () => {
+    for (const el of main.querySelectorAll('div[data-id]')) {
+      const id = el.getAttribute('data-id') || '';
+      if (!id || vistos.has(id)) continue;
+      const t = (el.innerText || '').trim();
+      if (!t) continue;
+      const cls = String(el.className || '');
+      const p = el.querySelector('[data-pre-plain-text]');
+      vistos.set(id, {
+        id: id, texto: t.slice(0, 1200),
+        meu: cls.includes('message-out') || el.querySelector('.message-out') !== null,
+        // medido em 31/08: recado do sistema NÃO tem `data-pre-plain-text`, e
+        // mensagem de gente sempre tem ("[10:39, 31/08/2026] +55 51 8276-1348: ")
+        autor: p ? (p.getAttribute('data-pre-plain-text') || '') : ''
+      });
+    }
+  };
+
+  colher();
+  let paradas = 0;
+  for (let i = 0; sc && i < op.voltas && vistos.size < op.limite; i++) {
+    const antes = vistos.size, topo = sc.scrollTop;
+    sc.scrollTop = Math.max(0, sc.scrollTop - sc.clientHeight * 0.82);
+    await new Promise(r => setTimeout(r, op.pausa));
+    colher();
+    if (vistos.size === antes) { if (++paradas >= 2) break; } else paradas = 0;
+    if (topo <= 0) break;          // já está no começo da conversa
+  }
+  return {itens: Array.from(vistos.values()).slice(-op.limite),
+          total: vistos.size, rolou: !!sc};
 }
 """
 
@@ -243,9 +268,23 @@ _FRASES_SISTEMA = (
 )
 
 
-def _do_sistema(texto: str) -> bool:
-    t = " ".join((texto or "").replace("\xa0", " ").split()).lower()
-    return any(f in t for f in _FRASES_SISTEMA)
+def _do_sistema(item: dict) -> bool:
+    """True quando a linha é recado do WhatsApp, não mensagem de gente.
+
+    ⚠️ O DISCRIMINADOR BOM APARECEU NA MEDIÇÃO (31/08). O `--diag` mostrou que
+    mensagem de pessoa SEMPRE traz `data-pre-plain-text` — "[10:39, 31/08/2026]
+    +55 51 8276-1348: " — e recado do sistema NUNCA traz. Nos quatro grupos,
+    sem exceção. É um sinal estrutural do próprio WhatsApp, muito mais firme
+    que casar frase.
+
+    A lista de frases fica como rede embaixo: se um dia a marcação mudar e o
+    atributo sumir, o filtro degrada pra "quase certo" em vez de deixar passar
+    tudo. Duas evidências fracas na mesma direção valem mais que uma sozinha.
+    """
+    if (item.get("autor") or "").strip():
+        return False                      # tem autor: é gente
+    t = " ".join((item.get("texto") or "").replace("\xa0", " ").split()).lower()
+    return any(f in t for f in _FRASES_SISTEMA) or not t
 
 # ⚠️ O --diag EXISTE PRA NÃO ADIVINHAR DUAS VEZES. Quando a leitura volta
 # vazia, "0 mensagens" não diz se o seletor está errado, se a conversa não
@@ -286,18 +325,24 @@ _JS_DIAG = """
 
 
 def _ler_grupo(pagina, grupo: str, limite: int) -> list:
-    """[{id, texto}] das mensagens recebidas visíveis.
+    """[{id, texto}] das mensagens recebidas — rolando e colhendo a cada passo.
 
-    Rola um pouco antes de ler: é o que carrega mensagem mais antiga no
-    WhatsApp Web e, de quebra, é o que uma pessoa faz ao abrir o grupo."""
-    for _ in range(random.randint(2, 4)):
-        try:
-            pagina.mouse.wheel(0, -random.randint(600, 1400))
-        except Exception:
-            break
-        pagina.wait_for_timeout(random.randint(400, 900))
+    ⚠️ A VERSÃO ANTERIOR LIA 11 LINHAS NUM GRUPO COM 72 (31/08). Ela rolava com
+    `mouse.wheel` (que rola onde o CURSOR está, e o cursor não estava sobre as
+    mensagens) e só depois lia, uma vez. Como o WhatsApp descarta do DOM o que
+    saiu da tela, o que sobrava era a última janela.
+    📌 Eu tinha conferido que ele "lia o DOM" e chamei isso de funcionar. Ler o
+    DOM era verdade; ler TUDO não era — e a diferença só aparece comparando com
+    o grupo aberto do lado, que era exatamente o que eu não fiz.
+
+    A rolagem agora é do painel certo, e a colheita acontece a cada passo.
+    O ritmo continua de gente: passos de ~82% da tela com pausa entre eles."""
     try:
-        r = pagina.evaluate(_JS_MENSAGENS, limite) or {}
+        r = pagina.evaluate(_JS_MENSAGENS, {
+            "limite": limite,
+            "voltas": VOLTAS_ROLAGEM,
+            "pausa": random.randint(420, 700),
+        }) or {}
     except Exception as e:
         _log(f"   ⚠️ não li o DOM de {grupo}: {type(e).__name__} {str(e)[:80]}")
         return []
@@ -306,8 +351,14 @@ def _ler_grupo(pagina, grupo: str, limite: int) -> list:
         return []
     brutos = [i for i in (r.get("itens") or [])
               if i.get("id") and i.get("texto") and not i.get("meu")]
-    itens = [i for i in brutos if not _do_sistema(i["texto"])]
+    itens = [i for i in brutos if not _do_sistema(i)]
     total = int(r.get("total") or 0)
+    if not r.get("rolou"):
+        # ⚠️ sem o painel rolável a leitura fica presa na primeira tela — é
+        # exatamente o defeito de 31/08, e ele precisa gritar em vez de sair
+        # como um número baixo plausível
+        _log(f"   ⚠️ {grupo}: não achei o painel rolável — li só o que estava "
+             f"visível ({total} linha(s))")
     sistema = len(brutos) - len(itens)
     if sistema:
         _log(f"   {sistema} recado(s) do sistema ignorado(s)")
