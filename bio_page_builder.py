@@ -574,7 +574,6 @@ def gerar_site(produtos: list) -> str:
     grupo_topo = GRUPO_WHATSAPP or GRUPO_TELEGRAM or INSTAGRAM
     return _TEMPLATE.replace("{{VITRINE}}", _vitrine_html(produtos))\
                     .replace("{{MURAL}}", _mural_html(produtos))\
-                    .replace("{{GRUPOS}}", _grupos_html())\
                     .replace("{{GRUPO_TOPO}}", html.escape(grupo_topo))\
                     .replace("{{TOTAL}}", str(total))\
                     .replace("{{LOJAS}}", str(lojas))\
@@ -610,6 +609,10 @@ _TEMPLATE = r"""<!DOCTYPE html>
 <!-- pinta a barra do navegador no celular com o fundo da página:
      é o detalhe que faz o site parecer app em vez de aba -->
 <meta name="theme-color" content="#0B0C0F">
+<!-- o símbolo é o mesmo da marca, embutido: a assinatura precisa existir
+     sem a palavra "topshop" pra virar ícone de app um dia -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2032%2032%22%3E%3Cpath%20d%3D%22M6%200h13.4L32%2012.6V26a6%206%200%200%201-6%206H6a6%206%200%200%201-6-6V6a6%206%200%200%201%206-6Z%22%20fill%3D%22%23FF3D6E%22/%3E%3Ccircle%20cx%3D%2223.6%22%20cy%3D%228.4%22%20r%3D%222.1%22%20fill%3D%22%230B0C0F%22%20opacity%3D%22.55%22/%3E%3Cpath%20d%3D%22M6.6%2012.4h13.2v3.5h-4.8v10.4h-3.6V15.9H6.6z%22%20fill%3D%22%23fff%22/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2032%2032%22%3E%3Cpath%20d%3D%22M6%200h13.4L32%2012.6V26a6%206%200%200%201-6%206H6a6%206%200%200%201-6-6V6a6%206%200%200%201%206-6Z%22%20fill%3D%22%23FF3D6E%22/%3E%3Ccircle%20cx%3D%2223.6%22%20cy%3D%228.4%22%20r%3D%222.1%22%20fill%3D%22%230B0C0F%22%20opacity%3D%22.55%22/%3E%3Cpath%20d%3D%22M6.6%2012.4h13.2v3.5h-4.8v10.4h-3.6V15.9H6.6z%22%20fill%3D%22%23fff%22/%3E%3C/svg%3E">
 <style>
 @font-face{font-family:'Arch';src:url('topshop-fonte.woff2') format('woff2');
   font-weight:100 900;font-stretch:62% 125%;font-display:swap}
@@ -643,53 +646,62 @@ img{max-width:100%}
 :where(a,button,input):focus-visible{outline:2px solid var(--marca);
   outline-offset:2px;border-radius:10px}
 
-/* ══ TOPO: marca + busca, tudo num bloco que gruda ════════════════════════
-   Dois `position:sticky` empilhados exigem saber a altura do primeiro pra
-   posicionar o segundo — e essa altura muda quando o teclado do celular abre.
-   Um bloco só não tem esse problema. */
-.topo{position:sticky;top:0;z-index:50;background:var(--bg);
-  transition:box-shadow .25s,padding .22s}
-.topo.colado{box-shadow:0 1px 0 var(--linha),0 12px 32px rgba(0,0,0,.5)}
-.barra{display:flex;align-items:center;justify-content:space-between;gap:14px;
-  padding-block:14px 10px;transition:padding .22s}
-.topo.colado .barra{padding-block:9px 6px}
-.marca{font-size:20px;font-weight:800;font-stretch:112%;letter-spacing:-.045em;
-  white-space:nowrap;display:flex;align-items:center}
+/* ══ TOPO: altura FIXA, e a razão é um bug ════════════════════════════════
+   ⚠️ A VERSÃO ANTERIOR ENCOLHIA O PRÓPRIO BLOCO STICKY, e era isso que o Dre
+   viu de "bugado dependendo de como a pessoa subir a tela e parar". Elemento
+   `sticky` ocupa espaço no fluxo: quando ele encolhe de 58px pra 46px, o
+   documento inteiro encurta e o conteúdo SOBE 12px debaixo do dedo. Perto do
+   limiar isso vira solavanco, e parando ali no meio a página fica tremendo.
+   📌 Barra que gruda não pode mudar de tamanho. A busca grande mora na CAPA e
+   rola embora normalmente; o topo tem uma busca COMPACTA que aparece quando a
+   outra sai de vista. As duas escrevem no mesmo filtro.
+
+   E a lupa: `top:29px` era metade de 58px chumbada na mão — bastava um estado
+   de altura que eu não tivesse enumerado (e eram cinco) pra ela sair do lugar.
+   `top:50%` não depende de altura nenhuma. */
+.topo{position:sticky;top:0;z-index:50;background:rgba(11,12,15,.72);
+  backdrop-filter:blur(22px) saturate(150%);
+  -webkit-backdrop-filter:blur(22px) saturate(150%);
+  border-bottom:1px solid transparent;transition:border-color .25s}
+.topo.colado{border-bottom-color:var(--linha)}
+.barra{display:flex;align-items:center;gap:12px;height:60px}
+.marca{display:flex;align-items:center;gap:9px;font-size:19px;font-weight:800;
+  font-stretch:112%;letter-spacing:-.045em;white-space:nowrap;flex:none}
+.marca .ts{width:26px;height:26px;flex:none;display:block}
 .marca i{font-style:normal;color:var(--marca)}
-.zap{border:1px solid var(--linha2);color:var(--ink);font-weight:650;font-size:13.5px;
-  padding:9px 16px;border-radius:999px;white-space:nowrap;
-  transition:background .22s,border-color .22s}
+.zap{margin-left:auto;flex:none;border:1px solid var(--linha2);color:var(--ink);
+  font-weight:650;font-size:13px;padding:9px 15px;border-radius:999px;
+  white-space:nowrap;min-height:40px;display:flex;align-items:center;
+  transition:background .2s,border-color .2s}
 .zap:hover{background:var(--sup2);border-color:var(--marca)}
 
-/* a busca é o elemento mais gordo da página, de propósito: é o que a pessoa
-   que veio do Reels precisa em primeiro lugar */
-.buscabox{position:relative;padding-bottom:12px;transition:padding .22s}
-.topo.colado .buscabox{padding-bottom:9px}
-.buscabox input{width:100%;height:58px;background:var(--sup);
+/* a busca compacta do topo entra quando a grande sai de cena */
+.busca-topo{flex:1;max-width:420px;opacity:0;transform:translateY(-6px);
+  pointer-events:none;transition:opacity .25s,transform .25s}
+.topo.colado .busca-topo{opacity:1;transform:none;pointer-events:auto}
+@media(max-width:760px){.busca-topo{max-width:none}
+  .topo.colado .marca span,.topo.colado .zap{display:none}}
+
+/* ── caixa de busca (serve às duas: grande na capa, compacta no topo) ───── */
+.buscabox{position:relative;display:block}
+.buscabox input{width:100%;height:var(--h,56px);background:var(--sup);
   border:1px solid var(--linha2);color:var(--ink);border-radius:13px;
-  padding:0 52px 0 50px;font:inherit;font-size:16.5px;font-weight:500;
-  transition:height .22s,font-size .22s,border-color .2s,background .2s}
-.topo.colado .buscabox input{height:46px;font-size:15px}
+  padding:0 16px 0 48px;font:inherit;font-size:var(--fs,16px);font-weight:500;
+  transition:border-color .2s,background .2s,box-shadow .2s}
 .buscabox input::placeholder{color:var(--muted);font-weight:400}
 .buscabox input::-webkit-search-cancel-button{filter:invert(.6)}
-.buscabox input:focus{outline:none;border-color:var(--marca);background:var(--sup2)}
-.buscabox .lupa{position:absolute;left:18px;top:29px;transform:translateY(-50%);
-  width:19px;height:19px;stroke:var(--muted);fill:none;stroke-width:2;
-  stroke-linecap:round;transition:stroke .2s,top .22s;pointer-events:none}
-.topo.colado .buscabox .lupa{top:23px}
+.buscabox input:focus{outline:none;border-color:var(--marca);background:var(--sup2);
+  box-shadow:0 0 0 3px rgba(255,61,110,.14)}
+.buscabox .lupa{position:absolute;left:17px;top:50%;transform:translateY(-50%);
+  width:18px;height:18px;stroke:var(--muted);fill:none;stroke-width:2;
+  stroke-linecap:round;transition:stroke .2s;pointer-events:none}
 .buscabox input:focus~.lupa{stroke:var(--marca)}
-.atalho{position:absolute;right:16px;top:29px;transform:translateY(-50%);font-size:11px;
-  color:var(--muted);border:1px solid var(--linha);border-radius:6px;padding:2px 7px;
-  pointer-events:none;transition:top .22s}
-.topo.colado .atalho{top:23px}
-@media(max-width:700px){.atalho{display:none}}
-
-/* frase de posicionamento: some ao grudar, pra devolver a altura ao produto */
-.frase{color:var(--muted);font-size:14px;padding-bottom:12px;
-  max-height:44px;overflow:hidden;
-  transition:max-height .25s,opacity .2s,padding .25s}
-.frase b{color:var(--ink);font-weight:650}
-.topo.colado .frase{max-height:0;opacity:0;padding-bottom:0}
+.busca-topo .buscabox{--h:40px;--fs:15px}
+.busca-capa{--h:58px;--fs:17px;margin-top:22px;max-width:520px}
+@media(max-width:600px){
+  .busca-capa{--h:52px;--fs:16px;margin-top:16px}   /* 16px = iOS não dá zoom */
+  .busca-topo .buscabox{--fs:16px}
+}
 
 /* ══ CONTROLES: categorias e lojas em fita ════════════════════════════════ */
 .controles{display:flex;flex-direction:column;gap:9px;padding-bottom:14px}
@@ -777,34 +789,15 @@ h2{font-size:clamp(22px,3.2vw,34px);font-weight:800;font-stretch:108%;
 .js .reveal{opacity:0;transform:translateY(14px);
   transition:opacity .5s,transform .5s}
 .js .reveal.dentro{opacity:1;transform:none}
-.passos,.provas{display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(250px,1fr));
-  gap:clamp(10px,1.4vw,16px);margin-top:28px}
-.passo,.prova{padding:22px 20px 24px;border-radius:var(--r);
-  border:1px solid var(--linha);background:var(--sup);
-  transition:border-color .22s,background .22s}
-.passo:hover,.prova:hover{border-color:var(--linha2);background:var(--sup2)}
-.passo .num{display:grid;place-items:center;width:30px;height:30px;border-radius:9px;
-  background:var(--sup2);border:1px solid var(--linha2);color:var(--ink);
-  font-weight:800;font-size:14px;margin-bottom:14px}
-.passo h3{font-size:16px;font-weight:700;margin-bottom:7px;letter-spacing:-.01em}
-.passo p,.prova p{color:var(--muted);font-size:13.5px;line-height:1.55}
-.prova b{display:block;font-size:clamp(30px,4vw,40px);font-weight:800;
-  letter-spacing:-.04em;line-height:1;color:var(--ink);
-  font-variant-numeric:tabular-nums}
-.prova h3{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
-  color:var(--muted);margin:9px 0 9px}
-.contato{display:grid;grid-template-columns:1fr 1fr;gap:clamp(20px,4vw,48px);
-  align-items:start}
-@media(max-width:820px){.contato{grid-template-columns:1fr}}
-.cis{display:flex;flex-direction:column;gap:8px;margin-top:8px}
-.ci{display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:12px;
-  border:1px solid var(--linha);background:var(--sup);min-height:44px;
-  transition:border-color .2s,background .2s}
-.ci:hover{border-color:var(--linha2);background:var(--sup2)}
-.ci .ico{font-size:18px;flex:none}
-.ci span{display:flex;flex-direction:column;font-size:14px;font-weight:600}
-.ci span i{font-style:normal;font-size:12.5px;color:var(--muted);font-weight:400;margin-top:2px}
+.rodape-prova{padding:clamp(30px,5vw,54px) 0 clamp(20px,3vw,34px);
+  border-top:1px solid var(--linha);margin-top:clamp(26px,4vw,46px)}
+.prova-linha{color:var(--muted);font-size:14px;line-height:1.9;max-width:78ch}
+.prova-linha b{color:var(--ink);font-weight:700;font-variant-numeric:tabular-nums}
+.canais{display:flex;gap:8px;flex-wrap:wrap;margin-top:20px}
+.ci{border:1px solid var(--linha2);background:var(--sup);border-radius:999px;
+  padding:10px 16px;font-size:13.5px;font-weight:600;min-height:42px;
+  display:flex;align-items:center;transition:background .2s,border-color .2s}
+.ci:hover{background:var(--sup2);border-color:var(--marca)}
 
 footer.wrap{border-top:1px solid var(--linha);padding-block:26px 40px;color:var(--muted);
   font-size:12.5px;display:flex;gap:16px;flex-wrap:wrap;justify-content:space-between}
@@ -822,12 +815,11 @@ footer a{border-bottom:1px solid var(--linha)}
   .pr{flex-direction:column;align-items:flex-start;gap:1px}
   .pr b{font-size:17px}
   .pr s{font-size:11px}
-  .buscabox input{height:52px;font-size:16px}   /* 16px = iOS não dá zoom */
-  .buscabox .lupa,.atalho{top:26px}
-  .topo.colado .buscabox input{height:44px;font-size:16px}
-  .topo.colado .buscabox .lupa{top:22px}
+  /* ⚠️ AQUI SOBRAVA A ALTURA CHUMBADA DA VERSÃO ANTIGA (height:52px/44px e
+     lupa em top:26px/22px). Ela reintroduzia exatamente o defeito que o bloco
+     do topo acabou de consertar: barra grudada mudando de tamanho. A altura
+     agora vem da variável --h de cada caixa, num lugar só. */
   .zap{font-size:12.5px;padding:8px 13px}
-  .frase{font-size:13px}
 }
 @media(prefers-reduced-motion:reduce){
   *{animation:none!important;transition-duration:.01ms!important}
@@ -912,7 +904,7 @@ footer a{border-bottom:1px solid var(--linha)}
 .fita-rolo.arrastando .chip,.fita-rolo.arrastando .loja{pointer-events:none}
 
 /* ── números que sobem quando VOCÊ chega neles ──────────────────────────── */
-.prova b{font-variant-numeric:tabular-nums}
+.prova-linha b{font-variant-numeric:tabular-nums}
 
 @media(prefers-reduced-motion:reduce){
   .mfita{animation:none!important}
@@ -932,19 +924,16 @@ footer a{border-bottom:1px solid var(--linha)}
      (quantos produtos, quantos dias de preço) desceu pra depois da grade:
      ela convence quem já está explorando, não quem acabou de chegar. -->
 <div class="topo" id="topo">
-  <div class="wrap">
-    <div class="barra">
-      <a class="marca" href="#topo">top<i>shop</i></a>
-      <a class="zap" href="{{GRUPO_TOPO}}" target="_blank" rel="noopener">Entrar no grupo</a>
-    </div>
-    <label class="buscabox">
-      <input id="busca" type="search" placeholder="O que você viu no vídeo?"
-             autocomplete="off" aria-label="Buscar produto">
-      <svg class="lupa" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg>
-      <span class="atalho">/</span>
+  <div class="wrap barra">
+    <a class="marca" href="#topo" aria-label="topshop"><svg class="ts" viewBox="0 0 32 32" aria-hidden="true"><path d="M6 0h13.4L32 12.6V26a6 6 0 0 1-6 6H6a6 6 0 0 1-6-6V6a6 6 0 0 1 6-6Z" fill="#FF3D6E"/><circle cx="23.6" cy="8.4" r="2.1" fill="#0B0C0F" opacity=".55"/><path d="M6.6 12.4h13.2v3.5h-4.8v10.4h-3.6V15.9H6.6z" fill="#fff"/></svg><span>top<i>shop</i></span></a>
+    <label class="busca-topo">
+      <span class="buscabox">
+        <input id="busca-topo" type="search" placeholder="Buscar achadinho"
+               autocomplete="off" aria-label="Buscar produto">
+        <svg class="lupa" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg>
+      </span>
     </label>
-    <p class="frase">O que você viu no vídeo, <b>achou aqui</b> — com link direto
-       e preço conferido.</p>
+    <a class="zap" href="{{GRUPO_TOPO}}" target="_blank" rel="noopener">Entrar no grupo</a>
   </div>
 </div>
 
@@ -957,10 +946,15 @@ footer a{border-bottom:1px solid var(--linha)}
        o problema era um herói que não mostrava mercadoria. -->
   <section class="capa">
     <div>
-      <span class="olho">Social commerce discovery</span>
-      <h1>O que você viu no vídeo, <em>achou aqui</em>.</h1>
-      <p class="sub">A gente garimpa nos vídeos, confere o preço e deixa o link
-         pronto. Você só procura o que viu.</p>
+      <span class="olho">Achados dos nossos vídeos</span>
+      <h1>Viralizou.<br><em>A gente achou.</em></h1>
+      <p class="sub">Todo produto que aparece nos nossos vídeos entra aqui no
+         mesmo dia — com link direto e preço conferido.</p>
+      <label class="busca-capa buscabox">
+        <input id="busca" type="search" placeholder="O que você viu no vídeo?"
+               autocomplete="off" aria-label="Buscar produto">
+        <svg class="lupa" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg>
+      </label>
     </div>
     {{MURAL}}
   </section>
@@ -969,66 +963,26 @@ footer a{border-bottom:1px solid var(--linha)}
     {{VITRINE}}
   </section>
 
-  <section id="como" class="reveal">
-    <span class="eyebrow">Como funciona</span>
-    <h2>Do vídeo pro carrinho, sem enrolação</h2>
-    <p class="sec-sub">A gente garimpa e testa. Você só precisa do link certo —
-       e ele tá sempre aqui.</p>
-    <div class="passos">
-      <div class="passo"><span class="num">1</span>
-        <h3>Você viu no vídeo</h3>
-        <p>Todo achado que aparece no nosso Reels passou por garimpo e teste antes.</p></div>
-      <div class="passo"><span class="num">2</span>
-        <h3>Achou aqui</h3>
-        <p>O produto do vídeo entra nesta página no mesmo dia, com o link certo.
-           Nada de procurar no perfil.</p></div>
-      <div class="passo"><span class="num">3</span>
-        <h3>Compra na loja oficial</h3>
-        <p>O link leva direto pra Shopee ou Amazon. A compra é lá, no preço deles,
-           com a garantia deles.</p></div>
-    </div>
-  </section>
-
-  <section id="confianca" class="reveal">
-    <span class="eyebrow">Por que confiar no link</span>
-    <h2>A vitrine se corrige sozinha</h2>
-    <p class="sec-sub">Nenhuma dessas frases é promessa: é o que o sistema faz
-       todo dia, e o número ao lado sai dele.</p>
-    <div class="provas">
-      <div class="prova"><b>{{TOTAL}}</b>
-        <h3>produtos no ar agora</h3>
-        <p>Conferidos em {{DATA}}. Produto que sai do ar some da vitrine sozinho —
-           você não clica em link morto.</p></div>
-      <div class="prova"><b>{{DIAS}}</b>
-        <h3>dias de preço acompanhado</h3>
-        <p>Por isso o preço aparece como média, com a data do lado. Preço exato
-           numa página envelhece; média com data, não.</p></div>
-      <div class="prova"><b>{{OFF}}%</b>
-        <h3>de desconto médio</h3>
-        <p>O selo amarelo só aparece a partir de 15%. Abaixo disso não é
-           desconto, é ruído — e a gente não põe selo por pôr.</p></div>
-    </div>
-  </section>
-
-  <section id="contato" class="reveal">
-    <div class="contato">
-      <div>
-        <span class="eyebrow">Vamos conversar</span>
-        <h2>Fale comigo</h2>
-        <p class="sec-sub">Quer indicar um produto, propor uma parceria ou entrar
-           nos grupos de achadinhos? Chama aí.</p>
-      </div>
-      <div class="cis">
-        {{GRUPOS}}
-        <a class="ci" href="mailto:{{EMAIL}}"><span class="ico">✉️</span>
-          <span>E-mail<i>{{EMAIL}}</i></span></a>
-        <a class="ci" href="{{INSTAGRAM}}" target="_blank" rel="noopener"><span class="ico">📸</span>
-          <span>Instagram<i>@topshop.__</i></span></a>
-        <a class="ci" href="{{TIKTOK}}" target="_blank" rel="noopener"><span class="ico">🎵</span>
-          <span>TikTok<i>@topshop.__</i></span></a>
-        <a class="ci" href="{{YOUTUBE}}" target="_blank" rel="noopener"><span class="ico">▶️</span>
-          <span>YouTube<i>@TopShop._0</i></span></a>
-      </div>
+  <!-- ⚠️ AQUI MORAVAM DOIS BLOCOS DE TRÊS QUADRADINHOS: "Como funciona" com
+       passos numerados e "Por que confiar" com três números gigantes. O Dre
+       matou a charada: "esse final aí é a cara da IA, todo site que eu vejo das
+       pessoas sempre tem isso". Está certo — trio de cards com ícone, título e
+       parágrafo é o layout que todo gerador cospe, e ele aparece justamente
+       onde o site devia estar VENDENDO.
+       📌 Loja não explica como loja funciona. A prova vira UMA LINHA honesta, e
+       o espaço volta pro que converte. Os números continuam aqui: só pararam
+       de posar de infográfico. -->
+  <section class="rodape-prova">
+    <p class="prova-linha">
+      <b>{{TOTAL}}</b> achados no ar · preços conferidos em <b>{{DATA}}</b> ·
+      <b>{{DIAS}}</b> dias de histórico de preço · link que morre sai sozinho
+    </p>
+    <div class="canais">
+      <a class="ci" href="{{GRUPO_TOPO}}" target="_blank" rel="noopener">Grupo de achadinhos</a>
+      <a class="ci" href="{{INSTAGRAM}}" target="_blank" rel="noopener">Instagram</a>
+      <a class="ci" href="{{TIKTOK}}" target="_blank" rel="noopener">TikTok</a>
+      <a class="ci" href="{{YOUTUBE}}" target="_blank" rel="noopener">YouTube</a>
+      <a class="ci" href="mailto:{{EMAIL}}">Fale com a gente</a>
     </div>
   </section>
 </main>
@@ -1135,15 +1089,28 @@ if (caixaCats) caixaCats.addEventListener('click', function(e){
     o.setAttribute('aria-pressed', String(o === b)); });
   st.cat = b.dataset.filtro; aplicar();
 });
-var inp = document.getElementById('busca');
-if (inp){
-  inp.addEventListener('input', function(e){
-    st.q = e.target.value.toLowerCase().trim(); aplicar();
+/* ⚠️ DUAS CAIXAS, UM ESTADO SÓ. A grande vive na capa e rola embora; a
+   compacta vive no topo grudado. Se cada uma tivesse a própria busca, digitar
+   numa e rolar até a outra mostraria a página filtrada com o campo vazio — e a
+   pessoa não teria como saber por que faltam produtos. Cada uma escreve no
+   mesmo `st.q` e espelha o texto na irmã. */
+var caixas = [].slice.call(document.querySelectorAll('input[type=search]'));
+var inp = caixas[0];
+caixas.forEach(function(c){
+  c.addEventListener('input', function(e){
+    var v = e.target.value;
+    st.q = v.toLowerCase().trim();
+    caixas.forEach(function(o){ if (o !== e.target) o.value = v; });
+    aplicar();
   });
-  document.addEventListener('keydown', function(e){
-    if (e.key === '/' && document.activeElement !== inp){ e.preventDefault(); inp.focus(); }
-  });
-}
+});
+if (caixas.length) document.addEventListener('keydown', function(e){
+  if (e.key !== '/' || caixas.indexOf(document.activeElement) > -1) return;
+  e.preventDefault();
+  /* foca a que está de fato VISÍVEL: a compacta só existe depois de rolar */
+  var alvo = caixas.filter(function(c){ return c.offsetParent !== null; });
+  (alvo[alvo.length - 1] || caixas[0]).focus();
+});
 
 /* ── o topo encolhe ao grudar ────────────────────────────────────────────
    ⚠️ NÃO É `position:sticky` SOZINHO. Sticky mantém a busca na tela, mas com o
@@ -1237,7 +1204,7 @@ var obsNum = new IntersectionObserver(function(ents){
     });
   });
 }, {threshold: .6});
-document.querySelectorAll('.prova b').forEach(function(b){ obsNum.observe(b); });
+document.querySelectorAll('.prova-linha b').forEach(function(b){ obsNum.observe(b); });
 
 /* ── o mural para quando some da tela ────────────────────────────────────
    Animação rodando fora da vista gasta bateria e mantém o celular acordado
