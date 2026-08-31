@@ -184,6 +184,11 @@ VOLTAS_ROLAGEM = int(float(os.environ.get("WHATSAPP_MINA_VOLTAS", "150")))
 NOTA_MIN_MINA = float(os.environ.get("WHATSAPP_MINA_NOTA", "4.0"))
 VENDAS_MIN_MINA = int(float(os.environ.get("WHATSAPP_MINA_VENDAS", "3")))
 
+# Piso de relevância pro resultado da BUSCA CURTA (fração das palavras da busca
+# presentes no título). Só vale nesse caminho: a busca com o termo inteiro já
+# nasce relevante; a curta é chute educado e precisa de prova.
+REL_MINIMA = float(os.environ.get("WHATSAPP_MINA_REL", "0.5"))
+
 # Palavras de marketing que a concorrente cola no título e que a busca da Shopee
 # não casa com nada. Medido em 31/08: "Tenis Feminino Tendência | Design Robusto
 # e Moderno" devolvia zero; "Tenis Feminino" devolve dezenas.
@@ -711,8 +716,22 @@ def _aproveitar(texto: str, hunter, shopee, teste: bool, autor: str = "") -> tup
             if curto and curto != termo:
                 m2 = minerar(curto, nota_minima=NOTA_MIN_MINA,
                              vendas_minimas=VENDAS_MIN_MINA)
-                if m2.get("ok") and m2.get("campeao"):
-                    m, motivo = m2, f" (busca curta: {curto!r})"
+                # ⚠️ BUSCA CURTA PODE TRAZER O PRODUTO ERRADO, e isso é PIOR que
+                # não trazer nada. Medido em 31/08: o termo 'CENARIO FESTA
+                # PRONTO' (linha de marketing que o extrator escolheu) casou com
+                # "Trio Mesas Ripadas Cilindros Branco em Mdf" — produto
+                # aleatório que iria pro grupo como achadinho.
+                # 📌 O `minerar` já calcula `relevancia` (fração das palavras da
+                # busca presentes no título) e eu não estava olhando. Sem
+                # produto é uma rodada mais fraca; com produto errado é o
+                # cliente clicando em coisa que não tem nada a ver.
+                cam = (m2.get("campeao") or {}) if m2.get("ok") else {}
+                rel = float(cam.get("relevancia") or 0)
+                if cam and rel >= REL_MINIMA:
+                    m, motivo = m2, f" (busca curta: {curto!r}, rel {rel:.2f})"
+                elif cam:
+                    _log(f"   ↩️ descartei {cam.get('nome', '')[:30]!r} pra "
+                         f"{curto!r} — relevância {rel:.2f} < {REL_MINIMA}")
     if not m.get("ok") or not m.get("campeao"):
         d = m.get("diagnostico") or {}
         return ("so_fracos" if int(d.get("analisados") or 0) else "sem_busca"), termo
@@ -724,15 +743,30 @@ def _aproveitar(texto: str, hunter, shopee, teste: bool, autor: str = "") -> tup
     if teste:
         return "ok", f"{c.get('nome', termo)[:52]}  (R$ {c.get('preco', 0)}){motivo}"
 
+    # ⚠️ TERCEIRA VEZ QUE EU JOGO FORA UM DIAGNÓSTICO HOJE (31/08). A rodada
+    # real deu `✅ 0 · sem link 15`: quinze produtos achados na Shopee e nenhum
+    # link gerado — a fila recebeu ZERO. `gerar_link_afiliado` devolve
+    # `{"ok": False, "erro": "..."}` explicando o motivo (resposta sem
+    # shortLink, erro de GraphQL, credencial), e eu só perguntava se havia link.
+    # 15 de 15 falhando é problema sistemático, não azar, e o motivo estava
+    # escrito na resposta o tempo todo.
+    #
+    # 📌 `link_gerado` nem existe no `minerar_oportunidades` — era um fallback
+    # que eu copiei do hunter sem conferir se o campo era real. Ele nunca
+    # salvou nada; só disfarçava a falha de mais um `or`.
+    link, erro_link = "", ""
     try:
-        r = gerar_link(url, sub_ids=["wa_mina", "whatsapp_minerador"])
-        link = (r.get("link") or r.get("short_link") or "") \
-            if isinstance(r, dict) else str(r or "")
+        r = gerar_link(url, sub_ids=["wa_mina", "wa_grupo"])
+        if isinstance(r, dict):
+            link = r.get("short_link") or r.get("link") or ""
+            erro_link = str(r.get("erro") or "")
+        else:
+            link = str(r or "")
     except Exception as e:
-        _log(f"   ⚠️ link de afiliado falhou: {str(e)[:70]}")
-        link = ""
-    link = link or m.get("link_gerado") or ""
+        erro_link = f"{type(e).__name__}: {e}"
     if not link:
+        _log(f"   ⚠️ link de afiliado vazio pra {termo[:34]!r} — "
+             f"{erro_link[:150] or 'sem motivo na resposta'}")
         return "sem_link", termo
 
     registrar(c.get("nome", termo), link, c.get("imagem", ""),
