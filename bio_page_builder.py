@@ -572,7 +572,7 @@ def _abertura_html(produtos: list) -> str:
              else "")
     return (f'<section class="abertura"><div class="abertura-topo">'
             f'<h2>{titulo}</h2>'
-            f'<span class="dica">arraste &rarr;</span></div>'
+            f'<span class="dica">arraste para ver mais &rarr;</span></div>'
             f'<div class="trilho fita-rolo">{cartas}</div></section>')
 
 
@@ -605,7 +605,14 @@ def _vitrine_html(produtos: list) -> str:
     if not produtos:
         return ('<p class="vazio"><b>Em breve, novos achados</b>'
                 'A vitrine enche toda semana.</p>')
-    controles = ('<div class="controles">' + _toggle_plataforma_html(produtos)
+    modos = ('<div class="modos" id="modos" role="group" aria-label="Visualização">'
+             '<button class="modo" type="button" data-modo="grade" '
+             'aria-pressed="true">Grade</button>'
+             '<button class="modo" type="button" data-modo="lista" '
+             'aria-pressed="false">Lista</button></div>')
+    linha_topo = ('<div class="linha-controles">' + _toggle_plataforma_html(produtos)
+                  + modos + "</div>")
+    controles = ('<div class="controles">' + linha_topo
                  + _filtros_html(produtos) + "</div>")
     # ⚠️ A FAIXA DO GRUPO ENTRA NO MEIO DA GRADE, não antes dela. Quem chega
     # pelo link do Reels quer ver achadinho; convite antes do produto é banner,
@@ -712,7 +719,35 @@ _TEMPLATE = r"""<!DOCTYPE html>
   --ink:#EDEFF2; --muted:#8D949E;
   --marca:#FF3D6E; --marca-esc:#D42A55; --ok:#35C88A;
   --r:14px; --topo:0px;
+  --foto:#F4F5F7;
 }
+
+/* ══ TEMA CLARO ═══════════════════════════════════════════════════════════
+   ⚠️ VEIO DAS REFERÊNCIAS, e é a técnica que aparece nas DUAS principais: o
+   ERA Residence tem "by day / by night" e o Loop tem LIGHT/DARK/SYSTEM. Não é
+   moda — é o sinal mais barato de "esse site foi feito por gente que pensa no
+   usuário", porque respeita quem lê no sol e quem lê na cama.
+   📌 Só os TOKENS mudam. Nenhuma regra de componente sabe que existe tema —
+   se soubesse, cada card novo teria que ser pintado duas vezes e um dia alguém
+   esqueceria metade. */
+:root[data-tema="claro"]{
+  --bg:#F7F7F9; --sup:#FFFFFF; --sup2:#F0F1F4;
+  --linha:rgba(11,12,15,.09); --linha2:rgba(11,12,15,.16);
+  --ink:#14161A; --muted:#666E7A;
+  --marca:#E42060; --marca-esc:#B8144A; --ok:#128A5A;
+  --foto:#EFF0F3;
+}
+:root[data-tema="claro"] .topo{background:rgba(247,247,249,.78)}
+:root[data-tema="claro"] .card{
+  box-shadow:0 1px 2px rgba(11,12,15,.06), 0 1px 1px rgba(11,12,15,.04)}
+:root[data-tema="claro"] .card:hover{
+  box-shadow:0 16px 38px rgba(11,12,15,.13), 0 0 0 1px rgba(228,32,96,.14)}
+:root[data-tema="claro"] .selo{background:rgba(255,255,255,.86);
+  border-color:rgba(11,12,15,.12);color:var(--ink)}
+:root[data-tema="claro"] .card .foto::before{
+  background:linear-gradient(transparent,rgba(11,12,15,.18))}
+:root[data-tema="claro"] .g-x,
+:root[data-tema="claro"] .gaveta{background:var(--bg)}
 *{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth}
 body{background:var(--bg);color:var(--ink);
@@ -748,7 +783,13 @@ img{max-width:100%}
   font-stretch:112%;letter-spacing:-.045em;white-space:nowrap;flex:none}
 .marca .ts{width:26px;height:26px;flex:none;display:block}
 .marca i{font-style:normal;color:var(--marca)}
-.zap{margin-left:auto;flex:none;border:1px solid var(--linha2);color:var(--ink);
+.tema{flex:none;width:40px;height:40px;border-radius:11px;cursor:pointer;
+  border:1px solid var(--linha2);background:transparent;color:var(--ink);
+  display:grid;place-items:center;font:inherit;font-size:16px;line-height:1;
+  transition:background .2s,border-color .2s,transform .3s}
+.tema:hover{background:var(--sup2);border-color:var(--marca)}
+.tema:active{transform:scale(.92)}
+.zap{margin-left:0;flex:none;border:1px solid var(--linha2);color:var(--ink);
   font-weight:650;font-size:13px;padding:9px 15px;border-radius:999px;
   white-space:nowrap;min-height:40px;display:flex;align-items:center;
   transition:background .2s,border-color .2s}
@@ -786,6 +827,8 @@ img{max-width:100%}
 
 /* ══ CONTROLES: categorias e lojas em fita ════════════════════════════════ */
 .controles{display:flex;flex-direction:column;gap:9px;padding-bottom:14px}
+.linha-controles{display:flex;align-items:center;gap:10px;min-width:0}
+.linha-controles .lojas{flex:1;min-width:0}
 .fita-rolo{display:flex;gap:7px;overflow-x:auto;scrollbar-width:none;
   margin-inline:calc(-1 * clamp(14px,3.2vw,28px));
   padding-inline:clamp(14px,3.2vw,28px);scroll-snap-type:x proximity}
@@ -808,6 +851,40 @@ img{max-width:100%}
   border-color:var(--linha2)}
 .loja .n{opacity:.6;margin-left:6px;font-variant-numeric:tabular-nums;font-style:normal}
 .loja:disabled{opacity:.34;cursor:not-allowed}
+
+/* ══ MODO DE VISUALIZAÇÃO ═════════════════════════════════════════════════
+   ⚠️ TIRADO DO LOOP AGENCY, que alterna List / Gallery / Spiral. Lá é bravata
+   de portfólio; aqui é utilidade real — com 300 produtos, quem procura uma
+   coisa específica quer LISTA (mais itens por tela, nome inteiro visível) e
+   quem está passeando quer GRADE (foto grande).
+   📌 O que eu NÃO trouxe: o "Spiral". Numa vitrine, forma que atrapalha
+   encontrar é forma que custa venda — a referência é de outro ofício. */
+.modos{display:flex;gap:3px;background:var(--sup);border:1px solid var(--linha);
+  border-radius:999px;padding:3px;flex:none}
+.modo{border:0;background:none;color:var(--muted);font:inherit;font-size:12.5px;
+  font-weight:650;padding:7px 13px;border-radius:999px;cursor:pointer;
+  transition:color .2s,background .2s}
+.modo[aria-pressed="true"]{background:var(--sup2);color:var(--ink)}
+
+/* lista: a foto vira miniatura e o nome ganha a linha inteira */
+.grade.lista{grid-template-columns:1fr;gap:8px}
+.grade.lista .card{flex-direction:row;align-items:stretch}
+.grade.lista .card .foto{width:104px;flex:none;aspect-ratio:1}
+.grade.lista .card .foto::before{display:none}
+.grade.lista .selo.plat{display:none}
+.grade.lista .selo.off{top:9px;right:auto;left:9px;font-size:12px;padding:4px 8px}
+.grade.lista .selo.novo{display:none}
+.grade.lista .card .corpo{padding:12px 14px;gap:6px}
+.grade.lista .card h3{-webkit-line-clamp:1;font-size:14px}
+.grade.lista .card .ver{margin-top:0;align-self:flex-start;padding:8px 16px;
+  min-height:38px;font-size:12.5px}
+.grade.lista .faixa{display:none}
+@media(min-width:760px){
+  .grade.lista .card{align-items:center}
+  .grade.lista .card .corpo{flex-direction:row;align-items:center;gap:18px}
+  .grade.lista .card h3{flex:1}
+  .grade.lista .card .pr{flex:none;min-width:130px;justify-content:flex-end}
+}
 
 /* ══ GRADE ═══════════════════════════════════════════════════════════════
    ⚠️ O CARD ERA QUASE INVISÍVEL (31/08). `--sup:#131519` sobre `--bg:#0B0C0F`
@@ -834,7 +911,7 @@ img{max-width:100%}
              0 0 0 1px rgba(255,61,110,.10)}
 .card.saindo{opacity:0;transform:scale(.96);pointer-events:none}
 
-.card .foto{aspect-ratio:1;position:relative;overflow:hidden;background:#F4F5F7}
+.card .foto{aspect-ratio:1;position:relative;overflow:hidden;background:var(--foto)}
 .card .foto img{width:100%;height:100%;object-fit:cover;display:block;opacity:0;
   transition:opacity .35s,transform .5s cubic-bezier(.22,.7,.2,1)}
 .card .foto img.ok{opacity:1}
@@ -966,7 +1043,7 @@ img{max-width:100%}
   border-radius:50%;border:1px solid var(--linha2);background:rgba(11,12,15,.7);
   backdrop-filter:blur(8px);color:var(--ink);font:inherit;font-size:17px;
   cursor:pointer;display:grid;place-items:center}
-.g-foto{aspect-ratio:1;background:#F4F5F7;background-size:cover;
+.g-foto{aspect-ratio:1;background:var(--foto);background-size:cover;
   background-position:center;flex:none}
 .g-corpo{padding:18px 20px 24px;display:flex;flex-direction:column;gap:14px}
 .g-corpo h3{font-size:17px;font-weight:650;line-height:1.35}
@@ -1136,6 +1213,7 @@ footer a{border-bottom:1px solid var(--linha)}
              autocomplete="off" aria-label="Buscar produto">
       <svg class="lupa" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg>
     </label>
+    <button class="tema" id="tema" type="button" aria-label="Trocar entre claro e escuro">☾</button>
     <a class="zap" href="{{GRUPO_TOPO}}" target="_blank" rel="noopener">Grupo</a>
   </div>
 </div>
@@ -1506,6 +1584,55 @@ cards.forEach(function(c){
 document.getElementById('g-x').addEventListener('click', fechar);
 veu.addEventListener('click', fechar);
 addEventListener('keydown', function(e){ if (e.key === 'Escape' && !gav.hidden) fechar(); });
+/* ══ TEMA CLARO/ESCURO ═══════════════════════════════════════════════════
+   ⚠️ A PREFERÊNCIA DO SISTEMA É O PADRÃO, e a escolha manual vence. Quem nunca
+   clicou recebe o que o celular dele já diz (`prefers-color-scheme`); quem
+   clicou uma vez recebe o que pediu, pra sempre. Assumir escuro pra todo mundo
+   é decidir pelo outro num assunto em que ele já tem uma opinião registrada.
+   📌 `localStorage` dentro de try/catch: navegador em janela anônima e alguns
+   modos de privacidade LANÇAM ao acessar, e um tema quebrado derrubaria o
+   resto do script — inclusive a busca. */
+(function(){
+  var raiz = document.documentElement, bt = document.getElementById('tema');
+  var guardado = null;
+  try { guardado = localStorage.getItem('topshop-tema'); } catch (e) {}
+  var escuro = guardado ? guardado === 'escuro'
+             : !matchMedia('(prefers-color-scheme: light)').matches;
+  function pintar(){
+    raiz.setAttribute('data-tema', escuro ? 'escuro' : 'claro');
+    if (bt) bt.textContent = escuro ? '☾' : '☀';
+    var m = document.querySelector('meta[name=theme-color]');
+    if (m) m.setAttribute('content', escuro ? '#0B0C0F' : '#F7F7F9');
+  }
+  pintar();
+  if (bt) bt.addEventListener('click', function(){
+    escuro = !escuro; pintar();
+    try { localStorage.setItem('topshop-tema', escuro ? 'escuro' : 'claro'); } catch (e) {}
+  });
+})();
+
+/* ══ MODO GRADE / LISTA ══════════════════════════════════════════════════
+   Só troca uma classe: os mesmos cards, outro arranjo. Nada é re-renderizado,
+   então o filtro, a busca e o drawer continuam funcionando sem saber que isto
+   existe. */
+(function(){
+  var caixa = document.getElementById('modos');
+  if (!caixa) return;
+  var grades = [].slice.call(document.querySelectorAll('.grade'));
+  var lembrado = null;
+  try { lembrado = localStorage.getItem('topshop-modo'); } catch (e) {}
+  function aplicarModo(m){
+    grades.forEach(function(g){ g.classList.toggle('lista', m === 'lista'); });
+    caixa.querySelectorAll('.modo').forEach(function(b){
+      b.setAttribute('aria-pressed', String(b.dataset.modo === m)); });
+    try { localStorage.setItem('topshop-modo', m); } catch (e) {}
+  }
+  if (lembrado === 'lista') aplicarModo('lista');
+  caixa.addEventListener('click', function(e){
+    var b = e.target.closest('.modo');
+    if (b) aplicarModo(b.dataset.modo);
+  });
+})();
 </script>
 </body>
 </html>
