@@ -314,6 +314,41 @@ def _preco_html(p: dict, grande: bool = False) -> str:
     return linha + f'<span class="afer{classe}">{html.escape(texto)}</span>'
 
 
+def _faixa_svg(serie: list, largura=68, altura=20) -> str:
+    """A linha do preço, do tamanho de uma unha, dentro do card.
+
+    ⚠️ ESTE É O ÚNICO PEDAÇO DESTA PÁGINA QUE NENHUM CONCORRENTE PODE COPIAR.
+    Grupo de achadinho mostra print de story; loja grande mostra preço de hoje.
+    Só quem guarda leitura diária há 20 dias consegue mostrar se o preço de
+    hoje é bom — e é a diferença entre "confia em mim" e "olha o dado".
+
+    📌 Sem eixo, sem grade, sem rótulo. A unha responde UMA pergunta ("tá
+    subindo ou caindo?") e o resto fica pro drawer, onde há espaço pra
+    responder direito. Enfeitar isto aqui seria transformar prova em gráfico.
+
+    Verde quando terminou abaixo de onde começou (bom pra quem compra),
+    cinza quando não — e nunca vermelho: preço subindo não é alarme, é
+    informação, e vermelho num card de compra lê como erro.
+    """
+    if len(serie) < 3:
+        return ""
+    vals = [float(v) for _, v in serie]
+    lo, hi = min(vals), max(vals)
+    faixa = (hi - lo) or 1.0            # série plana desenha uma reta no meio
+    passo = largura / (len(vals) - 1)
+    pts = " ".join(
+        f"{i * passo:.1f},{altura - 2 - ((v - lo) / faixa) * (altura - 4):.1f}"
+        for i, v in enumerate(vals))
+    caiu = vals[-1] < vals[0]
+    cor = "var(--ok)" if caiu else "var(--muted)"
+    return (f'<svg class="faixa" viewBox="0 0 {largura} {altura}" '
+            f'preserveAspectRatio="none" aria-hidden="true">'
+            f'<polyline points="{pts}" fill="none" stroke="{cor}" '
+            f'stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>'
+            f'<circle cx="{largura:.1f}" cy="{altura - 2 - ((vals[-1] - lo) / faixa) * (altura - 4):.1f}" '
+            f'r="2.1" fill="{cor}"/></svg>')
+
+
 def _selos_html(p: dict, novo: bool = False) -> str:
     r = p.get("preco_resumo") or {}
     selos = []
@@ -388,14 +423,27 @@ def _card_grid(p: dict, novo: bool = False) -> str:
     link = html.escape(p.get("link", "#"))
     cat = html.escape(_inferir_categoria(p))
     plat = (p.get("plataforma") or "shopee").lower()
+    r = p.get("preco_resumo") or {}
+    serie = r.get("serie") or []
+    # ⚠️ os dados do drawer viajam em atributos do próprio card, e não num JSON
+    # separado no fim da página: assim não existe a possibilidade de a lista e
+    # a grade saírem de sincronia — é literalmente o mesmo elemento.
+    dados_drawer = (
+        f' data-serie="{",".join(str(v) for _, v in serie)}"'
+        f' data-dias="{",".join(d for d, _ in serie)}"'
+        f' data-min="{r.get("min", "")}" data-max="{r.get("max", "")}"'
+        f' data-preco="{r.get("preco", "")}" data-visto="{html.escape(str(r.get("visto", "")))}"'
+        f' data-obs="{r.get("obs", 0)}" data-img="{html.escape(p.get("imagem", ""))}"'
+        f' data-loja="{html.escape(_loja(p)[0])}"')
     return f"""
       <a class="card" href="{link}" target="_blank" rel="noopener"
          data-busca="{titulo.lower()} {nome.lower()}" data-categoria="{cat}"
-         data-plataforma="{plat}">
+         data-plataforma="{plat}"{dados_drawer}>
         {_foto_html(p, titulo, novo)}
         <div class="corpo">
           <h3>{titulo}</h3>
           {_preco_html(p)}
+          {_faixa_svg(serie)}
           <span class="ver">Ver oferta <span>&rarr;</span></span>
         </div>
       </a>"""
@@ -777,6 +825,70 @@ img{max-width:100%}
 .vazio{text-align:center;padding:56px 20px;color:var(--muted)}
 .vazio b{display:block;color:var(--ink);font-size:19px;margin-bottom:7px;font-weight:700}
 
+
+/* ══ A LINHA DO PREÇO ═════════════════════════════════════════════════════
+   O argumento da casa, em dois tamanhos: unha no card, gráfico no drawer. */
+.faixa{width:68px;height:20px;display:block;margin-top:-2px;opacity:.9}
+
+/* ══ DRAWER ═══════════════════════════════════════════════════════════════
+   ⚠️ O CARD LEVA DIRETO PRA LOJA, E ISSO CONTINUA VALENDO — o drawer só
+   intercepta o clique quando há histórico pra mostrar (3+ leituras). Sem
+   histórico ele não tem o que dizer, e roubar o clique pra exibir menos do que
+   a loja já mostra seria piorar a página em nome de um efeito.
+   📌 E o `href` continua no HTML: sem JS, ou pra quem abre em aba nova com o
+   meio do mouse, o card é um link normal. O drawer é ganho, não requisito. */
+.veu{position:fixed;inset:0;z-index:60;background:rgba(5,6,8,.66);
+  backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .28s}
+.veu.aberto{opacity:1;pointer-events:auto}
+.gaveta{position:fixed;top:0;right:0;bottom:0;z-index:61;width:min(430px,100%);
+  background:var(--bg);border-left:1px solid var(--linha);
+  transform:translateX(100%);transition:transform .34s cubic-bezier(.22,.72,.2,1);
+  display:flex;flex-direction:column;overflow-y:auto;overscroll-behavior:contain}
+.gaveta.aberta{transform:none}
+@media(max-width:560px){
+  /* no celular vem DE BAIXO: é de onde o polegar alcança, e é o gesto que
+     todo app de compra usa pra detalhe de produto */
+  .gaveta{top:auto;left:0;width:100%;max-height:88vh;border-left:0;
+    border-top:1px solid var(--linha2);border-radius:20px 20px 0 0;
+    transform:translateY(100%);padding-bottom:env(safe-area-inset-bottom)}
+  .gaveta.aberta{transform:none}
+  .gaveta::before{content:"";position:sticky;top:0;display:block;width:38px;
+    height:4px;border-radius:99px;background:var(--linha2);margin:9px auto 0}
+}
+.g-x{position:absolute;top:12px;right:12px;z-index:2;width:36px;height:36px;
+  border-radius:50%;border:1px solid var(--linha2);background:rgba(11,12,15,.7);
+  backdrop-filter:blur(8px);color:var(--ink);font:inherit;font-size:17px;
+  cursor:pointer;display:grid;place-items:center}
+.g-foto{aspect-ratio:1;background:#F4F5F7;background-size:cover;
+  background-position:center;flex:none}
+.g-corpo{padding:18px 20px 24px;display:flex;flex-direction:column;gap:14px}
+.g-corpo h3{font-size:17px;font-weight:650;line-height:1.35}
+.g-preco{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.g-preco b{font-size:32px;font-weight:800;letter-spacing:-.03em;
+  font-variant-numeric:tabular-nums}
+.g-preco .tag{font-size:12px;font-weight:700;padding:4px 9px;border-radius:7px;
+  background:var(--sup2);border:1px solid var(--linha2);color:var(--muted)}
+.g-preco .tag.bom{background:var(--marca);border-color:transparent;color:#fff}
+
+/* o gráfico grande: aqui cabe eixo, porque aqui a pergunta é "quanto" */
+.g-graf{background:var(--sup);border:1px solid var(--linha);border-radius:var(--r);
+  padding:16px 14px 10px}
+.g-graf svg{width:100%;height:110px;display:block;overflow:visible}
+.g-eixo{display:flex;justify-content:space-between;font-size:11px;
+  color:var(--muted);margin-top:8px;font-variant-numeric:tabular-nums}
+.g-cotas{display:flex;gap:8px;margin-top:12px}
+.g-cota{flex:1;background:var(--sup);border:1px solid var(--linha);
+  border-radius:11px;padding:10px 12px}
+.g-cota i{font-style:normal;display:block;font-size:10.5px;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.07em}
+.g-cota b{font-size:16px;font-weight:750;font-variant-numeric:tabular-nums}
+.g-ir{display:flex;align-items:center;justify-content:center;gap:8px;
+  background:var(--marca);color:#fff;border-radius:12px;padding:15px;
+  font-size:15px;font-weight:750;min-height:50px;margin-top:2px;
+  transition:filter .2s}
+.g-ir:hover{filter:brightness(1.08)}
+.g-nota{font-size:11.5px;color:var(--muted);line-height:1.5;text-align:center}
+
 /* ══ SEÇÕES ═══════════════════════════════════════════════════════════════ */
 section{padding:clamp(40px,6vw,72px) 0}
 #produtos{padding-top:4px}
@@ -986,6 +1098,21 @@ footer a{border-bottom:1px solid var(--linha)}
     </div>
   </section>
 </main>
+
+<div class="veu" id="veu" hidden></div>
+<aside class="gaveta" id="gaveta" role="dialog" aria-modal="true"
+       aria-label="Detalhe do produto" hidden>
+  <button class="g-x" id="g-x" aria-label="Fechar">&times;</button>
+  <div class="g-foto" id="g-foto"></div>
+  <div class="g-corpo">
+    <h3 id="g-nome"></h3>
+    <div class="g-preco"><b id="g-preco"></b><span class="tag" id="g-tag"></span></div>
+    <div class="g-graf" id="g-graf"></div>
+    <div class="g-cotas" id="g-cotas"></div>
+    <a class="g-ir" id="g-ir" target="_blank" rel="noopener">Ver na loja <span>&rarr;</span></a>
+    <p class="g-nota" id="g-nota"></p>
+  </div>
+</aside>
 
 <footer class="wrap">
   <span>&copy; {{ANO}} topshop &middot; conteúdo publicitário &middot; links de afiliado
@@ -1217,6 +1344,99 @@ if (mural) new IntersectionObserver(function(ents){
     });
   });
 }).observe(mural);
+/* ══ O DRAWER — a única coisa nesta página que o concorrente não copia ═════
+   Ele existe pra responder a pergunta que o card não cabe: "esse preço é
+   bom?". Não é "ver mais": é o histórico que só quem guarda leitura diária há
+   semanas consegue mostrar.
+
+   ⚠️ SÓ INTERCEPTA O CLIQUE QUANDO TEM O QUE DIZER (3+ leituras). Sem série,
+   o card segue como link direto pra loja — roubar o clique pra exibir menos do
+   que a loja já mostra seria piorar a página em nome de um efeito. Ctrl/⌘,
+   botão do meio e "abrir em nova aba" também passam direto: quem pediu outra
+   aba pediu a loja, não um painel. */
+var veu = document.getElementById('veu'), gav = document.getElementById('gaveta');
+var reais = function(n){ return 'R$ ' + n.toFixed(2).replace('.', ','); };
+
+function grafico(vals, dias){
+  var L = 100, A = 46, lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
+  var faixa = (hi - lo) || 1, passo = L / (vals.length - 1);
+  var y = function(v){ return A - 3 - ((v - lo) / faixa) * (A - 6); };
+  var pts = vals.map(function(v, i){ return (i*passo).toFixed(2) + ',' + y(v).toFixed(2); });
+  var caiu = vals[vals.length-1] < vals[0];
+  var cor = caiu ? 'var(--ok)' : 'var(--marca)';
+  /* a área sob a linha dá volume sem inventar dado: é a mesma curva */
+  return '<svg viewBox="0 0 ' + L + ' ' + A + '" preserveAspectRatio="none">' +
+    '<defs><linearGradient id="gsob" x1="0" x2="0" y1="0" y2="1">' +
+    '<stop offset="0" stop-color="' + cor + '" stop-opacity=".28"/>' +
+    '<stop offset="1" stop-color="' + cor + '" stop-opacity="0"/></linearGradient></defs>' +
+    '<polygon points="0,' + A + ' ' + pts.join(' ') + ' ' + L + ',' + A + '" fill="url(#gsob)"/>' +
+    '<polyline points="' + pts.join(' ') + '" fill="none" stroke="' + cor +
+      '" stroke-width="1.8" vector-effect="non-scaling-stroke" ' +
+      'stroke-linejoin="round" stroke-linecap="round"/>' +
+    '<circle cx="' + L + '" cy="' + y(vals[vals.length-1]).toFixed(2) +
+      '" r="2.6" fill="' + cor + '" vector-effect="non-scaling-stroke"/></svg>' +
+    '<div class="g-eixo"><span>' + dias[0] + '</span><span>' +
+      dias[dias.length-1] + '</span></div>';
+}
+
+function abrir(c){
+  var vals = (c.dataset.serie || '').split(',').filter(Boolean).map(Number);
+  var dias = (c.dataset.dias || '').split(',').filter(Boolean);
+  if (vals.length < 3) return false;
+  var preco = +c.dataset.preco || vals[vals.length-1];
+  var mn = +c.dataset.min, mx = +c.dataset.max;
+
+  document.getElementById('g-nome').textContent = c.querySelector('h3').textContent;
+  document.getElementById('g-foto').style.backgroundImage =
+    c.dataset.img ? 'url("' + c.dataset.img + '")' : '';
+  document.getElementById('g-preco').textContent = reais(preco);
+  document.getElementById('g-graf').innerHTML = grafico(vals, dias);
+  document.getElementById('g-ir').href = c.href;
+
+  /* ⚠️ O VEREDITO SAI DA CONTA, NÃO DE UMA FRASE FIXA. "menor preço" só
+     aparece quando o preço de hoje É o menor observado — texto de urgência
+     inventado é o que faz a pessoa parar de acreditar na página inteira. */
+  var tag = document.getElementById('g-tag'), hoje = vals[vals.length-1];
+  var dif = mx > mn ? Math.round((1 - (hoje - mn) / (mx - mn)) * 100) : 0;
+  if (hoje <= mn){ tag.textContent = 'menor preço do período'; tag.className = 'tag bom'; }
+  else if (dif >= 60){ tag.textContent = 'perto do menor preço'; tag.className = 'tag bom'; }
+  else if (hoje >= mx){ tag.textContent = 'maior preço do período'; tag.className = 'tag'; }
+  else { tag.textContent = dif + '% abaixo do topo'; tag.className = 'tag'; }
+
+  document.getElementById('g-cotas').innerHTML =
+    '<div class="g-cota"><i>menor</i><b>' + reais(mn) + '</b></div>' +
+    '<div class="g-cota"><i>maior</i><b>' + reais(mx) + '</b></div>' +
+    '<div class="g-cota"><i>leituras</i><b>' + (c.dataset.obs || vals.length) + '</b></div>';
+  document.getElementById('g-nota').textContent =
+    'Preços conferidos por nós em ' + (c.dataset.loja || 'loja') +
+    '. Última leitura em ' + (c.dataset.visto || '—') +
+    '. Quem define o preço da compra é a loja.';
+
+  veu.hidden = gav.hidden = false;
+  requestAnimationFrame(function(){
+    veu.classList.add('aberto'); gav.classList.add('aberta');
+  });
+  document.body.style.overflow = 'hidden';
+  document.getElementById('g-x').focus();
+  return true;
+}
+
+function fechar(){
+  veu.classList.remove('aberto'); gav.classList.remove('aberta');
+  document.body.style.overflow = '';
+  setTimeout(function(){ veu.hidden = gav.hidden = true; }, 340);
+}
+
+cards.forEach(function(c){
+  c.addEventListener('click', function(e){
+    /* modificadores e botão do meio querem a loja, não o painel */
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+    if (abrir(c)) e.preventDefault();
+  });
+});
+document.getElementById('g-x').addEventListener('click', fechar);
+veu.addEventListener('click', fechar);
+addEventListener('keydown', function(e){ if (e.key === 'Escape' && !gav.hidden) fechar(); });
 </script>
 </body>
 </html>

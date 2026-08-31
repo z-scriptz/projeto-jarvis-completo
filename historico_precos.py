@@ -245,6 +245,15 @@ def resumo(link: str, janela: int = JANELA_PADRAO, dados: dict = None,
         "visto_iso": dias[-1],
         "min": menor,
         "max": maior,
+        # ⚠️ A SÉRIE SÓ SAI COM 3+ LEITURAS, e o piso é honestidade, não estilo.
+        # Dois pontos viram uma reta: uma reta desenha "subindo" ou "descendo"
+        # com a mesma convicção de vinte pontos, e a pessoa lê tendência onde
+        # existe uma medição a mais. Abaixo de MIN_LEITURAS a resposta certa é
+        # não desenhar nada.
+        # 📌 É o mesmo dado que já alimentava `preco`/`min`/`max` — a diferença
+        # é que agora ele pode ser VISTO. Média com data prova pouco; a linha
+        # dos últimos dias prova sozinha se o preço de hoje é bom.
+        "serie": [[d[5:], v] for d, v in zip(dias, vals)] if obs >= MIN_LEITURAS else [],
     }
 
 
