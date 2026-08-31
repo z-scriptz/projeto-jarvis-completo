@@ -103,6 +103,24 @@ _carregar_env, = _importar(["whatsapp_playwright", "agents.whatsapp_playwright"]
                            ["_carregar_env"])
 _carregar_env()
 
+# ⚠️ A MESMA TRAVA DO POSTADOR, IMPORTADA DO MESMO LUGAR. Em 31/08 eu escrevi
+# uma segunda implementação (arquivo de PID) e batizei com o nome de uma que já
+# existia — o `whatsapp_playwright` importa `travar` do `shared/trava.py` e usa
+# como context manager. A minha sombreou a original e o postador passou o dia
+# morrendo em `TypeError: 'bool' object does not support the context manager
+# protocol`, de 15 em 15 minutos, com o grupo em 0/24.
+# 📌 `grep travar` antes de criar a função custava cinco segundos.
+try:
+    from shared.trava import travar
+except Exception:
+    from contextlib import contextmanager
+
+    @contextmanager
+    def travar(_nome, base=None):
+        # sem a trava o certo é DEIXAR RODAR: travar tudo por falta de um
+        # módulo auxiliar é pior que o risco que ela cobre
+        yield True
+
 # ⚠️ TETO POR RODADA PORQUE CADA PRODUTO É UMA CHAMADA DE API. Sem ele, entrar
 # num grupo movimentado numa segunda de manhã queima a cota do dia numa rodada
 # e as outras voltam de mãos vazias sem explicar por quê.
@@ -139,8 +157,7 @@ def _pecas():
     metade é pior que rodada perdida."""
     wa = _importar(["whatsapp_playwright", "agents.whatsapp_playwright"],
                    ["_abrir", "_abrir_grupo", "_esperar_sessao", "_fechar_modal",
-                    "_print_erro", "_avisar", "_STEALTH_JS",
-                    "travar", "destravar"])
+                    "_print_erro", "_avisar", "_STEALTH_JS"])
     hunter = _importar(
         ["telegram_repurpose_hunter", "agents.telegram_repurpose_hunter"],
         ["extrair_termo_produto", "_limpar_links_terceiros", "_registrar_no_site",
@@ -534,18 +551,8 @@ def rodar(teste: bool, diag: bool) -> int:
 
     wa, hunter, shopee = _pecas()
     (_abrir, _abrir_grupo, _esperar_sessao, _fechar_modal,
-     _print_erro, _avisar, _STEALTH_JS, travar, destravar) = wa
+     _print_erro, _avisar, _STEALTH_JS) = wa
     (_, _, _, _, deve_pular, marcar, marcar_falha) = hunter
-
-    # ⚠️ A TRAVA VEM DO POSTADOR, não é cópia. Duas implementações do mesmo
-    # cadeado divergem no primeiro conserto e param de se enxergar — e o
-    # sintoma seria dois Chromium no mesmo perfil, que é exatamente o que ela
-    # existe pra impedir. O minerador é o lado que CEDE: espera pouco, porque
-    # a próxima rodada dele serve igual, e o postador tem hora marcada.
-    if not travar("minerador", espera_s=90):
-        _log("⏭️  o postador está usando a sessão — saio e tento no próximo "
-             "slot (o perfil do Chromium é um só)")
-        return 0
 
     alvos = list(fontes)
     random.shuffle(alvos)                    # ordem nunca é a mesma
@@ -556,7 +563,18 @@ def rodar(teste: bool, diag: bool) -> int:
     from playwright.sync_api import sync_playwright
     contas = {"lidas": 0, "novas": 0, "ok": 0,
               "sem_termo": 0, "sem_shopee": 0, "sem_link": 0}
-    try:
+    # ⚠️ MESMO NOME DE TRAVA DO POSTADOR, e é o nome que faz a exclusão
+    # acontecer: os dois dirigem o MESMO perfil do Chromium, e dois navegadores
+    # no mesmo `user_data_dir` corrompem a sessão — caminho curto pro QR novo.
+    # `flock` e não arquivo de PID: o kernel solta sozinho quando o processo
+    # morre, inclusive num `kill -9`. (Eu escrevi uma trava de PID aqui em
+    # 31/08, com o mesmo nome de uma que já existia, e ela derrubou o postador
+    # o dia inteiro — ver o comentário longo no whatsapp_playwright.)
+    with travar("whatsapp_playwright") as livre:
+        if not livre:
+            _log("⏭️  o navegador já está em uso (postador?) — saio limpo, "
+                 "tento na próxima rodada ✔")
+            return 0
         with sync_playwright() as pw:
             ctx = _abrir(pw)
             pagina = ctx.pages[0] if ctx.pages else ctx.new_page()
@@ -640,8 +658,6 @@ def rodar(teste: bool, diag: bool) -> int:
                     ctx.close()
                 except Exception:
                     pass
-    finally:
-        destravar()
 
 
 def main(argv=None) -> int:
