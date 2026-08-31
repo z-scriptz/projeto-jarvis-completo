@@ -1041,6 +1041,81 @@ def _norm(s: str) -> str:
     return " ".join((s or "").split()).strip().lower()
 
 
+TRAVA = BASE_DIR / "shared" / "whatsapp_sessao.lock"
+
+
+def _trava_morta():
+    """Motivo pelo qual a trava atual não vale mais, ou None se ela vale."""
+    if not TRAVA.exists():
+        return None
+    try:
+        d = json.loads(TRAVA.read_text(encoding="utf-8"))
+        pid, ts = int(d.get("pid") or 0), int(d.get("ts") or 0)
+    except Exception:
+        return "ilegível"
+    if time.time() - ts > 3600:
+        return "mais de 1h"
+    try:
+        os.kill(pid, 0)          # só pergunta se existe; não mata nada
+    except ProcessLookupError:
+        return f"pid {pid} não existe mais"
+    except PermissionError:
+        return None              # existe e é de outro dono: vale
+    return None
+
+
+def travar(quem: str, espera_s: int = 0) -> bool:
+    """True se peguei a sessão do WhatsApp pra este processo.
+
+    ⚠️ O PERFIL DO CHROMIUM É UM SÓ (30/08). `_abrir` usa
+    `launch_persistent_context(user_data_dir=SESSAO)`, e o Dre decidiu usar o
+    MESMO número pra postar e pra minerar. Dois Chromium no mesmo perfil não
+    convivem: o segundo falha no lock do próprio Chrome ou — pior — corrompe o
+    perfil, e aí a sessão cai de verdade e o WhatsApp pede QR novo. Escanear QR
+    à toa é justamente o padrão que faz o WhatsApp desconfiar da conta.
+
+    Trava órfã (processo morto, ou de mais de 1h) é assumida: sem isso, um
+    `kill -9` numa rodada travaria o WhatsApp pra sempre — e ninguém liga o
+    problema de terça com o arquivo de domingo.
+
+    O POSTADOR TEM PRIORIDADE, e a assimetria está em quem chama: ele espera
+    minutos porque tem hora marcada; o minerador desiste rápido porque a
+    próxima rodada dele serve igual."""
+    TRAVA.parent.mkdir(parents=True, exist_ok=True)
+    limite = time.time() + max(0, espera_s)
+    while True:
+        velha = _trava_morta()
+        if velha:
+            _log(f"trava órfã ({velha}) — assumindo")
+            try:
+                TRAVA.unlink()
+            except OSError:
+                pass
+        try:
+            fd = os.open(str(TRAVA), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            with os.fdopen(fd, "w") as f:
+                json.dump({"pid": os.getpid(), "ts": int(time.time()),
+                           "quem": quem}, f)
+            return True
+        except FileExistsError:
+            if time.time() >= limite:
+                return False
+            time.sleep(5)
+
+
+def destravar() -> None:
+    try:
+        d = json.loads(TRAVA.read_text(encoding="utf-8"))
+        if int(d.get("pid") or 0) != os.getpid():
+            return               # não é minha, não mexo
+    except Exception:
+        pass
+    try:
+        TRAVA.unlink()
+    except OSError:
+        pass
+
+
 def _estado_sessao(pagina, timeout=25000) -> str:
     """'logado' | 'qr' | 'carregando' | 'desconhecido'.
 
@@ -2494,6 +2569,12 @@ def enviar(quantos: int, teste: bool = False) -> int:
     _log(f"envio {len(alvo)} nesta rodada (teto rodada {quantos}, "
          f"resta hoje {resta_dia})")
 
+    # ⚠️ O minerador dirige o MESMO perfil do Chromium (ver `travar`). O
+    # postador espera, porque tem hora marcada; o minerador é que desiste.
+    if not travar("postador", espera_s=240):
+        _log("⏭️  a sessão está ocupada (minerador?) — perco este slot")
+        return 1
+
     with sync_playwright() as pw:
         ctx = _abrir(pw)
         pagina = ctx.pages[0] if ctx.pages else ctx.new_page()
@@ -2652,6 +2733,8 @@ def enviar(quantos: int, teste: bool = False) -> int:
                 ctx.close()
             except Exception:
                 pass
+            # solta a sessão pro minerador, inclusive quando a rodada quebrou
+            destravar()
 
 
 def main():
