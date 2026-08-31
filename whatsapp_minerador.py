@@ -762,11 +762,22 @@ def rodar(teste: bool, diag: bool) -> int:
                             _log(f"   {'🧪' if teste else '✅'} {det}")
                             if not teste:
                                 marcar(canal, m["id"])
-                        else:
+                        elif not teste:
                             # ⚠️ falha é REGISTRADA, não marcada como ok: o
                             # `_deve_pular` só desiste depois de MAX_TENTATIVAS,
                             # então um fora-do-ar da Shopee não queima a
                             # mensagem pra sempre.
+                            #
+                            # ⚠️ E O `not teste` FALTAVA AQUI (31/08). O acerto
+                            # respeitava o dry-run e a falha não: o primeiro
+                            # `--teste` gravou 25 falhas no `hunter_seen` de
+                            # produtos que ele só estava CONFERINDO. Não é
+                            # fatal (falha só desiste depois de
+                            # MAX_TENTATIVAS), mas gasta tentativa de graça —
+                            # e três `--teste` seguidos aposentariam mensagem
+                            # boa sem ninguém entender por quê.
+                            # 📌 Meio-termo em dry-run é o pior dos dois: quem
+                            # roda acha que não mexeu em nada.
                             marcar_falha(canal, m["id"])
 
                     if i < len(alvos) - 1:
