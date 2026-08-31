@@ -32,9 +32,10 @@
 # perfil não convivem: o segundo falha no lock do Chrome ou — pior — corrompe
 # o perfil, e aí a sessão cai de verdade e o WhatsApp pede QR novo. Escanear
 # QR à toa é justamente o padrão que faz o WhatsApp desconfiar da conta.
-# Daí a trava do `whatsapp_playwright` (`travar`/`destravar`, uma só pros
-# dois): quem chega primeiro roda, o outro desiste e tenta no próximo slot.
-# Nenhum dos dois é urgente ao minuto.
+# Daí a trava: `travar("whatsapp_playwright")` do `shared/trava.py`, a MESMA
+# que o postador usa — mesmo nome, então os dois se excluem sozinhos. É flock,
+# solto pelo kernel quando o processo morre. Quem chega depois sai limpo e
+# tenta na próxima rodada; nenhum dos dois é urgente ao minuto.
 #
 # ⚠️ RITMO DE GENTE, NÃO DE ROBÔ. Uma conta que abre os mesmos 3 grupos, na
 # mesma ordem, aos :00 de toda hora, é distinguível de um humano por qualquer
@@ -52,6 +53,9 @@
 #   WHATSAPP_FONTES=Grupo do Fulano;Achadinhos da Ciclana   (separador é `;`)
 #   WHATSAPP_MINA_MAX=40        teto de produtos consultados por rodada
 #   WHATSAPP_MINA_GRUPOS=2      quantos grupos-fonte por rodada (0 = todos)
+#   WHATSAPP_MINA_VOLTAS=60     passos de rolagem por grupo (fonte grande pede
+#                               mais; grupo pequeno para sozinho antes)
+#   WHATSAPP_MINA_JANELA=200    teto de mensagens colhidas por grupo
 
 import argparse
 import json
@@ -134,12 +138,25 @@ MINA_GRUPOS = int(float(os.environ.get("WHATSAPP_MINA_GRUPOS", "2")))
 # Quantas mensagens recentes olhar em cada grupo. O `hunter_seen` corta o que
 # já foi visto, então repetir é barato — e a janela precisa ser maior que o
 # volume entre duas rodadas, senão mensagem some antes de ser lida.
-JANELA_MSGS = int(float(os.environ.get("WHATSAPP_MINA_JANELA", "120")))
+# ⚠️ Precisa ser MAIOR que o volume de um dia da maior fonte, senão a rolagem
+# desce fundo e o corte joga fora o que ela achou. A Alana passou de 90 numa
+# manhã; 200 dá folga pro dia inteiro dela.
+JANELA_MSGS = int(float(os.environ.get("WHATSAPP_MINA_JANELA", "200")))
 
 # Quantos passos de rolagem por grupo. Cada passo sobe ~82% da altura do painel
-# e colhe o que apareceu. 14 passos cobrem com folga um dia de grupo movimentado
-# (o Promos da Alana postou 72 em 31/08) sem virar uma sessão que não termina.
-VOLTAS_ROLAGEM = int(float(os.environ.get("WHATSAPP_MINA_VOLTAS", "14")))
+# e colhe o que apareceu.
+#
+# ⚠️ 14 ERA POUCO, E O ERRO FOI CONTAR MENSAGEM EM VEZ DE PIXEL (31/08). Eu
+# dimensionei "14 passos cobrem um dia movimentado" imaginando linhas de texto.
+# As da Alana são cards com foto: medido, cada passo revela ~1,6 mensagens, e
+# 14 passos deram 22 num grupo que já tinha 90 ao meio-dia.
+#
+# 📌 Teto alto NÃO custa nada em grupo pequeno: o laço desiste depois de 3
+# rodadas sem colher nada novo, então o OFERTAS RELÂMPAGO com 9 mensagens sai
+# em 3 passos como sempre saiu. Quem paga o teto é só quem tem o que entregar.
+# 60 passos ≈ 35s no pior caso, num grupo por vez — e uma pessoa lendo o grupo
+# da manhã rola por aí mesmo.
+VOLTAS_ROLAGEM = int(float(os.environ.get("WHATSAPP_MINA_VOLTAS", "60")))
 
 
 def _log(m):
