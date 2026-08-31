@@ -26,6 +26,13 @@
 # janela morre, e ao entrar num grupo não se herda histórico. Por isso este
 # script roda várias vezes ao dia, e por isso perder um dia custa um dia.
 #
+# 📌 E É POR ISSO QUE "CHEGAR NO TOPO" DEIXOU DE SER A META (31/08). Passei três
+# correções perseguindo scrollTop 0, e o alvo só crescia — a conversa da Alana
+# saiu de 8.765px pra 55.309px conforme a rolagem carregava histórico. Rodando
+# de hora em hora, a pergunta certa não é "li a conversa inteira?" e sim
+# "alcancei o que já tinha lido?". A varredura funda é o preço da PRIMEIRA
+# rodada; da segunda em diante ela para em ~14 passos.
+#
 # ⚠️ SESSÃO ÚNICA, DOIS PROGRAMAS (a restrição que molda o resto do arquivo).
 # `_abrir` usa `launch_persistent_context(user_data_dir=SESSAO)` e o Dre
 # decidiu usar O MESMO NÚMERO pra postar e pra ler. Dois Chromium no mesmo
@@ -259,6 +266,8 @@ async (op) => {
   // 📌 Por isso a colheita acontece a CADA passo, acumulando por data-id. Ler
   // depois de rolar é ler o que sobrou; ler enquanto rola é ler tudo.
   const vistos = new Map();
+  const conhecidos = new Set(op.conhecidos || []);
+  let novosNoPasso = 0;
   const colher = () => {
     for (const el of main.querySelectorAll('div[data-id]')) {
       const id = el.getAttribute('data-id') || '';
@@ -267,6 +276,7 @@ async (op) => {
       if (!t) continue;
       const cls = String(el.className || '');
       const p = el.querySelector('[data-pre-plain-text]');
+      if (!conhecidos.has(id)) novosNoPasso++;
       vistos.set(id, {
         id: id, texto: t.slice(0, 1200),
         meu: cls.includes('message-out') || el.querySelector('.message-out') !== null,
@@ -278,7 +288,7 @@ async (op) => {
   };
 
   colher();
-  let passos = 0;
+  let passos = 0, alcancado = 0;
   for (let i = 0; sc && i < op.voltas && vistos.size < op.limite; i++) {
     const antes = vistos.size, topo = sc.scrollTop, alt = sc.scrollHeight;
     // ⚠️ PASSO DE 82% PULAVA MENSAGEM (31/08). O WhatsApp reposiciona o
@@ -289,6 +299,7 @@ async (op) => {
     // passos, que é barato.
     sc.scrollTop = Math.max(0, sc.scrollTop - sc.clientHeight * 0.5);
     passos++;
+    novosNoPasso = 0;
     await new Promise(r => setTimeout(r, op.pausa));
     // ⚠️ SUBIR PEDE MENSAGEM AO SERVIDOR, e isso não é instantâneo. Quando o
     // painel CRESCE, é sinal de que chegou lote novo — vale esperar mais um
@@ -313,9 +324,14 @@ async (op) => {
     // não "estava em zero quando cheguei".
     if (sc.scrollTop === topo) break;   // empurrei e não andou: acabou
     if (sc.scrollTop <= 0) { colher(); break; }   // topo de verdade
+    // dois passos inteiros só com mensagem já minerada = alcancei o que já foi
+    // lido antes; daqui pra cima é tudo repetição
+    if (conhecidos.size && novosNoPasso === 0) { if (++alcancado >= 2) break; }
+    else alcancado = 0;
   }
   return {itens: Array.from(vistos.values()).slice(-op.limite),
           total: vistos.size, rolou: !!sc, passos: passos,
+          alcancou: alcancado >= 2,
           painel: sc ? {alto: sc.clientHeight, rolo: sc.scrollHeight,
                         topo: sc.scrollTop} : null};
 }
@@ -476,7 +492,44 @@ _JS_DIAG = """
 """
 
 
-def _ler_grupo(pagina, grupo: str, limite: int) -> list:
+def _ja_conhecidos(canal: str) -> list:
+    """Os `data-id` deste grupo que o `hunter_seen` já registrou.
+
+    ⚠️ ISTO É O QUE FAZ A VARREDURA PARAR NA HORA CERTA. Rolar pra cima anda
+    PARA TRÁS no tempo: quando a leitura alcança mensagem que já foi processada
+    numa rodada anterior, tudo acima também já foi. Sem esse sinal o minerador
+    varre 55 mil pixels toda hora pra reencontrar a mesma conversa de ontem —
+    80s de rolagem contínua por rodada, sem nada em troca, no número que a
+    gente está justamente tentando não fazer parecer robô.
+
+    📌 CUIDADO PRA NÃO REPETIR O ERRO DO `paradas`. Aquele contava "passos sem
+    id novo no DOM" e chamava isso de fim da conversa — proxy ruim, cortou três
+    leituras pela metade. Este conta OUTRA coisa: id que a gente já MINEROU. É
+    fato registrado em banco, e a ordem cronológica garante que acima só há mais
+    do mesmo."""
+    try:
+        import sqlite3
+        for nome in ("telegram_repurpose_hunter", "agents.telegram_repurpose_hunter"):
+            try:
+                import importlib
+                caminho = importlib.import_module(nome).SEEN_DB
+                break
+            except Exception:
+                continue
+        else:
+            return []
+        con = sqlite3.connect(str(caminho), timeout=10)
+        ids = [r[0] for r in con.execute(
+            "SELECT msg_id FROM seen WHERE canal = ?", (canal,))]
+        con.close()
+        return ids
+    except Exception as e:
+        # sem a lista, o pior que acontece é varrer fundo — nunca ler errado
+        _log(f"   (não li o histórico de {canal}: {str(e)[:60]})")
+        return []
+
+
+def _ler_grupo(pagina, grupo: str, limite: int, canal: str = "") -> list:
     """[{id, texto}] das mensagens recebidas — rolando e colhendo a cada passo.
 
     ⚠️ A VERSÃO ANTERIOR LIA 11 LINHAS NUM GRUPO COM 72 (31/08). Ela rolava com
@@ -494,6 +547,7 @@ def _ler_grupo(pagina, grupo: str, limite: int) -> list:
             "limite": limite,
             "voltas": VOLTAS_ROLAGEM,
             "pausa": random.randint(420, 700),
+            "conhecidos": _ja_conhecidos(canal) if canal else [],
         }) or {}
     except Exception as e:
         _log(f"   ⚠️ não li o DOM de {grupo}: {type(e).__name__} {str(e)[:80]}")
@@ -518,7 +572,10 @@ def _ler_grupo(pagina, grupo: str, limite: int) -> list:
     # precisa distinguir: o primeiro é varredura completa, o segundo é leitura
     # truncada que PARECE completa. Foi assim que o Alana ficou três correções
     # devolvendo número baixo sem ninguém saber que faltava conversa.
-    if passos >= VOLTAS_ROLAGEM and topo > 0:
+    if r.get("alcancou"):
+        _log(f"   ✔️ alcancei o que já tinha sido minerado — o resto acima é "
+             f"repetição")
+    elif passos >= VOLTAS_ROLAGEM and topo > 0:
         _log(f"   ⚠️ {grupo}: acabaram os passos com {topo}px ainda por ler — "
              f"suba WHATSAPP_MINA_VOLTAS (hoje {VOLTAS_ROLAGEM})")
     if not r.get("rolou"):
@@ -672,7 +729,7 @@ def rodar(teste: bool, diag: bool) -> int:
                         continue
                     if diag:
                         _diagnosticar(pagina, g)
-                        msgs = _ler_grupo(pagina, g, JANELA_MSGS)
+                        msgs = _ler_grupo(pagina, g, JANELA_MSGS, f"wa:{g}")
                         _log(f"      → {len(msgs)} aproveitável(is) pelo filtro")
                         for m in msgs[-4:]:
                             _log(f"        {m['id'][:36]}  "
@@ -681,7 +738,7 @@ def rodar(teste: bool, diag: bool) -> int:
                         if len(alvos) > 1:
                             time.sleep(random.uniform(4, 10))
                         continue
-                    msgs = _ler_grupo(pagina, g, JANELA_MSGS)
+                    msgs = _ler_grupo(pagina, g, JANELA_MSGS, f"wa:{g}")
                     contas["lidas"] += len(msgs)
 
                     canal = f"wa:{g}"
