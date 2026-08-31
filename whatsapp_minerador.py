@@ -270,7 +270,7 @@ async (op) => {
   };
 
   colher();
-  let paradas = 0, passos = 0;
+  let passos = 0;
   for (let i = 0; sc && i < op.voltas && vistos.size < op.limite; i++) {
     const antes = vistos.size, topo = sc.scrollTop, alt = sc.scrollHeight;
     // ⚠️ PASSO DE 82% PULAVA MENSAGEM (31/08). O WhatsApp reposiciona o
@@ -288,14 +288,17 @@ async (op) => {
     // desiste achando que acabou.
     if (sc.scrollHeight > alt) await new Promise(r => setTimeout(r, op.pausa));
     colher();
-    // ⚠️ `paradas >= 3` ERA O QUE MATAVA A RODADA NO MEIO. Medido: parava em
-    // scrollTop 2490 num painel de 9880 — ainda havia 2490px de conversa
-    // acima. Três passos quietos não querem dizer "acabou": querem dizer que
-    // aquele trecho já tinha sido colhido, o que é normal com sobreposição.
-    // 📌 Quem termina a varredura é CHEGAR NO TOPO. `paradas` volta a ser o
-    // que devia ser desde o começo — uma rede contra laço infinito, não um
-    // critério de parada — e `voltas` já limita o tempo.
-    if (vistos.size === antes) { if (++paradas >= 8) break; } else paradas = 0;
+    // ⚠️ `paradas` SAIU DE VEZ, E ESSA FOI A TERCEIRA TENTATIVA (31/08).
+    // Primeiro 3, depois 8 — e o painel continuou parando em 1574 de 8765.
+    // "N passos sem colher nada novo" NUNCA foi sinal de fim: com passos
+    // sobrepostos, trecho repetido é o esperado, e uma sequência quieta só quer
+    // dizer que aquela faixa já tinha sido lida.
+    //
+    // 📌 Contador de tédio é palpite; POSIÇÃO é fato. A varredura termina em
+    // duas condições que não admitem interpretação — cheguei no topo
+    // (scrollTop 0), ou empurrei e não andou. O tempo já tem dono: `voltas`.
+    // Eu perdi três rodadas de conserto ajustando o número de um critério que
+    // não devia existir.
     // ⚠️ O `break` ANTIGO OLHAVA O scrollTop DE ANTES DE ROLAR: com o painel já
     // em zero ele saía na PRIMEIRA volta, e por isso subir VOLTAS de 14 pra 60
     // não mudou um número sequer. O fim da conversa é "empurrei e não andou",
