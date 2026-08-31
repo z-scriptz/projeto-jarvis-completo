@@ -197,11 +197,55 @@ _JS_MENSAGENS = """
                 el.querySelector('.message-out') !== null;
     const t = (el.innerText || '').trim();
     if (!t) continue;
-    saida.push({id: id, texto: t.slice(0, 1200), meu: meu});
+    // `data-pre-plain-text` é "[HH:MM, DD/MM/AAAA] Fulano: " — só mensagem de
+    // gente tem. Guardo pra saber se dá pra confiar nele como discriminador;
+    // hoje quem separa recado do sistema é a lista de frases, no Python.
+    const p = el.querySelector('[data-pre-plain-text]');
+    saida.push({id: id, texto: t.slice(0, 1200), meu: meu,
+                autor: p ? (p.getAttribute('data-pre-plain-text') || '') : ''});
   }
   return {itens: saida.slice(-limite), total: linhas.length};
 }
 """
+
+# ⚠️ RECADO DO SISTEMA NÃO É ACHADINHO, E CUSTA IGUAL (30/08). O primeiro
+# --diag em 3 grupos recém-entrados devolveu 8 linhas, todas do sistema:
+# "Você entrou usando um link de convite", "+55 61 9616-1104 entrou usando um
+# link de convite", "As mensagens e ligações são protegidas...". Nenhuma é
+# produto, mas cada uma consumiria uma vaga do orçamento da rodada, uma linha
+# no `hunter_seen` e — se o extrator achasse um "termo" nelas — uma chamada de
+# API pra procurar "entrou usando um link" na Shopee.
+#
+# 📌 Filtro por frase e não por marcação: estes textos são estáveis (são do
+# WhatsApp, não do dono do grupo) e nenhum anúncio de produto contém qualquer
+# um deles. Marcação muda toda semana; estas frases, não.
+_FRASES_SISTEMA = (
+    "entrou usando um link de convite",
+    "entrou no grupo",
+    "saiu do grupo",
+    "foi adicionado",
+    "foi removido",
+    "adicionou",
+    "removeu",
+    "criou este grupo",
+    "criou o grupo",
+    "mudou a descrição do grupo",
+    "mudou o nome do grupo",
+    "mudou a imagem do grupo",
+    "mudou as configurações",
+    "as mensagens e ligações são protegidas",
+    "as mensagens temporárias foram ativadas",
+    "as mensagens temporárias foram desativadas",
+    "esta mensagem foi apagada",
+    "você foi adicionado",
+    "agora é admin",
+    "mensagem apagada",
+)
+
+
+def _do_sistema(texto: str) -> bool:
+    t = " ".join((texto or "").replace("\xa0", " ").split()).lower()
+    return any(f in t for f in _FRASES_SISTEMA)
 
 # ⚠️ O --diag EXISTE PRA NÃO ADIVINHAR DUAS VEZES. Quando a leitura volta
 # vazia, "0 mensagens" não diz se o seletor está errado, se a conversa não
@@ -222,6 +266,8 @@ _JS_DIAG = """
       texto: (el.innerText || '').trim().slice(0, 70),
       filhos_in: el.querySelectorAll('.message-in').length,
       filhos_out: el.querySelectorAll('.message-out').length,
+      autor: (el.querySelector('[data-pre-plain-text]') || {getAttribute: () => ''})
+               .getAttribute('data-pre-plain-text') || '',
     });
   }
   return {
@@ -258,15 +304,26 @@ def _ler_grupo(pagina, grupo: str, limite: int) -> list:
     if r.get("erro"):
         _log(f"   ⚠️ {grupo}: {r['erro']}")
         return []
-    itens = [i for i in (r.get("itens") or [])
-             if i.get("id") and i.get("texto") and not i.get("meu")]
+    brutos = [i for i in (r.get("itens") or [])
+              if i.get("id") and i.get("texto") and not i.get("meu")]
+    itens = [i for i in brutos if not _do_sistema(i["texto"])]
     total = int(r.get("total") or 0)
+    sistema = len(brutos) - len(itens)
+    if sistema:
+        _log(f"   {sistema} recado(s) do sistema ignorado(s)")
     if total and not itens:
         # ⚠️ "0 de 0" e "0 de 137" são problemas diferentes: o primeiro é
-        # conversa que não carregou, o segundo é filtro comendo tudo. Dizer
-        # qual dos dois poupa a próxima meia hora.
-        _log(f"   ⚠️ {grupo}: {total} linha(s) no DOM e nenhuma aproveitável "
-             f"— rode --diag")
+        # conversa que não carregou, o segundo é filtro comendo tudo. E "só
+        # recado do sistema" é um terceiro: grupo em que a gente acabou de
+        # entrar, que ainda não postou nada desde então. Dizer qual dos três
+        # poupa a próxima meia hora.
+        if sistema and sistema == len(brutos):
+            _log(f"   ℹ️  {grupo}: só recado do sistema — o grupo não postou "
+                 f"produto desde que entramos (mensagem temporária não "
+                 f"deixa herdar histórico)")
+        else:
+            _log(f"   ⚠️ {grupo}: {total} linha(s) no DOM e nenhuma "
+                 f"aproveitável — rode --diag")
     return itens
 
 
@@ -287,7 +344,8 @@ def _diagnosticar(pagina, grupo: str) -> None:
         _log(f"      ─ id={a.get('id')}")
         _log(f"        classe={a.get('classe')!r}")
         _log(f"        in={a.get('filhos_in')} out={a.get('filhos_out')}  "
-             f"texto={a.get('texto')!r}")
+             f"autor={a.get('autor') or '(nenhum — recado do sistema?)'!r}")
+        _log(f"        texto={a.get('texto')!r}")
 
 
 # ── o miolo ──────────────────────────────────────────────────────────────
