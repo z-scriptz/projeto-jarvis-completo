@@ -414,7 +414,8 @@ def _filtros_html(produtos: list) -> str:
         ativo = "true" if c == "todos" else "false"
         botoes.append(f'<button class="chip" aria-pressed="{ativo}" '
                       f'data-filtro="{html.escape(c)}">{html.escape(rotulo)}</button>')
-    return '<div class="chips" id="filtros">' + "".join(botoes) + "</div>"
+    return ('<div class="chips fita-rolo" id="filtros">'
+            + "".join(botoes) + "</div>")
 
 
 def _toggle_plataforma_html(produtos: list) -> str:
@@ -437,9 +438,9 @@ def _toggle_plataforma_html(produtos: list) -> str:
         desab = ' disabled title="Aparece sozinha quando o primeiro produto entrar"' if vazia else ""
         botoes.append(
             f'<button class="loja" role="tab" aria-selected="{"true" if i == 0 else "false"}"'
-            f' data-plat="{chave}"{desab}><span class="pil"></span>'
+            f' data-plat="{chave}"{desab}>'
             f'<span>{rotulo}<i class="n">{"em breve" if vazia else n}</i></span></button>')
-    return ('<div class="lojas" id="filtros-plat" role="tablist">'
+    return ('<div class="lojas fita-rolo" id="filtros-plat" role="tablist">'
             + "".join(botoes) + "</div>")
 
 
@@ -501,8 +502,7 @@ def _vitrine_html(produtos: list) -> str:
                  + _filtros_html(produtos) + "</div>")
     cards = "\n".join(_card_grid(p, novo=(i < 3))
                       for i, p in enumerate(produtos))
-    grade = (f'<div class="palco"><div class="holofote" id="holofote"></div>'
-             f'<div class="grade" id="grade-prod">{cards}</div></div>')
+    grade = f'<div class="grade" id="grade-prod">{cards}</div>'
     vazio = ('<p class="vazio" id="sem-res" style="display:none">'
              '<b>Esse a gente ainda não garimpou</b>'
              'Tenta outra busca — a vitrine enche toda semana.</p>')
@@ -531,13 +531,10 @@ def gerar_site(produtos: list) -> str:
         log.info(f"   🚧 {antes - len(produtos)} produto(s) sem foto e sem preço "
                  f"fora da vitrine (o link continua valendo na legenda)")
     total, lojas, off_medio = _metricas(produtos)
-    destaque = _card_destaque(produtos[0]) if produtos else ""
     # imagem do 1º produto vira a prévia do link no WhatsApp/Instagram
     og = (produtos[0].get("imagem", "") if produtos else "") or ""
     grupo_topo = GRUPO_WHATSAPP or GRUPO_TELEGRAM or INSTAGRAM
     return _TEMPLATE.replace("{{VITRINE}}", _vitrine_html(produtos))\
-                    .replace("{{DESTAQUE}}", destaque)\
-                    .replace("{{ESTEIRA}}", _esteira_html(produtos))\
                     .replace("{{GRUPOS}}", _grupos_html())\
                     .replace("{{GRUPO_TOPO}}", html.escape(grupo_topo))\
                     .replace("{{TOTAL}}", str(total))\
@@ -571,384 +568,264 @@ _TEMPLATE = r"""<!DOCTYPE html>
 <meta property="og:description" content="O que você viu no vídeo, achou aqui.">
 <meta property="og:type" content="website">
 <meta property="og:image" content="{{OGIMG}}">
-<meta name="theme-color" content="#09070E">
+<!-- pinta a barra do navegador no celular com o fundo da página:
+     é o detalhe que faz o site parecer app em vez de aba -->
+<meta name="theme-color" content="#0B0C0F">
 <style>
 @font-face{font-family:'Arch';src:url('topshop-fonte.woff2') format('woff2');
   font-weight:100 900;font-stretch:62% 125%;font-display:swap}
 
+/* ══ PALETA: grafite + UM acento ═══════════════════════════════════════════
+   ⚠️ A anterior tinha TRÊS neons (rosa #FF3D8A, menta #3DFFB0, ouro #FFD84D)
+   sobre quase-preto arroxeado, mais quatro bolhas desfocadas animadas e uma
+   grade com máscara radial. Essa combinação é a assinatura visual de página
+   feita por IA — não porque seja feia, mas porque é o default de todo gerador,
+   e o olho de quem compra já aprendeu a reconhecer.
+   📌 Loja grande usa UMA cor de marca e gasta o resto em contraste e espaço.
+   Aqui: grafite de verdade (neutro, não roxo), cards um degrau acima do fundo,
+   e o rosa da TopShop só onde ele TRABALHA — CTA, estado ativo, selo de
+   desconto. Verde sobrou só como sinal semântico de "preço caiu". */
 :root{
-  --void:#09070E; --sup:#150F22; --sup2:#1E1631; --linha:rgba(255,215,240,.10);
-  --ink:#F7F2EC; --muted:#9C90AE;
-  --pink:#FF3D8A; --ouro:#FFD84D; --menta:#3DFFB0;
-  --r:16px;
+  --bg:#0B0C0F; --sup:#131519; --sup2:#1A1D23; --linha:rgba(255,255,255,.085);
+  --linha2:rgba(255,255,255,.14);
+  --ink:#EDEFF2; --muted:#8D949E;
+  --marca:#FF3D6E; --marca-esc:#D42A55; --ok:#35C88A;
+  --r:14px; --topo:0px;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth}
-body{background:var(--void);color:var(--ink);
+body{background:var(--bg);color:var(--ink);
   font-family:'Arch','Segoe UI',system-ui,-apple-system,sans-serif;
-  line-height:1.5;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+  line-height:1.5;overflow-x:hidden;-webkit-font-smoothing:antialiased;
+  padding-bottom:env(safe-area-inset-bottom)}
 a{color:inherit;text-decoration:none}
 img{max-width:100%}
-.wrap{max-width:1240px;margin:0 auto;padding:0 clamp(16px,4vw,32px)}
-:where(a,button,input):focus-visible{outline:2px solid var(--menta);
-  outline-offset:3px;border-radius:10px}
+.wrap{max-width:1320px;margin:0 auto;padding:0 clamp(14px,3.2vw,28px)}
+:where(a,button,input):focus-visible{outline:2px solid var(--marca);
+  outline-offset:2px;border-radius:10px}
 
-/* ══ fundo em 3 camadas (parallax só no desktop) ══════════════════════════ */
-.fundo{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
-.cam{position:absolute;inset:-30vh -12vw;will-change:transform}
-.cam i{position:absolute;border-radius:50%;display:block}
-.longe i{filter:blur(100px);opacity:.30}
-.longe i:nth-child(1){width:54vw;height:54vw;background:#8B1E52;top:8vh;right:-12vw;
-  animation:deriva1 26s ease-in-out infinite alternate}
-.longe i:nth-child(2){width:46vw;height:46vw;background:#2B1E6B;bottom:6vh;left:-10vw;
-  animation:deriva2 32s ease-in-out infinite alternate}
-.meio i{filter:blur(46px);opacity:.20}
-.meio i:nth-child(1){width:20vw;height:20vw;background:#FF3D8A;top:52vh;left:14vw;
-  animation:deriva2 19s ease-in-out infinite alternate}
-.meio i:nth-child(2){width:15vw;height:15vw;background:#3DFFB0;top:22vh;right:26vw;
-  opacity:.13;animation:deriva1 23s ease-in-out infinite alternate}
-.perto{position:absolute;inset:0;opacity:.5;
-  background-image:linear-gradient(var(--linha) 1px,transparent 1px),
-                   linear-gradient(90deg,var(--linha) 1px,transparent 1px);
-  background-size:72px 72px;background-position:0 var(--vy,0px),0 0;
-  -webkit-mask-image:radial-gradient(70% 55% at 50% 34%,#000,transparent 78%);
-  mask-image:radial-gradient(70% 55% at 50% 34%,#000,transparent 78%)}
-@keyframes deriva1{to{transform:translate(-7vw,9vh) scale(1.14)}}
-@keyframes deriva2{to{transform:translate(9vw,-7vh) scale(1.1)}}
-body>*:not(.fundo){position:relative;z-index:1}
+/* ══ TOPO: marca + busca, tudo num bloco que gruda ════════════════════════
+   Dois `position:sticky` empilhados exigem saber a altura do primeiro pra
+   posicionar o segundo — e essa altura muda quando o teclado do celular abre.
+   Um bloco só não tem esse problema. */
+.topo{position:sticky;top:0;z-index:50;background:var(--bg);
+  transition:box-shadow .25s,padding .22s}
+.topo.colado{box-shadow:0 1px 0 var(--linha),0 12px 32px rgba(0,0,0,.5)}
+.barra{display:flex;align-items:center;justify-content:space-between;gap:14px;
+  padding-block:14px 10px;transition:padding .22s}
+.topo.colado .barra{padding-block:9px 6px}
+.marca{font-size:20px;font-weight:800;font-stretch:112%;letter-spacing:-.045em;
+  white-space:nowrap;display:flex;align-items:center}
+.marca i{font-style:normal;color:var(--marca)}
+.zap{border:1px solid var(--linha2);color:var(--ink);font-weight:650;font-size:13.5px;
+  padding:9px 16px;border-radius:999px;white-space:nowrap;
+  transition:background .22s,border-color .22s}
+.zap:hover{background:var(--sup2);border-color:var(--marca)}
 
-/* ══ topo ═════════════════════════════════════════════════════════════════ */
-header{position:sticky;top:0;z-index:40;backdrop-filter:blur(20px);
-  background:rgba(9,7,14,.72);border-bottom:1px solid transparent;
-  transition:border-color .3s,background .3s}
-header.colado{border-bottom-color:var(--linha);background:rgba(9,7,14,.92)}
-.barra{display:flex;align-items:center;gap:clamp(10px,2.5vw,22px);padding-block:13px}
-.marca{font-size:21px;font-weight:800;font-stretch:112%;letter-spacing:-.045em;
-  white-space:nowrap;display:flex;align-items:center;gap:2px}
-.marca i{font-style:normal;color:var(--pink)}
-.marca .pt{color:var(--pink);animation:pisca 3.4s ease-in-out infinite}
-@keyframes pisca{0%,92%,100%{opacity:1}96%{opacity:.25}}
-.busca{flex:1;position:relative;max-width:520px}
-.busca input{width:100%;background:rgba(255,255,255,.045);border:1px solid var(--linha);
-  color:var(--ink);border-radius:999px;padding:11px 54px 11px 44px;font:inherit;
-  font-size:15px;transition:border-color .25s,background .25s,box-shadow .25s}
-.busca input::placeholder{color:var(--muted)}
-.busca input:focus{outline:none;border-color:var(--pink);background:rgba(255,61,138,.07);
-  box-shadow:0 0 0 4px rgba(255,61,138,.10)}
-.busca .lupa{position:absolute;left:16px;top:50%;transform:translateY(-50%);
-  width:17px;height:17px;stroke:var(--muted);fill:none;stroke-width:2;
-  stroke-linecap:round;transition:stroke .25s,transform .25s;pointer-events:none}
-.busca input:focus~.lupa{stroke:var(--pink);transform:translateY(-50%) scale(1.12)}
-.atalho{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:11px;
-  color:var(--muted);border:1px solid var(--linha);border-radius:6px;padding:2px 6px;
-  pointer-events:none}
-@media(max-width:640px){.atalho{display:none}}
-.zap{background:var(--menta);color:#03291B;font-weight:700;font-size:14px;
-  padding:10px 17px;border-radius:999px;white-space:nowrap;
-  transition:transform .2s,box-shadow .2s}
-.zap:hover{transform:translateY(-2px);box-shadow:0 8px 22px rgba(61,255,176,.26)}
-@media(max-width:860px){.zap{display:none}}
+/* a busca é o elemento mais gordo da página, de propósito: é o que a pessoa
+   que veio do Reels precisa em primeiro lugar */
+.buscabox{position:relative;padding-bottom:12px;transition:padding .22s}
+.topo.colado .buscabox{padding-bottom:9px}
+.buscabox input{width:100%;height:58px;background:var(--sup);
+  border:1px solid var(--linha2);color:var(--ink);border-radius:13px;
+  padding:0 52px 0 50px;font:inherit;font-size:16.5px;font-weight:500;
+  transition:height .22s,font-size .22s,border-color .2s,background .2s}
+.topo.colado .buscabox input{height:46px;font-size:15px}
+.buscabox input::placeholder{color:var(--muted);font-weight:400}
+.buscabox input::-webkit-search-cancel-button{filter:invert(.6)}
+.buscabox input:focus{outline:none;border-color:var(--marca);background:var(--sup2)}
+.buscabox .lupa{position:absolute;left:18px;top:29px;transform:translateY(-50%);
+  width:19px;height:19px;stroke:var(--muted);fill:none;stroke-width:2;
+  stroke-linecap:round;transition:stroke .2s,top .22s;pointer-events:none}
+.topo.colado .buscabox .lupa{top:23px}
+.buscabox input:focus~.lupa{stroke:var(--marca)}
+.atalho{position:absolute;right:16px;top:29px;transform:translateY(-50%);font-size:11px;
+  color:var(--muted);border:1px solid var(--linha);border-radius:6px;padding:2px 7px;
+  pointer-events:none;transition:top .22s}
+.topo.colado .atalho{top:23px}
+@media(max-width:700px){.atalho{display:none}}
 
-/* ══ herói ════════════════════════════════════════════════════════════════ */
-.heroi{display:grid;grid-template-columns:1.15fr .85fr;gap:clamp(24px,5vw,56px);
-  align-items:center;padding:clamp(30px,6vw,64px) 0 clamp(24px,4vw,40px);
-  position:relative;isolation:isolate}
-@media(max-width:900px){.heroi{grid-template-columns:1fr;gap:26px}}
-.atmos{position:absolute;top:0;bottom:0;left:50%;transform:translateX(-50%);
-  width:100vw;max-width:100vw;overflow:hidden;z-index:-2;pointer-events:none;
-  -webkit-mask-image:linear-gradient(90deg,transparent,#000 9%,#000 91%,transparent);
-  mask-image:linear-gradient(90deg,transparent,#000 9%,#000 91%,transparent)}
-.vivo{position:absolute;inset:-24%;border-radius:50%;filter:blur(66px);opacity:.42;
-  background:conic-gradient(from 0deg,rgba(255,61,138,.34),rgba(123,44,255,.30),
-    rgba(61,255,176,.14),rgba(255,216,77,.20),rgba(255,61,138,.34));
-  animation:gira 24s linear infinite}
-@keyframes gira{to{transform:rotate(1turn)}}
-.luz{position:absolute;inset:0;opacity:0;transition:opacity .55s;
-  background:radial-gradient(430px circle at var(--hx,50%) var(--hy,50%),
-    rgba(255,61,138,.15),transparent 66%)}
-.heroi:hover .luz{opacity:1}
-.rotulo{display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:700;
-  letter-spacing:.14em;text-transform:uppercase;color:var(--pink);margin-bottom:16px}
-.rotulo::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--pink);
-  box-shadow:0 0 0 0 rgba(255,61,138,.6);animation:pulso 2s infinite}
-@keyframes pulso{70%{box-shadow:0 0 0 11px rgba(255,61,138,0)}
-  100%{box-shadow:0 0 0 0 rgba(255,61,138,0)}}
-h1{font-size:clamp(38px,7.4vw,84px);font-weight:800;font-stretch:118%;
-  line-height:.92;letter-spacing:-.045em;text-wrap:balance;
-  background:linear-gradient(100deg,var(--ink) 40%,#FFFFFF 48%,var(--ink) 56%);
-  background-size:300% 100%;background-position:135% 0;
-  -webkit-background-clip:text;background-clip:text;color:transparent;
-  animation:varre 9s ease-in-out 1.8s infinite}
-@keyframes varre{0%,62%{background-position:135% 0}100%{background-position:-35% 0}}
-h1 .risca{position:relative;display:inline-block;color:var(--pink);padding-bottom:.1em}
-h1 .risca::after{content:"";position:absolute;left:0;right:0;bottom:0;height:.075em;
-  background:var(--ouro);transform:scaleX(0);transform-origin:left;border-radius:99px;
-  animation:risca 1s cubic-bezier(.2,.7,.2,1) .5s forwards}
-@keyframes risca{to{transform:scaleX(1)}}
-.heroi p.sub{color:var(--muted);font-size:clamp(15px,2vw,18px);max-width:42ch;margin-top:18px}
-.metricas{display:flex;gap:clamp(18px,4vw,40px);margin-top:28px;flex-wrap:wrap}
-.metricas div{display:flex;flex-direction:column}
-.metricas b{font-size:clamp(24px,3.4vw,34px);font-weight:800;font-stretch:110%;
-  letter-spacing:-.03em;font-variant-numeric:tabular-nums;line-height:1}
-.metricas span{font-size:12px;color:var(--muted);letter-spacing:.06em;
-  text-transform:uppercase;margin-top:5px}
-.cta-m{display:inline-flex;align-items:center;gap:9px;background:var(--pink);color:#fff;
-  font-weight:750;font-size:15px;padding:14px 26px;border-radius:999px;margin-top:24px;
-  transition:transform .18s,box-shadow .28s;box-shadow:0 10px 30px rgba(255,61,138,.28)}
-.cta-m:hover{box-shadow:0 16px 42px rgba(255,61,138,.42)}
-.cta-m .seta{transition:transform .3s}
-.cta-m:hover .seta{transform:translateX(5px)}
+/* frase de posicionamento: some ao grudar, pra devolver a altura ao produto */
+.frase{color:var(--muted);font-size:14px;padding-bottom:12px;
+  max-height:44px;overflow:hidden;
+  transition:max-height .25s,opacity .2s,padding .25s}
+.frase b{color:var(--ink);font-weight:650}
+.topo.colado .frase{max-height:0;opacity:0;padding-bottom:0}
 
-/* moldura 9:16 — o formato do Reels de onde a pessoa veio */
-.moldura{position:relative;aspect-ratio:9/16;max-height:520px;margin:0 auto;width:100%;
-  max-width:300px;border-radius:26px;overflow:hidden;border:1px solid var(--linha);
-  background:linear-gradient(180deg,#EFEBF4 0%,#E6E0F0 38%,#3A2E56 68%,var(--sup) 100%);
-  box-shadow:0 30px 70px rgba(0,0,0,.55);display:block;
-  transition:transform .35s cubic-bezier(.2,.7,.2,1)}
-.moldura .capa{position:absolute;top:0;left:0;width:100%;height:64%;object-fit:cover;
-  -webkit-mask-image:linear-gradient(#000 74%,transparent);
-  mask-image:linear-gradient(#000 74%,transparent);
-  animation:respira 12s ease-in-out infinite}
-.moldura .capa-fb{position:absolute;top:0;left:0;width:100%;height:64%;display:grid;
-  place-items:center;font-size:84px;font-style:normal;animation:respira 12s ease-in-out infinite}
-@keyframes respira{50%{transform:scale(1.07)}}
-.moldura .brilho{position:absolute;inset:0;pointer-events:none;
-  background:radial-gradient(60% 40% at 50% 0%,rgba(255,61,138,.30),transparent 70%)}
-.moldura .live{position:absolute;top:14px;left:14px;display:flex;align-items:center;
-  gap:6px;background:rgba(9,7,14,.7);backdrop-filter:blur(8px);
-  border:1px solid var(--linha);border-radius:999px;padding:5px 11px;
-  font-size:11px;font-weight:700}
-.moldura .live b{width:6px;height:6px;border-radius:50%;background:var(--pink);
-  animation:pulso 1.6s infinite}
-.moldura .pe{position:absolute;left:0;right:0;bottom:0;padding:18px 16px 16px;
-  background:linear-gradient(transparent,rgba(9,7,14,.94) 55%)}
-.moldura .pe h3{font-size:14px;font-weight:600;line-height:1.3;margin-bottom:9px}
-.moldura .pe .pr b{font-size:26px;color:var(--ouro)}
-.moldura .pe .pr b i{color:rgba(255,216,77,.55)}
-.moldura .pe .afer{margin-top:7px}
+/* ══ CONTROLES: categorias e lojas em fita ════════════════════════════════ */
+.controles{display:flex;flex-direction:column;gap:9px;padding-bottom:14px}
+.fita-rolo{display:flex;gap:7px;overflow-x:auto;scrollbar-width:none;
+  margin-inline:calc(-1 * clamp(14px,3.2vw,28px));
+  padding-inline:clamp(14px,3.2vw,28px);scroll-snap-type:x proximity}
+.fita-rolo::-webkit-scrollbar{display:none}
+.chip{flex:none;border:1px solid var(--linha2);background:transparent;color:var(--muted);
+  font:inherit;font-size:13.5px;font-weight:600;padding:9px 15px;border-radius:999px;
+  cursor:pointer;scroll-snap-align:start;
+  transition:color .18s,border-color .18s,background .18s}
+.chip:hover{color:var(--ink);border-color:var(--linha2);background:var(--sup)}
+.chip[aria-pressed="true"]{background:var(--marca);color:#fff;border-color:var(--marca)}
+.loja{flex:none;border:1px solid transparent;background:var(--sup);color:var(--muted);
+  font:inherit;font-size:13px;font-weight:650;padding:8px 14px;border-radius:999px;
+  cursor:pointer;scroll-snap-align:start;
+  transition:color .18s,background .18s,border-color .18s}
+.loja[aria-selected="true"]{color:var(--ink);background:var(--sup2);
+  border-color:var(--linha2)}
+.loja .n{opacity:.6;margin-left:6px;font-variant-numeric:tabular-nums;font-style:normal}
+.loja:disabled{opacity:.34;cursor:not-allowed}
 
-/* ══ esteira ══════════════════════════════════════════════════════════════ */
-.esteira{border-top:1px solid var(--linha);border-bottom:1px solid var(--linha);
-  padding:13px 0;overflow:hidden;white-space:nowrap;margin:clamp(14px,3vw,26px) 0;
-  -webkit-mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);
-  mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)}
-.esteira .fita{display:inline-flex;gap:34px;animation:corre 40s linear infinite}
-.esteira:hover .fita{animation-play-state:paused}
-@keyframes corre{to{transform:translateX(-50%)}}
-.esteira span{font-size:13px;color:var(--muted);display:inline-flex;align-items:center;gap:9px}
-.esteira span::before{content:"";width:5px;height:5px;border-radius:50%;
-  background:var(--pink);flex:none}
-.esteira b{color:var(--ink);font-weight:600}
-
-/* ══ controles ════════════════════════════════════════════════════════════ */
-.controles{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:20px}
-.lojas{display:flex;gap:5px;background:rgba(255,255,255,.04);border:1px solid var(--linha);
-  border-radius:999px;padding:5px;overflow-x:auto;scrollbar-width:none;max-width:100%}
-.lojas::-webkit-scrollbar{display:none}
-.loja{border:0;background:none;color:var(--muted);font:inherit;font-size:14px;
-  font-weight:650;padding:9px 17px;border-radius:999px;cursor:pointer;white-space:nowrap;
-  position:relative;isolation:isolate;transition:color .22s}
-.loja[aria-selected="true"]{color:#fff}
-.loja .pil{position:absolute;inset:0;border-radius:999px;z-index:0;opacity:0;
-  transform:scale(.85);background:linear-gradient(120deg,var(--pink),#B4247E);
-  transition:opacity .3s,transform .3s cubic-bezier(.2,.7,.2,1)}
-.loja[aria-selected="true"] .pil{opacity:1;transform:scale(1)}
-.loja>span:not(.pil){position:relative;z-index:1}
-.loja .n{opacity:.62;margin-left:6px;font-variant-numeric:tabular-nums;font-style:normal}
-.loja:disabled{opacity:.38;cursor:not-allowed}
-.chips{display:flex;gap:7px;flex-wrap:wrap}
-.chip{border:1px solid var(--linha);background:transparent;color:var(--muted);font:inherit;
-  font-size:13px;padding:8px 14px;border-radius:999px;cursor:pointer;
-  transition:color .2s,border-color .2s,background .2s,transform .2s}
-.chip:hover{color:var(--ink);transform:translateY(-1px)}
-.chip[aria-pressed="true"]{background:var(--ink);color:#12100D;border-color:var(--ink)}
-
-/* ══ grade ════════════════════════════════════════════════════════════════ */
-.palco{position:relative}
-.holofote{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .4s;
-  background:radial-gradient(340px circle at var(--mx,50%) var(--my,50%),
-    rgba(255,61,138,.13),transparent 62%)}
-.palco:hover .holofote{opacity:1}
-.grade{display:grid;gap:clamp(11px,1.6vw,18px);
-  grid-template-columns:repeat(auto-fill,minmax(215px,1fr))}
-.card{background:linear-gradient(165deg,var(--sup),rgba(21,15,34,.6));
-  border:1px solid var(--linha);border-radius:var(--r);overflow:hidden;display:flex;
-  flex-direction:column;position:relative;
-  transition:opacity .55s,transform .4s cubic-bezier(.2,.7,.2,1),
-    border-color .3s,box-shadow .4s}
+/* ══ GRADE: densa, card premium ═══════════════════════════════════════════ */
+.grade{display:grid;gap:clamp(9px,1.2vw,14px);
+  grid-template-columns:repeat(auto-fill,minmax(196px,1fr))}
+.card{background:var(--sup);border:1px solid var(--linha);border-radius:var(--r);
+  overflow:hidden;display:flex;flex-direction:column;position:relative;
+  transition:opacity .4s,transform .22s,border-color .22s,background .22s}
 .card.esconde{display:none}
-.js .card{opacity:0;transform:translateY(24px)}
+.js .card{opacity:0;transform:translateY(12px)}
 .js .card.dentro{opacity:1;transform:none}
-.card:hover{border-color:rgba(255,61,138,.45);box-shadow:0 22px 50px rgba(0,0,0,.5)}
-.card .foto{aspect-ratio:1;position:relative;overflow:hidden;
-  background:linear-gradient(170deg,#F6F3F8,#DDD6E6)}
+.card:hover{border-color:var(--linha2);background:var(--sup2);transform:translateY(-3px)}
+.card .foto{aspect-ratio:1;position:relative;overflow:hidden;background:#F4F5F7}
 .card .foto img{width:100%;height:100%;object-fit:cover;display:block;opacity:0;
-  transition:opacity .5s,transform .6s cubic-bezier(.2,.7,.2,1)}
+  transition:opacity .35s,transform .35s}
 .card .foto img.ok{opacity:1}
-.card:hover .foto img.ok{transform:scale(1.07)}
-.card .foto .fb{position:absolute;inset:0;display:none;place-items:center;font-size:46px;
-  font-style:normal;transition:transform .45s cubic-bezier(.2,.7,.2,1)}
-.card .foto.sem-foto{background:radial-gradient(110% 80% at 50% 12%,var(--sup2),transparent)}
+.card:hover .foto img.ok{transform:scale(1.04)}
+.card .foto .fb{position:absolute;inset:0;display:none;place-items:center;font-size:42px;
+  font-style:normal}
+.card .foto.sem-foto{background:var(--sup2)}
 .card .foto.sem-foto .fb{display:grid}
-.card:hover .foto.sem-foto .fb{transform:scale(1.14) rotate(-4deg)}
 .card .foto.carregando{background-image:linear-gradient(100deg,
-  #E9E3F0 42%,#F9F6FC 50%,#E9E3F0 58%);background-size:280% 100%;
-  animation:esqueleto 1.25s linear infinite}
+  #EDEEF1 42%,#F8F9FA 50%,#EDEEF1 58%);background-size:280% 100%;
+  animation:esqueleto 1.2s linear infinite}
 @keyframes esqueleto{from{background-position:160% 0}to{background-position:-60% 0}}
-.card .foto::after{content:"";position:absolute;inset:0;transform:translateX(-110%);
-  pointer-events:none;background:linear-gradient(112deg,transparent 40%,
-    rgba(255,255,255,.34) 50%,transparent 60%);transition:transform .8s}
-.card:hover .foto::after{transform:translateX(110%)}
-.selo{position:absolute;top:10px;left:10px;font-size:10.5px;font-weight:750;
-  padding:4px 9px;border-radius:999px;letter-spacing:.03em;background:rgba(9,7,14,.72);
-  backdrop-filter:blur(8px);border:1px solid var(--linha);color:var(--ink);z-index:2}
-.selo.novo{background:var(--menta);color:#03291B;border-color:transparent}
-.selo.off{background:var(--ouro);color:#2A1C00;border-color:transparent;left:auto;right:10px}
-.selo.plat{top:auto;bottom:10px}
-.card .corpo{padding:13px 14px 15px;display:flex;flex-direction:column;gap:10px;flex:1}
-.card h3{font-size:14px;font-weight:550;line-height:1.35;
+.selo{position:absolute;top:8px;left:8px;font-size:10.5px;font-weight:750;
+  padding:4px 8px;border-radius:7px;letter-spacing:.02em;
+  background:rgba(11,12,15,.82);backdrop-filter:blur(6px);
+  border:1px solid var(--linha);color:var(--ink);z-index:2}
+.selo.novo{background:rgba(11,12,15,.82);color:var(--ink);border-color:var(--linha2)}
+/* ⚠️ o desconto é o único selo COLORIDO: é o número que decide o clique */
+.selo.off{background:var(--marca);color:#fff;border-color:transparent;left:auto;right:8px}
+.selo.plat{top:auto;bottom:8px}
+.card .corpo{padding:11px 12px 13px;display:flex;flex-direction:column;gap:8px;flex:1}
+.card h3{font-size:13.5px;font-weight:500;line-height:1.35;color:var(--ink);
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.card .ver{display:flex;align-items:center;justify-content:center;gap:7px;
-  border:1px solid var(--linha);border-radius:11px;padding:11px;font-size:13.5px;
-  font-weight:700;margin-top:auto;transition:background .25s,border-color .25s,color .25s}
-.card:hover .ver{background:var(--pink);border-color:var(--pink);color:#fff}
+.card .ver{display:flex;align-items:center;justify-content:center;gap:6px;
+  background:var(--sup2);border:1px solid var(--linha2);border-radius:10px;
+  padding:11px;font-size:13px;font-weight:700;margin-top:auto;min-height:44px;
+  transition:background .2s,border-color .2s}
+.card:hover .ver{background:var(--marca);border-color:var(--marca);color:#fff}
 
-/* preço — o til avisa que é média, não preço travado */
-.pr{display:flex;align-items:baseline;gap:8px}
+.pr{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap}
 .pr b,.pr s{white-space:nowrap}
-.pr b{font-size:21px;font-weight:800;letter-spacing:-.025em;font-variant-numeric:tabular-nums}
+.pr b{font-size:20px;font-weight:800;letter-spacing:-.03em;
+  font-variant-numeric:tabular-nums}
 .pr b i{font-style:normal;font-weight:600;font-size:.62em;margin-right:2px;
   position:relative;top:-.1em;color:var(--muted)}
 .pr s{color:var(--muted);font-size:12px}
-.afer{font-size:10.5px;color:var(--muted);letter-spacing:.015em;margin-top:-4px;
-  display:flex;align-items:flex-start;gap:5px;line-height:1.35}
-.afer::before{content:"";width:4px;height:4px;border-radius:50%;background:var(--muted);
-  flex:none;opacity:.7;margin-top:.42em}
-.afer.caindo{color:var(--menta)}
-.afer.caindo::before{background:var(--menta);opacity:1}
+.afer{font-size:10.5px;color:var(--muted);margin-top:-3px;line-height:1.35}
+.afer.caindo{color:var(--ok)}
 
-.vazio{text-align:center;padding:60px 20px;color:var(--muted)}
+.vazio{text-align:center;padding:56px 20px;color:var(--muted)}
 .vazio b{display:block;color:var(--ink);font-size:19px;margin-bottom:7px;font-weight:700}
 
-/* ══ seções de conteúdo ═══════════════════════════════════════════════════ */
-section{padding:clamp(48px,8vw,88px) 0}
-.eyebrow{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.14em;
-  text-transform:uppercase;color:var(--pink);margin-bottom:12px}
-h2{font-size:clamp(26px,4.4vw,44px);font-weight:800;font-stretch:112%;
-  letter-spacing:-.035em;line-height:1.05;text-wrap:balance}
-.sec-sub{color:var(--muted);margin-top:12px;max-width:56ch;font-size:clamp(14px,1.8vw,16.5px)}
+/* ══ SEÇÕES ═══════════════════════════════════════════════════════════════ */
+section{padding:clamp(40px,6vw,72px) 0}
+#produtos{padding-top:4px}
+.eyebrow{display:inline-block;font-size:11.5px;font-weight:700;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:11px}
+h2{font-size:clamp(22px,3.2vw,34px);font-weight:800;font-stretch:108%;
+  letter-spacing:-.03em;line-height:1.1;text-wrap:balance}
+.sec-sub{color:var(--muted);margin-top:11px;max-width:58ch;font-size:15px}
 .reveal{opacity:1}
-.js .reveal{opacity:0;transform:translateY(26px);
-  transition:opacity .7s,transform .7s cubic-bezier(.2,.7,.2,1)}
+.js .reveal{opacity:0;transform:translateY(14px);
+  transition:opacity .5s,transform .5s}
 .js .reveal.dentro{opacity:1;transform:none}
-/* passos numerados: aqui a numeração significa ordem de verdade — é a
-   sequência que a pessoa percorre, não enfeite */
-.passos{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
-  gap:clamp(11px,1.6vw,18px);margin-top:34px;counter-reset:passo}
-.passo{padding:26px 22px 28px;border-radius:var(--r);border:1px solid var(--linha);
-  background:linear-gradient(165deg,var(--sup),rgba(21,15,34,.55));position:relative;
-  transition:border-color .3s,transform .3s,box-shadow .3s}
-.passo:hover{border-color:rgba(255,61,138,.4);transform:translateY(-4px);
-  box-shadow:0 20px 44px rgba(0,0,0,.45)}
-.passo .num{display:grid;place-items:center;width:34px;height:34px;border-radius:50%;
-  background:var(--pink);color:#fff;font-weight:800;font-size:15px;margin-bottom:16px}
-.passo h3{font-size:17px;font-weight:700;margin-bottom:8px;letter-spacing:-.01em}
-.passo p{color:var(--muted);font-size:14px;line-height:1.55}
-/* provas: o número é o argumento, então ele é que fica grande */
-.provas{display:grid;grid-template-columns:repeat(auto-fit,minmax(258px,1fr));
-  gap:clamp(11px,1.6vw,18px);margin-top:34px}
-.prova{padding:24px 22px 26px;border-radius:var(--r);border:1px solid var(--linha);
-  background:rgba(255,255,255,.025);transition:border-color .3s,transform .3s}
-.prova:hover{border-color:rgba(61,255,176,.4);transform:translateY(-3px)}
-.prova b{display:block;font-size:clamp(38px,5.4vw,52px);font-weight:800;
-  font-stretch:110%;letter-spacing:-.04em;line-height:1;color:var(--menta);
+.passos,.provas{display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(250px,1fr));
+  gap:clamp(10px,1.4vw,16px);margin-top:28px}
+.passo,.prova{padding:22px 20px 24px;border-radius:var(--r);
+  border:1px solid var(--linha);background:var(--sup);
+  transition:border-color .22s,background .22s}
+.passo:hover,.prova:hover{border-color:var(--linha2);background:var(--sup2)}
+.passo .num{display:grid;place-items:center;width:30px;height:30px;border-radius:9px;
+  background:var(--sup2);border:1px solid var(--linha2);color:var(--ink);
+  font-weight:800;font-size:14px;margin-bottom:14px}
+.passo h3{font-size:16px;font-weight:700;margin-bottom:7px;letter-spacing:-.01em}
+.passo p,.prova p{color:var(--muted);font-size:13.5px;line-height:1.55}
+.prova b{display:block;font-size:clamp(30px,4vw,40px);font-weight:800;
+  letter-spacing:-.04em;line-height:1;color:var(--ink);
   font-variant-numeric:tabular-nums}
-.prova h3{font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
-  color:var(--ink);margin:10px 0 10px}
-.prova p{color:var(--muted);font-size:14px;line-height:1.55}
-.contato{display:grid;grid-template-columns:1fr 1fr;gap:clamp(24px,5vw,56px);
+.prova h3{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--muted);margin:9px 0 9px}
+.contato{display:grid;grid-template-columns:1fr 1fr;gap:clamp(20px,4vw,48px);
   align-items:start}
 @media(max-width:820px){.contato{grid-template-columns:1fr}}
-.cis{display:flex;flex-direction:column;gap:10px;margin-top:8px}
-.ci{display:flex;align-items:center;gap:13px;padding:15px 17px;border-radius:13px;
-  border:1px solid var(--linha);background:rgba(255,255,255,.025);
-  transition:border-color .25s,transform .25s}
-.ci:hover{border-color:rgba(61,255,176,.42);transform:translateX(3px)}
-.ci .ico{font-size:19px;flex:none}
-.ci span{display:flex;flex-direction:column;font-size:14.5px;font-weight:600}
+.cis{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.ci{display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:12px;
+  border:1px solid var(--linha);background:var(--sup);min-height:44px;
+  transition:border-color .2s,background .2s}
+.ci:hover{border-color:var(--linha2);background:var(--sup2)}
+.ci .ico{font-size:18px;flex:none}
+.ci span{display:flex;flex-direction:column;font-size:14px;font-weight:600}
 .ci span i{font-style:normal;font-size:12.5px;color:var(--muted);font-weight:400;margin-top:2px}
 
-footer.wrap{border-top:1px solid var(--linha);padding-block:30px 48px;color:var(--muted);
-  font-size:13px;display:flex;gap:16px;flex-wrap:wrap;justify-content:space-between}
+footer.wrap{border-top:1px solid var(--linha);padding-block:26px 40px;color:var(--muted);
+  font-size:12.5px;display:flex;gap:16px;flex-wrap:wrap;justify-content:space-between}
 footer a{border-bottom:1px solid var(--linha)}
 
-@media(max-width:560px){
-  .grade{grid-template-columns:repeat(2,1fr)}
-  .card .corpo{padding:10px 11px 12px;gap:8px}
+/* ══ CELULAR: prioridade absoluta ═════════════════════════════════════════ */
+@media(max-width:600px){
+  /* 2 colunas com gap curto: cabe uma linha inteira a mais na primeira tela */
+  .grade{grid-template-columns:repeat(2,1fr);gap:8px}
+  .card .corpo{padding:9px 10px 11px;gap:7px}
   .card h3{font-size:12.5px}
-  .card .ver{padding:9px;font-size:12.5px}
-  .card .foto .fb{font-size:36px}
-  /* preço empilhado: lado a lado o riscado quebrava no meio do número
-     ("R$" numa linha, "220,37" na outra) no card de duas colunas */
+  .card .ver{padding:10px;font-size:12.5px}
+  .card .foto .fb{font-size:34px}
+  /* preço empilhado: lado a lado o riscado quebrava no meio do número */
   .pr{flex-direction:column;align-items:flex-start;gap:1px}
   .pr b{font-size:17px}
   .pr s{font-size:11px}
-  /* chips numa fita rolável: em pé eles ocupavam 3 fileiras inteiras antes
-     do primeiro produto aparecer */
-  .chips{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;
-    margin-inline:calc(-1 * clamp(16px,4vw,32px));
-    padding-inline:clamp(16px,4vw,32px)}
-  .chips::-webkit-scrollbar{display:none}
-  .chip{flex:none}
+  .buscabox input{height:52px;font-size:16px}   /* 16px = iOS não dá zoom */
+  .buscabox .lupa,.atalho{top:26px}
+  .topo.colado .buscabox input{height:44px;font-size:16px}
+  .topo.colado .buscabox .lupa{top:22px}
+  .zap{font-size:12.5px;padding:8px 13px}
+  .frase{font-size:13px}
 }
 @media(prefers-reduced-motion:reduce){
   *{animation:none!important;transition-duration:.01ms!important}
   .js .card,.js .reveal{opacity:1;transform:none}
-  h1{background:none;-webkit-text-fill-color:var(--ink);color:var(--ink)}
 }
 </style>
 </head>
 <body>
-<div class="fundo" aria-hidden="true">
-  <div class="cam longe" data-k="0.10"><i></i><i></i></div>
-  <div class="cam meio"  data-k="0.30"><i></i><i></i></div>
-  <div class="perto" data-k="0.55"></div>
-</div>
 
-<header id="topo">
-  <div class="wrap barra">
-    <a class="marca" href="#topo">top<i>shop</i><span class="pt">.</span></a>
-    <label class="busca">
-      <input id="busca" type="search" placeholder="Buscar o achado do vídeo..."
+<!-- ══ PRIMEIRA DOBRA ═══════════════════════════════════════════════════════
+     Antes daqui vinha: 4 bolhas desfocadas com parallax, uma grade mascarada,
+     um herói de tela cheia com título de 84px em gradiente animado, três
+     números que subiam contando e uma moldura 9:16 girando com o mouse.
+     Tudo isso ficava ENTRE a pessoa e o produto — e quem chega pelo link do
+     Reels já sabe onde está: quer procurar o que viu.
+     📌 Ordem nova = marca, busca, categorias, produto. A prova de confiança
+     (quantos produtos, quantos dias de preço) desceu pra depois da grade:
+     ela convence quem já está explorando, não quem acabou de chegar. -->
+<div class="topo" id="topo">
+  <div class="wrap">
+    <div class="barra">
+      <a class="marca" href="#topo">top<i>shop</i></a>
+      <a class="zap" href="{{GRUPO_TOPO}}" target="_blank" rel="noopener">Entrar no grupo</a>
+    </div>
+    <label class="buscabox">
+      <input id="busca" type="search" placeholder="O que você viu no vídeo?"
              autocomplete="off" aria-label="Buscar produto">
       <svg class="lupa" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg>
       <span class="atalho">/</span>
     </label>
-    <a class="zap" href="{{GRUPO_TOPO}}" target="_blank" rel="noopener">Entrar no grupo</a>
+    <p class="frase">O que você viu no vídeo, <b>achou aqui</b> — com link direto
+       e preço conferido.</p>
   </div>
-</header>
+</div>
 
 <main class="wrap">
-  <section class="heroi" id="inicio">
-    <div class="atmos" id="atmos"><div class="vivo"></div><div class="luz" id="luz"></div></div>
-    <div>
-      <div class="rotulo">Achado de hoje</div>
-      <h1>O que você viu<br>no vídeo, <span class="risca">achou aqui</span>.</h1>
-      <p class="sub">A gente garimpa, testa e mostra. Se apareceu no Reels, o link
-         tá aqui embaixo — com preço conferido.</p>
-      <div class="metricas">
-        <div><b data-alvo="{{TOTAL}}">{{TOTAL}}</b><span>achados ativos</span></div>
-        <div><b data-alvo="{{LOJAS}}">{{LOJAS}}</b><span>{{LOJAS_ROTULO}}</span></div>
-        <div><b data-alvo="{{OFF}}">{{OFF}}</b><span>% off médio</span></div>
-      </div>
-      <a class="cta-m" href="#produtos">Ver o garimpo <span class="seta">&rarr;</span></a>
-    </div>
-    {{DESTAQUE}}
-  </section>
-
-  {{ESTEIRA}}
-
-  <section id="produtos" style="padding-top:clamp(18px,3vw,32px)">
+  <section id="produtos">
     {{VITRINE}}
   </section>
 
@@ -1058,19 +935,6 @@ document.querySelectorAll('.card').forEach(function(c, i){
 });
 document.querySelectorAll('.reveal').forEach(function(s){ obs.observe(s); });
 
-/* ── números do herói subindo (o valor certo já está no HTML) ───────────── */
-document.querySelectorAll('.metricas b').forEach(function(el){
-  var alvo = +el.dataset.alvo || 0;
-  if (calmo || !alvo) return;
-  var t0 = null;
-  requestAnimationFrame(function passo(t){
-    if (!t0) t0 = t;
-    var k = Math.min(1, (t - t0) / 1100), e = 1 - Math.pow(1 - k, 3);
-    el.textContent = Math.round(alvo * e);
-    if (k < 1) requestAnimationFrame(passo);
-  });
-});
-
 /* ── filtros e busca: só mostram e escondem o que já veio pronto ────────── */
 var st = {plat: 'todos', cat: 'todos', q: ''};
 var cards = [].slice.call(document.querySelectorAll('.card'));
@@ -1114,72 +978,35 @@ if (inp){
   });
 }
 
-/* ── holofote sobre a grade e inclinação 3D dos cards ───────────────────── */
-var palco = document.querySelector('.palco'), holo = document.getElementById('holofote');
-if (palco && holo) palco.addEventListener('pointermove', function(e){
-  var r = palco.getBoundingClientRect();
-  holo.style.setProperty('--mx', (e.clientX - r.left) + 'px');
-  holo.style.setProperty('--my', (e.clientY - r.top) + 'px');
-});
-if (!calmo && fino) cards.forEach(function(c){
-  c.addEventListener('pointermove', function(e){
-    var r = c.getBoundingClientRect();
-    var x = (e.clientX - r.left) / r.width - .5, y = (e.clientY - r.top) / r.height - .5;
-    c.style.transform = 'perspective(760px) rotateX(' + (-y * 7).toFixed(2) +
-      'deg) rotateY(' + (x * 7).toFixed(2) + 'deg) translateY(-5px)';
-  });
-  c.addEventListener('pointerleave', function(){ c.style.transform = ''; });
-});
+/* ── o topo encolhe ao grudar ────────────────────────────────────────────
+   ⚠️ NÃO É `position:sticky` SOZINHO. Sticky mantém a busca na tela, mas com o
+   tamanho de tela cheia ela comeria 150px de altura o scroll inteiro — no
+   celular, quase uma linha de produtos, permanentemente. A classe `.colado`
+   encolhe a busca, esconde a frase de posicionamento e devolve essa altura pro
+   que interessa. É a mesma coisa que app de marketplace faz.
 
-/* ── herói: luz no cursor e moldura acompanhando ────────────────────────── */
-var heroi = document.querySelector('.heroi'), luz = document.getElementById('luz');
-var atmos = document.getElementById('atmos'), mold = document.getElementById('moldura');
-var giro = {x:0, y:0}, desloc = 0;
-function porMoldura(){
-  if (!mold) return;
-  mold.style.transform = 'perspective(1000px) translateY(' + desloc.toFixed(1) + 'px)' +
-    ' rotateY(' + giro.x.toFixed(2) + 'deg) rotateX(' + giro.y.toFixed(2) + 'deg)';
+   O limiar tem HISTERESE (32/8) de propósito: com um valor só, parar o dedo
+   exatamente na fronteira faz a barra piscar entre os dois tamanhos a cada
+   pixel de rolagem. */
+var topo = document.getElementById('topo'), colado = false, pedido = false;
+function medirTopo(){
+  var y = scrollY;
+  if (!colado && y > 32){ colado = true; topo.classList.add('colado'); }
+  else if (colado && y < 8){ colado = false; topo.classList.remove('colado'); }
+  pedido = false;
 }
-if (!calmo && fino && heroi){
-  heroi.addEventListener('pointermove', function(e){
-    /* medido contra .atmos, que é mais largo que o herói */
-    var r = atmos.getBoundingClientRect();
-    luz.style.setProperty('--hx', (e.clientX - r.left) + 'px');
-    luz.style.setProperty('--hy', (e.clientY - r.top) + 'px');
-  });
-  addEventListener('pointermove', function(e){
-    giro.x = (e.clientX / innerWidth - .5) * 9;
-    giro.y = -(e.clientY / innerHeight - .5) * 6;
-    porMoldura();
-  });
-}
-
-/* ── profundidade: 3 camadas em velocidades diferentes, só no desktop ────
-   No celular o parallax de scroll engasga e a gente perde mais do que ganha —
-   e o tráfego daqui vem quase todo da bio do Instagram. */
-var camadas = [].slice.call(document.querySelectorAll('.cam'));
-var perto = document.querySelector('.perto');
-if (!calmo && fino && matchMedia('(min-width:900px)').matches){
-  var agendado = false;
-  addEventListener('scroll', function(){
-    if (agendado) return;
-    agendado = true;
-    requestAnimationFrame(function(){
-      var y = scrollY;
-      camadas.forEach(function(c){
-        c.style.transform = 'translate3d(0,' + (-y * (+c.dataset.k)).toFixed(1) + 'px,0)';
-      });
-      if (perto) perto.style.setProperty('--vy', (-y * (+perto.dataset.k)).toFixed(1) + 'px');
-      desloc = Math.max(-26, -y * 0.06);
-      porMoldura();
-      agendado = false;
-    });
-  }, {passive:true});
-}
-
 addEventListener('scroll', function(){
-  document.getElementById('topo').classList.toggle('colado', scrollY > 8);
+  if (pedido) return;
+  pedido = true; requestAnimationFrame(medirTopo);
 }, {passive:true});
+medirTopo();
+
+/* ⌨️ o teclado do celular cobre metade da tela: ao focar a busca, leva a
+   grade pro topo pra pessoa ver o resultado enquanto digita */
+if (inp) inp.addEventListener('focus', function(){
+  if (matchMedia('(max-width:600px)').matches && scrollY < 8)
+    setTimeout(function(){ scrollTo({top: 40, behavior: 'smooth'}); }, 60);
+});
 </script>
 </body>
 </html>
