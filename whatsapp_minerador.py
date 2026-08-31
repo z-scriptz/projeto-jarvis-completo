@@ -53,9 +53,9 @@
 #   WHATSAPP_FONTES=Grupo do Fulano;Achadinhos da Ciclana   (separador é `;`)
 #   WHATSAPP_MINA_MAX=40        teto de produtos consultados por rodada
 #   WHATSAPP_MINA_GRUPOS=2      quantos grupos-fonte por rodada (0 = todos)
-#   WHATSAPP_MINA_VOLTAS=60     passos de rolagem por grupo (fonte grande pede
+#   WHATSAPP_MINA_VOLTAS=150    passos de rolagem por grupo (fonte grande pede
 #                               mais; grupo pequeno para sozinho antes)
-#   WHATSAPP_MINA_JANELA=200    teto de mensagens colhidas por grupo
+#   WHATSAPP_MINA_JANELA=250    teto de mensagens colhidas por grupo
 
 import argparse
 import json
@@ -141,7 +141,7 @@ MINA_GRUPOS = int(float(os.environ.get("WHATSAPP_MINA_GRUPOS", "2")))
 # ⚠️ Precisa ser MAIOR que o volume de um dia da maior fonte, senão a rolagem
 # desce fundo e o corte joga fora o que ela achou. A Alana passou de 90 numa
 # manhã; 200 dá folga pro dia inteiro dela.
-JANELA_MSGS = int(float(os.environ.get("WHATSAPP_MINA_JANELA", "200")))
+JANELA_MSGS = int(float(os.environ.get("WHATSAPP_MINA_JANELA", "250")))
 
 # Quantos passos de rolagem por grupo. Cada passo sobe MEIA tela e colhe o que
 # apareceu — a sobreposição é o que impede mensagem de passar batida.
@@ -156,7 +156,15 @@ JANELA_MSGS = int(float(os.environ.get("WHATSAPP_MINA_JANELA", "200")))
 # em 3 passos como sempre saiu. Quem paga o teto é só quem tem o que entregar.
 # 60 passos ≈ 35s no pior caso, num grupo por vez — e uma pessoa lendo o grupo
 # da manhã rola por aí mesmo.
-VOLTAS_ROLAGEM = int(float(os.environ.get("WHATSAPP_MINA_VOLTAS", "60")))
+# ⚠️ 60 TAMBÉM ERA POUCO, e só dava pra saber DEPOIS de a rolagem funcionar.
+# Medido no Promos da Alana: o painel começou com 8765px e virou 31072px —
+# subir faz o WhatsApp carregar histórico que ainda não existia no DOM, então o
+# alvo CRESCE enquanto a gente anda nele. Bateu os 60 passos com 7184px ainda
+# por ler.
+# 📌 Passo custa ~0,5s e só é gasto por quem tem conteúdo (o OFERTAS
+# RELÂMPAGO sai em 1 passo). 150 passos = ~80s no pior caso, uma vez por hora,
+# num grupo que entrega 150 achadinhos por dia. É barato pelo que devolve.
+VOLTAS_ROLAGEM = int(float(os.environ.get("WHATSAPP_MINA_VOLTAS", "150")))
 
 
 def _log(m):
@@ -502,9 +510,17 @@ def _ler_grupo(pagina, grupo: str, limite: int) -> list:
     # número que subir VOLTAS de 14 pra 60 pareceu não fazer efeito, quando na
     # verdade o laço saía na 1ª volta.
     pn = r.get("painel") or {}
-    _log(f"   ↕️  {r.get('passos', 0)} passo(s) de rolagem · "
+    passos, topo = int(r.get("passos") or 0), int(pn.get("topo") or 0)
+    _log(f"   ↕️  {passos} passo(s) de rolagem · "
          f"painel {pn.get('alto', '?')}px de {pn.get('rolo', '?')}px · "
-         f"parou em {pn.get('topo', '?')} · {total} linha(s)")
+         f"parou em {topo} · {total} linha(s)")
+    # ⚠️ "PAROU EM 0" E "ACABARAM OS PASSOS" SÃO RESULTADOS DIFERENTES, e o log
+    # precisa distinguir: o primeiro é varredura completa, o segundo é leitura
+    # truncada que PARECE completa. Foi assim que o Alana ficou três correções
+    # devolvendo número baixo sem ninguém saber que faltava conversa.
+    if passos >= VOLTAS_ROLAGEM and topo > 0:
+        _log(f"   ⚠️ {grupo}: acabaram os passos com {topo}px ainda por ler — "
+             f"suba WHATSAPP_MINA_VOLTAS (hoje {VOLTAS_ROLAGEM})")
     if not r.get("rolou"):
         # ⚠️ sem o painel rolável a leitura fica presa na primeira tela — é
         # exatamente o defeito de 31/08, e ele precisa gritar em vez de sair
