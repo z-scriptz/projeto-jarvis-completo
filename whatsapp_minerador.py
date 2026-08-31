@@ -143,8 +143,8 @@ MINA_GRUPOS = int(float(os.environ.get("WHATSAPP_MINA_GRUPOS", "2")))
 # manhã; 200 dá folga pro dia inteiro dela.
 JANELA_MSGS = int(float(os.environ.get("WHATSAPP_MINA_JANELA", "200")))
 
-# Quantos passos de rolagem por grupo. Cada passo sobe ~82% da altura do painel
-# e colhe o que apareceu.
+# Quantos passos de rolagem por grupo. Cada passo sobe MEIA tela e colhe o que
+# apareceu — a sobreposição é o que impede mensagem de passar batida.
 #
 # ⚠️ 14 ERA POUCO, E O ERRO FOI CONTAR MENSAGEM EM VEZ DE PIXEL (31/08). Eu
 # dimensionei "14 passos cobrem um dia movimentado" imaginando linhas de texto.
@@ -273,7 +273,13 @@ async (op) => {
   let paradas = 0, passos = 0;
   for (let i = 0; sc && i < op.voltas && vistos.size < op.limite; i++) {
     const antes = vistos.size, topo = sc.scrollTop, alt = sc.scrollHeight;
-    sc.scrollTop = Math.max(0, sc.scrollTop - sc.clientHeight * 0.82);
+    // ⚠️ PASSO DE 82% PULAVA MENSAGEM (31/08). O WhatsApp reposiciona o
+    // scroll quando recicla linhas, então o salto real é maior que o pedido —
+    // e com cards altos (os da Alana têm foto) um passo grande atravessa
+    // mensagens que nunca chegam a ficar visíveis pro `colher()`. Meia tela
+    // sobrepõe o suficiente pra nada passar batido; o custo é dobrar os
+    // passos, que é barato.
+    sc.scrollTop = Math.max(0, sc.scrollTop - sc.clientHeight * 0.5);
     passos++;
     await new Promise(r => setTimeout(r, op.pausa));
     // ⚠️ SUBIR PEDE MENSAGEM AO SERVIDOR, e isso não é instantâneo. Quando o
@@ -282,14 +288,20 @@ async (op) => {
     // desiste achando que acabou.
     if (sc.scrollHeight > alt) await new Promise(r => setTimeout(r, op.pausa));
     colher();
-    // 3 e não 2: com carregamento lento, duas rodadas quietas seguidas
-    // acontecem sem a conversa ter terminado
-    if (vistos.size === antes) { if (++paradas >= 3) break; } else paradas = 0;
+    // ⚠️ `paradas >= 3` ERA O QUE MATAVA A RODADA NO MEIO. Medido: parava em
+    // scrollTop 2490 num painel de 9880 — ainda havia 2490px de conversa
+    // acima. Três passos quietos não querem dizer "acabou": querem dizer que
+    // aquele trecho já tinha sido colhido, o que é normal com sobreposição.
+    // 📌 Quem termina a varredura é CHEGAR NO TOPO. `paradas` volta a ser o
+    // que devia ser desde o começo — uma rede contra laço infinito, não um
+    // critério de parada — e `voltas` já limita o tempo.
+    if (vistos.size === antes) { if (++paradas >= 8) break; } else paradas = 0;
     // ⚠️ O `break` ANTIGO OLHAVA O scrollTop DE ANTES DE ROLAR: com o painel já
     // em zero ele saía na PRIMEIRA volta, e por isso subir VOLTAS de 14 pra 60
     // não mudou um número sequer. O fim da conversa é "empurrei e não andou",
     // não "estava em zero quando cheguei".
-    if (sc.scrollTop === topo) break;
+    if (sc.scrollTop === topo) break;   // empurrei e não andou: acabou
+    if (sc.scrollTop <= 0) { colher(); break; }   // topo de verdade
   }
   return {itens: Array.from(vistos.values()).slice(-op.limite),
           total: vistos.size, rolou: !!sc, passos: passos,
