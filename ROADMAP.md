@@ -517,8 +517,13 @@ DESCE pra linha 2 (greedy), nunca 1 linha só nem corte no meio. A fonte encolhe
 caber em exatamente 2 linhas; frase curta demais recebe corte equilibrado forçado.
 Emoji sempre no fim da 2ª linha. (`narrated_video_agent._criar_camadas_topo`.)
 Ex.: "O segredo pra ter um iPhone 17 sem gastar / uma fortuna ✨".
-- ⏳ **geral (@topshop.__)** ainda saiu no template ANTIGO (fundo preto, quebra
-  equilibrada) — precisa do mesmo tratamento/âncora que a tech já tem.
+- ✅ **geral (@topshop.__)** — RESOLVIDO há ~3 meses (corrigido em 31/08, quando
+  eu listei isso como pendência aberta e o Dre respondeu *"não renderiza em
+  fundo preto já tem 3 meses"*).
+  ⚠️ **Pendência marcada e nunca desmarcada vira mentira com aparência de
+  registro** — e o custo é pior que o de não ter registro nenhum: eu li o
+  roadmap, confiei nele e recomendei trabalho já feito. Ao fechar um item,
+  desmarcar é parte do conserto.
 
 ---
 
