@@ -527,6 +527,198 @@ Ex.: "O segredo pra ter um iPhone 17 sem gastar / uma fortuna ✨".
 
 ---
 
+## 🗓️ Dia 2026-08-31 — a mina abriu, e eu descartei três diagnósticos pra chegar lá
+
+### 🔴 O PIOR BUG DO DIA FOI MEU, E CALOU O GRUPO POR 12 HORAS
+
+    File "whatsapp_playwright.py", line 2822, in main
+        with travar("whatsapp_playwright") as livre:
+    TypeError: 'bool' object does not support the context manager protocol
+
+O arquivo **já importava** `travar` do `shared/trava.py` — um context manager
+que o `main()` usa desde sempre. Eu criei uma função `travar()` devolvendo bool
+no mesmo módulo; ela **sombreou a original** e toda acordada do cron morreu na
+primeira linha, de 15 em 15 minutos, desde o deploy da madrugada. O grupo passou
+o dia em `0/24` e o traceback foi pro `logs/whatsapp.log`, que ninguém lia.
+
+⚠️ **DOIS ERROS EM UM.** O primeiro: não rodei `grep travar` antes de criar a
+função — nome já usado no mesmo módulo é colisão garantida e custa cinco
+segundos conferir. O segundo é pior: **reimplementei um mecanismo que já
+existia**, e o arquivo que dupliquei explica no cabeçalho por que a minha versão
+é a ruim:
+
+> *"Arquivo de PID sobrevive ao crash e trava tudo até alguém apagar na mão, o
+> que é pior que o problema original: em vez de postar 4x, para de postar e
+> ninguém percebe."*
+
+📌 É literalmente o que aconteceu. Hoje os dois programas usam
+`travar("whatsapp_playwright")` — mesmo nome, exclusão de graça, flock solto
+pelo kernel.
+
+### 🕳️ TRÊS DIAGNÓSTICOS QUE O CÓDIGO PRODUZIU E EU JOGUEI FORA
+
+O padrão do dia, e o mais caro:
+
+| onde | o que o código dizia | o que eu reportei |
+|---|---|---|
+| rolagem do minerador | passos, tamanho do painel, onde parou | "16 linhas" |
+| `minerar_oportunidades` | `diagnostico`: quantos reprovados por nota/vendas | `sem_shopee` |
+| `gerar_link_afiliado` | `{"ok": False, "erro": "..."}` | `sem link` |
+
+📌 **Cada um deles teria apontado a causa na primeira tentativa.** Em vez disso
+gastei cinco rodadas de conserto adivinhando. Quando uma função devolve um campo
+de diagnóstico, ela está dizendo que o autor já sabia que ia dar errado ali.
+
+### 🔍 `sem_shopee` ERA MENTIRA — e quem provou foi o Dre
+
+Eu reportei 25 produtos como "não existem na Shopee". Ele abriu os 25 links um a
+um: **todos da Shopee.**
+
+⚠️ **`minerar_oportunidades` NÃO É "PROCURAR NA SHOPEE" — É "PROCURAR MINA DE
+OURO".** Ela corta `rating < 4.7` e `vendas < 10` e devolve `ok=False` mesmo
+tendo ACHADO o produto.
+
+Os cortes fazem sentido no caso pra que foram feitos: garimpar produto novo pra
+promover do zero, onde nota e volume são a única defesa contra reembolso. Aqui o
+caso é OUTRO — **a concorrente já escolheu o produto e está vendendo pro mesmo
+público hoje.** A prova social existe, só não está na API. Agora: tentativa
+exigente primeiro, e a régua do reetiquetar (4.0 / 3) quando aquela reprova.
+
+E quando a busca volta VAZIA a causa é terceira: **título de marketing**.
+`"Tenis Feminino Tendência | Design Robusto e Moderno"` casa com nada;
+`"Tenis Feminino"` casa com dezenas.
+
+⚠️ **BUSCA CURTA PRECISA DE PISO DE RELEVÂNCIA.** Medido: o termo
+`'CENARIO FESTA PRONTO'` casou com *"Trio Mesas Ripadas Cilindros Branco em
+Mdf"*. **Produto errado é pior que produto nenhum** — sem produto é rodada
+fraca, com produto errado é o cliente clicando em coisa que não tem a ver.
+
+**Resultado: conversão de 38% → 72%** (21 de 29).
+
+### 📜 A SAGA DA ROLAGEM — cinco correções no mesmo laço
+
+Vale registrar em ordem, porque cada uma parecia a última:
+
+1. **`mouse.wheel` rola onde o CURSOR está**, e o cursor não estava sobre as
+   mensagens. Lia 11 de 72 (14%, medido em simulador).
+2. **O WhatsApp recicla o DOM**: rolar 3× e ler 1× devolve só a última janela.
+   Colher passou a acontecer a cada passo, acumulando por `data-id`.
+3. **"Tem overflow" não é "rola"**: o ancestral escolhido passava no teste de
+   `scrollHeight` e não se mexia. Agora empurra 20px, confere e desfaz.
+4. **`if (topo <= 0) break` lia o scrollTop de ANTES de rolar** — com o painel
+   em zero, saía na primeira volta. Por isso subir `VOLTAS` de 14 pra 60 não
+   mudou um número sequer.
+5. **`paradas` (contador de tédio) matava a varredura no meio.** Ajustei de 3
+   pra 8 e continuou parando em 1574 de 8765.
+
+📌 **A quinta foi a lição de verdade: eu estava ajustando o NÚMERO de um
+critério que não devia existir.** "N passos sem colher nada novo" nunca foi
+sinal de fim — com passos sobrepostos, trecho repetido é o esperado. Contador
+de tédio é palpite; **posição é fato**.
+
+### 🎯 "CHEGAR NO TOPO" DEIXOU DE SER A META
+
+Com a rolagem funcionando, o Promos da Alana mostrou o problema do alvo móvel:
+
+    painel 8.765px → 31.072px → 55.309px
+
+**Subir CRIA conversa** — o WhatsApp carrega histórico conforme você anda nele.
+Perseguir `scrollTop 0` num grupo grande não termina nunca.
+
+Rodando de hora em hora, a pergunta certa não é *"li a conversa inteira?"* e sim
+***"alcancei o que já tinha lido?"***. `_ja_conhecidos` traz do `hunter_seen` os
+`data-id` já processados; dois passos só com conhecidos param a varredura —
+rolar pra cima anda para trás no tempo, então acima só há repetição.
+
+⚠️ Não confundir com o `paradas` removido: aquele contava "sem id novo no DOM"
+(proxy ruim); este conta **id já MINERADO** — fato em banco, com a ordem
+cronológica garantindo o resto.
+
+**Medido: 1ª rodada 102 linhas em 150 passos; seguintes 11 em 14 passos.** De
+~80s de rolagem por hora para ~8s.
+
+### 🧪 DRY-RUN QUE ESCREVIA
+
+O acerto respeitava o `--teste` (`if not teste: marcar(...)`) e a falha não. O
+primeiro `--teste` gravou 25 falhas no `hunter_seen` de produtos que ele só
+estava conferindo.
+
+📌 **Meio-termo em dry-run é o pior dos dois mundos: quem roda acha que não
+mexeu em nada.**
+
+### 📊 O QUE O MINERADOR ENTREGA (medido 31/08)
+
+    Alana 94  ·  PROMOÇÕES 24  ·  #102 23  ·  OFERTAS 0   =  141 mensagens/rodada
+    conversão 72%  ·  teto de 40 consultas/rodada
+    12 rodadas/dia  →  ~180 produtos/dia   (alvo do grupo: 72)
+
+Contra os **11,3/dia** de ontem. O Dre estava certo desde o começo: *"não é
+difícil achar produto não clau"* — o gargalo nunca foi o catálogo, era quantas
+fontes a gente escutava.
+
+    cron:  25 8-21 * * *  whatsapp_minerador.py
+
+### 🔕 O AUDITOR DO SITE GRITAVA DOIS FALSOS
+
+- **"a fila está no teto"**: lia `max_itens: int = 0` ao pé da letra, mas 0
+  significa SEM teto desde 15/08 (o real vem de `FILA_ACERVO_MAX=500`). Com
+  `n >= 0` sempre verdade, ele ia acusar isso **em toda execução, pra sempre**.
+- **"faltam 144"**: o funil esquecia `VITRINE_MAX_PRODUTOS=200`, o maior corte
+  de todos, e mandava procurar push quebrado num deploy que fez o certo.
+
+📌 **Auditor desatualizado é pior que auditor ausente:** produz um ❌ vermelho e
+convincente sobre problema já consertado e ensina o dono a ignorar o painel.
+
+### 🎨 O SITE — três aberturas, e as duas primeiras erraram por motivos OPOSTOS
+
+1. **Herói institucional** de tela cheia: título de 84px, números contando,
+   moldura girando com o mouse. Ficava entre a pessoa e o produto.
+2. **Mural de fotos derivando**: bonito, sem clique, sem informação. Enfeite
+   caro — exatamente o erro que a correção anterior tentava consertar.
+3. **Notícia**: o que BAIXOU DE PREÇO, em trilho arrastável de cards de
+   verdade. O `caiu` já era calculado e não aparecia em lugar nenhum.
+
+⚠️ **A PRIMEIRA CORREÇÃO EXAGEROU.** Tirar o visual de IA virou tirar TODO o
+movimento, e o site ficou correto e sem graça — *"uma lápide"*, e o Dre tinha
+razão. 📌 A linha não é entre "com" e "sem" animação: é entre movimento
+**ambiente** (bolha girando sozinha, brilho seguindo o mouse no vazio) — que não
+informa nada e é a assinatura do gerador — e movimento **funcional**, que
+responde ao dedo, ao scroll ou a um estado que mudou.
+
+**A aposta do site:** a TopShop tem 1207 leituras de preço guardadas e não
+mostrava nenhuma. Grupo de achadinho mostra print de story; loja grande mostra o
+preço de hoje. **Só quem guarda leitura diária consegue responder "esse preço é
+bom?"** — unha no card, gráfico no drawer, e um veredito que sai da CONTA, não
+de frase fixa ("menor preço do período" só aparece quando hoje é o menor).
+
+Outros acertos do dia: símbolo TS próprio (existe sem a palavra, vira favicon);
+`"Social commerce discovery"` → `"Achados dos nossos vídeos"` (descrevia o
+projeto pra nós e nada pra quem veio de um Reel); e os **dois blocos de três
+quadradinhos** do rodapé saíram — é o layout que todo gerador cospe, e ficava
+justo onde o site devia estar vendendo.
+
+⚠️ **BARRA QUE GRUDA NÃO PODE MUDAR DE TAMANHO.** Elemento `sticky` ocupa espaço
+no fluxo: encolher de 58px pra 46px encurta o documento e o conteúdo SOBE 12px
+debaixo do dedo. E a lupa em `top:29px` era metade de 58 chumbada na mão —
+desalinhava em qualquer estado de altura não enumerado, e eram cinco.
+
+### 🧾 Configuração que ficou valendo
+
+    WHATSAPP_MINA_VOLTAS=150   WHATSAPP_MINA_JANELA=250
+    WHATSAPP_MINA_NOTA=4.0     WHATSAPP_MINA_VENDAS=3    WHATSAPP_MINA_REL=0.5
+    VITRINE_MAX_PRODUTOS=300   (era 200)
+
+### ⏳ Aberto no fim do dia
+
+- ⏳ **`gerar_link_afiliado` devolveu vazio 15 de 15** na rodada real — a fila
+  recebeu ZERO. O motivo agora é impresso; falta rodar e ler.
+- ⏳ **Dia 4 do tráfego pago ≈ 03/09.** A campanha subiu em 30/08 — eu vinha
+  repetindo "dia 4" por inércia e o Dre corrigiu. Não mexer nos anúncios antes.
+- ⏳ Deploy do site novo (`creative_engine/bio_page_builder.py` +
+  `historico_precos.py`) ainda não foi feito.
+
+---
+
 ## 🗓️ Dia 2026-08-30 — o grupo virou três, e a fonte deixou de ser o gargalo
 
 ### 📊 A conta que mudou a estratégia
