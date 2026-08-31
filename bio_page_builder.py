@@ -540,42 +540,40 @@ def _metricas(produtos: list) -> tuple:
     return len(produtos), lojas, medio
 
 
-def _mural_html(produtos: list) -> str:
-    """O mural do topo: três colunas de produto DERIVANDO devagar.
+def _baixaram(produtos: list, quantos: int = 10) -> tuple:
+    """(titulo, lista) — o que abre a página.
 
-    ⚠️ ESTE É O MOVIMENTO QUE VOLTOU, E ELE É O OPOSTO DO QUE SAIU (31/08). A
-    versão anterior tinha bolhas desfocadas girando atrás do texto: movimento
-    ambiente, sem referente, que não informa nada — a assinatura de página
-    gerada. Aqui o que se move É O CATÁLOGO. A mesma técnica (transform
-    infinito) muda de significado quando o que desliza é a mercadoria: vira
-    vitrine de rua, não protetor de tela.
+    ⚠️ AQUI MORAVA UM MURAL DECORATIVO: três colunas de foto de produto
+    derivando, sem clique, `aria-hidden`. Era bonito e não dizia nada — foto de
+    mercadoria passando continua sendo enfeite, só que com enfeite caro.
+    📌 O `caiu` já era calculado pelo `historico_precos` e não aparecia em
+    lugar nenhum da página. Produto que BAIXOU DE PREÇO é notícia; catálogo é
+    catálogo. Notícia é o que faz alguém voltar amanhã.
 
-    📌 `aria-hidden` + `pointer-events:none` de propósito. Estes cards repetem
-    produto que já está na grade logo abaixo; se fossem clicáveis, o mesmo link
-    apareceria duas vezes na página — dobrando o link no HTML (ruim pro Google)
-    e partindo a métrica de clique em dois lugares. Quem quer clicar rola 300px
-    e acha o card de verdade, com preço e botão.
+    O título muda com o dado, e isso não é detalhe: escrever "baixou de preço"
+    num dia em que nada baixou é a primeira mentirinha, e depois dela ninguém
+    acredita no gráfico. Sem quedas, o bloco assume ser o que é — o que acabou
+    de entrar."""
+    caiu = sorted(
+        (p for p in produtos if int((p.get("preco_resumo") or {}).get("caiu") or 0) > 0),
+        key=lambda p: -int(p["preco_resumo"]["caiu"]))
+    if len(caiu) >= 4:
+        return "Baixou de preço", caiu[:quantos]
+    novos = sorted(produtos, key=lambda p: -int(p.get("ts") or 0))
+    return "Acabou de entrar", novos[:quantos]
 
-    Só produto COM foto entra: card sem imagem no mural vira retângulo cinza
-    deslizando, que é exatamente a cara de placeholder que a gente quer evitar.
-    """
-    com_foto = [p for p in produtos if (p.get("imagem") or "").strip()][:18]
-    if len(com_foto) < 6:
-        return ""          # mural ralo é pior que mural nenhum
-    colunas, n = [], len(com_foto)
-    for c in range(3):
-        fatia = com_foto[c * n // 3:(c + 1) * n // 3]
-        if not fatia:
-            continue
-        tijolos = "".join(
-            f'<i style="background-image:url(\'{html.escape(p["imagem"])}\')"></i>'
-            for p in fatia)
-        # duplicado pra emendar sem salto: a animação anda 50% e reinicia
-        colunas.append(
-            f'<div class="mcol" style="--dur:{34 + c * 6}s">'
-            f'<div class="mfita">{tijolos}{tijolos}</div></div>')
-    return ('<div class="mural" aria-hidden="true">' + "".join(colunas)
-            + '<span class="mfade"></span></div>')
+
+def _abertura_html(produtos: list) -> str:
+    titulo, itens = _baixaram(produtos)
+    if not itens:
+        return ""
+    cartas = "".join(_card_grid(p) for p in itens)
+    marca = ('<span class="selo-queda">−{}%</span>' if titulo == "Baixou de preço"
+             else "")
+    return (f'<section class="abertura"><div class="abertura-topo">'
+            f'<h2>{titulo}</h2>'
+            f'<span class="dica">arraste &rarr;</span></div>'
+            f'<div class="trilho fita-rolo">{cartas}</div></section>')
 
 
 def _vitrine_html(produtos: list) -> str:
@@ -621,7 +619,7 @@ def gerar_site(produtos: list) -> str:
     og = (produtos[0].get("imagem", "") if produtos else "") or ""
     grupo_topo = GRUPO_WHATSAPP or GRUPO_TELEGRAM or INSTAGRAM
     return _TEMPLATE.replace("{{VITRINE}}", _vitrine_html(produtos))\
-                    .replace("{{MURAL}}", _mural_html(produtos))\
+                    .replace("{{ABERTURA}}", _abertura_html(produtos))\
                     .replace("{{GRUPO_TOPO}}", html.escape(grupo_topo))\
                     .replace("{{TOTAL}}", str(total))\
                     .replace("{{LOJAS}}", str(lojas))\
@@ -723,14 +721,21 @@ img{max-width:100%}
   transition:background .2s,border-color .2s}
 .zap:hover{background:var(--sup2);border-color:var(--marca)}
 
-/* a busca compacta do topo entra quando a grande sai de cena */
-.busca-topo{flex:1;max-width:420px;opacity:0;transform:translateY(-6px);
-  pointer-events:none;transition:opacity .25s,transform .25s}
-.topo.colado .busca-topo{opacity:1;transform:none;pointer-events:auto}
-@media(max-width:760px){.busca-topo{max-width:none}
-  .topo.colado .marca span,.topo.colado .zap{display:none}}
+/* ⚠️ ANTES A BUSCA SÓ APARECIA DEPOIS DE ROLAR, e parado no topo o header
+   ficava com a marca de um lado, o botão do outro e um vão no meio — vazio
+   justo no instante em que a pessoa chega querendo procurar o que viu. Agora
+   ela é permanente e ocupa o meio.
+   📌 De quebra sumiram os dois campos sincronizados: uma caixa só não tem como
+   sair de sincronia com ninguém. Simplificar foi consequência de acertar o
+   lugar, não economia. */
+.barra .buscabox{flex:1;min-width:0;--h:42px;--fs:15px}
+@media(max-width:760px){
+  /* o polegar precisa da busca inteira; a palavra "topshop" cabe no símbolo */
+  .marca span{display:none}
+  .zap{padding:9px 13px}
+}
 
-/* ── caixa de busca (serve às duas: grande na capa, compacta no topo) ───── */
+/* ── caixa de busca ─────────────────────────────────────────────────────── */
 .buscabox{position:relative;display:block}
 .buscabox input{width:100%;height:var(--h,56px);background:var(--sup);
   border:1px solid var(--linha2);color:var(--ink);border-radius:13px;
@@ -744,12 +749,7 @@ img{max-width:100%}
   width:18px;height:18px;stroke:var(--muted);fill:none;stroke-width:2;
   stroke-linecap:round;transition:stroke .2s;pointer-events:none}
 .buscabox input:focus~.lupa{stroke:var(--marca)}
-.busca-topo .buscabox{--h:40px;--fs:15px}
-.busca-capa{--h:58px;--fs:17px;margin-top:22px;max-width:520px}
-@media(max-width:600px){
-  .busca-capa{--h:52px;--fs:16px;margin-top:16px}   /* 16px = iOS não dá zoom */
-  .busca-topo .buscabox{--fs:16px}
-}
+@media(max-width:600px){.barra .buscabox{--fs:16px}} /* 16px = iOS não dá zoom */
 
 /* ══ CONTROLES: categorias e lojas em fita ════════════════════════════════ */
 .controles{display:flex;flex-direction:column;gap:9px;padding-bottom:14px}
@@ -762,7 +762,11 @@ img{max-width:100%}
   cursor:pointer;scroll-snap-align:start;
   transition:color .18s,border-color .18s,background .18s}
 .chip:hover{color:var(--ink);border-color:var(--linha2);background:var(--sup)}
-.chip[aria-pressed="true"]{background:var(--marca);color:#fff;border-color:var(--marca)}
+/* ⚠️ O CHIP ATIVO ERA ROSA E DISPUTAVA COM O BOTÃO DE COMPRAR. Um acento só
+   funciona quando ele significa UMA coisa: aqui o rosa é AÇÃO (ver na loja,
+   selo de desconto, foco). Estado de filtro é orientação, não ação — vai de
+   branco, que é mais forte e não mente sobre a hierarquia. */
+.chip[aria-pressed="true"]{background:var(--ink);color:#0B0C0F;border-color:var(--ink)}
 .loja{flex:none;border:1px solid transparent;background:var(--sup);color:var(--muted);
   font:inherit;font-size:13px;font-weight:650;padding:8px 14px;border-radius:999px;
   cursor:pointer;scroll-snap-align:start;
@@ -948,44 +952,31 @@ footer a{border-bottom:1px solid var(--linha)}
    FUNCIONAL, que responde ao dedo, ao scroll ou a um estado que mudou. O
    primeiro saiu e não volta. O segundo é o que faz parecer produto caro. */
 
-/* ── capa: o texto de um lado, o CATÁLOGO derivando do outro ────────────── */
-.capa{display:grid;grid-template-columns:1.02fr .98fr;gap:clamp(20px,4vw,54px);
-  align-items:center;padding:clamp(18px,3vw,44px) 0 clamp(16px,2.4vw,30px)}
+/* ── capa: só a voz. A busca subiu pro topo e a notícia vem logo abaixo ── */
+.capa{padding:clamp(22px,3.4vw,44px) 0 clamp(14px,2vw,24px);max-width:60ch}
 .olho{display:inline-flex;align-items:center;gap:8px;font-size:11.5px;font-weight:700;
-  letter-spacing:.15em;text-transform:uppercase;color:var(--muted);margin-bottom:15px}
+  letter-spacing:.15em;text-transform:uppercase;color:var(--muted);margin-bottom:13px}
 .olho::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--marca)}
-.capa h1{font-size:clamp(30px,4.6vw,52px);font-weight:800;font-stretch:110%;
-  line-height:1.03;letter-spacing:-.04em;text-wrap:balance}
+.capa h1{font-size:clamp(28px,4.2vw,46px);font-weight:800;font-stretch:110%;
+  line-height:1.05;letter-spacing:-.04em;text-wrap:balance}
 .capa h1 em{font-style:normal;color:var(--marca)}
-.capa .sub{color:var(--muted);font-size:clamp(14px,1.6vw,16.5px);margin-top:14px;
-  max-width:44ch}
+.capa .sub{color:var(--muted);font-size:clamp(14px,1.6vw,16px);margin-top:13px;
+  max-width:52ch}
 
-.mural{position:relative;height:min(60vh,470px);overflow:hidden;border-radius:20px;
-  display:grid;grid-template-columns:repeat(3,1fr);gap:10px;
-  pointer-events:none;-webkit-mask-image:linear-gradient(#000 62%,transparent);
-  mask-image:linear-gradient(#000 62%,transparent)}
-.mcol{overflow:hidden}
-.mfita{display:flex;flex-direction:column;gap:10px;
-  animation:deriva var(--dur,38s) linear infinite}
-.mcol:nth-child(2) .mfita{animation-direction:reverse}
-@keyframes deriva{to{transform:translateY(-50%)}}
-.mfita i{display:block;aspect-ratio:1;border-radius:13px;background:#F4F5F7;
-  background-size:cover;background-position:center;border:1px solid var(--linha);
-  flex:none}
-.mfade{position:absolute;inset:0;pointer-events:none;
-  background:linear-gradient(180deg,transparent 55%,var(--bg))}
-@media(max-width:900px){
-  .capa{grid-template-columns:1fr;gap:16px;padding-top:10px}
-  /* no celular o mural vira uma FAIXA: uma tira de 96px que dá o recado sem
-     empurrar o produto pra fora da primeira tela */
-  .mural{height:96px;grid-template-columns:1fr;border-radius:14px;
-    -webkit-mask-image:none;mask-image:none}
-  .mcol:nth-child(n+2){display:none}
-  .mfita{flex-direction:row;animation-name:derivaX;--dur:30s}
-  @keyframes derivaX{to{transform:translateX(-50%)}}
-  .mfita i{width:96px;height:96px;aspect-ratio:auto}
-  .mfade{background:linear-gradient(90deg,transparent 80%,var(--bg))}
-}
+/* ── abertura: a notícia do dia, em trilho ──────────────────────────────
+   ⚠️ Aqui rodava um mural de fotos derivando, sem clique. O movimento era
+   bonito e o conteúdo era zero. Um trilho ARRASTÁVEL de produto que baixou de
+   preço tem a mesma energia visual e cada peça é notícia — e clicável, o que
+   o mural nunca foi. */
+.abertura{padding:clamp(6px,1.4vw,14px) 0 clamp(18px,2.6vw,30px)}
+.abertura-topo{display:flex;align-items:baseline;justify-content:space-between;
+  gap:12px;margin-bottom:13px}
+.abertura h2{font-size:clamp(18px,2.4vw,24px);font-weight:800;letter-spacing:-.03em}
+.abertura .dica{font-size:12px;color:var(--muted);white-space:nowrap}
+.trilho{display:flex;gap:clamp(9px,1.2vw,14px);scroll-snap-type:x mandatory;
+  padding-bottom:6px}
+.trilho .card{flex:none;width:min(210px,62vw);scroll-snap-align:start}
+@media(max-width:600px){.trilho .card{width:60vw;max-width:220px}}
 
 /* ── header em vidro ao rolar ───────────────────────────────────────────── */
 .topo.colado{background:rgba(11,12,15,.72);
@@ -1019,7 +1010,6 @@ footer a{border-bottom:1px solid var(--linha)}
 .prova-linha b{font-variant-numeric:tabular-nums}
 
 @media(prefers-reduced-motion:reduce){
-  .mfita{animation:none!important}
   .card.saindo{opacity:1;transform:none}
 }
 </style>
@@ -1038,38 +1028,32 @@ footer a{border-bottom:1px solid var(--linha)}
 <div class="topo" id="topo">
   <div class="wrap barra">
     <a class="marca" href="#topo" aria-label="topshop"><svg class="ts" viewBox="0 0 32 32" aria-hidden="true"><path d="M6 0h13.4L32 12.6V26a6 6 0 0 1-6 6H6a6 6 0 0 1-6-6V6a6 6 0 0 1 6-6Z" fill="#FF3D6E"/><circle cx="23.6" cy="8.4" r="2.1" fill="#0B0C0F" opacity=".55"/><path d="M6.6 12.4h13.2v3.5h-4.8v10.4h-3.6V15.9H6.6z" fill="#fff"/></svg><span>top<i>shop</i></span></a>
-    <label class="busca-topo">
-      <span class="buscabox">
-        <input id="busca-topo" type="search" placeholder="Buscar achadinho"
-               autocomplete="off" aria-label="Buscar produto">
-        <svg class="lupa" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg>
-      </span>
+    <label class="buscabox">
+      <input id="busca" type="search" placeholder="O que você viu no vídeo?"
+             autocomplete="off" aria-label="Buscar produto">
+      <svg class="lupa" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg>
     </label>
-    <a class="zap" href="{{GRUPO_TOPO}}" target="_blank" rel="noopener">Entrar no grupo</a>
+    <a class="zap" href="{{GRUPO_TOPO}}" target="_blank" rel="noopener">Grupo</a>
   </div>
 </div>
 
 <main class="wrap">
 
-  <!-- ⚠️ O HERÓI VOLTOU, MAS DE OUTRA ESPÉCIE. O antigo era institucional:
-       título de 84px, três números contando e uma moldura girando com o mouse,
-       tudo ENTRE a pessoa e o produto. Este é feito DE produto — o mural à
-       direita é o catálogo derivando. O conceito de herói nunca foi o problema;
-       o problema era um herói que não mostrava mercadoria. -->
+  <!-- ⚠️ TERCEIRA VERSÃO DESTA ABERTURA, e as duas anteriores erraram por
+       motivos OPOSTOS. A primeira era um herói institucional de tela cheia,
+       que ficava entre a pessoa e o produto. A segunda foi um mural de fotos
+       derivando: bonito, sem clique, sem informação — enfeite caro.
+       📌 O que abre a página agora é NOTÍCIA: o que baixou de preço hoje, com
+       o título mudando quando não baixou nada. A voz da marca cabe em três
+       linhas acima; o resto da primeira dobra é mercadoria clicável. -->
   <section class="capa">
-    <div>
-      <span class="olho">Achados dos nossos vídeos</span>
-      <h1>Viralizou.<br><em>A gente achou.</em></h1>
-      <p class="sub">Todo produto que aparece nos nossos vídeos entra aqui no
-         mesmo dia — com link direto e preço conferido.</p>
-      <label class="busca-capa buscabox">
-        <input id="busca" type="search" placeholder="O que você viu no vídeo?"
-               autocomplete="off" aria-label="Buscar produto">
-        <svg class="lupa" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg>
-      </label>
-    </div>
-    {{MURAL}}
+    <span class="olho">Achados dos nossos vídeos</span>
+    <h1>Viralizou. <em>A gente achou.</em></h1>
+    <p class="sub">A gente confere o preço todo dia. Clica em qualquer produto
+       pra ver o histórico e saber se hoje é hora de comprar.</p>
   </section>
+
+  {{ABERTURA}}
 
   <section id="produtos">
     {{VITRINE}}
@@ -1221,23 +1205,15 @@ if (caixaCats) caixaCats.addEventListener('click', function(e){
    numa e rolar até a outra mostraria a página filtrada com o campo vazio — e a
    pessoa não teria como saber por que faltam produtos. Cada uma escreve no
    mesmo `st.q` e espelha o texto na irmã. */
-var caixas = [].slice.call(document.querySelectorAll('input[type=search]'));
-var inp = caixas[0];
-caixas.forEach(function(c){
-  c.addEventListener('input', function(e){
-    var v = e.target.value;
-    st.q = v.toLowerCase().trim();
-    caixas.forEach(function(o){ if (o !== e.target) o.value = v; });
-    aplicar();
+var inp = document.getElementById('busca');
+if (inp){
+  inp.addEventListener('input', function(e){
+    st.q = e.target.value.toLowerCase().trim(); aplicar();
   });
-});
-if (caixas.length) document.addEventListener('keydown', function(e){
-  if (e.key !== '/' || caixas.indexOf(document.activeElement) > -1) return;
-  e.preventDefault();
-  /* foca a que está de fato VISÍVEL: a compacta só existe depois de rolar */
-  var alvo = caixas.filter(function(c){ return c.offsetParent !== null; });
-  (alvo[alvo.length - 1] || caixas[0]).focus();
-});
+  document.addEventListener('keydown', function(e){
+    if (e.key === '/' && document.activeElement !== inp){ e.preventDefault(); inp.focus(); }
+  });
+}
 
 /* ── o topo encolhe ao grudar ────────────────────────────────────────────
    ⚠️ NÃO É `position:sticky` SOZINHO. Sticky mantém a busca na tela, mas com o
@@ -1333,17 +1309,7 @@ var obsNum = new IntersectionObserver(function(ents){
 }, {threshold: .6});
 document.querySelectorAll('.prova-linha b').forEach(function(b){ obsNum.observe(b); });
 
-/* ── o mural para quando some da tela ────────────────────────────────────
-   Animação rodando fora da vista gasta bateria e mantém o celular acordado
-   sem nada em troca. */
-var mural = document.querySelector('.mural');
-if (mural) new IntersectionObserver(function(ents){
-  ents.forEach(function(en){
-    mural.querySelectorAll('.mfita').forEach(function(f){
-      f.style.animationPlayState = en.isIntersecting ? 'running' : 'paused';
-    });
-  });
-}).observe(mural);
+
 /* ══ O DRAWER — a única coisa nesta página que o concorrente não copia ═════
    Ele existe pra responder a pergunta que o card não cabe: "esse preço é
    bom?". Não é "ver mais": é o histórico que só quem guarda leitura diária há
