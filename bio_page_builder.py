@@ -576,6 +576,29 @@ def _abertura_html(produtos: list) -> str:
             f'<div class="trilho fita-rolo">{cartas}</div></section>')
 
 
+def _grupo_faixa_html() -> str:
+    """O convite pro grupo, no meio da vitrine.
+
+    ⚠️ A PROMESSA AQUI É LITERAL, e é por isso que ela funciona: o sistema
+    confere preço todo dia (`historico_precos`), esconde link morto sozinho
+    (health-check) e posta no grupo 24x por dia. Nenhuma frase desta faixa é
+    marketing — é a descrição do que a máquina faz.
+    📌 Promessa que o produto cumpre não precisa de ponto de exclamação."""
+    destino = GRUPO_WHATSAPP or GRUPO_TELEGRAM or INSTAGRAM
+    if not destino:
+        return ""
+    return (
+        '<section class="grupo-faixa">'
+        '<div class="txt">'
+        '<h3>A gente confere esses preços <em>todo dia</em>.</h3>'
+        '<p>Quando um achado baixa de verdade, ele vai pro grupo na hora — '
+        'com o link já pronto. É de graça e você sai quando quiser.</p>'
+        '</div>'
+        f'<a class="cta" href="{html.escape(destino)}" target="_blank" '
+        'rel="noopener">Entrar no grupo <span>&rarr;</span></a>'
+        '</section>')
+
+
 def _vitrine_html(produtos: list) -> str:
     """Controles + grade. Os cards vêm prontos do servidor (aparecem no Google
     e funcionam sem JS); o JS só mostra e esconde na hora de filtrar."""
@@ -584,9 +607,19 @@ def _vitrine_html(produtos: list) -> str:
                 'A vitrine enche toda semana.</p>')
     controles = ('<div class="controles">' + _toggle_plataforma_html(produtos)
                  + _filtros_html(produtos) + "</div>")
+    # ⚠️ A FAIXA DO GRUPO ENTRA NO MEIO DA GRADE, não antes dela. Quem chega
+    # pelo link do Reels quer ver achadinho; convite antes do produto é banner,
+    # e banner a pessoa aprendeu a pular. Depois de uma leva de cards ela já
+    # gostou do que viu, e aí o convite é a próxima coisa lógica.
+    # 📌 O card fica FORA do filtro: `.grade` é o que o JS mostra e esconde, e
+    # uma seção presa lá dentro sumiria quando alguém filtrasse por categoria.
+    corte = min(len(produtos), 12)
     cards = "\n".join(_card_grid(p, novo=(i < 3))
-                      for i, p in enumerate(produtos))
+                      for i, p in enumerate(produtos[:corte]))
+    resto = "\n".join(_card_grid(p) for p in produtos[corte:])
     grade = f'<div class="grade" id="grade-prod">{cards}</div>'
+    if resto:
+        grade += _grupo_faixa_html() + f'<div class="grade">{resto}</div>'
     vazio = ('<p class="vazio" id="sem-res" style="display:none">'
              '<b>Esse a gente ainda não garimpou</b>'
              'Tenta outra busca — a vitrine enche toda semana.</p>')
@@ -776,59 +809,129 @@ img{max-width:100%}
 .loja .n{opacity:.6;margin-left:6px;font-variant-numeric:tabular-nums;font-style:normal}
 .loja:disabled{opacity:.34;cursor:not-allowed}
 
-/* ══ GRADE: densa, card premium ═══════════════════════════════════════════ */
-.grade{display:grid;gap:clamp(9px,1.2vw,14px);
+/* ══ GRADE ═══════════════════════════════════════════════════════════════
+   ⚠️ O CARD ERA QUASE INVISÍVEL (31/08). `--sup:#131519` sobre `--bg:#0B0C0F`
+   é 2% de diferença de luminosidade: a grade virava uma mancha só, e o olho
+   não tinha onde pousar. Escuro sem CAMADA não lê como caro, lê como barato —
+   a diferença entre os dois é profundidade, não saturação.
+   📌 Três coisas fazem um card escuro parecer objeto: superfície mais clara
+   que o fundo, um fio de luz na borda de cima (como plástico pegando luz), e
+   uma sombra que o descola da página. Nenhuma delas é decoração — todas são
+   pistas de que aquilo ali é uma COISA, clicável. */
+.grade{display:grid;gap:clamp(10px,1.3vw,16px);
   grid-template-columns:repeat(auto-fill,minmax(196px,1fr))}
 .card{background:var(--sup);border:1px solid var(--linha);border-radius:var(--r);
   overflow:hidden;display:flex;flex-direction:column;position:relative;
-  transition:opacity .4s,transform .22s,border-color .22s,background .22s}
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.055), 0 1px 2px rgba(0,0,0,.4);
+  transform-style:preserve-3d;
+  transition:opacity .4s,transform .32s cubic-bezier(.22,.7,.2,1),
+    border-color .22s,background .22s,box-shadow .32s}
 .card.esconde{display:none}
-.js .card{opacity:0;transform:translateY(12px)}
+.js .card{opacity:0;transform:translateY(16px) scale(.985)}
 .js .card.dentro{opacity:1;transform:none}
-.card:hover{border-color:var(--linha2);background:var(--sup2);transform:translateY(-3px)}
+.card:hover{background:var(--sup2);border-color:rgba(255,61,110,.42);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.09), 0 20px 46px rgba(0,0,0,.55),
+             0 0 0 1px rgba(255,61,110,.10)}
+.card.saindo{opacity:0;transform:scale(.96);pointer-events:none}
+
 .card .foto{aspect-ratio:1;position:relative;overflow:hidden;background:#F4F5F7}
 .card .foto img{width:100%;height:100%;object-fit:cover;display:block;opacity:0;
-  transition:opacity .35s,transform .35s}
+  transition:opacity .35s,transform .5s cubic-bezier(.22,.7,.2,1)}
 .card .foto img.ok{opacity:1}
-.card:hover .foto img.ok{transform:scale(1.04)}
+.card:hover .foto img.ok{transform:scale(1.07)}
 .card .foto .fb{position:absolute;inset:0;display:none;place-items:center;font-size:42px;
   font-style:normal}
-.card .foto.sem-foto{background:var(--sup2)}
+.card .foto.sem-foto{background:linear-gradient(160deg,var(--sup2),var(--sup))}
 .card .foto.sem-foto .fb{display:grid}
 .card .foto.carregando{background-image:linear-gradient(100deg,
   #EDEEF1 42%,#F8F9FA 50%,#EDEEF1 58%);background-size:280% 100%;
   animation:esqueleto 1.2s linear infinite}
 @keyframes esqueleto{from{background-position:160% 0}to{background-position:-60% 0}}
-.selo{position:absolute;top:8px;left:8px;font-size:10.5px;font-weight:750;
-  padding:4px 8px;border-radius:7px;letter-spacing:.02em;
-  background:rgba(11,12,15,.82);backdrop-filter:blur(6px);
-  border:1px solid var(--linha);color:var(--ink);z-index:2}
-.selo.novo{background:rgba(11,12,15,.82);color:var(--ink);border-color:var(--linha2)}
-/* ⚠️ o desconto é o único selo COLORIDO: é o número que decide o clique */
-.selo.off{background:var(--marca);color:#fff;border-color:transparent;left:auto;right:8px}
-.selo.plat{top:auto;bottom:8px}
-.card .corpo{padding:11px 12px 13px;display:flex;flex-direction:column;gap:8px;flex:1}
-.card h3{font-size:13.5px;font-weight:500;line-height:1.35;color:var(--ink);
-  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.card .ver{display:flex;align-items:center;justify-content:center;gap:6px;
-  background:var(--sup2);border:1px solid var(--linha2);border-radius:10px;
-  padding:11px;font-size:13px;font-weight:700;margin-top:auto;min-height:44px;
-  transition:background .2s,border-color .2s}
-.card:hover .ver{background:var(--marca);border-color:var(--marca);color:#fff}
+/* véu que escurece o pé da foto: o selo branco some sobre foto clara */
+.card .foto::before{content:"";position:absolute;inset:auto 0 0;height:38%;
+  pointer-events:none;background:linear-gradient(transparent,rgba(11,12,15,.5))}
 
-.pr{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap}
+/* ── selos ───────────────────────────────────────────────────────────────
+   ⚠️ O DESCONTO É O PRODUTO. Num site de achadinho a pessoa não procura
+   "cortador de legumes", procura "quanto tá abatido" — então o % é o elemento
+   mais gritante da grade inteira, e o resto dos selos se cala pra ele
+   aparecer. Antes os três tinham o mesmo peso e nenhum era lido. */
+.selo{position:absolute;top:9px;left:9px;font-size:10.5px;font-weight:700;
+  padding:4px 9px;border-radius:8px;letter-spacing:.02em;
+  background:rgba(11,12,15,.74);backdrop-filter:blur(8px);
+  border:1px solid rgba(255,255,255,.12);color:var(--ink);z-index:2}
+.selo.novo{color:var(--ink)}
+.selo.off{left:auto;right:9px;font-size:14px;font-weight:850;letter-spacing:-.02em;
+  padding:6px 11px;border-radius:10px;border-color:transparent;color:#fff;
+  background:linear-gradient(160deg,var(--marca),var(--marca-esc));
+  box-shadow:0 6px 18px rgba(255,61,110,.34)}
+.selo.plat{top:auto;bottom:9px;font-size:10px;background:rgba(11,12,15,.6)}
+
+.card .corpo{padding:12px 13px 14px;display:flex;flex-direction:column;gap:9px;flex:1}
+.card h3{font-size:13px;font-weight:500;line-height:1.4;color:var(--muted);
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+  transition:color .22s}
+.card:hover h3{color:var(--ink)}
+
+/* ── botão: enche da esquerda pra direita no hover ─────────────────────── */
+.card .ver{position:relative;overflow:hidden;isolation:isolate;
+  display:flex;align-items:center;justify-content:center;gap:6px;
+  background:var(--sup2);border:1px solid var(--linha2);border-radius:11px;
+  padding:11px;font-size:13px;font-weight:750;margin-top:auto;min-height:44px;
+  transition:border-color .22s,color .22s}
+.card .ver::before{content:"";position:absolute;inset:0;z-index:-1;
+  background:linear-gradient(100deg,var(--marca),var(--marca-esc));
+  transform:scaleX(0);transform-origin:left;
+  transition:transform .34s cubic-bezier(.22,.7,.2,1)}
+.card:hover .ver{border-color:transparent;color:#fff}
+.card:hover .ver::before{transform:scaleX(1)}
+.card .ver span{display:inline-block;transition:transform .28s}
+.card:hover .ver span{transform:translateX(4px)}
+
+/* ── preço: o número é o argumento, então ele manda ─────────────────────
+   ⚠️ 20px NÃO É PREÇO DE SITE DE DESCONTO. Era do mesmo tamanho do nome do
+   produto, e a pessoa lia o card inteiro pra achar o que só interessava ela. */
+.pr{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
 .pr b,.pr s{white-space:nowrap}
-.pr b{font-size:20px;font-weight:800;letter-spacing:-.03em;
-  font-variant-numeric:tabular-nums}
-.pr b i{font-style:normal;font-weight:600;font-size:.62em;margin-right:2px;
-  position:relative;top:-.1em;color:var(--muted)}
-.pr s{color:var(--muted);font-size:12px}
-.afer{font-size:10.5px;color:var(--muted);margin-top:-3px;line-height:1.35}
-.afer.caindo{color:var(--ok)}
+.pr b{font-size:25px;font-weight:850;letter-spacing:-.035em;color:var(--ink);
+  font-variant-numeric:tabular-nums;line-height:1.05}
+.pr b i{font-style:normal;font-weight:600;font-size:.5em;margin-right:3px;
+  position:relative;top:-.35em;color:var(--muted)}
+.pr s{color:var(--muted);font-size:12.5px;opacity:.8}
+.afer{font-size:10.5px;color:var(--muted);margin-top:-4px;line-height:1.4;
+  display:flex;align-items:center;gap:5px}
+/* queda de preço é notícia: ganha cor, seta e peso */
+.afer.caindo{color:var(--ok);font-weight:650}
+.afer.caindo::before{content:"↓";font-weight:850;font-size:12px}
 
 .vazio{text-align:center;padding:56px 20px;color:var(--muted)}
 .vazio b{display:block;color:var(--ink);font-size:19px;margin-bottom:7px;font-weight:700}
 
+/* ══ FAIXA DO GRUPO ══════════════════════════════════════════════════════
+   O clique de afiliado é uma venda; o membro do grupo é uma anuidade. A faixa
+   fica DEPOIS da primeira leva de produtos, não antes: quem acabou de chegar
+   quer ver achadinho, e o convite convence melhor quem já gostou do que viu. */
+.grupo-faixa{position:relative;overflow:hidden;border-radius:18px;
+  border:1px solid rgba(255,61,110,.28);
+  background:radial-gradient(120% 140% at 12% 0%,rgba(255,61,110,.16),transparent 62%),
+             var(--sup);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.07);
+  padding:clamp(20px,3vw,32px);margin:clamp(22px,3vw,34px) 0;
+  display:flex;align-items:center;gap:clamp(16px,3vw,34px);flex-wrap:wrap}
+.grupo-faixa .txt{flex:1;min-width:min(280px,100%)}
+.grupo-faixa h3{font-size:clamp(19px,2.6vw,26px);font-weight:800;
+  letter-spacing:-.03em;line-height:1.15}
+.grupo-faixa h3 em{font-style:normal;color:var(--marca)}
+.grupo-faixa p{color:var(--muted);font-size:14.5px;margin-top:9px;max-width:56ch}
+.grupo-faixa .cta{flex:none;display:flex;align-items:center;gap:9px;
+  background:linear-gradient(100deg,var(--marca),var(--marca-esc));color:#fff;
+  font-weight:800;font-size:15px;padding:15px 26px;border-radius:13px;
+  min-height:52px;box-shadow:0 12px 30px rgba(255,61,110,.32);
+  transition:transform .2s,box-shadow .28s}
+.grupo-faixa .cta:hover{transform:translateY(-2px);
+  box-shadow:0 18px 44px rgba(255,61,110,.46)}
+.grupo-faixa .cta span{transition:transform .28s}
+.grupo-faixa .cta:hover span{transform:translateX(4px)}
 
 /* ══ A LINHA DO PREÇO ═════════════════════════════════════════════════════
    O argumento da casa, em dois tamanhos: unha no card, gráfico no drawer. */
