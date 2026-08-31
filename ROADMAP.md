@@ -522,6 +522,203 @@ Ex.: "O segredo pra ter um iPhone 17 sem gastar / uma fortuna ✨".
 
 ---
 
+## 🗓️ Dia 2026-08-30 — o grupo virou três, e a fonte deixou de ser o gargalo
+
+### 📊 A conta que mudou a estratégia
+
+Eu tinha cravado **11,3 achadinhos bons/dia** como se fosse teto do mundo. O Dre
+rebateu: *"não é difícil achar produto não clau, quantos milhares de produtos
+existem por aí?"* — e estava certo. 11,3 é o que a **esteira atual** produz, com
+as fontes que ela escuta. É propriedade do encanamento, não do mercado.
+
+⚠️ **Eu ancorei numa medição e a tratei como lei.** O número era real; a
+conclusão que tirei dele, não. Medir quanto uma tubulação entrega não diz nada
+sobre quanto existe pra ela puxar.
+
+**A conversão medida (`hunter_seen.sqlite`):**
+
+    ok    454      fail  301      →  60,1%
+
+E esse 60% é **piso** pro WhatsApp, não teto: boa parte dos `fail` do Telegram é
+o download do vídeo (`msg.download_media`, 3 tentativas), etapa que o minerador
+do WhatsApp nem tem — ele só precisa do NOME do produto.
+
+    216 mensagens varridas/dia  ×  60%  =  ~130 achadinhos/dia
+
+Contra 24/dia hoje e 72 como meta. Sobra.
+
+### 🔁 O achadinho era queimado PARA SEMPRE
+
+`estado["links"]` era lista sem data e `_candidatos` cortava tudo que estivesse
+nela: **cada produto valia um envio na vida inteira do grupo**. Com um grupo
+pequeno ninguém via; virou teto duro quando a pergunta passou a ser "72 por
+dia" — sem repost, os ~11 que entram por dia são o máximo diário com QUALQUER
+catálogo.
+
+`enviados_em` guarda QUANDO cada link foi ao ar; `_bloqueados` responde "foi
+recente" no lugar de "já foi alguma vez". `WHATSAPP_REPOST_DIAS=21` (0 = antigo).
+
+📌 **A migração carimba os links antigos com a data de HOJE, de propósito.** Ler
+a lista antiga como "sem data = pode repetir" soltaria centenas de repetições na
+primeira rodada depois do deploy — o grupo levaria uma enxurrada e a culpa
+pareceria do WhatsApp. Carimbado, nada repete por 21 dias e o recurso entra
+sozinho, no ritmo certo. Medido na VPS: **111 links carimbados**.
+
+### 🐛 Quatro bugs que só aparecem quando o sistema cresce
+
+Todos da mesma família: **estado ou suposição que era invisível enquanto só
+existia UM de alguma coisa.**
+
+**1. `env_set` gravou valor com quebra de linha.** O Dre colou
+
+    env_set.py WHATSAPP_GRUPOS 'Grupo #1;Grupo #2;
+    Grupo #3'
+
+com um Enter dentro das aspas. O `.env` ficou com o valor em duas linhas, e todo
+carregador do projeto lê linha a linha e pula o que não tem `=`. **O grupo #3
+sumiu em silêncio, com um ✅ impresso.** É a falha que o `env_set.py` inteiro
+existe pra impedir, entrando por outra porta. Guard: valor com `\n` é recusado
+antes de qualquer escrita.
+
+**2. "Ainda carregando" era reportado como "sessão caída".** O ciclo só
+perguntava se a lista de conversas apareceu em 25s e, no não, mandava rodar
+`--login`. O print que ele mesmo tira mostrava o **splash com a barra de
+progresso** — sessão viva, sincronizando (o Dre tinha acabado de apagar todas as
+conversas e criar 3 grupos, que é justo quando o WhatsApp tem mais estado pra
+reconciliar).
+
+📌 **Timeout não é diagnóstico.** "Não achei em 25s" tem três causas
+(deslogado / carregando / marcação nova) e o código escolhia sempre a mais
+assustadora — a única que manda escanear QR à toa, que é o padrão que faz o
+WhatsApp desconfiar da conta. `_estado_sessao` separa os três; `_esperar_sessao`
+dá 90s a mais só pra quem está de fato carregando.
+
+⚠️ `SEL_QR_ESTRITO` existe porque `SEL_QR` termina num `canvas` pelado, que
+casaria com qualquer canvas do splash e desfaria a correção.
+
+**3. Um espaço reprovava os 3 grupos.** `_confere_conversa` comparava o nome do
+`.env` com o cabeçalho, os dois via `_sem_emoji` — que troca cada símbolo por UM
+espaço. Os lados têm símbolos em quantidades diferentes:
+
+    .env      "ACHADINHOS VIP TOPSHOP ⭐ #1"  → "…TOPSHOP" + 4 espaços + "1"
+    cabeçalho "ACHADINHOS VIP TOPSHOP  #1"   → "…TOPSHOP" + 3 espaços + "1"
+
+O cabeçalho vem sem a ⭐ porque o WhatsApp Web renderiza emoji como `<img>` e
+`innerText` não devolve imagem — mas os espaços que a cercavam ficam. Sintoma
+cruel: *"abri a conversa ERRADA"* com o nome certo impresso ao lado. O clique
+estava certo; a comparação é que não.
+
+📌 **Normalização pela metade é pior que nenhuma:** some com a diferença óbvia
+(o emoji) e deixa a invisível (o espaço), que é a que ninguém procura.
+`_achatar` colapsa o espaço depois de tirar o símbolo.
+
+**4. A caixa de busca guardava a busca anterior.** `_abrir_grupo` clica e digita
+mas nunca limpava. Dos 4 grupos-fonte, **1 abriu e 3 não**: a 2ª busca virou
+`OFERTAS RELÂMPAGO #106 @espiadeofertinhasPromos da Alana #1`.
+
+📌 **Estado que sobra de uma iteração é invisível enquanto só existe uma.** O
+postador tem esse defeito desde sempre e nunca sofreu, porque os grupos dele
+estão FIXADOS e são achados "direto da lista, sem busca". As fontes não estão.
+
+### 🕵️ `whatsapp_minerador.py` — o cano novo pra uma máquina que já funciona
+
+Lê os grupos-fonte, tira o nome do produto, procura na API de afiliado e grava
+na fila com o NOSSO link. **Não é máquina nova:** reusa o caminho do hunter do
+Telegram inteiro (`extrair_termo_produto` → `minerar_oportunidades` →
+`gerar_link_afiliado` → `_registrar_no_site`), que é código já rodado 454 vezes
+com sucesso. Só a origem do texto muda.
+
+- ⚠️ **NUNCA ESCREVE EM GRUPO NENHUM**, e a garantia é estrutural: não existe
+  chamada de envio no arquivo, com teste que falha se alguém acrescentar uma.
+- ⚠️ **SESSÃO ÚNICA, DOIS PROGRAMAS.** O Dre decidiu usar o MESMO número pra
+  postar e pra ler (*"assim a gente faz o wa business só com grupos, difícil o
+  whatsApp derrubar o número"*). Consequência **técnica**, não de risco: os dois
+  dirigem o mesmo `user_data_dir`, e dois Chromium num perfil só corrompem a
+  sessão — caminho curto pro QR novo. `travar`/`destravar` moram no
+  `whatsapp_playwright` e são UMA implementação pros dois (duas divergem no
+  primeiro conserto e param de se enxergar). O postador espera 4min porque tem
+  hora marcada; o minerador cede em 90s.
+- **Ritmo de gente:** ordem sorteada, nem todo grupo em toda rodada, pausa de
+  20–75s, rolagem antes de ler.
+- `WHATSAPP_FONTES` **nunca** cai pro `WHATSAPP_GRUPOS`: sem isso o minerador
+  leria o que nós publicamos e reciclaria o próprio conteúdo.
+
+### 🔬 O `--diag` provou que estava certo — e que não havia nada pra minerar
+
+Primeiro `--diag` real, nos 4 grupos recém-entrados:
+
+    div[data-id]  2
+    'As mensagens e ligações são protegidas com a criptografia...'
+    'Você entrou usando um link de convite\n592 membros'
+
+**As 8 linhas lidas eram TODAS recado do sistema.** Zero produto — porque ele
+entrou nos grupos 22:27–22:36 e eles têm mensagem temporária.
+
+⚠️ **FONTE É FLUXO, NÃO ESTOQUE.** Ao entrar num grupo não se herda histórico.
+Não existe "varrer uma vez e ter fonte pro ano": o que não for lido dentro da
+janela (24h ou 7 dias) morre. Por isso o minerador roda várias vezes ao dia, e
+por isso perder um dia custa um dia.
+
+Recado do sistema custa igual a produto (vaga do orçamento, linha no
+`hunter_seen`, e chamada de API se o extrator achasse um "termo" em "entrou
+usando um link de convite"). Filtro por FRASE e não por marcação: esses textos
+são do WhatsApp, não do dono do grupo — marcação muda toda semana, essas frases
+não.
+
+### 🔧 Configuração que ficou valendo
+
+    WHATSAPP_MAX_DIA=24        (era 6)   achadinhos/dia
+    WHATSAPP_MAX_RODADA=1      (era 2)   ⚠️ ver abaixo
+    WHATSAPP_MAX_MSG_DIA=80              24 × 3 grupos = 72 mensagens
+    WHATSAPP_REPOST_DIAS=21              novo
+    WHATSAPP_MINA_GRUPOS=3               de 4 fontes
+
+⚠️ **`MAX_RODADA=1` não é detalhe.** `_agenda_do_dia` sorteia **`MAX_DIA`
+horários**, mas `resta_dia` também corta em `MAX_DIA` *achadinhos*. Com 24 slots
+× 2 por rodada, os 24 achadinhos acabam no slot 12 — **o grupo fica mudo das
+13:00 às 21:00 e o log não reclama de nada.** Simulado: 24 slots cabem no
+`GAP_MIN=35`, de 07:07 a 21:35, nenhum truncado.
+
+### 📐 A aritmética dos grupos (pra não repetir a discussão)
+
+WhatsApp não tem "postar em vários grupos" — cada grupo é um envio
+(`for g in abertos:` + `sleep(45..120)`). Então **grupo não multiplica conteúdo,
+multiplica trabalho**:
+
+| | mensagens/dia | sessão aberta |
+|---|---|---|
+| 6 achadinhos × 1 grupo | 6 | ~9 min |
+| 24 × 3 grupos (hoje) | 72 | ~1h45 |
+| 6 × 30 grupos | 180 | ~4h20 |
+| 72 × 30 grupos | 2160 | **~53h — não cabe no dia** |
+
+📌 **O número de grupos segue o número de PESSOAS, não a ambição.** Abre o grupo
+seguinte quando o atual estiver em ~920 de 1024. A concorrente com 1072 membros
+posta 72/dia em **um** grupo = 72 mensagens; os mesmos 72 em 30 grupos = 2160.
+Não é a mesma coisa.
+
+Se o objetivo virar "um envio, muita gente", o instrumento é **Canal do
+WhatsApp** (seguidores ilimitados, 1 post = 1 envio), não mais grupos.
+
+### ✅ Verificado hoje / ⏳ ainda não
+
+- ✅ 3 grupos conferidos (`✔️ conversa conferida` nos três) e envio simulado
+- ✅ repost de 21 dias, com 111 links carimbados na migração
+- ✅ minerador abre os 4 grupos e lê o DOM
+- ✅ foto real chegando nos grupos (o problema da FIGURINHA de 19/08 está
+  resolvido — `WHATSAPP_COM_FOTO=1` fica ligado)
+- ⏳ **o minerador NUNCA rodou de verdade** (só `--diag`): `_aproveitar` com
+  texto de produto real, `_registrar_no_site` vindo deste chamador, marcação no
+  `hunter_seen` e a trava sob disputa real são caminhos ainda não exercidos
+- ⏳ quantos produtos cada grupo-fonte posta por noite — o número que decide se
+  4 fontes bastam pros 72/dia
+- ⏳ **dia 4 do tráfego pago:** comparar custo por clique no link entre os 3
+  anúncios, matar os 2 piores, pôr o resto no vencedor (custo real +12% de
+  imposto). ⚠️ **Não editar anúncio antes disso** — volta pra revisão e
+  descarta o aprendizado já pago.
+
+---
+
 ## 🗓️ Dia 2026-08-21 — pet e moda estavam DESLIGADAS, e o alcance tinha denominador
 
 ### 🔌 `ativa: false` — a resposta pras duas contas mudas
