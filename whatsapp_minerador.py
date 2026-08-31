@@ -173,6 +173,44 @@ JANELA_MSGS = int(float(os.environ.get("WHATSAPP_MINA_JANELA", "250")))
 # num grupo que entrega 150 achadinhos por dia. É barato pelo que devolve.
 VOLTAS_ROLAGEM = int(float(os.environ.get("WHATSAPP_MINA_VOLTAS", "150")))
 
+# ⚠️ A RÉGUA DO REETIQUETAR, e ela é MENOS exigente que a do garimpo de propósito.
+# `shopee_affiliate` corta rating < 4.7 e vendas < 10 porque foi feito pra achar
+# produto novo pra promover do zero: sem prova social, a nota e o volume são a
+# única defesa contra reembolso. Aqui o caso é outro — a concorrente JÁ escolheu
+# o produto e está vendendo pro mesmo público hoje. A prova social existe, só
+# não está na API.
+# 📌 Não é afrouxar por afrouxar: é usar a régua certa pra pergunta certa. A
+# tentativa exigente vem primeiro; esta só entra quando aquela reprova.
+NOTA_MIN_MINA = float(os.environ.get("WHATSAPP_MINA_NOTA", "4.0"))
+VENDAS_MIN_MINA = int(float(os.environ.get("WHATSAPP_MINA_VENDAS", "3")))
+
+# Palavras de marketing que a concorrente cola no título e que a busca da Shopee
+# não casa com nada. Medido em 31/08: "Tenis Feminino Tendência | Design Robusto
+# e Moderno" devolvia zero; "Tenis Feminino" devolve dezenas.
+_RUIDO_TITULO = {
+    "com", "de", "da", "do", "e", "em", "para", "pra", "que", "the",
+    "design", "elegância", "elegancia", "conforto", "moderno", "robusto",
+    "profissional", "premium", "original", "qualidade", "alta", "super",
+    "novo", "nova", "top", "linda", "lindo", "incrível", "incrivel",
+    "tendência", "tendencia", "luxo", "exclusivo", "perfeito", "ideal",
+}
+
+
+def _encurtar(termo: str, palavras: int = 3) -> str:
+    """As primeiras palavras QUE IDENTIFICAM o produto, sem o marketing.
+
+    A busca da Shopee casa por trecho: quanto mais adjetivo, menos resultado.
+    Corta no primeiro separador ("|", "–", "-") e fica com as N primeiras
+    palavras que não são ruído."""
+    import re as _re
+    # ⚠️ SÓ SEPARADOR COM ESPAÇO EM VOLTA. Cortar em qualquer hífen partia
+    # "Maxi T-Shirt de Renda" em "Maxi" — o hífen de palavra composta não é
+    # separador de frase, e o resultado era uma busca de uma palavra só.
+    base = _re.split(r"\s[|–—·•]\s|\s-\s", termo or "", 1)[0]
+    uteis = [w for w in base.split()
+             if w.lower().strip(".,;:") not in _RUIDO_TITULO and len(w) > 2]
+    return " ".join(uteis[:palavras]).strip()
+
 
 def _log(m):
     print(f"[mina] {m}", flush=True)
@@ -626,25 +664,65 @@ def _diagnosticar(pagina, grupo: str) -> None:
 
 # ── o miolo ──────────────────────────────────────────────────────────────
 def _aproveitar(texto: str, hunter, shopee, teste: bool, autor: str = "") -> tuple:
-    """(status, detalhe). status ∈ {'ok','sem_termo','sem_shopee','sem_link'}.
+    """(status, detalhe). status ∈ {ok, sem_termo, sem_busca, so_fracos, sem_link}.
 
-    Mesmo caminho do hunter do Telegram, e de propósito: é código já rodado
-    454 vezes com sucesso. O que muda aqui é só de onde vem o texto."""
+    ⚠️ `sem_shopee` SUMIU DE PROPÓSITO. Ele juntava duas coisas opostas — "a
+    busca não achou nada" e "achou e reprovou na régua" — e a mistura me fez
+    reportar 25 produtos como inexistentes na Shopee quando todos estavam lá.
+    Rótulo que agrupa causas diferentes é rótulo que impede o conserto."""
     (extrair, limpar, registrar, tratar_preco, _, _, _) = hunter
     minerar, gerar_link = shopee
 
     termo = extrair(limpar(_limpar_cabecalho(texto, autor)))
     if not termo:
         return "sem_termo", ""
+
+    # ⚠️ `minerar_oportunidades` NÃO É "PROCURAR NA SHOPEE" — é "procurar MINA
+    # DE OURO" (31/08). Ela corta rating < 4.7 e vendas < 10, e devolve ok=False
+    # quando nada passa, mesmo tendo ACHADO produtos. Eu li isso como "não
+    # existe na Shopee" e reportei 25 falhas assim; o Dre abriu os links um por
+    # um e mostrou que todos eram da Shopee.
+    #
+    # 📌 Os cortes fazem sentido pro caso original — garimpar produto novo pra
+    # promover do zero. Aqui é OUTRO caso: a concorrente JÁ escolheu o produto e
+    # está vendendo pro mesmo público. A prova social que os cortes procuram já
+    # existe, fora da API. Então: tenta exigente primeiro (mina de ouro é
+    # melhor), e se não passar, tenta de novo com a régua do reetiquetar.
+    #
+    # ⚠️ E O `diagnostico` QUE ELA DEVOLVE EU ESTAVA DESCARTANDO. Ele diz
+    # quantos foram reprovados por nota e quantos por vendas — a diferença entre
+    # "a busca não achou nada" e "achou e reprovou" muda completamente o que
+    # fazer, e virava um `sem_shopee` mudo.
     m = minerar(termo)
+    motivo = ""
     if not m.get("ok") or not m.get("campeao"):
-        return "sem_shopee", termo
+        d = m.get("diagnostico") or {}
+        achou = int(d.get("analisados") or 0)
+        if achou:
+            m2 = minerar(termo, nota_minima=NOTA_MIN_MINA,
+                         vendas_minimas=VENDAS_MIN_MINA)
+            if m2.get("ok") and m2.get("campeao"):
+                m, motivo = m2, " (régua do reetiquetar)"
+        else:
+            # busca vazia: o termo pode ser título de marketing longo demais.
+            # "Tenis Feminino Tendência | Design Robusto e Moderno" não casa
+            # com nada; "Tenis Feminino" casa.
+            curto = _encurtar(termo)
+            if curto and curto != termo:
+                m2 = minerar(curto, nota_minima=NOTA_MIN_MINA,
+                             vendas_minimas=VENDAS_MIN_MINA)
+                if m2.get("ok") and m2.get("campeao"):
+                    m, motivo = m2, f" (busca curta: {curto!r})"
+    if not m.get("ok") or not m.get("campeao"):
+        d = m.get("diagnostico") or {}
+        return ("so_fracos" if int(d.get("analisados") or 0) else "sem_busca"), termo
+
     c = m["campeao"]
     url = c.get("product_link") or c.get("offer_link") or ""
     if not url:
-        return "sem_shopee", termo
+        return "sem_busca", termo
     if teste:
-        return "ok", f"{c.get('nome', termo)[:52]}  (R$ {c.get('preco', 0)})"
+        return "ok", f"{c.get('nome', termo)[:52]}  (R$ {c.get('preco', 0)}){motivo}"
 
     try:
         r = gerar_link(url, sub_ids=["wa_mina", "whatsapp_minerador"])
@@ -691,7 +769,7 @@ def rodar(teste: bool, diag: bool) -> int:
 
     from playwright.sync_api import sync_playwright
     contas = {"lidas": 0, "novas": 0, "ok": 0,
-              "sem_termo": 0, "sem_shopee": 0, "sem_link": 0}
+              "sem_termo": 0, "sem_busca": 0, "so_fracos": 0, "sem_link": 0}
     # ⚠️ MESMO NOME DE TRAVA DO POSTADOR, e é o nome que faz a exclusão
     # acontecer: os dois dirigem o MESMO perfil do Chromium, e dois navegadores
     # no mesmo `user_data_dir` corrompem a sessão — caminho curto pro QR novo.
@@ -792,7 +870,8 @@ def rodar(teste: bool, diag: bool) -> int:
             finally:
                 _log(f"lidas {contas['lidas']} · novas {contas['novas']} · "
                      f"✅ {contas['ok']} · sem termo {contas['sem_termo']} · "
-                     f"sem Shopee {contas['sem_shopee']} · "
+                     f"busca vazia {contas['sem_busca']} · "
+                     f"só fracos {contas['so_fracos']} · "
                      f"sem link {contas['sem_link']}")
                 try:
                     ctx.close()
