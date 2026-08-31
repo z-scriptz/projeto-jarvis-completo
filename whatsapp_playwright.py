@@ -1228,9 +1228,9 @@ def _confere_conversa(pagina, grupo: str) -> bool:
         _log("   ⚠️ não consegui ler o cabeçalho da conversa — sigo, mas sem "
              "conferir. (Se aparecer sempre, é seletor a corrigir.)")
         return True
-    alvo = _sem_emoji(grupo).strip().lower()
-    visto = _sem_emoji(titulo).strip().lower()
-    if alvo and alvo.split("\n")[0] in visto:
+    alvo = _achatar(grupo)
+    visto = _achatar(titulo)
+    if alvo and alvo in visto:
         _log(f"   ✔️ conversa conferida: {titulo.splitlines()[0][:48]!r}")
         return True
     caminho = _print_erro(pagina, f"abri a conversa ERRADA: {titulo[:60]!r}")
@@ -1244,6 +1244,34 @@ def _sem_emoji(s: str) -> str:
     """Só letras/números/espaço — o nome do grupo tem emoji e o cabeçalho pode
     renderizar como imagem, então comparar cru daria falso negativo."""
     return re.sub(r"[^\w\s]", " ", s or "", flags=re.U)
+
+
+def _achatar(s: str) -> str:
+    """`_sem_emoji` + espaço colapsado, pra comparar nome de grupo com cabeçalho.
+
+    ⚠️ O COLAPSO É A PARTE QUE FALTAVA, E ELE SOZINHO DERRUBOU OS 3 GRUPOS
+    (30/08). `_sem_emoji` troca cada símbolo por UM espaço, e os dois lados têm
+    símbolos em quantidades diferentes:
+
+        .env      "ACHADINHOS VIP TOPSHOP ⭐ #1"  → "…TOPSHOP" + 4 espaços + "1"
+        cabeçalho "ACHADINHOS VIP TOPSHOP  #1"   → "…TOPSHOP" + 3 espaços + "1"
+
+    O cabeçalho vem sem a ⭐ porque o WhatsApp Web renderiza emoji como <img> e
+    `innerText` não devolve imagem — mas os espaços que cercavam a estrela
+    ficam. Um espaço de diferença, e `alvo in visto` dá False.
+
+    O sintoma foi cruel: "abri a conversa ERRADA", com o cabeçalho impresso do
+    lado sendo VISIVELMENTE o grupo certo. O código acusava clique errado
+    quando o clique estava certo — e como a regra da casa é não mandar mensagem
+    em conversa não confirmada, ele parou tudo, corretamente, pelo motivo errado.
+
+    📌 Normalização pela metade é pior que nenhuma: some com a diferença óbvia
+    (o emoji) e deixa a invisível (o espaço), que é a que ninguém procura.
+
+    Achata também o `\\n` — o cabeçalho traz o subtítulo junto
+    ("Somente admins podem enviar mensagens") e ele não atrapalha a comparação
+    por conter, só alonga o lado direito."""
+    return " ".join(_sem_emoji(s).split()).strip().lower()
 
 
 def _fechar_modal(pagina, voltas: int = 3) -> int:
