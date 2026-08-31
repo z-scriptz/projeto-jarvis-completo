@@ -189,9 +189,17 @@ async (op) => {
   // ⚠️ O PAINEL ROLÁVEL NÃO É A JANELA. `mouse.wheel` rola onde o cursor
   // estiver, e o cursor não estava sobre as mensagens — é por isso que a
   // versão anterior lia 11 linhas num grupo com 72.
+  // ⚠️ "O PRIMEIRO DIV QUE ROLA" PEGOU O DIV ERRADO (31/08). No Promos da
+  // Alana ele achou algum container interno que rolava um tiquinho: a leitura
+  // subiu de 11 pra 14 linhas num grupo com 72, o que parece progresso e é
+  // quase nada. O painel certo é o que CONTÉM as mensagens — então em vez de
+  // procurar por aí, subo a partir de uma mensagem de verdade até achar o
+  // ancestral que rola. Não tem como pegar outro.
   let sc = null;
-  for (const d of main.querySelectorAll('div')) {
-    if (d.clientHeight > 240 && d.scrollHeight > d.clientHeight + 80) { sc = d; break; }
+  const ancora = main.querySelector('div[data-id]');
+  for (let n = ancora && ancora.parentElement; n && n !== document.body;
+       n = n.parentElement) {
+    if (n.clientHeight > 160 && n.scrollHeight > n.clientHeight + 40) { sc = n; break; }
   }
 
   // ⚠️ E O WHATSAPP RECICLA O DOM: rolando pra cima ele MONTA as mensagens
@@ -221,11 +229,18 @@ async (op) => {
   colher();
   let paradas = 0;
   for (let i = 0; sc && i < op.voltas && vistos.size < op.limite; i++) {
-    const antes = vistos.size, topo = sc.scrollTop;
+    const antes = vistos.size, topo = sc.scrollTop, alt = sc.scrollHeight;
     sc.scrollTop = Math.max(0, sc.scrollTop - sc.clientHeight * 0.82);
     await new Promise(r => setTimeout(r, op.pausa));
+    // ⚠️ SUBIR PEDE MENSAGEM AO SERVIDOR, e isso não é instantâneo. Quando o
+    // painel CRESCE, é sinal de que chegou lote novo — vale esperar mais um
+    // pouco, senão a colheita acontece antes do conteúdo existir e a rodada
+    // desiste achando que acabou.
+    if (sc.scrollHeight > alt) await new Promise(r => setTimeout(r, op.pausa));
     colher();
-    if (vistos.size === antes) { if (++paradas >= 2) break; } else paradas = 0;
+    // 3 e não 2: com carregamento lento, duas rodadas quietas seguidas
+    // acontecem sem a conversa ter terminado
+    if (vistos.size === antes) { if (++paradas >= 3) break; } else paradas = 0;
     if (topo <= 0) break;          // já está no começo da conversa
   }
   return {itens: Array.from(vistos.values()).slice(-op.limite),
@@ -261,11 +276,75 @@ _FRASES_SISTEMA = (
     "as mensagens e ligações são protegidas",
     "as mensagens temporárias foram ativadas",
     "as mensagens temporárias foram desativadas",
+    # visto em 31/08 no OFERTAS RELÂMPAGO, e passou pelo filtro como "produto":
+    # "Seu código de segurança com +55 11 94718-2512 mudou. Clique para..."
+    "código de segurança",
+    "codigo de seguranca",
+    "mudou o número de telefone",
+    "criptografia de ponta a ponta",
+    "esta empresa usa",
+    "ligação de voz perdida",
+    "chamada de vídeo perdida",
     "esta mensagem foi apagada",
     "você foi adicionado",
     "agora é admin",
     "mensagem apagada",
 )
+
+
+_RE_FONE = __import__("re").compile(r"^[+~]?[\d\s()\-]{8,}$")
+_RE_DOMINIO = __import__("re").compile(r"^[\w.\-]+\.(com|br|com\.br|net|me|io)(/\S*)?$", 2)
+
+
+def _limpar_cabecalho(texto: str, autor: str) -> str:
+    """Tira o rótulo do remetente que vem colado no começo da mensagem.
+
+    ⚠️ MEDIDO NO --diag DE 31/08. O `innerText` de uma linha do WhatsApp Web não
+    começa no produto:
+
+        Suporte Achados Da Kah      <- rótulo de quem manda
+        +55 31 8238-9095            <- telefone
+        Luminária Varanasi | Abajur de mesa
+
+    O `extrair_termo_produto` escolhe entre as SEIS primeiras linhas, e
+    "Suporte Achados Da Kah" tem 4 palavras: passa em todos os filtros dele. O
+    sintoma seria procurar isso na Shopee — uma chamada de API gasta, zero
+    resultado, e o log dizendo "não localizado" como se o produto fosse ruim.
+
+    ⚠️ E O CORTE NÃO PODE SER PELO NOME DE QUEM MANDA: o `autor` traz o TELEFONE
+    ("[10:52, 31/08/2026] +55 31 8238-9095: "), enquanto a primeira linha traz o
+    RÓTULO ("Suporte Achados Da Kah"). São coisas diferentes, e foi assim que a
+    primeira versão desta função deixou o rótulo passar.
+    📌 O que os une é a POSIÇÃO: o telefone vem logo depois do rótulo. Então o
+    corte é "tudo até o telefone, inclusive" — e só nas primeiras linhas, pra
+    um telefone no meio do anúncio não picotar o texto.
+
+    Mensagem sem cabeçalho nenhum ("Kit 3 Potes\nR$ 32") passa intacta: sem
+    telefone no topo, não há o que cortar."""
+    if not texto:
+        return ""
+    # ⚠️ NEM TODO REMETENTE É UM TELEFONE. Quando a pessoa tem nome no
+    # WhatsApp, a linha é "~Nfèrnanda" — sem dígito nenhum, então a regra do
+    # telefone não pega e o rótulo "ofertinhasdaespia" sobrevive como termo.
+    # O `autor` sabe quem é nos dois casos, e é ele que fecha a lacuna.
+    quem = ""
+    if autor and ":" in autor:
+        quem = autor.rsplit(":", 1)[0].split("]", 1)[-1].strip().lower()
+    linhas = texto.split("\n")
+    corte = -1
+    for i, l in enumerate(linhas[:4]):
+        t = l.strip()
+        if _RE_FONE.match(t) or (quem and t.lower() == quem):
+            corte = i
+    saida = linhas[corte + 1:] if corte >= 0 else linhas
+    # sobra do cabeçalho: domínio solto e o caractere invisível que a Alana usa
+    while saida:
+        t = saida[0].strip()
+        if not t or t == "\u200b" or _RE_DOMINIO.match(t):
+            saida.pop(0)
+            continue
+        break
+    return "\n".join(saida).strip()
 
 
 def _do_sistema(item: dict) -> bool:
@@ -400,7 +479,7 @@ def _diagnosticar(pagina, grupo: str) -> None:
 
 
 # ── o miolo ──────────────────────────────────────────────────────────────
-def _aproveitar(texto: str, hunter, shopee, teste: bool) -> tuple:
+def _aproveitar(texto: str, hunter, shopee, teste: bool, autor: str = "") -> tuple:
     """(status, detalhe). status ∈ {'ok','sem_termo','sem_shopee','sem_link'}.
 
     Mesmo caminho do hunter do Telegram, e de propósito: é código já rodado
@@ -408,7 +487,7 @@ def _aproveitar(texto: str, hunter, shopee, teste: bool) -> tuple:
     (extrair, limpar, registrar, tratar_preco, _, _, _) = hunter
     minerar, gerar_link = shopee
 
-    termo = extrair(limpar(texto))
+    termo = extrair(limpar(_limpar_cabecalho(texto, autor)))
     if not termo:
         return "sem_termo", ""
     m = minerar(termo)
@@ -524,8 +603,9 @@ def rodar(teste: bool, diag: bool) -> int:
                         contas["novas"] += 1
                         orcamento -= 1
                         try:
-                            status, det = _aproveitar(m["texto"], hunter,
-                                                      shopee, teste)
+                            status, det = _aproveitar(
+                                m["texto"], hunter, shopee, teste,
+                                m.get("autor", ""))
                         except Exception as e:
                             _log(f"   ⚠️ {type(e).__name__}: {str(e)[:80]}")
                             marcar_falha(canal, m["id"])
