@@ -702,9 +702,37 @@ except Exception:
         return ids
 
 
+# ⚠️ NEM TODA MENSAGEM DE GRUPO DE ACHADINHO É UMA OFERTA (01/09). Foram parar
+# na vitrine "siga nossos canais" (duas vezes), "a vida que não sabia que
+# precisava" e "ontem esponja amanhã peneira — o direito de ligar e desligar".
+# São recados do dono do grupo, e chegaram COM LINK: o extrator tirou um termo
+# qualquer da frase, a busca curta achou um produto qualquer na Shopee, e o
+# resultado virou card. 📌 O erro não estava na busca — estava em ter buscado.
+#
+# O que separa oferta de recado não é o assunto, é a ESTRUTURA: quem posta uma
+# oferta põe preço ou link de loja. Quem posta recado não põe nenhum dos dois.
+#
+# ⚠️ E link de convite NÃO CONTA. "Siga nossos canais" costuma vir com
+# chat.whatsapp.com ou t.me — se eu aceitasse qualquer http, o recado passaria
+# justamente pelo que o denuncia.
+_TEM_LOJA = re.compile(
+    r"(shopee|amzn\.to|amazon\.|mercadolivre|mercadolibre|produto\.mercadolivre"
+    r"|magazine(voce|luiza)|magalu|shein|aliexpress|americanas|casasbahia"
+    r"|s\.shopee|kwai\.shop)", re.IGNORECASE)
+_TEM_PRECO = re.compile(
+    r"r\$\s*\d|\bpor\s+\d{1,4}[,.]\d{2}\b|\b\d{1,4}[,.]\d{2}\s*reais\b"
+    r"|\bs[óo]\s+\d{1,4}[,.]\d{2}\b|\bde\s+\d[\d.,]*\s+por\s+\d", re.IGNORECASE)
+
+
+def _e_oferta(texto: str) -> bool:
+    """Tem preço ou link de loja? Então alguém está vendendo alguma coisa."""
+    return bool(_TEM_LOJA.search(texto or "") or _TEM_PRECO.search(texto or ""))
+
+
 def _aproveitar(texto: str, hunter, shopee, teste: bool, autor: str = "",
                 fonte: str = "") -> tuple:
-    """(status, detalhe). status ∈ {ok, sem_termo, sem_busca, so_fracos, sem_link}.
+    """(status, detalhe). status ∈ {ok, nao_e_oferta, sem_termo, sem_busca,
+    so_fracos, sem_link}.
 
     ⚠️ `sem_shopee` SUMIU DE PROPÓSITO. Ele juntava duas coisas opostas — "a
     busca não achou nada" e "achou e reprovou na régua" — e a mistura me fez
@@ -712,6 +740,10 @@ def _aproveitar(texto: str, hunter, shopee, teste: bool, autor: str = "",
     Rótulo que agrupa causas diferentes é rótulo que impede o conserto."""
     (extrair, limpar, registrar, tratar_preco, _, _, _) = hunter
     minerar, gerar_link = shopee
+
+    # o portão mais barato de todos: nem chega a chamar a API
+    if not _e_oferta(texto):
+        return "nao_e_oferta", " ".join((texto or "").split())[:70]
 
     termo = extrair(limpar(_limpar_cabecalho(texto, autor)))
     if not termo:
@@ -922,6 +954,11 @@ def rodar(teste: bool, diag: bool) -> int:
                         contas[status] = contas.get(status, 0) + 1
                         if status == "ok":
                             _log(f"   {'🧪' if teste else '✅'} {det}")
+                        elif teste and status == "nao_e_oferta" and det:
+                            # 📌 Portão que barra calado é portão que ninguém
+                            # audita. No dry-run ele mostra a frase inteira, pra
+                            # dar pra ver se está comendo oferta de verdade.
+                            _log(f"   🚫 não é oferta: {det}")
                             if not teste:
                                 marcar(canal, m["id"])
                         elif not teste:

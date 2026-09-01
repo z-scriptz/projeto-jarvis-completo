@@ -126,9 +126,15 @@ SEL_BUSCA = ["div[contenteditable='true'][data-tab='3']",
 SEL_MODAL = ["div[role='dialog']", "div[data-animate-modal-body='true']"]
 TXT_MODAL_OK = ["Continuar", "Continue", "OK", "Ok", "Entendi", "Got it",
                 "Agora não", "Not now", "Fechar", "Dispensar"]
-SEL_CAIXA = ["div[contenteditable='true'][data-tab='10']",
-             "div[contenteditable='true'][data-tab='6']",
+# ⚠️ `data-tab` É NUMERAÇÃO INTERNA DO WHATSAPP, e ela muda sem aviso. Por isso
+# o que descreve a caixa pelo PAPEL (o texto de placeholder, que é tradução e
+# muda bem menos) vem primeiro, e os números ficam de reserva.
+SEL_CAIXA = ["div[contenteditable='true'][aria-placeholder*='mensagem' i]",
+             "div[contenteditable='true'][aria-label*='mensagem' i]",
              "footer div[contenteditable='true']",
+             "footer div[role='textbox']",
+             "div[contenteditable='true'][data-tab='10']",
+             "div[contenteditable='true'][data-tab='6']",
              "div[role='textbox'][data-tab='10']"]
 SEL_LOGADO = ["div[data-testid='chat-list']", "#pane-side", "div[aria-label*='Lista de conversas']"]
 
@@ -1784,10 +1790,36 @@ def _enviar_texto(pagina, texto: str) -> bool:
     link pelado, sem cartão, que é o formato que a gente está justamente
     tentando não postar.
     """
+    # ⚠️ FALHA INTERMITENTE (01/09): uma rodada em 11:16 não achou a caixa e
+    # mandou 0 em 3 grupos, enquanto as outras do dia mandaram normal. O despejo
+    # mostrou os botões do rodapé (Anexar, Emojis, microfone) — ou seja, o
+    # rodapé existia. 📌 Rodapé montado não quer dizer editor montado: o React
+    # pinta os botões antes do campo. Uma segunda chance depois de respirar
+    # custa 1,5s e evita perder o slot inteiro.
     caixa = _achar(pagina, SEL_CAIXA)
     if not caixa:
+        _log("   ⏳ caixa não apareceu de primeira — respirando e tentando de novo")
+        pagina.wait_for_timeout(1500)
+        caixa = _achar(pagina, SEL_CAIXA, timeout=4000)
+    if not caixa:
+        # ⚠️ E O AVISO PRECISA DIZER QUAL DAS DUAS CAUSAS FOI. "Não achei" tem
+        # dois consertos OPOSTOS: se existe contenteditable na página e nenhum
+        # seletor casou, a marcação mudou e o conserto é aqui; se não existe
+        # nenhum, o editor não montou e o conserto é esperar mais. Sem essa
+        # distinção eu ia mexer no seletor por palpite — foi exatamente o erro
+        # do "sessão caída" que era "ainda carregando".
+        try:
+            quantos = pagina.evaluate(
+                "() => document.querySelectorAll("
+                "\"[contenteditable='true'],[role='textbox']\").length")
+        except Exception:
+            quantos = -1
+        pista = ("a marcação mudou (existe campo editável, nenhum seletor casou)"
+                 if quantos and quantos > 0 else
+                 "o editor não montou (nenhum campo editável na página)")
+        _log(f"   🔎 campos editáveis na página: {quantos} → {pista}")
         caminho = _print_erro(pagina, "não achei a caixa de mensagem")
-        _avisar("WhatsApp: a marcação mudou (caixa de mensagem).", caminho)
+        _avisar(f"WhatsApp: {pista}.", caminho)
         return False
     caixa.click()
     # digita linha a linha: Enter manda a mensagem, então quebra de linha
