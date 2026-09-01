@@ -41,6 +41,18 @@ CHROMIUM = "/opt/pw-browsers/chromium"
 # fonte de reserva (0,844 em em vez de 0,935) e a correção saiu curta — o
 # defeito continuou no ar depois de "corrigido". Aqui a medida sai da mesma
 # página que o usuário vê, e desiste se a fonte não estiver carregada.
+# ⚠️ COM TETO, SENAO TRAVA. Imagem com loading="lazy" fora da tela fica
+# `complete === false` PARA SEMPRE (ela nem foi pedida), e foto de loja
+# externa pendura no proxy. A primeira versao disto travou o teste em 9
+# minutos. 📌 Espera de teste sempre com teto: sem ele, "esperar o
+# carregamento" vira "esperar o que nunca vai acontecer".
+ESPERAR_IMAGENS = """() => Promise.race([
+    Promise.all([...document.images]
+        .filter(i => !i.complete && i.getBoundingClientRect().top < innerHeight * 2)
+        .map(i => new Promise(r => { i.onload = i.onerror = r; }))),
+    new Promise(r => setTimeout(r, 2500))
+])"""
+
 MEDIR_MANCHETE = r"""() => {
   var h1 = document.querySelector('.abre h1');
   if (!h1) return null;
@@ -186,13 +198,30 @@ async def rodar(pasta: Path) -> int:
         p(all("FF3D6E" not in h and "0B0C0F" not in h for h in icones),
           "o favicon não tem mais as cores aposentadas")
 
+        # ⚠️ ESPERAR AS IMAGENS ANTES DE MEDIR ROLAGEM. Enquanto elas
+        # carregam, o navegador reancora o scroll pra manter na tela o que você
+        # está vendo — e isso EMPURRA o scrollY pra baixo no meio da subida ao
+        # topo. Medido: 1163 -> 1636 -> 0, com o zero chegando em ~750ms. A
+        # página está certa (a rolagem ganha a queda de braço); quem media
+        # errado era o teste, cronometrando durante o carregamento.
+        # 📌 NAO é o mesmo defeito de antes: aquele era a animação sendo
+        # ABORTADA, este é ela sendo CONTRARIADA. Mesmo sintoma, causa outra.
+        await pg.evaluate(ESPERAR_IMAGENS)
         await pg.evaluate("scrollTo(0, 2000)")
-        await pg.wait_for_timeout(400)
+        await pg.wait_for_timeout(500)
         await pg.evaluate("window.__vivo = 1")
         url_antes = pg.url
         await pg.click("a.marca")
-        await pg.wait_for_timeout(900)
-        p(await pg.evaluate("scrollY") == 0, "clicar na marca na home leva ao topo")
+        serie = []
+        for _ in range(14):            # até 2,1s, saindo assim que chegar
+            await pg.wait_for_timeout(150)
+            serie.append(await pg.evaluate("scrollY"))
+            if serie[-1] == 0:
+                break
+        # 📌 A asserção conta o que MEDIU. "Falhou" sem número obriga a
+        # reproduzir tudo de novo só pra saber o que aconteceu.
+        p(serie[-1] == 0,
+          f"clicar na marca na home leva ao topo (scrollY: {serie})")
         p(await pg.evaluate("window.__vivo || 0") == 1, "e não recarrega a página")
         p(pg.url == url_antes, "e não muda a URL")
 

@@ -89,21 +89,38 @@ _CATEGORIAS_FILTRO = [
                     "cão", "cães", "gato", "gatos", "filhote", "petisco",
                     "arranhador", "aquário", "aquario", "canino", "felino",
                     "pets")),   # "pets" e não "pet": "pet" pegaria "petisco"
+    # ⚠️ "TÉRMICA" E "ÁGUA" SAÍRAM, E SÃO A MAIOR CORREÇÃO DESTA LISTA. Elas
+    # descrevem ATRIBUTO, não produto: "à prova d'água" mandou 5 itens pra
+    # Cozinha (dois relógios, um fone, uma tenda de praia), e "térmica" mandou
+    # outros 5 (impressora térmica, prensa de estampar, cinta de cólica).
+    # 📌 Palavra que qualifica qualquer coisa não classifica nada. O utensílio
+    # de verdade continua entrando pelo substantivo: garrafa, copo, marmita,
+    # caixa — que é o que ele É.
     ("Cozinha",    ("cortador", "legumes", "liquidificador", "balanca", "balança",
-                    "garrafa", "caneca", "termica", "térmica", "descascador",
-                    "processador", "fatiador", "espremedor", "água", "agua",
+                    "garrafa", "caneca", "descascador", "cozinha",
+                    "processador", "fatiador", "espremedor", "marmita",
                     "panela", "faca", "prato", "copo", "tigela", "ralador",
-                    "forma", "air fryer", "fritadeira", "tábua", "tabua", "pote",
-                    "mixer", "sanduicheira", "cafeteira", "chaleira", "talher",
-                    "colher")),
+                    "=forma", "=formas", "air fryer", "fritadeira", "tábua",
+                    "tabua", "pote", "mixer", "sanduicheira", "cafeteira",
+                    "chaleira", "talher", "colher", "taça", "taca", "xícara",
+                    "xicara", "manteigueira", "pipoqueira", "travessa", "jarra",
+                    "baleiro", "potiche", "espátula", "espatula", "assadeira",
+                    "escorredor", "peneira", "abridor")),
     ("Beleza",     ("modelador", "cachos", "escova", "secadora", "alisadora",
                     "maquiagem", "skincare", "cravos", "espelho", "cabelo",
                     "unha", "perfume", "batom", "esmalte", "depilador",
-                    "barbeador", "sobrancelha", "pelos", "hidratante", "make")),
+                    "barbeador", "sobrancelha", "pelos", "hidratante", "make",
+                    "blush", "gloss", "labial", "lábio", "labio", "sombra",
+                    "pincel", "kabuki", "progressiva", "capilar", "shampoo",
+                    "condicionador", "protetor solar", "body splash", "sérum",
+                    "aplique", "barba", "collagen", "colágeno", "paleta",
+                    "óleo corporal", "oleo corporal", "óleo em creme")),
     ("Fitness",    ("massageador", "massagem", "yoga", "pilates", "faixas",
                     "corda", "pular", "cervical", "fisioterapia", "academia",
                     "treino", "elastica", "elástica", "halter", "abdominal",
-                    "musculac", "musculaç", "luva de treino")),
+                    "musculac", "musculaç", "luva de treino", "joelheira",
+                    "bíceps", "biceps", "compressão", "compressao",
+                    "ortopédic", "ortopedic", "twister", "caneleira")),
     # Moda DEPOIS de Fitness: "Kit 2 Shorts Femininos Academia Yoga" é roupa,
     # mas quem procura isso procura em Fitness. Antes daqui não havia categoria
     # de roupa/calçado nenhuma e sandália, scarpin, vestido e cropped caíam
@@ -116,7 +133,8 @@ _CATEGORIAS_FILTRO = [
                     "legging", "pijama", "biquini", "biquíni", "sutia",
                     "sutiã", "lingerie", "bolsa", "mochila", "carteira",
                     "cinto", "boné", "bone", "chapeu", "chapéu", "oculos",
-                    "óculos", "bermuda", "conjunto feminino")),
+                    "óculos", "bermuda", "conjunto feminino", "anel", "brinco",
+                    "colar", "cueca", "pantufa", "meia", "sunga", "short")),
     ("Tech",       ("mouse", "power bank", "powerbank", "carregador", "projetor",
                     "notebook", "cabo", "fone", "usb", "celular", "induç",
                     "induc", "teclado", "headset", "camera", "câmera",
@@ -125,7 +143,14 @@ _CATEGORIAS_FILTRO = [
                     "monitor", "adaptador", "hub", "roteador", "smart",
                     "led rgb", "xbox", "playstation", "nintendo", "ps4", "ps5",
                     "console", "gamer", "joystick", "controle de", "videogame",
-                    "video game", "dualshock")),
+                    "video game", "dualshock",
+                    # ⚠️ "capa" SOZINHA NÃO ENTRA: capa de cadeira, capa de
+                    # sofá e capa de chuva não são tech. O que identifica é o
+                    # APARELHO — e ele quase sempre está no título.
+                    "capinha", "iphone", "ipad", "galaxy", "xiaomi", "redmagic",
+                    "motorola", "airpods", "airtag", "tripé", "tripe",
+                    "game stick", "impressora", "etiquetas", "película",
+                    "pelicula", "caixa de som", "alexa", "chromecast")),
     ("Utilidades", ("organizador", "gancho", "cabide", "sacola", "cesto",
                     "balde", "lixeira", "pedal", "litro", "caixa", "mala",
                     "guarda-chuva", "ferramenta", "chave", "mangueira", "varal",
@@ -137,7 +162,17 @@ _CATEGORIAS_FILTRO = [
                     "tapete", "vela", "porta", "suporte", "prateleira",
                     "cortina", "toalha", "almofada", "edredom", "lençol",
                     "lencol", "vaso", "limpeza", "pano", "capacho", "difusor",
-                    "quadro")),
+                    "quadro",
+                    # o Natal foi a maior ausência: 6 produtos em "Outros"
+                    "natal", "natalin", "árvore", "arvore", "papai noel",
+                    "guirlanda", "enfeite", "pendente", "manta", "cadeira",
+                    "mesa", "estante", "sofá", "sofa", "dispenser", "sabonete",
+                    "fechadura", "aromatizador", "essência", "essencia",
+                    "lava e seca", "máquina de lavar", "maquina de lavar",
+                    "extratora", "ralo", "impermeabilizante", "desengordurante",
+                    "limpador", "papel higiênico", "papel higienico",
+                    "tinta spray", "espelho de parede", "travesseiro",
+                    "fronha", "cobertor", "colcha", "manta ")),
 ]
 
 
@@ -146,11 +181,24 @@ _CATEGORIAS_FILTRO = [
 # casava com "cão" e mandava roupa pra Pet — os dois vistos na fila real.
 # Sem \b no fim, de propósito: "induç" precisa pegar "indução" e "escova"
 # precisa pegar "escovas".
-_CATEGORIAS_RE = [
-    (rotulo, re.compile(r"\b(?:" + "|".join(re.escape(k) for k in kws) + r")",
-                        re.IGNORECASE))
-    for rotulo, kws in _CATEGORIAS_FILTRO
-]
+# ⚠️ E ALGUMAS PRECISAM DO \b NO FIM TAMBÉM. "forma" (de bolo) casava com
+# "FORMAto de coração" e mandava gloss labial pra Cozinha; "forma de unha"
+# ia junto. Quem precisa da palavra INTEIRA vem escrita com "=" na frente.
+# 📌 Marcar caso a caso em vez de fechar todas: fechar todas quebraria "induç"
+# (indução) e "escova" (escovas), que dependem de casar o começo.
+def _regex(kws):
+    fim, meio = [], []
+    for k in kws:
+        (fim if k.startswith("=") else meio).append(k.lstrip("="))
+    partes = []
+    if meio:
+        partes.append(r"\b(?:" + "|".join(re.escape(k) for k in meio) + r")")
+    if fim:
+        partes.append(r"\b(?:" + "|".join(re.escape(k) for k in fim) + r")\b")
+    return re.compile("|".join(partes), re.IGNORECASE)
+
+
+_CATEGORIAS_RE = [(rotulo, _regex(kws)) for rotulo, kws in _CATEGORIAS_FILTRO]
 
 
 def _inferir_categoria(p: dict) -> str:
@@ -583,7 +631,28 @@ def _esteira_html(produtos: list) -> str:
 MOSTRAR_SEM_DADOS = False
 
 
+# ⚠️ O MINERADOR TRAZ COISA QUE NÃO É PRODUTO. Na vitrine de 01/09 havia
+# "siga nossos canais" (duas vezes), "a vida que não sabia que precisava" e
+# "ontem esponja amanhã peneira — o direito de ligar e desligar". São recados
+# de grupo que o minerador leu como se fossem achadinho, e eles chegam com link
+# e tudo. 📌 Um card desses não é feio, é CONFUSO: a pessoa clica esperando
+# comprar e cai num convite. Vale mais um buraco na grade que um card que
+# promete o que não existe.
+_NAO_E_PRODUTO = re.compile(
+    r"siga\s+(nossos|nos|no)\b|nossos canais|entre no grupo|link na bio"
+    r"|clique aqui|chama no (zap|whats)|bom dia (galera|pessoal)"
+    r"|\bo direito de\b|que n[ãa]o sabia que precisava",
+    re.IGNORECASE)
+
+
+def _e_produto(p: dict) -> bool:
+    texto = f"{p.get('nome','')} {p.get('titulo','')}"
+    return not _NAO_E_PRODUTO.search(texto)
+
+
 def _vale_mostrar(p: dict) -> bool:
+    if not _e_produto(p):
+        return False
     tem_foto = bool((p.get("imagem") or "").strip())
     tem_preco = bool((p.get("preco_resumo") or {}).get("preco"))
     return MOSTRAR_SEM_DADOS or tem_foto or tem_preco
