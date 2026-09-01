@@ -88,9 +88,18 @@ LARGURAS = (320, 640, 960)
 LADO = 1000                      # o quadrado onde o produto é montado
 MARGEM = 0.10                    # respiro em volta, igual pra todos
 
-# portão de ENTRADA: quão lisa a moldura precisa ser
-UNIF_MIN = 0.86
+# portão de ENTRADA — DUAS evidências de "fundo simples", e qualquer uma serve
+# ⚠️ EU EXIGIA SÓ A PRIMEIRA, E PERDIA UM TERÇO DAS BOAS. A moldura limpa some
+# assim que o produto encosta na borda ou o vendedor imprime o nome da loja na
+# faixa de cima — e nenhuma das duas coisas é motivo pra não recortar. Medido
+# nas 16 sorteadas: a bolsa SOPHINE tem fundo branco chapado (desvio 2,2) e
+# moldura 0,66 só por causa da palavra impressa; a luminária branca tem o
+# inverso, moldura 0,94 e fundo com degradê de estúdio (desvio 6,4).
+# 📌 Duas evidências independentes do mesmo fato pedem OU, não E.
+UNIF_MIN = 0.86                  # 1ª evidência: a moldura é de uma cor só
 FUNDO_MIN = 0.28
+DESVIO_MAX = 4.0                 # 2ª evidência: o fundo achado é chapado
+FUNDO_MIN_LISO = 0.18
 # colagem/infográfico: manchinhas do tamanho de letra na frente
 TXT_MAX = 20                     # medido: 69 no infográfico, 0-4 no resto
 # portão de SAÍDA: o recorte tem que sobrar produto, e só produto
@@ -225,11 +234,15 @@ def classificar(im):
     if min(w, h) < LADO_MINIMO:
         return "C", f"pequena demais ({w}x{h})", None
 
-    _, _, unif, area_fundo = analisar(im)
-    if unif < UNIF_MIN or area_fundo < FUNDO_MIN:
-        # ⚠️ B aqui não é "feia" — é "sem moldura lisa". Sem ela eu não tenho
-        # como conferir o recorte, então não toco na foto.
-        return "B", f"foto de cena (moldura {unif:.2f})", None
+    a, fundo, unif, area_fundo = analisar(im)
+    desvio = float(a[fundo].std(axis=0).mean()) if fundo.any() else 999.0
+    moldura_limpa = unif >= UNIF_MIN and area_fundo >= FUNDO_MIN
+    fundo_liso = desvio < DESVIO_MAX and area_fundo >= FUNDO_MIN_LISO
+    if not (moldura_limpa or fundo_liso):
+        # ⚠️ B aqui não é "feia" — é "não sei onde o produto acaba". Sem uma das
+        # duas evidências eu não tenho como conferir o recorte, então não toco.
+        return "B", (f"foto de cena (moldura {unif:.2f}, fundo {area_fundo:.2f}, "
+                     f"desvio {desvio:.1f})"), None
 
     txt = _manchinhas(im)
     if txt > TXT_MAX:
