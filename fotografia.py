@@ -435,7 +435,10 @@ def main():
         conta[classe] += 1
         if args.prova:
             pares.append((im, pronta, classe, motivo))
-            print(f"  {i:>3} {classe}  {motivo}")
+            # ⚠️ A URL SAI JUNTO. Sem ela, discordar de uma foto da folha vira
+            # "a terceira da segunda coluna" — e ninguém consegue olhar a mesma
+            # imagem duas vezes. 📌 Prova que não é reproduzível não é prova.
+            print(f"  {i:>3} {classe}  {motivo}\n      {url}")
             continue
         registro = {"classe": classe, "motivo": motivo, "id": ident,
                     "lado": min(im.size), "quando": int(time.time())}
