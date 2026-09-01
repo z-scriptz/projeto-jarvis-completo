@@ -1526,7 +1526,14 @@ img{max-width:100%}
   padding:6px 11px;border-radius:10px;border-color:transparent;color:#fff;
   background:linear-gradient(160deg,var(--marca),var(--marca-esc));
   box-shadow:0 6px 18px rgba(255,61,110,.34)}
-.selo.plat{top:auto;bottom:9px;font-size:10px;background:rgba(11,12,15,.6)}
+/* ⚠️ DOIS SELOS NO MESMO CANTO. A dobra rosa é GRAVADA na foto tratada, no
+   canto inferior esquerdo — e a etiqueta da loja morava exatamente ali, por
+   cima dela. Só apareceu depois de 128 fotos tratadas irem ao ar: até então
+   aquele canto estava vazio. 📌 A dobra é marca e não se move; a etiqueta é
+   interface e se move. Quando dois elementos disputam um canto, quem cede é o
+   que não é identidade. */
+.selo.plat{top:auto;bottom:9px;left:auto;right:9px;font-size:10px;
+  background:rgba(11,12,15,.6)}
 
 .card .corpo{padding:12px 13px 14px;display:flex;flex-direction:column;gap:9px;flex:1}
 .card h3{font-size:13px;font-weight:500;line-height:1.4;color:var(--muted);
