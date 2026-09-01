@@ -941,8 +941,8 @@ _CORPO_CATALOGO = """
   <section class="cat-topo">
     <a class="voltar" href="index.html">&larr; voltar</a>
     <h1>Todos os achados</h1>
-    <p>{{TOTAL}} produtos com preço conferido. Busque pelo que você viu no
-       vídeo, ou filtre por loja e categoria.</p>
+    <p>{{TOTAL}} produtos com preço conferido. Busque pelo nome, ou filtre
+       por loja e categoria.</p>
   </section>
 
   <section id="produtos">
@@ -1865,7 +1865,7 @@ footer a{border-bottom:1px solid var(--linha)}
   <div class="wrap barra">
     <a class="marca" href="index.html" aria-label="topshop"><span class="selo-marca" aria-hidden="true"><svg viewBox="0 0 100 100"><defs><path id="anel-t" d="M50,50 m-37,0 a37,37 0 1,1 74,0 a37,37 0 1,1 -74,0"/></defs><g class="anel"><text><textPath href="#anel-t" startOffset="0%">topshop · curadoria diária · desde 2026 · </textPath></text></g><g transform="translate(50 50)"><path class="ts-mini" transform="translate(-11 -11)" d="M4 0h9.6L22 8.6V18a4 4 0 0 1-4 4H4a4 4 0 0 1-4-4V4a4 4 0 0 1 4-4Z"/><path transform="translate(-11 -11)" fill="var(--bg)" d="M4.6 8.4h9.2v2.5h-3.3v7.4H7.9v-7.4H4.6z"/></g></svg></span><span>top<i>shop</i></span></a>
     <label class="buscabox">
-      <input id="busca" type="search" placeholder="Buscar uma peça"
+      <input id="busca" type="search" placeholder="Buscar um produto"
              autocomplete="off" aria-label="Buscar produto">
       <svg class="lupa" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg>
     </label>
@@ -2069,22 +2069,48 @@ if (!calmo && fino) cards.forEach(function(c){
 /* ── fitas de categoria arrastáveis, com inércia ─────────────────────────
    O navegador já dá inércia ao dedo no celular. O que falta é o DESKTOP, onde
    arrastar não faz nada e a fita parece travada — então aqui a gente empresta
-   o mesmo gesto pro mouse, e solta com velocidade decrescente. */
+   o mesmo gesto pro mouse, e solta com velocidade decrescente.
+
+   ⚠️ ESTE ARRASTO MATOU O FILTRO DE CATEGORIA (01/09) — o Dre: "clico em todos
+   ou qualquer coisa e simplesmente não muda". A versão anterior marcava
+   `.arrastando` já no `pointerdown`, e `.arrastando .chip{pointer-events:none}`
+   tirava o chip do teste de acerto no meio do próprio clique:
+
+       pointerdown -> chip            mouseup -> .fita-rolo
+       mousedown   -> chip            click   -> .fita-rolo   (closest('.chip') = null)
+
+   O clique existia, chegava na fita e morria ali. 📌 SEGURAR O BOTÃO NÃO É
+   ARRASTAR: arrasto é movimento, e só vira arrasto depois de 5px. É o mesmo
+   erro do minerador — tratar uma suposição ("está apertado, deve querer
+   arrastar") como se fosse fato ("andou 5px"). */
 document.querySelectorAll('.fita-rolo').forEach(function(f){
-  var baixo = false, x0 = 0, e0 = 0, v = 0, ultimo = 0, quadro;
+  var baixo = false, andou = false, x0 = 0, e0 = 0, v = 0, ultimo = 0, quadro;
   f.addEventListener('pointerdown', function(e){
-    if (e.pointerType === 'touch') return;   /* o celular já sabe fazer isso */
-    baixo = true; x0 = e.clientX; e0 = f.scrollLeft; v = 0; ultimo = e.clientX;
-    cancelAnimationFrame(quadro); f.classList.add('arrastando');
+    if (e.pointerType === 'touch' || e.button !== 0) return;  /* o celular já sabe */
+    baixo = true; andou = false;
+    x0 = e.clientX; e0 = f.scrollLeft; v = 0; ultimo = e.clientX;
+    cancelAnimationFrame(quadro);
   });
   addEventListener('pointermove', function(e){
     if (!baixo) return;
+    if (!andou){
+      if (Math.abs(e.clientX - x0) < 5) return;   /* ainda é um clique parado */
+      andou = true; f.classList.add('arrastando');
+    }
     f.scrollLeft = e0 - (e.clientX - x0);
     v = e.clientX - ultimo; ultimo = e.clientX;
   });
   addEventListener('pointerup', function(){
     if (!baixo) return;
-    baixo = false; f.classList.remove('arrastando');
+    baixo = false;
+    if (!andou) return;              /* clique puro: nada a frear, nada a engolir */
+    f.classList.remove('arrastando');
+    /* soltar em cima de um chip depois de arrastar não pode filtrar: o clique
+       que vem a seguir é resíduo do gesto. Engolido na captura, e o listener
+       sai no próximo tique — o click chega antes, na mesma tarefa. */
+    var engole = function(ev){ ev.stopPropagation(); ev.preventDefault(); };
+    f.addEventListener('click', engole, true);
+    setTimeout(function(){ f.removeEventListener('click', engole, true); }, 0);
     (function desliza(){
       if (Math.abs(v) < .4) return;
       f.scrollLeft -= v; v *= .93;          /* atrito */
