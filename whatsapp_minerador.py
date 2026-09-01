@@ -929,6 +929,20 @@ def rodar(teste: bool, diag: bool) -> int:
                         for m in msgs[-4:]:
                             _log(f"        {m['id'][:36]}  "
                                  f"{m['texto'].splitlines()[0][:56]!r}")
+                        # ⚠️ O PORTÃO DE OFERTA MEDIDO AQUI, E NÃO NO --teste.
+                        # O --teste só vê mensagem NOVA, e depois da rodada do
+                        # cron sobra uma ou nenhuma — foi o que aconteceu em
+                        # 01/09: amostra de 1, conclusão nenhuma. O --diag lê a
+                        # janela inteira ignorando o "já minerado", então é o
+                        # único lugar onde dá pra saber a taxa de verdade.
+                        # 📌 Portão novo se mede na população, não no que
+                        # sobrou.
+                        barrados = [m for m in msgs if not _e_oferta(m["texto"])]
+                        pc = (100.0 * len(barrados) / len(msgs)) if msgs else 0
+                        _log(f"      🚫 portão de oferta barraria {len(barrados)}"
+                             f" de {len(msgs)} ({pc:.0f}%)")
+                        for m in barrados[:8]:
+                            _log("         " + " ".join(m["texto"].split())[:72])
                         contas["lidas"] += len(msgs)
                         if len(alvos) > 1:
                             time.sleep(random.uniform(4, 10))
