@@ -590,13 +590,22 @@ def _abre_html(produtos: list) -> str:
     ⚠️ "ACHADOS DOS NOSSOS VÍDEOS" SAIU (01/09). Era a frase que a casa usa pra
     falar de si mesma: quem chega de um anúncio não sabe que existem vídeos, e a
     manchete gastava as três linhas maiores do site explicando NOSSO processo em
-    vez de dar um motivo pra ficar. 📌 A manchete promete o critério; a linha de
-    número embaixo dela entrega a prova ("preço conferido em 01/09"). Uma sem a
-    outra é ou slogan vazio ou dado solto."""
+    vez de dar um motivo pra ficar.
+
+    📌 A MANCHETE DO DRE ACERTOU O QUE AS MINHAS ERRARAM: ela fala do MUNDO, não
+    da loja. "Nem tudo merece sua atenção" é uma frase que existiria sem a
+    TopShop — e por isso soa marca, não vitrine. As minhas ("o que vale a pena",
+    "o preço de hoje, conferido") descreviam o serviço, que é o mesmo defeito de
+    "achados dos nossos vídeos" num nível mais bem-vestido.
+
+    A estrutura é dois tempos: a manchete tira algo (quase nada presta) e a
+    linha menor devolve (a gente acha o que presta). O número à direita continua
+    sendo a prova — promessa, resolução, evidência, nessa ordem."""
     return (
-        '<section class="abre" id="abre">'
-        '<h1><span><b>O que</b></span><span><b>vale</b></span>'
-        '<span><b><em>a pena</em></b></span></h1>'
+        '<section class="abre" id="abre"><div class="abre-t">'
+        '<h1><span><b>Nem tudo</b></span><span><b>merece sua</b></span>'
+        '<span><b><em>atenção.</em></b></span></h1>'
+        '<p class="abre-sub">A gente encontra o que merece.</p></div>'
         f'<p class="abre-n"><b>{len(produtos)}</b>achados no ar<br>'
         f'preço conferido em {time.strftime("%d/%m")}</p>'
         + _abre_foto(produtos) +
@@ -1023,9 +1032,9 @@ _TEMPLATE = r"""<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>topshop — o que vale a pena</title>
+<title>topshop — a gente encontra o que merece</title>
 <meta name="description" content="Curadoria diária de objetos que valem o preço. A gente confere o valor todo dia e mostra o histórico antes de você comprar.">
-<meta property="og:title" content="topshop — o que vale a pena">
+<meta property="og:title" content="topshop — a gente encontra o que merece">
 <meta property="og:description" content="Curadoria diária, com o preço conferido todo dia.">
 <meta property="og:type" content="website">
 <meta property="og:image" content="{{OGIMG}}">
@@ -1451,16 +1460,33 @@ img{max-width:100%}
   display:grid;grid-template-columns:1fr auto;align-items:end;gap:24px}
 .abre h1{font-size:clamp(46px,10.5vw,142px);font-weight:850;font-stretch:118%;
   line-height:.85;letter-spacing:-.055em;text-transform:none}
-.abre h1 span{display:block;overflow:hidden}
+.abre-t{min-width:0}
+/* ⚠️ A CORTINA CORTAVA O TIL E A CEDILHA. `overflow:hidden` clipa na caixa de
+   linha, e com line-height .82 o ~ do Ã fica ACIMA dela e o ¸ do Ç ABAIXO —
+   defeito que só aparece quando a manchete tem acento, e a nossa passou a ter
+   ("ATENÇÃO."). `overflow-clip-margin` alarga a janela sem mover a caixa; o
+   `overflow:hidden` antes fica de reserva pra quem não entende `clip`. */
+.abre h1 span{display:block;overflow:hidden;overflow:clip;
+  overflow-clip-margin:.16em}
 .abre h1 b{display:block;font-weight:inherit}
 .abre h1 em{font-style:normal;color:var(--marca)}
 /* a cortina: cada linha sobe de dentro da própria caixa. É o "abrir a porta"
-   que o Dre descreveu no ERA, em 520ms e sem segurar ninguém na tela. */
-.js .abre h1 b{transform:translateY(102%);
+   que o Dre descreveu no ERA, em 520ms e sem segurar ninguém na tela.
+   📌 125% e não 102%: a janela agora é .16em mais alta que a caixa, então o
+   102% de antes deixaria aparecer uma tira do topo das letras antes da hora. */
+.js .abre h1 b{transform:translateY(125%);
   transition:transform .72s cubic-bezier(.16,.84,.28,1)}
 .js .abre h1 span:nth-child(2) b{transition-delay:.08s}
 .js .abre h1 span:nth-child(3) b{transition-delay:.16s}
 .abre.dentro h1 b{transform:none}
+/* o segundo tempo: chega DEPOIS das três linhas, senão as duas frases disputam
+   o mesmo instante e nenhuma é lida. */
+.abre-sub{margin-top:clamp(14px,1.7vw,24px);max-width:26ch;
+  font-size:clamp(15px,1.55vw,21px);line-height:1.35;letter-spacing:-.005em;
+  color:var(--ink)}
+.js .abre-sub{opacity:0;transform:translateY(14px);
+  transition:opacity .7s .34s,transform .7s .34s cubic-bezier(.16,.84,.28,1)}
+.abre.dentro .abre-sub{opacity:1;transform:none}
 .abre-n{text-align:right;color:var(--muted);font-size:13.5px;line-height:1.6;
   padding-bottom:.6em;white-space:nowrap}
 .abre-n b{display:block;color:var(--ink);font-size:clamp(26px,3.4vw,40px);
