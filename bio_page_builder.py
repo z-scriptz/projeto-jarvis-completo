@@ -26,6 +26,20 @@ except Exception:
     logging.basicConfig(level=logging.INFO)
     log = logging.getLogger("bio_page_builder")
 
+# A marca, em curvas de verdade (ver gerar_marca.py). Se o módulo não tiver
+# sido deployado, o site NÃO fica sem logo: cai no desenho antigo e o log diz
+# qual está no ar. 📌 Cair no padrão calado foi o que colocou a logo de uma
+# conta no vídeo de outra (shared/marca.py conta a história inteira).
+try:
+    from shared.marca_svg import SIMBOLO as _SVG_SIMBOLO, WORDMARK as _SVG_WORDMARK
+except Exception:
+    try:
+        from marca_svg import SIMBOLO as _SVG_SIMBOLO, WORDMARK as _SVG_WORDMARK
+    except Exception:
+        _SVG_SIMBOLO = _SVG_WORDMARK = ""
+        log.warning("⚠️  shared/marca_svg.py não encontrado — o site vai sair "
+                    "com o desenho ANTIGO da marca. Deploye o módulo.")
+
 SAIDA_HTML = Path(__file__).parent.parent / "site" / "index.html"
 JSON_FILA = Path(__file__).parent.parent / "shared" / "produtos_fila.json"
 # ⚠️ O REGISTRO DO QUE FOI MANDADO, não da fila. A fila é intenção; este
@@ -998,11 +1012,66 @@ _CORPO_CATALOGO = """
 """
 
 
+_MARCA_ANTIGA = (
+    '<a class="marca" href="index.html" aria-label="topshop">'
+    '<span class="selo-marca" aria-hidden="true"><svg viewBox="0 0 100 100">'
+    '<defs><path id="anel-t" d="M50,50 m-37,0 a37,37 0 1,1 74,0 a37,37 0 1,1 -74,0"/>'
+    '</defs><g class="anel"><text><textPath href="#anel-t" startOffset="0%">'
+    'topshop \u00b7 curadoria di\u00e1ria \u00b7 desde 2026 \u00b7 </textPath></text></g>'
+    '<g transform="translate(50 50)">'
+    '<path class="ts-mini" transform="translate(-11 -11)" '
+    'd="M4 0h9.6L22 8.6V18a4 4 0 0 1-4 4H4a4 4 0 0 1-4-4V4a4 4 0 0 1 4-4Z"/>'
+    '<path transform="translate(-11 -11)" fill="var(--bg)" '
+    'd="M4.6 8.4h9.2v2.5h-3.3v7.4H7.9v-7.4H4.6z"/></g></svg></span>'
+    '<span>top<i>shop</i></span></a>')
+
+
+def _aninhar(svg: str, x: float, y: float, lado: float) -> str:
+    """Encaixa um SVG inteiro dentro de outro, na caixa pedida.
+
+    SVG aninhado escala pelo viewBox sozinho — não precisa recalcular
+    transform, e é por isso que o s\u00edmbolo cabe no selo sem ninguém
+    ajustar n\u00famero na m\u00e3o quando a proporção mudar."""
+    vb = re.search(r'viewBox="([^"]+)"', svg)
+    miolo = re.sub(r"^<svg[^>]*>|</svg>$", "", svg)
+    miolo = re.sub(r"<title>.*?</title>", "", miolo, flags=re.S)
+    return (f'<svg x="{x}" y="{y}" width="{lado}" height="{lado}" '
+            f'viewBox="{vb.group(1)}" preserveAspectRatio="xMidYMid meet">'
+            f"{miolo}</svg>")
+
+
+def _cabecalho_marca() -> str:
+    """A assinatura no topo: o selo girando com o s\u00edmbolo dentro, e o
+    wordmark em curva ao lado.
+
+    \u26a0\ufe0f O SELO GUARDAVA A LOGO VELHA. Ele continua girando — foi o Dre
+    quem pediu e \u00e9 dele a decis\u00e3o de tirar — mas o quadradinho rosa com um
+    T de dentro dele saiu: manter os dois seria ter duas marcas no mesmo
+    cabe\u00e7alho, e a nova perde por estar menor.
+    \U0001f4cc O nome ao lado deixou de ser TEXTO. Era `top<i>shop</i>` com a
+    fonte do sistema; agora \u00e9 o contorno da Instrument Serif, id\u00eantico em
+    qualquer m\u00e1quina. Wordmark que depende da fonte instalada n\u00e3o \u00e9 wordmark."""
+    if not (_SVG_SIMBOLO and _SVG_WORDMARK):
+        return _MARCA_ANTIGA
+    selo = (
+        '<span class="selo-marca" aria-hidden="true"><svg viewBox="0 0 100 100">'
+        '<defs><path id="anel-t" d="M50,50 m-37,0 a37,37 0 1,1 74,0 a37,37 0 1,1 -74,0"/>'
+        '</defs><g class="anel"><text><textPath href="#anel-t" startOffset="0%">'
+        'topshop \u00b7 curadoria di\u00e1ria \u00b7 desde 2026 \u00b7 </textPath></text></g>'
+        + _aninhar(_SVG_SIMBOLO, 34, 33, 32) + "</svg></span>")
+    nome = ('<span class="marca-nome">'
+            + re.sub(r"<title>.*?</title>", "", _SVG_WORDMARK, flags=re.S)
+            + "</span>")
+    return ('<a class="marca" href="index.html" aria-label="topshop">'
+            + selo + nome + "</a>")
+
+
 def _comuns(produtos: list, corpo: str, og: str) -> str:
     """Substituições que valem pras duas páginas."""
     total, lojas, off_medio = _metricas(produtos)
     grupo_topo = GRUPO_WHATSAPP or GRUPO_TELEGRAM or INSTAGRAM
     return _TEMPLATE.replace("{{CORPO}}", corpo)\
+                    .replace("{{MARCA}}", _cabecalho_marca())\
                     .replace("{{GRUPO_TOPO}}", html.escape(grupo_topo))\
                     .replace("{{TOTAL}}", str(total))\
                     .replace("{{LOJAS}}", str(lojas))\
@@ -1150,7 +1219,8 @@ _TEMPLATE = r"""<!DOCTYPE html>
   --marca:#FF5C82; --marca-esc:#D43D63; --ok:#4FCB8E;
   --foto:#26221C;
 }
-:root[data-tema="escuro"] .topo{background:rgba(20,18,15,.76)}
+:root[data-tema="escuro"] .topo,
+:root[data-tema="escuro"] .topo.colado{background:rgba(20,18,15,.80)}
 :root[data-tema="escuro"] .card{
   box-shadow:inset 0 1px 0 rgba(242,238,230,.06), 0 1px 2px rgba(0,0,0,.5)}
 :root[data-tema="escuro"] .card:hover{
@@ -1184,7 +1254,12 @@ img{max-width:100%}
    E a lupa: `top:29px` era metade de 58px chumbada na mão — bastava um estado
    de altura que eu não tivesse enumerado (e eram cinco) pra ela sair do lugar.
    `top:50%` não depende de altura nenhuma. */
-.topo{position:sticky;top:0;z-index:50;background:rgba(11,12,15,.72);
+/* ⚠️ ISTO AQUI ERA rgba(11,12,15,.72) — o preto FRIO do tema antigo, chumbado
+   na regra base. Só o tema escuro tinha correção, então no tema claro a página
+   era creme e a barra do topo era uma tira cinza-chumbo em cima dela. Passou
+   despercebido porque as telas todas foram vistas no escuro. 📌 Sobra de
+   paleta antiga não se descobre olhando o tema em que se trabalha. */
+.topo{position:sticky;top:0;z-index:50;background:rgba(246,243,237,.78);
   backdrop-filter:blur(22px) saturate(150%);
   -webkit-backdrop-filter:blur(22px) saturate(150%);
   border-bottom:1px solid transparent;transition:border-color .25s}
@@ -1193,6 +1268,10 @@ img{max-width:100%}
 .marca{display:flex;align-items:center;gap:11px;font-size:19px;font-weight:800;
   font-stretch:112%;letter-spacing:-.045em;white-space:nowrap;flex:none}
 .marca i{font-style:normal;color:var(--marca)}
+/* o wordmark é desenho, não texto: a altura manda e a largura acompanha. */
+.marca-nome{display:block;flex:none;line-height:0}
+.marca-nome svg{height:23px;width:auto;display:block;overflow:visible}
+@media(max-width:700px){.marca-nome svg{height:19px}}
 .tema{flex:none;width:40px;height:40px;border-radius:11px;cursor:pointer;
   border:1px solid var(--linha2);background:transparent;color:var(--ink);
   display:grid;place-items:center;font:inherit;font-size:16px;line-height:1;
@@ -1214,8 +1293,11 @@ img{max-width:100%}
    lugar, não economia. */
 .barra .buscabox{flex:1;min-width:0;--h:42px;--fs:15px}
 @media(max-width:760px){
-  /* o polegar precisa da busca inteira; a palavra "topshop" cabe no símbolo */
-  .marca span{display:none}
+  /* o polegar precisa da busca inteira; a palavra "topshop" cabe no símbolo
+     ⚠️ ERA `.marca span`, que também pegava o `<span class="selo-marca">` — ou
+     seja, no celular a marca sumia INTEIRA, símbolo e nome. Especificidade
+     (0,1,1) ganhava do `.selo-marca` (0,1,0) mesmo ele vindo depois. */
+  .marca .marca-nome{display:none}
   .zap{padding:9px 13px}
 }
 
@@ -1674,7 +1756,10 @@ img{max-width:100%}
    ⚠️ 40s por volta, não 8: girar rápido vira spinner de carregamento, e
    spinner é a coisa mais barata que existe. Devagar, o olho lê como objeto. */
 .selo-marca{position:relative;width:74px;height:74px;flex:none;display:block}
-.selo-marca svg{width:100%;height:100%;display:block}
+/* ⚠️ FILHO DIRETO. Sem o `>`, esta regra pega TAMBÉM o SVG aninhado do
+   símbolo, e width:100% atropela o x/y/width que posicionam ele dentro do
+   anel — o T saía transbordando por cima do texto do selo. */
+.selo-marca > svg{width:100%;height:100%;display:block}
 .selo-marca .anel{animation:gira-selo 40s linear infinite;transform-origin:50% 50%}
 @keyframes gira-selo{to{transform:rotate(360deg)}}
 .selo-marca text{font-family:var(--serif);font-size:8.4px;letter-spacing:.34em;
@@ -1876,7 +1961,7 @@ footer a{border-bottom:1px solid var(--linha)}
 @media(max-width:600px){.trilho .card{width:60vw;max-width:220px}}
 
 /* ── header em vidro ao rolar ───────────────────────────────────────────── */
-.topo.colado{background:rgba(11,12,15,.72);
+.topo.colado{background:rgba(246,243,237,.82);
   backdrop-filter:blur(22px) saturate(150%);
   -webkit-backdrop-filter:blur(22px) saturate(150%)}
 
@@ -1924,7 +2009,7 @@ footer a{border-bottom:1px solid var(--linha)}
      ela convence quem já está explorando, não quem acabou de chegar. -->
 <div class="topo" id="topo">
   <div class="wrap barra">
-    <a class="marca" href="index.html" aria-label="topshop"><span class="selo-marca" aria-hidden="true"><svg viewBox="0 0 100 100"><defs><path id="anel-t" d="M50,50 m-37,0 a37,37 0 1,1 74,0 a37,37 0 1,1 -74,0"/></defs><g class="anel"><text><textPath href="#anel-t" startOffset="0%">topshop · curadoria diária · desde 2026 · </textPath></text></g><g transform="translate(50 50)"><path class="ts-mini" transform="translate(-11 -11)" d="M4 0h9.6L22 8.6V18a4 4 0 0 1-4 4H4a4 4 0 0 1-4-4V4a4 4 0 0 1 4-4Z"/><path transform="translate(-11 -11)" fill="var(--bg)" d="M4.6 8.4h9.2v2.5h-3.3v7.4H7.9v-7.4H4.6z"/></g></svg></span><span>top<i>shop</i></span></a>
+    {{MARCA}}
     <label class="buscabox">
       <input id="busca" type="search" placeholder="Buscar um produto"
              autocomplete="off" aria-label="Buscar produto">
