@@ -585,11 +585,18 @@ def _abre_html(produtos: list) -> str:
     ⚠️ NÃO TEM PRODUTO AQUI, e é a primeira vez neste projeto que a primeira
     dobra não tenta vender. O motivo é o diagnóstico do Dre: "parecer padrão".
     Uma página que começa com grade só pode parecer grade. Esta tela existe pra
-    dar UM respiro e um tom — e custa 400ms de rolagem, não uma sessão."""
+    dar UM respiro e um tom — e custa 400ms de rolagem, não uma sessão.
+
+    ⚠️ "ACHADOS DOS NOSSOS VÍDEOS" SAIU (01/09). Era a frase que a casa usa pra
+    falar de si mesma: quem chega de um anúncio não sabe que existem vídeos, e a
+    manchete gastava as três linhas maiores do site explicando NOSSO processo em
+    vez de dar um motivo pra ficar. 📌 A manchete promete o critério; a linha de
+    número embaixo dela entrega a prova ("preço conferido em 01/09"). Uma sem a
+    outra é ou slogan vazio ou dado solto."""
     return (
         '<section class="abre" id="abre">'
-        '<h1><span><b>Achados</b></span><span><b>dos nossos</b></span>'
-        '<span><b><em>vídeos</em></b></span></h1>'
+        '<h1><span><b>O que</b></span><span><b>vale</b></span>'
+        '<span><b><em>a pena</em></b></span></h1>'
         f'<p class="abre-n"><b>{len(produtos)}</b>achados no ar<br>'
         f'preço conferido em {time.strftime("%d/%m")}</p>'
         + _abre_foto(produtos) +
@@ -1018,7 +1025,7 @@ _TEMPLATE = r"""<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>topshop — o que vale a pena</title>
 <meta name="description" content="Curadoria diária de objetos que valem o preço. A gente confere o valor todo dia e mostra o histórico antes de você comprar.">
-<meta property="og:title" content="topshop — o garimpo">
+<meta property="og:title" content="topshop — o que vale a pena">
 <meta property="og:description" content="Curadoria diária, com o preço conferido todo dia.">
 <meta property="og:type" content="website">
 <meta property="og:image" content="{{OGIMG}}">
