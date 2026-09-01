@@ -17,6 +17,7 @@ import html
 import time
 import argparse
 from pathlib import Path
+from urllib.parse import quote
 
 try:
     from shared.logger import get_logger
@@ -31,12 +32,14 @@ except Exception:
 # qual está no ar. 📌 Cair no padrão calado foi o que colocou a logo de uma
 # conta no vídeo de outra (shared/marca.py conta a história inteira).
 try:
-    from shared.marca_svg import SIMBOLO as _SVG_SIMBOLO, WORDMARK as _SVG_WORDMARK
+    from shared.marca_svg import (SIMBOLO as _SVG_SIMBOLO,
+                                  WORDMARK as _SVG_WORDMARK, MICRO)
 except Exception:
     try:
-        from marca_svg import SIMBOLO as _SVG_SIMBOLO, WORDMARK as _SVG_WORDMARK
+        from marca_svg import (SIMBOLO as _SVG_SIMBOLO,
+                               WORDMARK as _SVG_WORDMARK, MICRO)
     except Exception:
-        _SVG_SIMBOLO = _SVG_WORDMARK = ""
+        _SVG_SIMBOLO = _SVG_WORDMARK = MICRO = ""
         log.warning("⚠️  shared/marca_svg.py não encontrado — o site vai sair "
                     "com o desenho ANTIGO da marca. Deploye o módulo.")
 
@@ -1040,6 +1043,35 @@ def _aninhar(svg: str, x: float, y: float, lado: float) -> str:
             f"{miolo}</svg>")
 
 
+_FAVICON_ANTIGO = (
+    '<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//'
+    'www.w3.org/2000/svg%22%20viewBox%3D%220%200%2032%2032%22%3E%3Cpath%20d%3D'
+    '%22M6%200h13.4L32%2012.6V26a6%206%200%200%201-6%206H6a6%206%200%200%201-6'
+    '-6V6a6%206%200%200%201%206-6Z%22%20fill%3D%22%23C8385E%22/%3E%3Cpath%20d'
+    '%3D%22M6.6%2012.4h13.2v3.5h-4.8v10.4h-3.6V15.9H6.6z%22%20fill%3D%22%23fff'
+    '%22/%3E%3C/svg%3E">')
+
+
+def _favicon() -> str:
+    """A micro, virada em data-URI.
+
+    ⚠️ O FAVICON FICOU PRA TRÁS DUAS TROCAS DE PALETA. Ele estava chumbado no
+    HTML com o rosa neon #FF3D6E e o preto frio #0B0C0F — as duas cores que a
+    marca já tinha aposentado — e ninguém viu porque favicon é o único elemento
+    do site que a gente nunca olha de perto: ele mora na aba, com 16px.
+    📌 Agora ele SAI da mesma fonte que as outras assinaturas. Não existe mais
+    "atualizar o favicon" como tarefa separada; ele muda junto ou não muda.
+
+    Cores fixas de propósito: a aba do navegador não enxerga as variáveis da
+    página, então aqui não dá pra seguir tema — e é por isso que a micro tem
+    fundo próprio, em vez de contar com o fundo de trás."""
+    if not MICRO:
+        return _FAVICON_ANTIGO
+    uri = quote(MICRO, safe="")
+    return (f'<link rel="icon" href="data:image/svg+xml,{uri}">'
+            f'<link rel="apple-touch-icon" href="data:image/svg+xml,{uri}">')
+
+
 def _cabecalho_marca() -> str:
     """A assinatura no topo: o selo girando com o s\u00edmbolo dentro, e o
     wordmark em curva ao lado.
@@ -1072,6 +1104,7 @@ def _comuns(produtos: list, corpo: str, og: str) -> str:
     grupo_topo = GRUPO_WHATSAPP or GRUPO_TELEGRAM or INSTAGRAM
     return _TEMPLATE.replace("{{CORPO}}", corpo)\
                     .replace("{{MARCA}}", _cabecalho_marca())\
+                    .replace("{{FAVICON}}", _favicon())\
                     .replace("{{GRUPO_TOPO}}", html.escape(grupo_topo))\
                     .replace("{{TOTAL}}", str(total))\
                     .replace("{{LOJAS}}", str(lojas))\
@@ -1159,8 +1192,7 @@ _TEMPLATE = r"""<!DOCTYPE html>
 <meta name="theme-color" content="#F2EEE6">
 <!-- o símbolo é o mesmo da marca, embutido: a assinatura precisa existir
      sem a palavra "topshop" pra virar ícone de app um dia -->
-<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2032%2032%22%3E%3Cpath%20d%3D%22M6%200h13.4L32%2012.6V26a6%206%200%200%201-6%206H6a6%206%200%200%201-6-6V6a6%206%200%200%201%206-6Z%22%20fill%3D%22%23FF3D6E%22/%3E%3Ccircle%20cx%3D%2223.6%22%20cy%3D%228.4%22%20r%3D%222.1%22%20fill%3D%22%230B0C0F%22%20opacity%3D%22.55%22/%3E%3Cpath%20d%3D%22M6.6%2012.4h13.2v3.5h-4.8v10.4h-3.6V15.9H6.6z%22%20fill%3D%22%23fff%22/%3E%3C/svg%3E">
-<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2032%2032%22%3E%3Cpath%20d%3D%22M6%200h13.4L32%2012.6V26a6%206%200%200%201-6%206H6a6%206%200%200%201-6-6V6a6%206%200%200%201%206-6Z%22%20fill%3D%22%23FF3D6E%22/%3E%3Ccircle%20cx%3D%2223.6%22%20cy%3D%228.4%22%20r%3D%222.1%22%20fill%3D%22%230B0C0F%22%20opacity%3D%22.55%22/%3E%3Cpath%20d%3D%22M6.6%2012.4h13.2v3.5h-4.8v10.4h-3.6V15.9H6.6z%22%20fill%3D%22%23fff%22/%3E%3C/svg%3E">
+{{FAVICON}}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
@@ -2526,6 +2558,26 @@ addEventListener('keydown', function(e){ if (e.key === 'Escape' && !gav.hidden) 
   if (calmo) { a.classList.add('dentro'); return; }
   requestAnimationFrame(function(){
     requestAnimationFrame(function(){ a.classList.add('dentro'); });
+  });
+})();
+
+/* ══ CLICAR NA MARCA ESTANDO NA HOME ═════════════════════════════════════
+   ⚠️ O Dre: "toda vez que clico no selo a página reseta". Ela recarregava
+   MESMO — o link é href="index.html" e o navegador obedece, mesmo quando você
+   já está no index. Recarregar a página em que você já está não é navegação, é
+   perder a rolagem e o estado por nada.
+   📌 Na home o clique vira "voltar ao topo"; nas outras páginas continua sendo
+   link de verdade. E respeita ctrl/cmd/shift e o botão do meio: quem quer abrir
+   noutra aba tem que conseguir. */
+(function(){
+  var a = document.querySelector('a.marca');
+  if (!a) return;
+  var aqui = location.pathname.replace(/\/$/, '/index.html');
+  if (!/index\.html$/.test(aqui)) return;
+  a.addEventListener('click', function(e){
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+    e.preventDefault();
+    scrollTo({top: 0, behavior: calmo ? 'auto' : 'smooth'});
   });
 })();
 

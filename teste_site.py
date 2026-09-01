@@ -154,6 +154,35 @@ async def rodar(pasta: Path) -> int:
               f"chegar por ?c={alvo} já abre filtrado")
             p(await vis() < total, "e a grade já vem cortada")
 
+        # ── a marca no topo ───────────────────────────────────────────────
+        await pg.goto(base + "/index.html")
+        await pg.wait_for_timeout(500)
+        icones = await pg.eval_on_selector_all(
+            "link[rel=icon],link[rel=apple-touch-icon]", "e => e.map(x => x.href)")
+        p(len(icones) == 2, f"favicon e apple-touch-icon no lugar ({len(icones)})")
+        # ⚠️ O favicon ficou DUAS trocas de paleta pra trás sem ninguém notar,
+        # porque é o único elemento do site que nunca se olha de perto.
+        p(all("FF3D6E" not in h and "0B0C0F" not in h for h in icones),
+          "o favicon não tem mais as cores aposentadas")
+
+        await pg.evaluate("scrollTo(0, 2000)")
+        await pg.wait_for_timeout(400)
+        await pg.evaluate("window.__vivo = 1")
+        url_antes = pg.url
+        await pg.click("a.marca")
+        await pg.wait_for_timeout(900)
+        p(await pg.evaluate("scrollY") == 0, "clicar na marca na home leva ao topo")
+        p(await pg.evaluate("window.__vivo || 0") == 1, "e não recarrega a página")
+        p(pg.url == url_antes, "e não muda a URL")
+
+        await pg.goto(base + "/todos.html")
+        await pg.wait_for_timeout(500)
+        await pg.click("a.marca")
+        await pg.wait_for_load_state("load")
+        await pg.wait_for_timeout(400)
+        p(pg.url.endswith("index.html"),
+          "fora da home a marca continua sendo link pra home")
+
         p(not erros, f"sem erro de JS ({erros or 'nenhum'})")
         await pg.close()
 
