@@ -124,6 +124,27 @@ async def rodar(pasta: Path) -> int:
             await pg.wait_for_timeout(500)
             p(await vis() == total, "'todos' devolve a grade inteira")
 
+        # ⚠️ TROCAR DE CATEGORIA, NÃO SÓ FILTRAR UMA VEZ. O meu teste clicava
+        # numa categoria vindo de "tudo" — o caminho fácil, onde os cards já
+        # estão visíveis. O que quebrava era o outro: vir de uma categoria
+        # pequena pra uma grande, com dezenas de cards saindo de escondido. O
+        # Dre viu como "Cozinha só tem um relógio". 📌 Um teste que só percorre
+        # a transição fácil aprova o código na única situação que não importa.
+        alvos = [c for c in cats if c != "todos"][:6]
+        perdas = 0
+        for cat in (alvos + list(reversed(alvos)) + alvos):
+            await pg.click(f'#filtros .chip[data-filtro="{cat}"]')
+            await pg.wait_for_timeout(650)
+            v = await vis()
+            n = await pg.eval_on_selector_all(
+                ".card", f"e => e.filter(x => x.dataset.categoria === {cat!r}).length")
+            if v != n:
+                perdas += 1
+                print(f"        {cat}: visíveis={v} html={n}")
+        p(perdas == 0, f"{len(alvos)*3} trocas de categoria sem perder card")
+        await pg.click('#filtros .chip[data-filtro="todos"]')
+        await pg.wait_for_timeout(600)
+
         if await pg.query_selector('#filtros-plat .loja[data-plat="shopee"]'):
             await pg.click('#filtros-plat .loja[data-plat="shopee"]')
             await pg.wait_for_timeout(500)

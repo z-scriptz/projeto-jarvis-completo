@@ -1493,7 +1493,7 @@ img{max-width:100%}
 .card:hover{background:var(--sup);border-color:var(--marca);
   transform:translateY(-3px);
   box-shadow:0 18px 40px rgba(26,35,56,.16), 0 0 0 1px rgba(200,56,94,.16)}
-.card.saindo{opacity:0;transform:scale(.96);pointer-events:none}
+.card.saindo,.card.chegando{opacity:0;transform:scale(.96);pointer-events:none}
 
 .card .foto{aspect-ratio:1;position:relative;overflow:hidden;background:var(--foto)}
 .card .foto img{width:100%;height:100%;object-fit:cover;display:block;opacity:0;
@@ -2080,7 +2080,7 @@ footer a{border-bottom:1px solid var(--linha)}
 .js .card.dentro{opacity:1;transform:none}
 /* o filtro re-anima a saída: bater display:none faz a grade PISCAR, e é a
    diferença entre "o site respondeu" e "o site engasgou" */
-.card.saindo{opacity:0;transform:scale(.96);pointer-events:none}
+.card.saindo,.card.chegando{opacity:0;transform:scale(.96);pointer-events:none}
 
 /* ── fitas com inércia: o cursor vira mão ao arrastar ───────────────────── */
 .fita-rolo{scroll-behavior:smooth;cursor:grab}
@@ -2091,7 +2091,7 @@ footer a{border-bottom:1px solid var(--linha)}
 .prova-linha b{font-variant-numeric:tabular-nums}
 
 @media(prefers-reduced-motion:reduce){
-  .card.saindo{opacity:1;transform:none}
+  .card.saindo,.card.chegando{opacity:1;transform:none}
 }
 </style>
 </head>
@@ -2199,9 +2199,24 @@ var semRes = document.getElementById('sem-res');
 
 /* ⚠️ FILTRAR COM display:none FAZ A GRADE PISCAR. O card some no mesmo frame
    e os vizinhos saltam pro lugar dele — parece engasgo, não resposta. Aqui a
-   saída é animada (.saindo) e só depois vira .esconde; a volta re-escalona a
-   entrada. É a diferença entre "o site respondeu" e "o site travou".
-   Sem JS a grade nasce inteira e o filtro simplesmente não existe. */
+   saída é animada e só depois vira .esconde; a volta re-escalona a entrada.
+   Sem JS a grade nasce inteira e o filtro simplesmente não existe.
+
+   ⚠️⚠️ UMA CLASSE SÓ PARA DUAS COISAS DIFERENTES PERDIA CARD (01/09). Antes,
+   quem SAÍA e quem CHEGAVA usavam `.saindo` — e a varredura que esconde os que
+   saíram, 300ms depois, escondia junto os que estavam chegando. O Dre viu como
+   "Cozinha só tem um relógio": vindo de Pet, 25 dos 35 sumiam.
+
+   O número dos sobreviventes entregou a causa: sobravam exatamente 10, que são
+   os índices 0-9 do escalonamento `Math.min(i,10)*22`. Todos os que caíam em
+   220ms morriam — porque os timers de entrada são agendados DENTRO de um
+   requestAnimationFrame, e rAF + 220ms passa dos 300ms da varredura. Corrida
+   pura: com Tech->Cozinha ela ganhava, com Pet->Cozinha perdia.
+
+   📌 Não dá pra consertar corrida ajustando o relógio — os 300ms viravam 400,
+   e o defeito voltava numa máquina mais lenta. O erro era `.saindo` significar
+   "está indo embora" E "está chegando". Agora são duas classes com o mesmo
+   visual, e a varredura só pode esconder quem está saindo. */
 var pintando = null;
 function aplicar(){
   var visiveis = 0, entrando = [];
@@ -2212,11 +2227,12 @@ function aplicar(){
     if (ok){
       visiveis++;
       if (c.classList.contains('esconde')){
-        c.classList.remove('esconde');
-        c.classList.add('saindo');       /* nasce encolhido e cresce */
+        c.classList.remove('esconde', 'saindo');
+        c.classList.add('chegando');     /* nasce encolhido e cresce */
         entrando.push(c);
       }
     } else if (!c.classList.contains('esconde')) {
+      c.classList.remove('chegando');
       c.classList.add('saindo');
     }
   });
@@ -2225,10 +2241,10 @@ function aplicar(){
   clearTimeout(pintando);
   requestAnimationFrame(function(){
     entrando.forEach(function(c, i){
-      setTimeout(function(){ c.classList.remove('saindo'); }, Math.min(i, 10) * 22);
+      setTimeout(function(){ c.classList.remove('chegando'); }, Math.min(i, 10) * 22);
     });
   });
-  /* só tira do fluxo depois que a saída terminou */
+  /* só tira do fluxo depois que a saída terminou — e SÓ quem está saindo */
   pintando = setTimeout(function(){
     cards.forEach(function(c){
       if (c.classList.contains('saindo')) c.classList.add('esconde');
