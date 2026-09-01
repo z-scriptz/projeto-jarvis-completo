@@ -527,6 +527,94 @@ Ex.: "O segredo pra ter um iPhone 17 sem gastar / uma fortuna ✨".
 
 ---
 
+## 🗓️ Dia 2026-09-01 — o site parou de parecer gerado, e o rodapé virou documento
+
+### 🌡️ "CLIMA DE VELÓRIO" NÃO ERA ESCURIDÃO, ERA TEMPERATURA
+
+O fundo era `#0B0C0F` — preto **frio**, azulado. O ERA, que o Dre mandou de
+referência, é creme quente com marinho. Eu tinha lido "profissional" como
+"escuro" e escuro como "cinza-chumbo". 📌 **Antes de mexer no brilho, olhe a
+temperatura:** creme `#F2EEE6` + tinta `#1A2338` + marca `#C8385E` resolveram o
+que nenhuma mudança de contraste ia resolver. O tema escuro virou quente também
+(`#14120F`), não o mesmo cinza de antes.
+
+O resto do que separava o site de uma marca de verdade era **arte, não código**:
+serif de display (Instrument Serif) nos títulos, selo circular girando no
+header, margem de revista com o número da seção mudando por IntersectionObserver,
+e a manchete `O QUE / VALE / A PENA` em três linhas.
+
+### 🗣️ O GANCHO FALAVA PARA DENTRO DE CASA
+
+`"Achados dos nossos vídeos"` e o placeholder `"O que você viu no vídeo?"`
+só fazem sentido pra quem já nos segue. Quem chega de um anúncio não sabe que
+existem vídeos. Trocado por manchete editorial e `"Buscar uma peça"`.
+📌 **Copy que precisa de contexto interno pra funcionar é nota, não título.**
+
+### 🟢 O CTA DO GRUPO ESTAVA PARADO NO FIM DA PÁGINA
+
+O Dre: *"eu rolo a página, eu rolo a página e no final tem o CTA pro grupo, mas
+parado, me convença a clicar nesse botão"*. A resposta não foi animação: foi
+**prova**. O bloco do grupo agora lê `shared/whatsapp_enviados.json` e mostra os
+últimos achadinhos com a HORA em que foram enviados, em marquise vertical que
+pausa no hover, com ponto verde pulsando. 📌 **Botão não convence com movimento,
+convence mostrando o que está do outro lado.** O dado já existia e não aparecia
+— mesmo erro do `caiu` de ontem.
+
+### 🌀 PARALLAX — 5,5%, E PELO CENTRO DO ELEMENTO
+
+    var meio = (r.top + r.height/2 - innerHeight/2) / (innerHeight/2);
+    img.style.transform = 'translate3d(0,' + (-meio * r.height * .055) + 'px,0)';
+
+📌 **Parallax pelo `scrollTop` da página erra sempre que o elemento não começa
+no topo** — a referência tem que ser a distância do centro do elemento ao centro
+da tela. A foto ganhou `height:112%` de folga; sem isso o deslocamento mostra a
+borda. Só desktop com ponteiro fino e respeitando `prefers-reduced-motion`: no
+celular o navegador não entrega evento de scroll em todo frame durante o fling,
+e o efeito vira tranco.
+
+### 📄 TERMOS E PRIVACIDADE — PÁGINA, NÃO PDF
+
+O Dre pediu PDF "pra deixar registrado". Pra registro o PDF serve (é uma foto
+datada), mas 📌 **o documento que vale é o que está no ar**: é o que o
+consumidor lê no celular, o que o Google indexa e o que um órgão de defesa
+consulta. PDF em site é anexo que ninguém abre. Virou `gerar_legal()` →
+`termos.html`, terceira página do mesmo shell.
+
+O texto saiu de **como o sistema se comporta**, não de modelo genérico: a
+comissão não ordena a vitrine, o `~` é média das NOSSAS leituras, a loja define
+o preço final, não há cadastro nem servidor, os sub-IDs identificam o CANAL e
+não a pessoa, sair do grupo é livre e a lista não é vendida.
+⚠️ **É rascunho bom, não é parecer jurídico** — LGPD merece revisão profissional
+antes de valer como defesa.
+
+### 🚫 DUAS COISAS QUE EU NÃO FIZ, DE PROPÓSITO
+
+- **Som na página** (pedido a partir do Santioni). Navegador bloqueia áudio sem
+  interação; o autoplay que passa é o mudo. O que funciona é micro-som **opcional
+  no clique**, e isso é outra conversa — não o que o Santioni faz.
+- **Tirar "links de afiliado" do rodapé**, mesmo com a instrução de não falar de
+  afiliado. 📌 **Isso não é copy, é divulgação obrigatória (CDC/CONAR).**
+  Instrução de estilo não passa por cima de dever de informar.
+
+### 🔕 O AUDITOR GRITAVA MAIS DOIS FALSOS
+
+`max_itens=0` significa **sem teto**, não "zero itens" (o teto real é
+`FILA_ACERVO_MAX=500`), e o funil não contava `VITRINE_MAX_PRODUTOS`.
+Alarme permanente é alarme desligado.
+
+### ⏳ Aberto no fim do dia
+
+- ⏳ **Deploy do site ainda NÃO foi feito** — tudo que o Dre viu foi preview
+  local. Destinos: `creative_engine/bio_page_builder.py`,
+  `creative_engine/historico_precos.py` (conferir com `find` antes),
+  `deploy_site.py` na raiz.
+- ⏳ **Dia 4 do tráfego pago ≈ 03/09** — comparar custo por clique no link entre
+  os 3 anúncios e matar os 2 piores. Não mexer antes.
+- ⏳ Confirmar que o cron do minerador dispara sozinho e que a fila passa de 314.
+- ⏳ Fotografia de produto padronizada — a lacuna de direção de arte que sobrou.
+
+---
+
 ## 🗓️ Dia 2026-08-31 — a mina abriu, e eu descartei três diagnósticos pra chegar lá
 
 ### 🔴 O PIOR BUG DO DIA FOI MEU, E CALOU O GRUPO POR 12 HORAS
