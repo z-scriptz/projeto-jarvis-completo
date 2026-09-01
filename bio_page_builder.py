@@ -576,6 +576,109 @@ def _abertura_html(produtos: list) -> str:
             f'<div class="trilho fita-rolo">{cartas}</div></section>')
 
 
+def _abre_html(produtos: list) -> str:
+    """A abertura. Três linhas de tipo enorme e um número — nada mais.
+
+    ⚠️ NÃO TEM PRODUTO AQUI, e é a primeira vez neste projeto que a primeira
+    dobra não tenta vender. O motivo é o diagnóstico do Dre: "parecer padrão".
+    Uma página que começa com grade só pode parecer grade. Esta tela existe pra
+    dar UM respiro e um tom — e custa 400ms de rolagem, não uma sessão."""
+    return (
+        '<section class="abre" id="abre">'
+        '<h1><span><b>Achados</b></span><span><b>dos nossos</b></span>'
+        '<span><b><em>vídeos</em></b></span></h1>'
+        f'<p class="abre-n"><b>{len(produtos)}</b>achados no ar<br>'
+        f'preço conferido em {time.strftime("%d/%m")}</p>'
+        '</section>')
+
+
+def _destaque_editorial(produtos: list) -> str:
+    """Um produto grande, dois pequenos invadindo a composição.
+
+    ⚠️ O GRANDE É O DE MAIOR QUEDA, não o mais caro nem o primeiro da lista. A
+    manchete de um site de achadinho é o desconto — e escolher pelo dado
+    significa que a home muda sozinha todo dia, sem ninguém curar.
+    Sem queda nenhuma, cai pro maior desconto absoluto; sem isso, o primeiro.
+    📌 A escolha vem de `preco_resumo`, que já existia. Nenhum campo novo."""
+    if not produtos:
+        return ""
+    def _queda(p):
+        r = p.get("preco_resumo") or {}
+        return (int(r.get("caiu") or 0), int(r.get("off") or 0))
+    ordenado = sorted(produtos, key=_queda, reverse=True)
+    estrela, apoio = ordenado[0], ordenado[1:3]
+
+    r = estrela.get("preco_resumo") or {}
+    titulo = html.escape(_titulo_legivel(estrela.get("titulo")
+                                         or estrela.get("nome", ""), 78))
+    link = html.escape(estrela.get("link", "#"))
+    img = html.escape(estrela.get("imagem", ""))
+    marca = (f'{r["caiu"]}% mais barato' if r.get("caiu")
+             else (f'{r["off"]}% off' if r.get("off") else "Achado do dia"))
+    numero = (f'-{r["caiu"]}%' if r.get("caiu")
+              else (f'-{r["off"]}%' if r.get("off") else "novo"))
+    rot = "Baixou de preço" if r.get("caiu") else "Achado do dia"
+
+    foto = (f'<img src="{img}" alt="" loading="eager" decoding="async">'
+            if img else "")
+    serie = (r.get("serie") or [])
+    return (
+        '<section class="dest">'
+        f'<div class="dest-rot"><h2>{rot}</h2>'
+        f'<span>{html.escape(marca)}</span></div>'
+        f'<a class="dest-foto" href="{link}" target="_blank" rel="noopener">'
+        f'{foto}</a>'
+        '<div class="dest-info">'
+        f'<span class="dest-off">{numero}</span>'
+        f'<h3>{titulo}</h3>'
+        f'{_preco_html(estrela, grande=True)}'
+        f'{_faixa_svg(serie, 110, 26)}'
+        f'<a class="dest-ir" href="{link}" target="_blank" rel="noopener">'
+        'Ver na loja <span>&rarr;</span></a>'
+        '</div>'
+        + (f'<div class="dest-mini">{"".join(_card_grid(x) for x in apoio)}</div>'
+           if apoio else "")
+        + '</section>')
+
+
+def _categorias_editorial(produtos: list) -> str:
+    """Categorias como porta de entrada do tamanho de um título.
+
+    ⚠️ CHIP NÃO É PORTA. Antes eram sete pílulas de 13px que filtravam a mesma
+    grade — a pessoa nem via que existiam. Aqui cada categoria é uma linha do
+    tamanho de um título, com a CONTAGEM REAL e a foto de um produto dela
+    aparecendo por trás no hover.
+    📌 A foto no hover não é enfeite: é a prova de que a porta leva a algum
+    lugar. Categoria vazia não entra — porta que abre pro nada é pior que
+    porta que não existe."""
+    porcat = {}
+    for p in produtos:
+        porcat.setdefault(_inferir_categoria(p), []).append(p)
+    linhas = []
+    for cat in list(_CATEGORIAS_FIXAS) + ["Outros"]:
+        itens = porcat.get(cat) or []
+        if len(itens) < 3:
+            continue
+        com_foto = next((i for i in itens if (i.get("imagem") or "").strip()), None)
+        fundo = (f'<img class="cf" src="{html.escape(com_foto["imagem"])}" '
+                 f'alt="" loading="lazy">' if com_foto else "")
+        linhas.append(
+            f'<a class="cat-l" href="todos.html?c={html.escape(cat)}">'
+            f'{fundo}<span class="cn">{html.escape(cat)}</span>'
+            f'<span class="cq">{len(itens)} achados</span></a>')
+    if not linhas:
+        return ""
+    return ('<section class="catg"><div class="catg-rot">Por onde você quer '
+            'começar</div>' + "".join(linhas) + '</section>')
+
+
+def _porta_catalogo(produtos: list) -> str:
+    return (f'<a class="tudo" href="todos.html"><span><b>Ver todos os '
+            f'{len(produtos)} achados</b>'
+            f'<i>com busca, filtro por loja e histórico de preço</i></span>'
+            f'<span class="seta">&rarr;</span></a>')
+
+
 def _grupo_faixa_html() -> str:
     """O convite pro grupo, no meio da vitrine.
 
@@ -647,19 +750,52 @@ def _grupos_html() -> str:
     return "".join(itens)
 
 
-def gerar_site(produtos: list) -> str:
-    _corrigir_titulos(produtos)
-    antes = len(produtos)
-    produtos = [p for p in produtos if _vale_mostrar(p)]
-    if len(produtos) < antes:
-        log.info(f"   🚧 {antes - len(produtos)} produto(s) sem foto e sem preço "
-                 f"fora da vitrine (o link continua valendo na legenda)")
+# ── os dois corpos ────────────────────────────────────────────────────────
+# ⚠️ A CASCA É UMA SÓ. Cabeça, CSS, header, drawer, rodapé e script vivem no
+# `_TEMPLATE` e as duas páginas trocam só o `{{CORPO}}`. Duplicar o template
+# seria garantir que um dia o tema claro funcionasse numa página e na outra
+# não — é a mesma lição das duas travas, aplicada a HTML.
+_CORPO_HOME = """
+  {{ABRE}}
+  {{DESTAQUE}}
+  {{CATEGORIAS}}
+  {{GRUPO_FAIXA}}
+  {{PORTA}}
+
+  <section class="rodape-prova">
+    <p class="prova-linha">
+      <b>{{TOTAL}}</b> achados no ar · preços conferidos em <b>{{DATA}}</b> ·
+      <b>{{DIAS}}</b> dias de histórico de preço · link que morre sai sozinho
+    </p>
+    <div class="canais">
+      <a class="ci" href="{{GRUPO_TOPO}}" target="_blank" rel="noopener">Grupo de achadinhos</a>
+      <a class="ci" href="{{INSTAGRAM}}" target="_blank" rel="noopener">Instagram</a>
+      <a class="ci" href="{{TIKTOK}}" target="_blank" rel="noopener">TikTok</a>
+      <a class="ci" href="{{YOUTUBE}}" target="_blank" rel="noopener">YouTube</a>
+      <a class="ci" href="mailto:{{EMAIL}}">Fale com a gente</a>
+    </div>
+  </section>
+"""
+
+_CORPO_CATALOGO = """
+  <section class="cat-topo">
+    <a class="voltar" href="index.html">&larr; voltar</a>
+    <h1>Todos os achados</h1>
+    <p>{{TOTAL}} produtos com preço conferido. Busque pelo que você viu no
+       vídeo, ou filtre por loja e categoria.</p>
+  </section>
+
+  <section id="produtos">
+    {{VITRINE}}
+  </section>
+"""
+
+
+def _comuns(produtos: list, corpo: str, og: str) -> str:
+    """Substituições que valem pras duas páginas."""
     total, lojas, off_medio = _metricas(produtos)
-    # imagem do 1º produto vira a prévia do link no WhatsApp/Instagram
-    og = (produtos[0].get("imagem", "") if produtos else "") or ""
     grupo_topo = GRUPO_WHATSAPP or GRUPO_TELEGRAM or INSTAGRAM
-    return _TEMPLATE.replace("{{VITRINE}}", _vitrine_html(produtos))\
-                    .replace("{{ABERTURA}}", _abertura_html(produtos))\
+    return _TEMPLATE.replace("{{CORPO}}", corpo)\
                     .replace("{{GRUPO_TOPO}}", html.escape(grupo_topo))\
                     .replace("{{TOTAL}}", str(total))\
                     .replace("{{LOJAS}}", str(lojas))\
@@ -674,6 +810,41 @@ def gerar_site(produtos: list) -> str:
                     .replace("{{INSTAGRAM}}", INSTAGRAM)\
                     .replace("{{TIKTOK}}", TIKTOK)\
                     .replace("{{YOUTUBE}}", YOUTUBE)
+
+
+def gerar_site(produtos: list) -> str:
+    """A HOME: escolhe, não lista.
+
+    ⚠️ ATÉ 31/08 ESTA FUNÇÃO DESPEJAVA OS 300 PRODUTOS NUMA PÁGINA SÓ. O Dre:
+    "não vamos colocar 1000 fotos na mesma página, ngm rola isso tudo, as
+    pessoas pesquisam". Ele tem razão e o efeito era pior que o peso — uma
+    página que repete a mesma célula 300 vezes SÓ PODE parecer template,
+    porque repetição é a definição de template.
+    📌 Home escolhe (um destaque, categorias, o convite); catálogo lista."""
+    _corrigir_titulos(produtos)
+    produtos = [p for p in produtos if _vale_mostrar(p)]
+    og = (produtos[0].get("imagem", "") if produtos else "") or ""
+    corpo = (_CORPO_HOME
+             .replace("{{ABRE}}", _abre_html(produtos))
+             .replace("{{DESTAQUE}}", _destaque_editorial(produtos))
+             .replace("{{CATEGORIAS}}", _categorias_editorial(produtos))
+             .replace("{{GRUPO_FAIXA}}", _grupo_faixa_html())
+             .replace("{{PORTA}}", _porta_catalogo(produtos)))
+    return _comuns(produtos, corpo, og)
+
+
+def gerar_catalogo(produtos: list) -> str:
+    """A segunda página: a grade densa, com busca e filtro. É aqui que os 300
+    moram — e aqui a repetição não é defeito, é a função."""
+    _corrigir_titulos(produtos)
+    antes = len(produtos)
+    produtos = [p for p in produtos if _vale_mostrar(p)]
+    if len(produtos) < antes:
+        log.info(f"   🚧 {antes - len(produtos)} produto(s) sem foto e sem preço "
+                 f"fora da vitrine (o link continua valendo na legenda)")
+    og = (produtos[0].get("imagem", "") if produtos else "") or ""
+    corpo = _CORPO_CATALOGO.replace("{{VITRINE}}", _vitrine_html(produtos))
+    return _comuns(produtos, corpo, og)
 
 
 # ===== Template do site (casca fixa + vitrine dinâmica) =====
@@ -1073,6 +1244,135 @@ img{max-width:100%}
 .g-ir:hover{filter:brightness(1.08)}
 .g-nota{font-size:11.5px;color:var(--muted);line-height:1.5;text-align:center}
 
+
+/* ══════════════════════════════════════════════════════════════════════════
+   HOME EDITORIAL
+   ⚠️ O DIAGNÓSTICO QUE MUDOU TUDO (31/08). O Dre: "nosso site me incomoda por
+   parecer padrão". Não era estética — era ARQUITETURA. Uma página que despeja
+   300 cards SÓ PODE parecer template, porque a única coisa que ela consegue
+   fazer é repetir a mesma célula 300 vezes.
+   📌 O ERA Residence não é bonito por causa do CSS: é bonito porque cada tela
+   tem um NÚMERO DIFERENTE de coisas, e por isso cada tela pode ter composição
+   própria. A nossa tinha uma composição só, repetida — e repetição é a
+   definição de template.
+   E ele mesmo deu a saída: "não vamos colocar 1000 fotos na mesma página, ngm
+   rola isso tudo, as pessoas pesquisam". Home escolhe; catálogo lista.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── abertura: o TEXTO é o layout ────────────────────────────────────────
+   Do ERA: "palavras enormes, espaço negativo, títulos quebrados
+   deliberadamente. Não é texto colocado dentro do layout — o texto É o
+   layout." Aqui a quebra em três linhas é escolhida, não consequência da
+   largura da tela. */
+.abre{padding:clamp(26px,6vw,86px) 0 clamp(20px,4vw,52px);
+  display:grid;grid-template-columns:1fr auto;align-items:end;gap:24px}
+.abre h1{font-size:clamp(46px,10.5vw,142px);font-weight:850;font-stretch:118%;
+  line-height:.85;letter-spacing:-.055em;text-transform:none}
+.abre h1 span{display:block;overflow:hidden}
+.abre h1 b{display:block;font-weight:inherit}
+.abre h1 em{font-style:normal;color:var(--marca)}
+/* a cortina: cada linha sobe de dentro da própria caixa. É o "abrir a porta"
+   que o Dre descreveu no ERA, em 520ms e sem segurar ninguém na tela. */
+.js .abre h1 b{transform:translateY(102%);
+  transition:transform .72s cubic-bezier(.16,.84,.28,1)}
+.js .abre h1 span:nth-child(2) b{transition-delay:.08s}
+.js .abre h1 span:nth-child(3) b{transition-delay:.16s}
+.abre.dentro h1 b{transform:none}
+.abre-n{text-align:right;color:var(--muted);font-size:13.5px;line-height:1.6;
+  padding-bottom:.6em;white-space:nowrap}
+.abre-n b{display:block;color:var(--ink);font-size:clamp(26px,3.4vw,40px);
+  font-weight:850;letter-spacing:-.04em;font-variant-numeric:tabular-nums;
+  line-height:1}
+@media(max-width:640px){
+  .abre{grid-template-columns:1fr;align-items:start;gap:16px}
+  .abre-n{text-align:left}
+}
+
+/* ── destaque: composição assimétrica, não [CARD][CARD][CARD] ────────────
+   Do ERA: "visual grande aqui, texto deslocado ali, outra fotografia
+   invadindo a composição". Grade de 12 colunas com os elementos em posições
+   escolhidas — e os dois menores DESCEM, entrando no espaço do texto. */
+.dest{display:grid;grid-template-columns:repeat(12,1fr);
+  gap:clamp(12px,1.6vw,22px);align-items:start;
+  padding-bottom:clamp(28px,5vw,64px)}
+.dest-rot{grid-column:1/-1;display:flex;align-items:baseline;gap:12px;
+  margin-bottom:6px}
+.dest-rot h2{font-size:clamp(15px,1.8vw,19px);font-weight:750;
+  letter-spacing:-.02em}
+.dest-rot span{font-size:12px;color:var(--muted)}
+.dest-foto{grid-column:1/8;border-radius:var(--r);overflow:hidden;
+  background:var(--foto);aspect-ratio:4/3;position:relative;display:block;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.06), 0 18px 44px rgba(0,0,0,.42)}
+.dest-foto img{width:100%;height:100%;object-fit:cover;display:block;
+  transition:transform .7s cubic-bezier(.22,.7,.2,1)}
+.dest-foto:hover img{transform:scale(1.05)}
+.dest-info{grid-column:8/13;padding-top:clamp(10px,3vw,42px)}
+.dest-off{display:inline-block;font-size:clamp(30px,4.6vw,58px);font-weight:850;
+  letter-spacing:-.05em;line-height:1;color:var(--marca)}
+.dest-info h3{font-size:clamp(17px,2vw,23px);font-weight:600;line-height:1.28;
+  margin:14px 0 12px;letter-spacing:-.015em}
+.dest-info .pr b{font-size:clamp(26px,3.2vw,36px)}
+.dest-info .faixa{width:110px;height:26px;margin-top:10px}
+.dest-ir{display:inline-flex;align-items:center;gap:9px;margin-top:18px;
+  border-bottom:1px solid var(--linha2);padding-bottom:5px;font-weight:700;
+  font-size:14.5px;transition:border-color .25s,gap .25s}
+.dest-ir:hover{border-color:var(--marca);gap:14px}
+/* os dois menores invadem a coluna do texto, e é essa sobreposição que quebra
+   a sensação de grade */
+.dest-mini{grid-column:5/11;display:grid;grid-template-columns:1fr 1fr;
+  gap:clamp(12px,1.6vw,22px);margin-top:clamp(-40px,-4vw,-14px);z-index:2}
+@media(max-width:820px){
+  .dest-foto{grid-column:1/-1;aspect-ratio:16/11}
+  .dest-info{grid-column:1/-1;padding-top:4px}
+  .dest-mini{grid-column:1/-1;margin-top:8px}
+}
+
+/* ── categorias: entrada tipográfica, não chip ───────────────────────────
+   Do Loop: "em vez de 'aqui estão nossos trabalhos', existe 'COMO você quer
+   explorar?'". Categoria vira porta de entrada do tamanho de um título, com a
+   contagem real do lado — e a foto de um produto dela aparecendo por trás no
+   hover, que é a prova de que a porta leva a algum lugar. */
+.catg{padding:clamp(26px,5vw,64px) 0;border-top:1px solid var(--linha)}
+.catg-rot{font-size:12px;font-weight:700;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:18px}
+.cat-l{position:relative;display:flex;align-items:center;justify-content:space-between;
+  gap:20px;padding:clamp(14px,2vw,22px) 0;border-bottom:1px solid var(--linha);
+  overflow:hidden;isolation:isolate}
+.cat-l .cn{font-size:clamp(26px,4.6vw,52px);font-weight:850;letter-spacing:-.045em;
+  line-height:1;transition:transform .38s cubic-bezier(.22,.7,.2,1),color .28s}
+.cat-l .cq{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;
+  white-space:nowrap;transition:color .28s}
+.cat-l .cf{position:absolute;right:78px;top:50%;translate:0 -50%;z-index:-1;
+  width:132px;height:88px;border-radius:10px;object-fit:cover;
+  opacity:0;transform:scale(.9) rotate(-4deg);
+  transition:opacity .38s,transform .5s cubic-bezier(.22,.7,.2,1)}
+.cat-l:hover .cn{transform:translateX(14px);color:var(--marca)}
+.cat-l:hover .cq{color:var(--ink)}
+.cat-l:hover .cf{opacity:.9;transform:scale(1) rotate(-2deg)}
+@media(max-width:600px){.cat-l .cf{display:none}}
+
+/* ── porta pro catálogo ──────────────────────────────────────────────────*/
+.tudo{display:flex;align-items:center;justify-content:space-between;gap:18px;
+  margin:clamp(24px,4vw,44px) 0;padding:clamp(20px,3vw,30px) clamp(20px,3vw,32px);
+  border:1px solid var(--linha2);border-radius:16px;background:var(--sup);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05);
+  transition:border-color .25s,background .25s,transform .25s}
+.tudo:hover{border-color:var(--marca);background:var(--sup2);transform:translateY(-2px)}
+.tudo b{font-size:clamp(17px,2.2vw,23px);font-weight:800;letter-spacing:-.025em}
+.tudo i{font-style:normal;display:block;color:var(--muted);font-size:13.5px;
+  margin-top:5px;font-weight:400}
+.tudo .seta{font-size:22px;transition:transform .3s}
+.tudo:hover .seta{transform:translateX(6px)}
+
+/* ── topo do catálogo ────────────────────────────────────────────────────*/
+.cat-topo{padding:clamp(18px,3vw,34px) 0 clamp(10px,1.6vw,18px)}
+.cat-topo h1{font-size:clamp(28px,4.4vw,46px);font-weight:850;
+  letter-spacing:-.04em;line-height:1}
+.cat-topo p{color:var(--muted);font-size:14.5px;margin-top:10px}
+.voltar{display:inline-flex;align-items:center;gap:7px;color:var(--muted);
+  font-size:13.5px;font-weight:600;margin-bottom:14px;transition:color .2s}
+.voltar:hover{color:var(--marca)}
+
 /* ══ SEÇÕES ═══════════════════════════════════════════════════════════════ */
 section{padding:clamp(40px,6vw,72px) 0}
 #produtos{padding-top:4px}
@@ -1219,49 +1519,7 @@ footer a{border-bottom:1px solid var(--linha)}
 </div>
 
 <main class="wrap">
-
-  <!-- ⚠️ TERCEIRA VERSÃO DESTA ABERTURA, e as duas anteriores erraram por
-       motivos OPOSTOS. A primeira era um herói institucional de tela cheia,
-       que ficava entre a pessoa e o produto. A segunda foi um mural de fotos
-       derivando: bonito, sem clique, sem informação — enfeite caro.
-       📌 O que abre a página agora é NOTÍCIA: o que baixou de preço hoje, com
-       o título mudando quando não baixou nada. A voz da marca cabe em três
-       linhas acima; o resto da primeira dobra é mercadoria clicável. -->
-  <section class="capa">
-    <span class="olho">Achados dos nossos vídeos</span>
-    <h1>Viralizou. <em>A gente achou.</em></h1>
-    <p class="sub">A gente confere o preço todo dia. Clica em qualquer produto
-       pra ver o histórico e saber se hoje é hora de comprar.</p>
-  </section>
-
-  {{ABERTURA}}
-
-  <section id="produtos">
-    {{VITRINE}}
-  </section>
-
-  <!-- ⚠️ AQUI MORAVAM DOIS BLOCOS DE TRÊS QUADRADINHOS: "Como funciona" com
-       passos numerados e "Por que confiar" com três números gigantes. O Dre
-       matou a charada: "esse final aí é a cara da IA, todo site que eu vejo das
-       pessoas sempre tem isso". Está certo — trio de cards com ícone, título e
-       parágrafo é o layout que todo gerador cospe, e ele aparece justamente
-       onde o site devia estar VENDENDO.
-       📌 Loja não explica como loja funciona. A prova vira UMA LINHA honesta, e
-       o espaço volta pro que converte. Os números continuam aqui: só pararam
-       de posar de infográfico. -->
-  <section class="rodape-prova">
-    <p class="prova-linha">
-      <b>{{TOTAL}}</b> achados no ar · preços conferidos em <b>{{DATA}}</b> ·
-      <b>{{DIAS}}</b> dias de histórico de preço · link que morre sai sozinho
-    </p>
-    <div class="canais">
-      <a class="ci" href="{{GRUPO_TOPO}}" target="_blank" rel="noopener">Grupo de achadinhos</a>
-      <a class="ci" href="{{INSTAGRAM}}" target="_blank" rel="noopener">Instagram</a>
-      <a class="ci" href="{{TIKTOK}}" target="_blank" rel="noopener">TikTok</a>
-      <a class="ci" href="{{YOUTUBE}}" target="_blank" rel="noopener">YouTube</a>
-      <a class="ci" href="mailto:{{EMAIL}}">Fale com a gente</a>
-    </div>
-  </section>
+{{CORPO}}
 </main>
 
 <div class="veu" id="veu" hidden></div>
@@ -1633,6 +1891,35 @@ addEventListener('keydown', function(e){ if (e.key === 'Escape' && !gav.hidden) 
     if (b) aplicarModo(b.dataset.modo);
   });
 })();
+/* ══ CORTINA DA ABERTURA ═════════════════════════════════════════════════
+   As três linhas do título sobem de dentro da própria caixa, escalonadas em
+   80ms. É o "abrir a porta" que o Dre descreveu no ERA Residence — mas em
+   520ms e SEM segurar ninguém numa tela de loading: quem chega do Reels não
+   veio assistir a uma abertura, veio procurar um produto.
+   📌 A diferença entre atmosfera e pedágio é quem manda no relógio. */
+(function(){
+  var a = document.getElementById('abre');
+  if (!a) return;
+  if (calmo) { a.classList.add('dentro'); return; }
+  requestAnimationFrame(function(){
+    requestAnimationFrame(function(){ a.classList.add('dentro'); });
+  });
+})();
+
+/* ══ CATEGORIA VINDA DA HOME ═════════════════════════════════════════════
+   A home manda `todos.html?c=Casa`. Sem isto o link levaria pro catálogo
+   inteiro e a pessoa teria que filtrar de novo — uma porta que não abre onde
+   diz que abre. */
+(function(){
+  var m = location.search.match(/[?&]c=([^&]+)/);
+  if (!m || typeof aplicar !== 'function') return;
+  var alvo = decodeURIComponent(m[1]);
+  var b = document.querySelector('.chip[data-filtro="' + CSS.escape(alvo) + '"]');
+  if (!b) return;
+  document.querySelectorAll('.chip').forEach(function(o){
+    o.setAttribute('aria-pressed', String(o === b)); });
+  st.cat = alvo; aplicar();
+})();
 </script>
 </body>
 </html>
@@ -1669,12 +1956,18 @@ def main():
 
     produtos.sort(key=lambda p: (0 if p.get("classe") == "mina_ouro" else 1,
                                  -float(p.get("comissao_valor", 0) or 0)))
-    html_final = gerar_site(produtos)
+    html_final = gerar_site(list(produtos))
 
     saida = Path(args.saida) if args.saida else SAIDA_HTML
     saida.parent.mkdir(parents=True, exist_ok=True)
     with open(saida, "w", encoding="utf-8") as f:
         f.write(html_final)
+    # ⚠️ DUAS PÁGINAS, E A SEGUNDA NÃO É OPCIONAL: a home tem um botão "ver
+    # todos" apontando pra `todos.html`. Gerar só a primeira publica um link
+    # quebrado no lugar mais clicado da página.
+    catalogo = saida.parent / "todos.html"
+    catalogo.write_text(gerar_catalogo(produtos), encoding="utf-8")
+    log.info(f"✅ Catálogo gerado: {catalogo}")
     log.info(f"✅ Site gerado: {saida} ({len(produtos)} produtos, {len(html_final)//1024}KB)")
     print(f"\n🌐 Site pronto: {saida}\n   Sobe no GitHub Pages e aponta tua bio pra ele!")
 

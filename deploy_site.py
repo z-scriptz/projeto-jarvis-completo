@@ -348,9 +348,21 @@ def main():
 
     mudou_fonte = _publicar_fonte()
 
-    html = B.gerar_site(produtos)
+    # ⚠️ DUAS PÁGINAS DESDE 31/08, E A SEGUNDA NÃO É OPCIONAL. A home passou a
+    # ESCOLHER (um destaque, categorias, o convite) em vez de despejar os 300
+    # produtos — "ngm rola isso tudo, as pessoas pesquisam". O botão mais
+    # clicado dela aponta pra `todos.html`; publicar só o index deixaria um
+    # link quebrado no lugar de maior tráfego da página.
+    # 📌 `list(produtos)` nas duas: `gerar_site` filtra a própria cópia com
+    # `_vale_mostrar`, e passar a mesma lista deixaria a segunda página vendo
+    # o resultado do filtro da primeira.
+    html = B.gerar_site(list(produtos))
+    html_cat = B.gerar_catalogo(list(produtos))
     idx = SITE_REPO / "index.html"
+    cat = SITE_REPO / "todos.html"
     mudou_html = not (idx.exists() and idx.read_text(encoding="utf-8") == html)
+    mudou_cat = not (cat.exists() and cat.read_text(encoding="utf-8") == html_cat)
+    mudou_html = mudou_html or mudou_cat
 
     if not mudou_html and not mudou_fonte:
         # ⚠️ "sem mudança" NÃO quer dizer "nada pendente". Se um push anterior
@@ -367,6 +379,8 @@ def main():
         return 0
     if mudou_html:
         idx.write_text(html, encoding="utf-8")
+        cat.write_text(html_cat, encoding="utf-8")
+        _log(f"páginas: index.html + todos.html")
 
     _git("add", "-A")
     c = _git("commit", "-m", f"vitrine: {len(produtos)} produtos (auto)")
