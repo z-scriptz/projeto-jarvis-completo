@@ -779,9 +779,12 @@ o carregamento.
 
 ### ⏳ Aberto no fim do dia
 
-- ⏳ **Relógio de pulso está em Tech no site, mas `shared/categorias.py` mapeia
-  `relogio → moda`.** Seis dos sete são analógicos. O site discorda do resto do
-  sistema — decisão do Dre.
+- ✅ **Relógio fica em Tech** (decidido pelo Dre, 01/09). O site diverge do
+  `shared/categorias.py` (que manda `relogio → moda`) e está tudo bem: são
+  eixos diferentes. Lá é o nicho da CONTA que publica o vídeo; aqui é onde a
+  pessoa procura na vitrine. 📌 E o argumento dele vale registro — "a maioria
+  vai entrar em Todos ou na barra de pesquisa": **categoria é atalho, busca é o
+  caminho principal.** Refinar categoria não é onde está o retorno.
 - ⏳ **O minerador traz mensagem que não é oferta.** O filtro está no site;
   a origem não foi tratada.
 - ✅ **Deploy do site FEITO (01/09, 02:37).** No ar em topshopoficial.com.br com
