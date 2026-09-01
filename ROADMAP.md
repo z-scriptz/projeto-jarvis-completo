@@ -602,12 +602,89 @@ antes de valer como defesa.
 `FILA_ACERVO_MAX=500`), e o funil não contava `VITRINE_MAX_PRODUTOS`.
 Alarme permanente é alarme desligado.
 
+### 🅣 A MARCA GANHOU CURVA DE VERDADE
+
+O conceito (monograma TS + dobra rosa) veio de imagem de IA. 📌 **Vetorizar não
+é redesenhar no olho:** as letras saem dos contornos da Instrument Serif — a
+mesma fonte das manchetes — extraídos com fontTools. São as Béziers do
+desenhista da fonte; nosso é o encaixe (o S entra sob o braço do T e **rompe a
+linha de base**, que é o que separa monograma de "duas letras").
+
+`gerar_marca.py` é GERADOR, não quatro arquivos à mão: mudou a proporção, as
+quatro assinaturas saem juntas. Ninguém conserta um SVG na mão e deixa o favicon
+diferente da principal — que é como uma identidade morre.
+
+⚠️ **A MICRO É REDESENHADA, NÃO REDUZIDA**, e por medida: o filete da Instrument
+Serif tem ~8 unidades em 1000 → 0,13 pixel num favicon de 16px, e o antialiasing
+come. Minha 1ª micro montava o S com três barras horizontais e **lia "TE"** —
+três barras paralelas são um E; o que faz o S é a curva trocando de lado.
+
+⚠️ **TRÊS DEFEITOS APARECERAM AO LIGAR A LOGO, E NENHUM ERA DA LOGO:**
+- `.topo{background:rgba(11,12,15,.72)}` chumbado — o preto FRIO do tema antigo,
+  com correção só no tema escuro. **No tema claro a barra do topo era uma tira
+  cinza-chumbo sobre a página creme, e ninguém viu porque todas as telas foram
+  olhadas no escuro.** 📌 Sobra de paleta antiga não se acha no tema em que se
+  trabalha.
+- `.marca span{display:none}` no celular pegava também o `<span class="selo-
+  marca">`: **abaixo de 760px a marca sumia INTEIRA.** Especificidade (0,1,1)
+  ganhava do `.selo-marca` (0,1,0) mesmo vindo depois.
+- O favicon estava **duas trocas de paleta atrás** (#FF3D6E + #0B0C0F). Favicon
+  é o único elemento do site que ninguém olha de perto — mora na aba, com 16px.
+
+### 🖱️ GREP NÃO CLICA — e por isso existe `teste_site.py`
+
+O filtro de categoria do catálogo ficou MORTO e todas as minhas verificações
+passaram verdes, porque liam o HTML como texto. O arrasto da fita marcava
+`.arrastando` no `pointerdown`, e `.arrastando .chip{pointer-events:none}`
+tirava o chip do teste de acerto no meio do próprio clique:
+
+    pointerdown -> chip          mouseup -> .fita-rolo
+    mousedown   -> chip          click   -> .fita-rolo   (closest('.chip') = null)
+
+📌 **Segurar o botão não é arrastar.** Arrasto é movimento — só vira arrasto
+depois de 5px. Mesmo erro do minerador: suposição tratada como fato.
+
+`teste_site.py` abre no Chromium e CLICA (28 checagens). Foi ele que passou a
+travar favicon com cor aposentada e a colisão de acento.
+
+### 〰️ O TIL BATIA NA LINHA DE CIMA — e eu medi errado DUAS vezes
+
+Maiúscula seca sobe 0,73 em; `ATENÇÃO.` sobe **0,935** por causa do til; a
+entrelinha é 0,82. ⚠️ **A 1ª medição deu 0,844 porque foi feita num HTML
+isolado onde o @font-face por file:// não pegou** — o canvas devolveu a métrica
+da fonte de reserva, a correção saiu curta e o defeito seguiu no ar depois de
+"corrigido". 📌 **Métrica de fonte só vale medida na página que a renderiza.**
+⚠️ E a folga de baixo não fazia efeito nenhum: a margem da última linha escapava
+do `h1` por **colapso** e ia disputar com a do subtítulo — colapso pega o MAIOR
+dos dois, não a soma. `display:flow-root` fecha.
+
+A folga agora sai do TEXTO (`.alta` pra acento, `.baixa` pra cedilha), não do
+bloco: afrouxar o h1 inteiro custaria o aperto em toda manchete, e a manchete
+muda toda semana.
+
+### ✍️ A MANCHETE QUE O DRE ESCREVEU GANHOU DAS MINHAS TRÊS
+
+"NEM TUDO MERECE SUA ATENÇÃO." + "A gente encontra o que merece."
+📌 **Ela fala do MUNDO, não da loja** — uma frase que existiria sem a TopShop
+soa marca; uma que só existe dentro dela soa vitrine. As minhas ("o que vale a
+pena", "o preço de hoje, conferido") descreviam o SERVIÇO, que é o mesmo defeito
+de "achados dos nossos vídeos" só que mais bem vestido.
+
+### 🌎 + PAÍSES: NÃO, E O MOTIVO NÃO É TÉCNICO
+
+O gargalo é o LINK, não o idioma: os links são da Shopee **Brasil**. Versão em
+espanhol geraria clique que não converte e dividiria o SEO. O que faz parecer
+internacional é o TOM, e isso a copy já resolveu de graça. Gatilho pra mudar:
+conta de afiliado aprovada em outro país — e aí o caro é fila e histórico de
+preço por moeda, não tradução.
+
 ### ⏳ Aberto no fim do dia
 
 - ⏳ **Deploy do site ainda NÃO foi feito** — tudo que o Dre viu foi preview
   local. Destinos: `creative_engine/bio_page_builder.py`,
   `creative_engine/historico_precos.py` (conferir com `find` antes),
-  `deploy_site.py` na raiz.
+  `deploy_site.py` na raiz e **`shared/marca_svg.py` (ARQUIVO NOVO)**. Sem o
+  último o site sai com o desenho ANTIGO da marca — e avisa no log.
 - ⏳ **Dia 4 do tráfego pago ≈ 03/09** — comparar custo por clique no link entre
   os 3 anúncios e matar os 2 piores. Não mexer antes.
 - ⏳ Confirmar que o cron do minerador dispara sozinho e que a fila passa de 314.
