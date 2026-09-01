@@ -853,6 +853,74 @@ _CORPO_HOME = """
   </section>
 """
 
+_CORPO_LEGAL = """
+  <section class="cat-topo">
+    <a class="voltar" href="index.html">&larr; voltar</a>
+    <h1>Termos e privacidade</h1>
+    <p>Atualizado em {{DATA}}. Vale para topshopoficial.com.br e para os canais
+       de divulgação da TopShop.</p>
+  </section>
+
+  <section class="legal">
+    <h2>Como a TopShop ganha dinheiro</h2>
+    <p>A TopShop é uma <b>curadoria de produtos</b>. Nós não vendemos nada e não
+       temos estoque. Os links desta página levam a lojas de terceiros —
+       principalmente Shopee e Amazon — e nós recebemos uma <b>comissão de
+       afiliado</b> quando alguém compra por esses links.</p>
+    <p>Isso não muda o preço para você: o valor é o mesmo que a loja cobraria
+       sem o nosso link. Também não influencia o que a gente mostra em primeiro
+       lugar — a ordenação da vitrine é por queda de preço e desconto, não por
+       comissão.</p>
+
+    <h2>Sobre os preços</h2>
+    <p>Os preços são lidos automaticamente da própria loja, todo dia, e ficam
+       registrados para montar o histórico que você vê nos gráficos. Quando um
+       produto tem leituras suficientes, mostramos a <b>média do período</b>, e
+       não o preço de um instante — por isso o valor aparece com um til (~).</p>
+    <p><b>Quem define o preço da compra é a loja</b>, no momento em que você
+       finaliza o pedido. Preço de página envelhece; o nosso é informação sobre
+       a tendência, não uma oferta.</p>
+
+    <h2>Quais dados a gente coleta</h2>
+    <p>Este site é uma página estática. <b>Não pedimos cadastro, não temos
+       login e não guardamos os seus dados pessoais em servidor nenhum.</b></p>
+    <ul>
+      <li><b>No seu navegador:</b> guardamos apenas a sua preferência de tema
+        (claro/escuro) e de visualização (grade/lista), com
+        <code>localStorage</code>. Fica no seu aparelho, não chega até nós, e
+        some quando você limpa os dados do site.</li>
+      <li><b>Nos links de saída:</b> os links carregam etiquetas de origem
+        (sub-IDs) que dizem à loja de qual canal veio o clique. Elas identificam
+        <b>o canal</b>, nunca a pessoa.</li>
+      <li><b>Nas lojas de destino:</b> a partir do clique, valem a política de
+        privacidade e os cookies da Shopee, Amazon ou de quem for a loja. A
+        gente não tem acesso ao que acontece lá.</li>
+    </ul>
+
+    <h2>Grupos de WhatsApp e Telegram</h2>
+    <p>A entrada é voluntária e a saída também: você sai quando quiser, pelo
+       próprio aplicativo. Nos grupos publicamos produtos com o link já pronto;
+       não mandamos mensagem privada, não vendemos a lista de participantes e
+       não repassamos números para ninguém.</p>
+
+    <h2>Publicidade</h2>
+    <p>Todo o conteúdo desta página e dos nossos canais é <b>conteúdo
+       publicitário</b>, conforme o Código de Defesa do Consumidor e as regras
+       do CONAR. Os vídeos e posts que levam até aqui também são.</p>
+
+    <h2>Responsabilidade</h2>
+    <p>Não somos responsáveis por entrega, garantia, defeito, troca ou
+       devolução: essa relação é entre você e a loja onde a compra foi feita.
+       Nossa parte é indicar o produto, conferir se o link está no ar e mostrar
+       o que sabemos do preço.</p>
+
+    <h2>Falar com a gente</h2>
+    <p>Dúvida, correção de informação ou pedido para remover algo:
+       <a href="mailto:{{EMAIL}}">{{EMAIL}}</a>. A gente responde.</p>
+  </section>
+"""
+
+
 _CORPO_CATALOGO = """
   <section class="cat-topo">
     <a class="voltar" href="index.html">&larr; voltar</a>
@@ -907,6 +975,21 @@ def gerar_site(produtos: list) -> str:
              .replace("{{GRUPO_FAIXA}}", _grupo_faixa_html())
              .replace("{{PORTA}}", _porta_catalogo(produtos)))
     return _comuns(produtos, corpo, og)
+
+
+def gerar_legal(produtos: list) -> str:
+    """Termos e privacidade, como PÁGINA do site.
+
+    ⚠️ PÁGINA E NÃO PDF, e a diferença importa. O Dre pediu PDF "pra deixar
+    registrado" — e pra registro o PDF serve (é uma foto datada). Mas o
+    documento que VALE é o que está no ar: é o que o consumidor consegue ler no
+    celular, o que o Google indexa e o que um órgão de defesa consulta. PDF em
+    site é anexo que ninguém abre.
+    📌 Gerada pelo mesmo builder de propósito: assim ela herda tema, tipografia
+    e cabeçalho, e não vira aquela página branca de Times New Roman que todo
+    site tem — a página legal é onde a maioria das marcas desiste de ser
+    marca."""
+    return _comuns(produtos, _CORPO_LEGAL, "")
 
 
 def gerar_catalogo(produtos: list) -> str:
@@ -1396,9 +1479,14 @@ img{max-width:100%}
 .dest-foto{grid-column:1/8;border-radius:var(--r);overflow:hidden;
   background:var(--foto);aspect-ratio:4/3;position:relative;display:block;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.06), 0 18px 44px rgba(0,0,0,.42)}
-.dest-foto img{width:100%;height:100%;object-fit:cover;display:block;
+/* ⚠️ A FOTO É MAIOR QUE A JANELA DE PROPÓSITO (112%). Parallax só funciona se
+   houver folga pra deslocar: com a imagem do tamanho exato do quadro, mover
+   1px já mostra o fundo da caixa. A folga é o que permite o movimento existir
+   sem buraco. */
+.dest-foto img{width:100%;height:112%;object-fit:cover;display:block;
+  will-change:transform;
   transition:transform .7s cubic-bezier(.22,.7,.2,1)}
-.dest-foto:hover img{transform:scale(1.05)}
+.dest-foto:hover img{transform:translate3d(0,var(--par,0px),0) scale(1.05)}
 .dest-info{grid-column:8/13;padding-top:clamp(10px,3vw,42px)}
 .dest-off{display:inline-block;font-size:clamp(30px,4.6vw,58px);font-weight:850;
   letter-spacing:-.05em;line-height:1;color:var(--marca)}
@@ -1590,6 +1678,24 @@ img{max-width:100%}
   .js main > section,.js main > a.tudo{opacity:1;transform:none}
 }
 
+/* ── página legal: leitura longa, não vitrine ───────────────────────────
+   Medida de linha curta (68ch) porque texto jurídico já é difícil sem a linha
+   atravessando a tela inteira. */
+.legal{max-width:68ch;padding-bottom:clamp(40px,6vw,80px)}
+.legal h2{font-family:var(--serif);font-weight:400;
+  font-size:clamp(21px,2.6vw,29px);letter-spacing:-.01em;
+  margin:clamp(28px,4vw,44px) 0 12px}
+.legal h2:first-child{margin-top:0}
+.legal p{color:var(--muted);font-size:15px;line-height:1.72;margin-bottom:13px}
+.legal p b{color:var(--ink);font-weight:650}
+.legal ul{margin:6px 0 16px 20px;color:var(--muted);font-size:15px;
+  line-height:1.72}
+.legal li{margin-bottom:9px}
+.legal li b{color:var(--ink);font-weight:650}
+.legal code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+  font-size:.9em;background:var(--sup2);padding:1px 6px;border-radius:5px}
+.legal a{color:var(--marca);border-bottom:1px solid currentColor}
+
 /* ══ SEÇÕES ═══════════════════════════════════════════════════════════════ */
 section{padding:clamp(40px,6vw,72px) 0}
 #produtos{padding-top:4px}
@@ -1726,7 +1832,7 @@ footer a{border-bottom:1px solid var(--linha)}
   <div class="wrap barra">
     <a class="marca" href="index.html" aria-label="topshop"><span class="selo-marca" aria-hidden="true"><svg viewBox="0 0 100 100"><defs><path id="anel-t" d="M50,50 m-37,0 a37,37 0 1,1 74,0 a37,37 0 1,1 -74,0"/></defs><g class="anel"><text><textPath href="#anel-t" startOffset="0%">topshop · curadoria diária · desde 2026 · </textPath></text></g><g transform="translate(50 50)"><path class="ts-mini" transform="translate(-11 -11)" d="M4 0h9.6L22 8.6V18a4 4 0 0 1-4 4H4a4 4 0 0 1-4-4V4a4 4 0 0 1 4-4Z"/><path transform="translate(-11 -11)" fill="var(--bg)" d="M4.6 8.4h9.2v2.5h-3.3v7.4H7.9v-7.4H4.6z"/></g></svg></span><span>top<i>shop</i></span></a>
     <label class="buscabox">
-      <input id="busca" type="search" placeholder="O que você viu no vídeo?"
+      <input id="busca" type="search" placeholder="Buscar uma peça"
              autocomplete="off" aria-label="Buscar produto">
       <svg class="lupa" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg>
     </label>
@@ -1767,7 +1873,8 @@ footer a{border-bottom:1px solid var(--linha)}
 
 <footer class="wrap">
   <span>&copy; {{ANO}} topshop &middot; conteúdo publicitário &middot; links de afiliado
-    &middot; atualizado em {{DATA}}</span>
+    &middot; atualizado em {{DATA}} &middot;
+    <a href="termos.html">termos e privacidade</a></span>
   <span><a href="{{INSTAGRAM}}" target="_blank" rel="noopener">Instagram</a>
     &middot; <a href="{{TIKTOK}}" target="_blank" rel="noopener">TikTok</a>
     &middot; <a href="{{YOUTUBE}}" target="_blank" rel="noopener">YouTube</a></span>
@@ -2072,6 +2179,43 @@ veu.addEventListener('click', fechar);
 addEventListener('keydown', function(e){ if (e.key === 'Escape' && !gav.hidden) fechar(); });
 
 
+
+/* ══ PARALLAX DA FOTO DO DESTAQUE ════════════════════════════════════════
+   ⚠️ MOVIMENTO COM REFERENTE, que é a linha que a gente traçou lá atrás: a
+   imagem responde AO SEU GESTO, não a um cronômetro. Bolha girando sozinha é
+   protetor de tela; foto que acompanha a rolagem é profundidade.
+
+   ⚠️ E É SÓ NO DESKTOP. No celular o parallax de scroll engasga (o navegador
+   já está ocupado compondo a rolagem) e a gente perde mais do que ganha — é a
+   mesma decisão que o site antigo tinha tomado e estava certa. O tráfego daqui
+   vem quase todo do Reels, então travar no celular custaria justamente onde
+   dói.
+
+   📌 12% de deslocamento, não 40%: parallax forte descola a imagem do card e
+   vira efeito. Nesta faixa o olho não vê "parallax", vê que a foto tem
+   profundidade. */
+(function(){
+  var foto = document.querySelector('.dest-foto');
+  if (!foto || calmo || !fino || !matchMedia('(min-width:900px)').matches) return;
+  var img = foto.querySelector('img');
+  if (!img) return;
+  var pedido = false;
+  function medir(){
+    var r = foto.getBoundingClientRect();
+    if (r.bottom < 0 || r.top > innerHeight) { pedido = false; return; }
+    /* -1 (entrando por baixo) → +1 (saindo por cima) */
+    var meio = (r.top + r.height / 2 - innerHeight / 2) / (innerHeight / 2);
+    img.style.setProperty('--par', (-meio * r.height * 0.055).toFixed(1) + 'px');
+    img.style.transform = 'translate3d(0,' +
+      (-meio * r.height * 0.055).toFixed(1) + 'px,0)';
+    pedido = false;
+  }
+  addEventListener('scroll', function(){
+    if (pedido) return;
+    pedido = true; requestAnimationFrame(medir);
+  }, {passive:true});
+  medir();
+})();
 /* ══ SEÇÕES ENTRANDO NO SCROLL ═══════════════════════════════════════════
    Uma por vez, quando chega perto. `unobserve` depois de revelar: seção que
    re-anima ao subir a página vira enjoo, e a pessoa que volta pra reler não
@@ -2240,8 +2384,11 @@ def main():
     # todos" apontando pra `todos.html`. Gerar só a primeira publica um link
     # quebrado no lugar mais clicado da página.
     catalogo = saida.parent / "todos.html"
-    catalogo.write_text(gerar_catalogo(produtos), encoding="utf-8")
+    catalogo.write_text(gerar_catalogo(list(produtos)), encoding="utf-8")
     log.info(f"✅ Catálogo gerado: {catalogo}")
+    legal = saida.parent / "termos.html"
+    legal.write_text(gerar_legal(list(produtos)), encoding="utf-8")
+    log.info(f"✅ Termos gerados: {legal}")
     log.info(f"✅ Site gerado: {saida} ({len(produtos)} produtos, {len(html_final)//1024}KB)")
     print(f"\n🌐 Site pronto: {saida}\n   Sobe no GitHub Pages e aponta tua bio pra ele!")
 

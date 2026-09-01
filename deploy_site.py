@@ -358,11 +358,17 @@ def main():
     # o resultado do filtro da primeira.
     html = B.gerar_site(list(produtos))
     html_cat = B.gerar_catalogo(list(produtos))
+    html_leg = B.gerar_legal(list(produtos))
     idx = SITE_REPO / "index.html"
     cat = SITE_REPO / "todos.html"
-    mudou_html = not (idx.exists() and idx.read_text(encoding="utf-8") == html)
-    mudou_cat = not (cat.exists() and cat.read_text(encoding="utf-8") == html_cat)
-    mudou_html = mudou_html or mudou_cat
+    leg = SITE_REPO / "termos.html"
+
+    def _difere(caminho, conteudo):
+        return not (caminho.exists()
+                    and caminho.read_text(encoding="utf-8") == conteudo)
+
+    mudou_html = (_difere(idx, html) or _difere(cat, html_cat)
+                  or _difere(leg, html_leg))
 
     if not mudou_html and not mudou_fonte:
         # ⚠️ "sem mudança" NÃO quer dizer "nada pendente". Se um push anterior
@@ -380,7 +386,8 @@ def main():
     if mudou_html:
         idx.write_text(html, encoding="utf-8")
         cat.write_text(html_cat, encoding="utf-8")
-        _log(f"páginas: index.html + todos.html")
+        leg.write_text(html_leg, encoding="utf-8")
+        _log("páginas: index.html + todos.html + termos.html")
 
     _git("add", "-A")
     c = _git("commit", "-m", f"vitrine: {len(produtos)} produtos (auto)")
