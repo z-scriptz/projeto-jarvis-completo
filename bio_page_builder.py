@@ -28,6 +28,9 @@ except Exception:
 
 SAIDA_HTML = Path(__file__).parent.parent / "site" / "index.html"
 JSON_FILA = Path(__file__).parent.parent / "shared" / "produtos_fila.json"
+# ⚠️ O REGISTRO DO QUE FOI MANDADO, não da fila. A fila é intenção; este
+# arquivo é fato — e a faixa do grupo só convence porque mostra fato.
+ARQ_ENVIADOS = Path(__file__).parent.parent / "shared" / "whatsapp_enviados.json"
 VALIDACAO = Path(__file__).parent.parent / "shared" / "content_plans" / "validacao_fila.json"
 
 # ===== Contatos e redes (edite com os teus dados reais) =====
@@ -715,12 +718,64 @@ def _grupo_faixa_html() -> str:
         '<section class="grupo-faixa">'
         '<div class="txt">'
         '<h3>A gente confere esses preços <em>todo dia</em>.</h3>'
-        '<p>Quando um achado baixa de verdade, ele vai pro grupo na hora — '
+        '<p>Quando uma peça baixa de verdade, ela vai pro grupo na hora — '
         'com o link já pronto. É de graça e você sai quando quiser.</p>'
-        '</div>'
         f'<a class="cta" href="{html.escape(destino)}" target="_blank" '
         'rel="noopener">Entrar no grupo <span>&rarr;</span></a>'
+        '</div>'
+        f'{_feed_grupo()}'
         '</section>')
+
+
+def _feed_grupo(quantos: int = 7) -> str:
+    """O que saiu no grupo, rolando devagar ao lado do botão.
+
+    ⚠️ O CTA ESTAVA MUDO (31/08). O Dre: "eu rolo a página e no final tem o CTA
+    pro grupo, mas parado, me convença a clicar nesse botão". Nenhuma animação
+    conserta isso — botão que pulsa continua sendo um botão que promete. O que
+    convence é MOSTRAR O QUE ACONTECE DO OUTRO LADO.
+
+    📌 Por isso o feed sai do `whatsapp_enviados.json`, que é o registro do que
+    o robô REALMENTE mandou, e não da fila (que é intenção). Se o grupo ficar um
+    dia parado, o feed fica parado junto — e é assim que tem que ser: prova que
+    continua bonita quando o fato para de acontecer virou enfeite.
+
+    Sem o arquivo, devolve vazio e a faixa volta a ser só texto e botão. Melhor
+    faixa simples que faixa com um feed inventado."""
+    import json as _json
+    try:
+        est = _json.loads((ARQ_ENVIADOS).read_text(encoding="utf-8"))
+        mapa = est.get("enviados_em") or {}
+    except Exception:
+        return ""
+    if not mapa:
+        return ""
+    # mais recentes primeiro; o nome vem da fila pelo link
+    recentes = sorted(mapa.items(), key=lambda kv: -int(kv[1] or 0))[:quantos * 2]
+    nomes = {}
+    try:
+        for it in _json.loads(JSON_FILA.read_text(encoding="utf-8")):
+            if isinstance(it, dict) and it.get("link"):
+                nomes[it["link"]] = (it.get("campeao") or it.get("produto") or "")
+    except Exception:
+        pass
+    linhas = []
+    for link, quando in recentes:
+        nome = _titulo_legivel(nomes.get(link, ""), 42)
+        if not nome:
+            continue
+        hora = time.strftime("%H:%M", time.localtime(int(quando or 0)))
+        linhas.append(f'<li><i>{hora}</i><span>{html.escape(nome)}</span></li>')
+        if len(linhas) >= quantos:
+            break
+    if len(linhas) < 3:
+        return ""
+    # duplicado pra emendar sem salto na volta do laço
+    itens = "".join(linhas) * 2
+    return (f'<div class="feed" aria-hidden="true">'
+            f'<div class="feed-rot">último que foi pro grupo</div>'
+            f'<div class="feed-jan"><ul class="feed-fita">{itens}</ul></div>'
+            f'</div>')
 
 
 def _vitrine_html(produtos: list) -> str:
@@ -752,8 +807,8 @@ def _vitrine_html(produtos: list) -> str:
     if resto:
         grade += _grupo_faixa_html() + f'<div class="grade">{resto}</div>'
     vazio = ('<p class="vazio" id="sem-res" style="display:none">'
-             '<b>Esse a gente ainda não garimpou</b>'
-             'Tenta outra busca — a vitrine enche toda semana.</p>')
+             '<b>Esse a gente ainda não tem</b>'
+             'Tenta outra busca — a curadoria entra todo dia.</p>')
     return controles + grade + vazio
 
 
@@ -789,7 +844,7 @@ _CORPO_HOME = """
       <b>{{DIAS}}</b> dias de histórico de preço · link que morre sai sozinho
     </p>
     <div class="canais">
-      <a class="ci" href="{{GRUPO_TOPO}}" target="_blank" rel="noopener">Grupo de achadinhos</a>
+      <a class="ci" href="{{GRUPO_TOPO}}" target="_blank" rel="noopener">Grupo no WhatsApp</a>
       <a class="ci" href="{{INSTAGRAM}}" target="_blank" rel="noopener">Instagram</a>
       <a class="ci" href="{{TIKTOK}}" target="_blank" rel="noopener">TikTok</a>
       <a class="ci" href="{{YOUTUBE}}" target="_blank" rel="noopener">YouTube</a>
@@ -878,10 +933,10 @@ _TEMPLATE = r"""<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>topshop — o que você viu no vídeo, achou aqui</title>
-<meta name="description" content="Os achados que aparecem nos nossos vídeos, com link direto e preço conferido. Shopee e Amazon.">
+<title>topshop — o que vale a pena</title>
+<meta name="description" content="Curadoria diária de objetos que valem o preço. A gente confere o valor todo dia e mostra o histórico antes de você comprar.">
 <meta property="og:title" content="topshop — o garimpo">
-<meta property="og:description" content="O que você viu no vídeo, achou aqui.">
+<meta property="og:description" content="Curadoria diária, com o preço conferido todo dia.">
 <meta property="og:type" content="website">
 <meta property="og:image" content="{{OGIMG}}">
 <!-- pinta a barra do navegador no celular com o fundo da página:
@@ -1479,6 +1534,62 @@ img{max-width:100%}
 .abre-foto img{width:100%;display:block;border-radius:12px}
 @media(max-width:640px){.abre-foto{width:150px;bottom:-8px;opacity:.85}}
 
+
+/* ── feed do grupo: prova, não enfeite ──────────────────────────────────
+   ⚠️ ROLA SOZINHO PORQUE O CONTEÚDO É NOVIDADE, não porque movimento é
+   bonito. É a diferença que a gente aprendeu no mural: mercadoria deslizando
+   é vitrine, bolha deslizando é protetor de tela. Aqui desliza o que o robô
+   mandou pro grupo, com a hora — e a hora é o que prova que não é maquete.
+   Pausa no hover: quem quer ler precisa poder. */
+.grupo-faixa{align-items:stretch}
+.grupo-faixa .txt{display:flex;flex-direction:column;justify-content:center}
+.feed{flex:none;width:min(320px,100%);border-left:1px solid var(--linha);
+  padding-left:clamp(16px,2.4vw,26px);display:flex;flex-direction:column;gap:9px}
+.feed-rot{font-size:10px;font-weight:700;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:7px}
+.feed-rot::before{content:"";width:6px;height:6px;border-radius:50%;
+  background:var(--ok);box-shadow:0 0 0 0 currentColor;
+  animation:pulso-vivo 2.4s ease-out infinite}
+@keyframes pulso-vivo{
+  0%{box-shadow:0 0 0 0 rgba(47,125,87,.5)}
+  70%{box-shadow:0 0 0 8px rgba(47,125,87,0)}
+  100%{box-shadow:0 0 0 0 rgba(47,125,87,0)}}
+.feed-jan{height:132px;overflow:hidden;
+  -webkit-mask-image:linear-gradient(transparent,#000 18%,#000 82%,transparent);
+  mask-image:linear-gradient(transparent,#000 18%,#000 82%,transparent)}
+.feed-fita{list-style:none;animation:sobe-feed 22s linear infinite}
+.feed:hover .feed-fita{animation-play-state:paused}
+@keyframes sobe-feed{to{transform:translateY(-50%)}}
+.feed-fita li{display:flex;gap:10px;align-items:baseline;padding:5px 0;
+  font-size:12.5px;line-height:1.35}
+.feed-fita i{font-style:normal;color:var(--muted);font-variant-numeric:tabular-nums;
+  font-size:11px;flex:none}
+.feed-fita span{color:var(--ink);overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap}
+@media(max-width:820px){
+  .feed{width:100%;border-left:0;border-top:1px solid var(--linha);
+    padding-left:0;padding-top:16px}
+  .feed-jan{height:96px}
+}
+@media(prefers-reduced-motion:reduce){
+  .feed-fita{animation:none}
+  .feed-rot::before{animation:none}
+}
+
+/* ── revelação por seção: o conteúdo entra conforme você rola ────────────
+   ⚠️ TODA a página estava parada — "eu rolo, rolo, e no final tem o CTA". As
+   seções nasciam prontas e nada acontecia entre uma e outra. 14px e 520ms:
+   o suficiente pra o olho registrar que algo chegou, pouco o bastante pra
+   ninguém esperar por isso. */
+.js main > section,.js main > a.tudo{opacity:0;transform:translateY(18px);
+  transition:opacity .6s cubic-bezier(.22,.7,.2,1),
+             transform .6s cubic-bezier(.22,.7,.2,1)}
+.js main > section.dentro,.js main > a.tudo.dentro{opacity:1;transform:none}
+.js .abre{opacity:1;transform:none}   /* a abertura tem cortina própria */
+@media(prefers-reduced-motion:reduce){
+  .js main > section,.js main > a.tudo{opacity:1;transform:none}
+}
+
 /* ══ SEÇÕES ═══════════════════════════════════════════════════════════════ */
 section{padding:clamp(40px,6vw,72px) 0}
 #produtos{padding-top:4px}
@@ -1613,7 +1724,7 @@ footer a{border-bottom:1px solid var(--linha)}
      ela convence quem já está explorando, não quem acabou de chegar. -->
 <div class="topo" id="topo">
   <div class="wrap barra">
-    <a class="marca" href="index.html" aria-label="topshop"><span class="selo-marca" aria-hidden="true"><svg viewBox="0 0 100 100"><defs><path id="anel-t" d="M50,50 m-37,0 a37,37 0 1,1 74,0 a37,37 0 1,1 -74,0"/></defs><g class="anel"><text><textPath href="#anel-t" startOffset="0%">topshop · achados dos nossos vídeos · </textPath></text></g><g transform="translate(50 50)"><path class="ts-mini" transform="translate(-11 -11)" d="M4 0h9.6L22 8.6V18a4 4 0 0 1-4 4H4a4 4 0 0 1-4-4V4a4 4 0 0 1 4-4Z"/><path transform="translate(-11 -11)" fill="var(--bg)" d="M4.6 8.4h9.2v2.5h-3.3v7.4H7.9v-7.4H4.6z"/></g></svg></span><span>top<i>shop</i></span></a>
+    <a class="marca" href="index.html" aria-label="topshop"><span class="selo-marca" aria-hidden="true"><svg viewBox="0 0 100 100"><defs><path id="anel-t" d="M50,50 m-37,0 a37,37 0 1,1 74,0 a37,37 0 1,1 -74,0"/></defs><g class="anel"><text><textPath href="#anel-t" startOffset="0%">topshop · curadoria diária · desde 2026 · </textPath></text></g><g transform="translate(50 50)"><path class="ts-mini" transform="translate(-11 -11)" d="M4 0h9.6L22 8.6V18a4 4 0 0 1-4 4H4a4 4 0 0 1-4-4V4a4 4 0 0 1 4-4Z"/><path transform="translate(-11 -11)" fill="var(--bg)" d="M4.6 8.4h9.2v2.5h-3.3v7.4H7.9v-7.4H4.6z"/></g></svg></span><span>top<i>shop</i></span></a>
     <label class="buscabox">
       <input id="busca" type="search" placeholder="O que você viu no vídeo?"
              autocomplete="off" aria-label="Buscar produto">
@@ -1960,6 +2071,25 @@ document.getElementById('g-x').addEventListener('click', fechar);
 veu.addEventListener('click', fechar);
 addEventListener('keydown', function(e){ if (e.key === 'Escape' && !gav.hidden) fechar(); });
 
+
+/* ══ SEÇÕES ENTRANDO NO SCROLL ═══════════════════════════════════════════
+   Uma por vez, quando chega perto. `unobserve` depois de revelar: seção que
+   re-anima ao subir a página vira enjoo, e a pessoa que volta pra reler não
+   quer ver o texto sumir e voltar. */
+(function(){
+  var alvos = [].slice.call(
+    document.querySelectorAll('main > section, main > a.tudo'));
+  if (!alvos.length) return;
+  if (calmo) { alvos.forEach(function(x){ x.classList.add('dentro'); }); return; }
+  var obs = new IntersectionObserver(function(ents){
+    ents.forEach(function(en){
+      if (!en.isIntersecting) return;
+      en.target.classList.add('dentro');
+      obs.unobserve(en.target);
+    });
+  }, {rootMargin: '0px 0px -12% 0px'});
+  alvos.forEach(function(x){ obs.observe(x); });
+})();
 /* ══ NÚMERO DA MARGEM ════════════════════════════════════════════════════
    No ERA o número da lateral muda conforme a seção — 23, 31, 37. Não é
    contador de nada: é paginação de revista, e serve pra dizer "você está em
