@@ -23,6 +23,7 @@ A pasta precisa ter `index.html` e `todos.html` gerados pelo bio_page_builder.
 Sem argumento, usa ./site.
 """
 import asyncio
+import os
 import sys
 from pathlib import Path
 
@@ -34,6 +35,40 @@ except ImportError:
 
 # o Chromium do ambiente; se não existir, o playwright acha o dele sozinho
 CHROMIUM = "/opt/pw-browsers/chromium"
+
+# ⚠️ MEDIR NA PÁGINA, NUNCA NUM ARQUIVO DE TESTE À PARTE. Em 01/09 eu medi o til
+# do Ã num HTML isolado, o @font-face não pegou, o canvas devolveu a métrica da
+# fonte de reserva (0,844 em em vez de 0,935) e a correção saiu curta — o
+# defeito continuou no ar depois de "corrigido". Aqui a medida sai da mesma
+# página que o usuário vê, e desiste se a fonte não estiver carregada.
+MEDIR_MANCHETE = r"""() => {
+  var h1 = document.querySelector('.abre h1');
+  if (!h1) return null;
+  var px = parseFloat(getComputedStyle(h1).fontSize);
+  if (!document.fonts.check('400 ' + px + 'px "Instrument Serif"')) return null;
+  var cv = document.createElement('canvas').getContext('2d');
+  cv.font = '400 ' + px + 'px "Instrument Serif"';
+  var linhas = [].map.call(h1.querySelectorAll('span'), function(sp){
+    var b = sp.querySelector('b'), rc = b.getBoundingClientRect();
+    var txt = b.textContent.toUpperCase();
+    var m = cv.measureText(txt);
+    var base = rc.top + (rc.height + px * 0.72) / 2;   /* base aproximada */
+    return {txt: txt, alta: sp.classList.contains('alta'),
+            sobe: m.actualBoundingBoxAscent / px,
+            desce: m.actualBoundingBoxDescent / px,
+            topo: base - m.actualBoundingBoxAscent,
+            fim: base + m.actualBoundingBoxDescent};
+  });
+  var folgas = [];
+  for (var i = 1; i < linhas.length; i++){
+    folgas.push({onde: "'" + linhas[i-1].txt + "' → '" + linhas[i].txt + "'",
+                 px: linhas[i].topo - linhas[i-1].fim});
+  }
+  var sub = document.querySelector('.abre-sub');
+  if (sub) folgas.push({onde: 'manchete → subtítulo',
+                        px: sub.getBoundingClientRect().top - linhas[linhas.length-1].fim});
+  return {linhas: linhas, folgas: folgas};
+}"""
 
 
 class Placar:
@@ -160,6 +195,32 @@ async def rodar(pasta: Path) -> int:
         await pg.mouse.up()
         await pg.wait_for_timeout(600)
         p(await vis2() < total2, "tremida de 3px continua sendo clique")
+        await pg.close()
+
+        # ── a manchete não pode se atropelar ──────────────────────────────
+        pg = await nav.new_page(viewport={"width": 1356, "height": 900})
+        await pg.goto(base + "/index.html")
+        # sem saída pra internet a fonte não vem do Google; FONTE_SERIF aponta
+        # pro .ttf baixado à mão e o teste continua valendo
+        local = os.environ.get("FONTE_SERIF", "")
+        if local and Path(local).exists():
+            await pg.add_style_tag(content=(
+                "@font-face{font-family:'Instrument Serif';font-style:normal;"
+                "font-weight:400;src:url('file://%s') format('truetype');}"
+                % Path(local).resolve()))
+            await pg.evaluate("document.fonts.load('168px \"Instrument Serif\"')")
+        await pg.wait_for_timeout(1500)
+        medida = await pg.evaluate(MEDIR_MANCHETE)
+        if not medida:
+            print("  (pulado) a Instrument Serif não carregou — sem ela a medida "
+                  "seria da fonte de reserva, e foi exatamente esse engano que "
+                  "deixou o til batendo em 01/09. Baixe o .ttf e aponte FONTE_SERIF.")
+        else:
+            for l in medida["linhas"]:
+                print("    %-14s sobe %.3f em  desce %.3f em%s" % (
+                    l["txt"], l["sobe"], l["desce"], "  [alta]" if l["alta"] else ""))
+            for f in medida["folgas"]:
+                p(f["px"] > 0, "folga %s (%.1fpx)" % (f["onde"], f["px"]))
 
         await nav.close()
 

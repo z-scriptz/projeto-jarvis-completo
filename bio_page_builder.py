@@ -579,6 +579,54 @@ def _abertura_html(produtos: list) -> str:
             f'<div class="trilho fita-rolo">{cartas}</div></section>')
 
 
+# ⚠️ O TIL BATIA NA LINHA DE CIMA (01/09). O Dre mandou o print: o ~ de ATENÇÃO
+# passando por dentro de MERECE SUA. Medido NA PRÓPRIA PÁGINA renderizada, com
+# a Instrument Serif carregada (168px):
+#
+#     NEM TUDO / MERECE SUA (maiúscula seca)  sobe 0,672 em acima da base
+#     ATENÇÃO.  (com o til do Ã)              sobe 0,935 em
+#     o Ç desce                               0,214 em
+#
+# O line-height é 0,82 em, que é a distância entre as bases. Como 0,935 > 0,82,
+# a tinta da linha de baixo invade 0,115 em da linha de cima. Não é bug de
+# navegador nem de fonte: é aritmética de entrelinha apertada.
+#
+# ⚠️ E A PRIMEIRA MEDIÇÃO MENTIU: num arquivo de teste isolado o canvas devolveu
+# 0,844 em, porque o @font-face por file:// não pegou e o número veio da fonte
+# de reserva. A correção dimensionada por ele ficou curta e o til continuou
+# batendo. 📌 Métrica de fonte só vale medida na página que de fato a renderiza
+# — e conferida no print, que é onde o defeito aparece.
+#
+# 📌 A CORREÇÃO É POR LINHA, NÃO NO BLOCO. Afrouxar tudo resolveria e custaria o
+# aperto tipográfico em TODA manchete, inclusive as sem acento. Como a manchete
+# muda toda semana, a folga sai do texto: acento alto ganha `.alta` (respiro em
+# cima), cedilha e rabo ganham `.baixa` (respiro embaixo, que é o que separa o Ç
+# do subtítulo). Manchete sem acento continua colada como estava.
+_ACENTO_ALTO = set("ãõáàâéêíóôúüÃÕÁÀÂÉÊÍÓÔÚÜ")
+_RABO_BAIXO = set("çÇqQjJ,;")
+
+
+def _manchete(linhas: list, grifo: int = -1) -> str:
+    """As três linhas gigantes da abertura, com a folga certa em cada uma.
+
+    `grifo` é o índice da linha que sai na cor da marca (-1 = a última)."""
+    fora = []
+    grifo = grifo % len(linhas)
+    for i, txt in enumerate(linhas):
+        letras = set(txt)
+        cls = []
+        if _ACENTO_ALTO & letras:
+            cls.append("alta")
+        if _RABO_BAIXO & letras:
+            cls.append("baixa")
+        marca = f' class="{" ".join(cls)}"' if cls else ""
+        miolo = html.escape(txt)
+        if i == grifo:
+            miolo = f"<em>{miolo}</em>"
+        fora.append(f"<span{marca}><b>{miolo}</b></span>")
+    return "<h1>" + "".join(fora) + "</h1>"
+
+
 def _abre_html(produtos: list) -> str:
     """A abertura. Três linhas de tipo enorme e um número — nada mais.
 
@@ -603,8 +651,7 @@ def _abre_html(produtos: list) -> str:
     sendo a prova — promessa, resolução, evidência, nessa ordem."""
     return (
         '<section class="abre" id="abre"><div class="abre-t">'
-        '<h1><span><b>Nem tudo</b></span><span><b>merece sua</b></span>'
-        '<span><b><em>atenção.</em></b></span></h1>'
+        + _manchete(["Nem tudo", "merece sua", "atenção."], grifo=-1) +
         '<p class="abre-sub">A gente encontra o que merece.</p></div>'
         f'<p class="abre-n"><b>{len(produtos)}</b>achados no ar<br>'
         f'preço conferido em {time.strftime("%d/%m")}</p>'
@@ -940,7 +987,7 @@ _CORPO_LEGAL = """
 _CORPO_CATALOGO = """
   <section class="cat-topo">
     <a class="voltar" href="index.html">&larr; voltar</a>
-    <h1>Todos os achados</h1>
+    <h1>Todos os produtos</h1>
     <p>{{TOTAL}} produtos com preço conferido. Busque pelo nome, ou filtre
        por loja e categoria.</p>
   </section>
@@ -1458,23 +1505,37 @@ img{max-width:100%}
    largura da tela. */
 .abre{padding:clamp(26px,6vw,86px) 0 clamp(20px,4vw,52px);
   display:grid;grid-template-columns:1fr auto;align-items:end;gap:24px}
+/* flow-root: sem isto a margem de baixo da ÚLTIMA linha escapa do h1 por
+   colapso e vai disputar com a margem do subtítulo — colapso pega o MAIOR dos
+   dois, não a soma, então a folga da cedilha simplesmente não existia. */
 .abre h1{font-size:clamp(46px,10.5vw,142px);font-weight:850;font-stretch:118%;
-  line-height:.85;letter-spacing:-.055em;text-transform:none}
+  line-height:.85;letter-spacing:-.055em;text-transform:none;display:flow-root}
 .abre-t{min-width:0}
 /* ⚠️ A CORTINA CORTAVA O TIL E A CEDILHA. `overflow:hidden` clipa na caixa de
    linha, e com line-height .82 o ~ do Ã fica ACIMA dela e o ¸ do Ç ABAIXO —
    defeito que só aparece quando a manchete tem acento, e a nossa passou a ter
    ("ATENÇÃO."). `overflow-clip-margin` alarga a janela sem mover a caixa; o
-   `overflow:hidden` antes fica de reserva pra quem não entende `clip`. */
+   `overflow:hidden` antes fica de reserva pra quem não entende `clip`.
+   📌 .24em e não .16em: a cedilha desce .219em, medido na fonte real. O .16
+   deixava o rabinho do Ç cortado — e trocar um defeito por outro é o que a
+   primeira versão desta linha fez. */
 .abre h1 span{display:block;overflow:hidden;overflow:clip;
-  overflow-clip-margin:.16em}
+  overflow-clip-margin:.24em}
+/* a folga medida: a tinta que mais sobe usa .935em e a entrelinha dá .82em, e
+   a linha de cima ainda desce .012em. .16em de respiro fecha a conta e sobra
+   .033em — pouco, e é pra ser pouco: manchete de revista quase encosta. */
+.abre h1 span.alta{margin-top:.16em}
+/* embaixo é a cedilha (.214em) contra o subtítulo, que hoje começa .027em
+   depois do fim da caixa. .13em separa os dois sem abrir buraco. */
+.abre h1 span.baixa{margin-bottom:.13em}
 .abre h1 b{display:block;font-weight:inherit}
 .abre h1 em{font-style:normal;color:var(--marca)}
 /* a cortina: cada linha sobe de dentro da própria caixa. É o "abrir a porta"
    que o Dre descreveu no ERA, em 520ms e sem segurar ninguém na tela.
-   📌 125% e não 102%: a janela agora é .16em mais alta que a caixa, então o
-   102% de antes deixaria aparecer uma tira do topo das letras antes da hora. */
-.js .abre h1 b{transform:translateY(125%);
+   📌 145% e não 102%: a janela é .24em mais alta que a caixa, e a cortina tem
+   que começar abaixo da JANELA, não da caixa — senão aparece uma tira do topo
+   das letras antes da hora. */
+.js .abre h1 b{transform:translateY(145%);
   transition:transform .72s cubic-bezier(.16,.84,.28,1)}
 .js .abre h1 span:nth-child(2) b{transition-delay:.08s}
 .js .abre h1 span:nth-child(3) b{transition-delay:.16s}
