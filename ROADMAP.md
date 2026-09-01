@@ -678,8 +678,112 @@ internacional é o TOM, e isso a copy já resolveu de graça. Gatilho pra mudar:
 conta de afiliado aprovada em outro país — e aí o caro é fila e histórico de
 preço por moeda, não tradução.
 
+### 📸 FOTOGRAFIA VIROU PIPELINE — e o Colgate foi o teste que importava
+
+Foto crua de marketplace → catálogo TopShop: recorte, chão creme, sombra sempre
+igual, dobra rosa. 📌 **O problema não é foto feia, é foto DIFERENTE** — 300
+fundos diferentes são ruído; 300 no mesmo chão viram catálogo. Consistência lê
+como direção de arte; qualidade individual vem depois.
+
+Três classes por MEDIDA, não gosto: **A** editorial (pode ser foto grande),
+**B** original, **C** poluída (nunca grande). Rodado nas 297: **A=128 · B=147 ·
+C=22 · 7,8 MB · 399s**. No ar, 45% dos cards do catálogo.
+
+⚠️ **O KIT COLGATE, E DUAS DIAGNOSES MINHAS ERRADAS.** Sumiram peças do produto
+— e kit de 5 mostrado com 3 é pior que foto feia: vira anúncio de outra oferta.
+1. Criei um portão de saída medindo "área descartada". Medido, o veredito saiu
+   ao CONTRÁRIO: o Colgate PASSOU com 2,8% (a falha real) e reprovaram o relógio
+   (11%, era a caixinha de marca) e o infográfico (26%, era o infográfico
+   inteiro). 📌 **Área descartada não distingue jogar fora lixo de jogar fora
+   produto** — pune justamente onde descartar é o objetivo.
+2. A causa real: **as peças perdidas são BRANCAS sobre fundo BRANCO.** Foram
+   absorvidas pela máscara de fundo. Limite ESTRUTURAL, não limiar.
+
+📌 **Parei na terceira métrica** — mesmo erro da saga da rolagem: afinar o
+número de um critério que não devia existir. Troquei pela ferramenta feita pro
+problema (u2net/rembg), que entende OBJETO e não cor.
+⚠️ **Mas a IA não ganha sempre:** no infográfico ela se perde (não há objeto
+saliente numa colagem) e o preenchimento por cor devolvia o tablet limpo. Por
+isso os DOIS ficam, e o pipeline decide ANTES se a foto é recortável. Sinal:
+manchinhas do tamanho de letra — **69 no infográfico, 0-4 no resto**.
+
+⚠️ **E O SELO CAI SEM DETECTOR DE SELO.** A 1ª triagem media "tinta saturada
+perto da borda" e reprovou um capacete — porque capacete vermelho é tinta
+saturada perto da borda. O que separa peça de selo é GEOMETRIA.
+
+⚠️ **"FUNDO SIMPLES" TEM DUAS EVIDÊNCIAS, e eu exigia só uma** (6 → 9 A em 16).
+A bolsa SOPHINE: fundo chapado (desvio 2,2), moldura 0,66 só pela palavra
+impressa. A luminária: o inverso (0,94 e desvio 6,4). 📌 Duas evidências
+independentes do mesmo fato pedem **OU**, não E.
+
+### 🅣 A MARCA EM CURVA, E TRÊS DEFEITOS QUE ELA REVELOU
+
+Ver o bloco do dia 01/09 acima. O que a leva de fotos acrescentou: a etiqueta da
+loja morava no mesmo canto da dobra rosa gravada na foto. 📌 **Quando dois
+elementos disputam um canto, cede quem não é identidade.**
+
+### 🖱️ UMA CLASSE PARA DUAS COISAS PERDIA CARD
+
+O Dre: "esse relógio na categoria cozinha, e coisa de cozinha de verdade não
+está aí". Os 35 cards de Cozinha ESTAVAM no HTML — o filtro é que os perdia:
+vindo de Pet, 25 dos 35 não voltavam.
+
+📌 **O número dos sobreviventes entregou a causa: sobravam exatamente 10**, os
+índices 0-9 do escalonamento `Math.min(i,10)*22`. Os que caíam em 220ms morriam,
+porque os timers de entrada são agendados dentro de um `requestAnimationFrame` e
+rAF + 220ms passa dos 300ms da varredura.
+
+⚠️ **Mas a corrida não era o erro de fundo:** `.saindo` significava ao mesmo
+tempo "está indo embora" e "está chegando". Ajustar 300→400ms só moveria o
+defeito pra uma máquina mais lenta. Agora são duas classes.
+
+### 🏷️ "OUTROS" ERA A MAIOR CATEGORIA (77 de 272 → 16)
+
+⚠️ **"água" e "térmica" descrevem ATRIBUTO, não produto.** "À prova d'água"
+mandou 5 itens pra Cozinha (dois relógios, um fone, uma tenda de praia);
+"térmica" mandou outros 5 (impressora, prensa de estampar, cinta de cólica).
+📌 **Palavra que qualifica qualquer coisa não classifica nada.**
+
+⚠️ E "forma" pegava "FORMAto de coração" — o casamento exige início de palavra
+mas não fim, de propósito ("induç" precisa pegar "indução"). Quem precisa da
+palavra inteira agora vem marcada com `=`. Fechar todas quebraria o resto.
+
+Ganhos: Casa +19 (o Natal inteiro faltava), Tech +16, Beleza +14.
+⚠️ **"capa" sozinha NÃO entrou** — capa de cadeira não é tech; quem identifica é
+o aparelho.
+
+⚠️ **4 cards não eram produto:** "siga nossos canais" ×2, "a vida que não sabia
+que precisava", "ontem esponja amanhã peneira". Recados de grupo que o minerador
+leu como achadinho, **com link e tudo**. Card assim não é feio, é CONFUSO. O
+filtro no site é remendo — a origem é o minerador.
+
+### 🧪 O TESTE QUE CLICA, E AS CEGUEIRAS DELE
+
+`teste_site.py` nasceu porque **grep não clica** — todas as minhas verificações
+liam HTML como texto e passaram verdes num site com o filtro morto.
+Mas ele teve as próprias cegueiras, e cada uma vale registro:
+- ⚠️ Clicava numa categoria vindo de "tudo" — **a transição fácil, onde os cards
+  já estão visíveis**. O que quebrava era vir de categoria pequena pra grande.
+- ⚠️ Esperar imagens SEM TETO travou o teste por 9 minutos: imagem `lazy` fora
+  da tela fica `complete=false` PARA SEMPRE. **Espera de teste sempre com teto.**
+- ⚠️ Reprovou o arrasto por `scrollLeft=0` numa largura onde a fita não
+  transborda: **a asserção é que estava errada**, não o código.
+- 📌 A asserção agora imprime o que MEDIU. "Falhou" sem número obriga a
+  reproduzir tudo de novo só pra saber o que houve.
+
+⚠️ **DOIS DEFEITOS DIFERENTES COM O MESMO SINTOMA** (o logo não subindo ao
+topo): 1º a rolagem suave sendo **abortada** pelo layout mudando; 2º ela sendo
+**contrariada** pelo ancoramento de rolagem enquanto as imagens carregam
+(medido: 1163 → 1636 → 0). O 1º era da página, o 2º era do teste medindo durante
+o carregamento.
+
 ### ⏳ Aberto no fim do dia
 
+- ⏳ **Relógio de pulso está em Tech no site, mas `shared/categorias.py` mapeia
+  `relogio → moda`.** Seis dos sete são analógicos. O site discorda do resto do
+  sistema — decisão do Dre.
+- ⏳ **O minerador traz mensagem que não é oferta.** O filtro está no site;
+  a origem não foi tratada.
 - ✅ **Deploy do site FEITO (01/09, 02:37).** No ar em topshopoficial.com.br com
   286 produtos, 1302 leituras de preço e 144 sparklines desenhadas — o mesmo 144
   que o log chama de "já com média de verdade", 1 pra 1. Os outros 126 têm menos
