@@ -680,11 +680,25 @@ preço por moeda, não tradução.
 
 ### ⏳ Aberto no fim do dia
 
-- ⏳ **Deploy do site ainda NÃO foi feito** — tudo que o Dre viu foi preview
-  local. Destinos: `creative_engine/bio_page_builder.py`,
-  `creative_engine/historico_precos.py` (conferir com `find` antes),
-  `deploy_site.py` na raiz e **`shared/marca_svg.py` (ARQUIVO NOVO)**. Sem o
-  último o site sai com o desenho ANTIGO da marca — e avisa no log.
+- ✅ **Deploy do site FEITO (01/09, 02:37).** No ar em topshopoficial.com.br com
+  286 produtos, 1302 leituras de preço e 144 sparklines desenhadas — o mesmo 144
+  que o log chama de "já com média de verdade", 1 pra 1. Os outros 126 têm menos
+  de 3 leituras e enchem sozinhos.
+  ⚠️ **E O DEPLOY FOI ERRADO NA PRIMEIRA VEZ, POR MINHA CAUSA.** Eu mandei rodar
+  `find` pra confirmar o destino e escrevi o bloco de comandos ANTES de ler a
+  saída. O `find` dizia `./historico_precos.py` (raiz); meu comando escreveu em
+  `creative_engine/historico_precos.py`, que **não existia**. Resultado: criou
+  um arquivo órfão que ninguém importa, o da raiz continuou velho, e o site
+  subiu **sem nenhum gráfico de preço** — sem erro nenhum, porque
+  `r.get("serie") or []` degrada calado.
+  📌 **Bloco de deploy se monta DEPOIS de ler o `find`, não junto com ele.** O
+  aviso do repo achatado vs. pacotes da VPS já estava escrito neste arquivo, por
+  mim, e eu caí nele mesmo assim — conferência que não muda o comando não é
+  conferência, é decoração.
+  📌 **`.get()` com padrão esconde deploy faltando.** Nos campos que são a razão
+  de ser da funcionalidade (aqui: o histórico de preço, que é o diferencial
+  inteiro do site), vale mais um log dizendo "veio sem série" do que um degrade
+  silencioso que passa despercebido por horas.
 - ⏳ **Dia 4 do tráfego pago ≈ 03/09** — comparar custo por clique no link entre
   os 3 anúncios e matar os 2 piores. Não mexer antes.
 - ⏳ Confirmar que o cron do minerador dispara sozinho e que a fila passa de 314.
