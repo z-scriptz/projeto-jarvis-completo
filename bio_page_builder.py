@@ -589,7 +589,28 @@ def _abre_html(produtos: list) -> str:
         '<span><b><em>vídeos</em></b></span></h1>'
         f'<p class="abre-n"><b>{len(produtos)}</b>achados no ar<br>'
         f'preço conferido em {time.strftime("%d/%m")}</p>'
+        + _abre_foto(produtos) +
         '</section>')
+
+
+def _abre_foto(produtos: list) -> str:
+    """A foto que passa POR CIMA do título.
+
+    ⚠️ É O MOVIMENTO QUE QUEBRA A SENSAÇÃO DE CAIXAS EMPILHADAS. No print 2 do
+    ERA, a buganvília rosa cobre parte de "NEW GOLDEN MILE" — dois elementos
+    disputando o mesmo espaço, um na frente do outro. Enquanto tudo estiver
+    lado a lado em blocos, o layout parece grade por mais bonito que seja.
+    📌 Pega o produto com foto e maior desconto: se vai ficar do tamanho de um
+    terço da tela, que seja o que mais convence."""
+    def _peso(p):
+        r = p.get("preco_resumo") or {}
+        return int(r.get("off") or 0) + int(r.get("caiu") or 0)
+    com_foto = [p for p in produtos if (p.get("imagem") or "").strip()]
+    if not com_foto:
+        return ""
+    alvo = max(com_foto, key=_peso)
+    return (f'<div class="abre-foto"><img src="{html.escape(alvo["imagem"])}" '
+            f'alt="" loading="eager" decoding="async"></div>')
 
 
 def _destaque_editorial(produtos: list) -> str:
@@ -865,14 +886,26 @@ _TEMPLATE = r"""<!DOCTYPE html>
 <meta property="og:image" content="{{OGIMG}}">
 <!-- pinta a barra do navegador no celular com o fundo da página:
      é o detalhe que faz o site parecer app em vez de aba -->
-<meta name="theme-color" content="#0B0C0F">
+<meta name="theme-color" content="#F2EEE6">
 <!-- o símbolo é o mesmo da marca, embutido: a assinatura precisa existir
      sem a palavra "topshop" pra virar ícone de app um dia -->
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2032%2032%22%3E%3Cpath%20d%3D%22M6%200h13.4L32%2012.6V26a6%206%200%200%201-6%206H6a6%206%200%200%201-6-6V6a6%206%200%200%201%206-6Z%22%20fill%3D%22%23FF3D6E%22/%3E%3Ccircle%20cx%3D%2223.6%22%20cy%3D%228.4%22%20r%3D%222.1%22%20fill%3D%22%230B0C0F%22%20opacity%3D%22.55%22/%3E%3Cpath%20d%3D%22M6.6%2012.4h13.2v3.5h-4.8v10.4h-3.6V15.9H6.6z%22%20fill%3D%22%23fff%22/%3E%3C/svg%3E">
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2032%2032%22%3E%3Cpath%20d%3D%22M6%200h13.4L32%2012.6V26a6%206%200%200%201-6%206H6a6%206%200%200%201-6-6V6a6%206%200%200%201%206-6Z%22%20fill%3D%22%23FF3D6E%22/%3E%3Ccircle%20cx%3D%2223.6%22%20cy%3D%228.4%22%20r%3D%222.1%22%20fill%3D%22%230B0C0F%22%20opacity%3D%22.55%22/%3E%3Cpath%20d%3D%22M6.6%2012.4h13.2v3.5h-4.8v10.4h-3.6V15.9H6.6z%22%20fill%3D%22%23fff%22/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
 <style>
 @font-face{font-family:'Arch';src:url('topshop-fonte.woff2') format('woff2');
   font-weight:100 900;font-stretch:62% 125%;font-display:swap}
+/* ⚠️ A SERIF É A MAIOR MUDANÇA ISOLADA DE "ARTE" (31/08). O Dre mandou prints
+   do ERA Residence e a diferença que salta não é cor nem animação: os títulos
+   deles são SERIF DISPLAY em caixa alta, e os nossos eram a mesma sans do
+   corpo, só maior. Tipo grande de sans é tipo grande; serif display é
+   editorial — a mesma palavra passa a ter opinião.
+   📌 `Instrument Serif` e não uma serif de sistema: Georgia e Times têm cara
+   de documento, e é justamente disso que a gente está fugindo. Com
+   `display=swap` o texto aparece na hora com a fonte de sistema e troca quando
+   a nossa chega, então quem vem do Reels no 4G não espera nada. */
 
 /* ══ PALETA: grafite + UM acento ═══════════════════════════════════════════
    ⚠️ A anterior tinha TRÊS neons (rosa #FF3D8A, menta #3DFFB0, ouro #FFD84D)
@@ -885,12 +918,20 @@ _TEMPLATE = r"""<!DOCTYPE html>
    e o rosa da TopShop só onde ele TRABALHA — CTA, estado ativo, selo de
    desconto. Verde sobrou só como sinal semântico de "preço caiu". */
 :root{
-  --bg:#0B0C0F; --sup:#131519; --sup2:#1A1D23; --linha:rgba(255,255,255,.085);
-  --linha2:rgba(255,255,255,.14);
-  --ink:#EDEFF2; --muted:#8D949E;
-  --marca:#FF3D6E; --marca-esc:#D42A55; --ok:#35C88A;
+  /* ⚠️ "TÁ COM CLIMA DE VELÓRIO" — e tinha causa exata: #0B0C0F é um preto
+     FRIO, azulado. O ERA Residence não usa preto; usa creme quente com
+     marinho, e é por isso que as fotos dele parecem ensolaradas e as nossas
+     pareciam necrotério.
+     📌 Escuro não é o problema — TEMPERATURA é. O padrão agora é o claro
+     creme (é onde as referências dele brilham), e o escuro virou quente:
+     #14120F em vez de #0B0C0F, com o texto em creme e não em branco-azulado. */
+  --bg:#F2EEE6; --sup:#FBF9F5; --sup2:#EAE5DA;
+  --linha:rgba(26,35,56,.13); --linha2:rgba(26,35,56,.22);
+  --ink:#1A2338; --muted:#6B6558;
+  --marca:#C8385E; --marca-esc:#9E2748; --ok:#2F7D57;
   --r:14px; --topo:0px;
-  --foto:#F4F5F7;
+  --foto:#EAE5DA;
+  --serif:'Instrument Serif','Iowan Old Style',Georgia,serif;
 }
 
 /* ══ TEMA CLARO ═══════════════════════════════════════════════════════════
@@ -901,24 +942,22 @@ _TEMPLATE = r"""<!DOCTYPE html>
    📌 Só os TOKENS mudam. Nenhuma regra de componente sabe que existe tema —
    se soubesse, cada card novo teria que ser pintado duas vezes e um dia alguém
    esqueceria metade. */
-:root[data-tema="claro"]{
-  --bg:#F7F7F9; --sup:#FFFFFF; --sup2:#F0F1F4;
-  --linha:rgba(11,12,15,.09); --linha2:rgba(11,12,15,.16);
-  --ink:#14161A; --muted:#666E7A;
-  --marca:#E42060; --marca-esc:#B8144A; --ok:#128A5A;
-  --foto:#EFF0F3;
+:root[data-tema="escuro"]{
+  --bg:#14120F; --sup:#1D1A15; --sup2:#26221C;
+  --linha:rgba(242,238,230,.10); --linha2:rgba(242,238,230,.18);
+  --ink:#F2EEE6; --muted:#9A9184;
+  --marca:#FF5C82; --marca-esc:#D43D63; --ok:#4FCB8E;
+  --foto:#26221C;
 }
-:root[data-tema="claro"] .topo{background:rgba(247,247,249,.78)}
-:root[data-tema="claro"] .card{
-  box-shadow:0 1px 2px rgba(11,12,15,.06), 0 1px 1px rgba(11,12,15,.04)}
-:root[data-tema="claro"] .card:hover{
-  box-shadow:0 16px 38px rgba(11,12,15,.13), 0 0 0 1px rgba(228,32,96,.14)}
-:root[data-tema="claro"] .selo{background:rgba(255,255,255,.86);
-  border-color:rgba(11,12,15,.12);color:var(--ink)}
-:root[data-tema="claro"] .card .foto::before{
-  background:linear-gradient(transparent,rgba(11,12,15,.18))}
-:root[data-tema="claro"] .g-x,
-:root[data-tema="claro"] .gaveta{background:var(--bg)}
+:root[data-tema="escuro"] .topo{background:rgba(20,18,15,.76)}
+:root[data-tema="escuro"] .card{
+  box-shadow:inset 0 1px 0 rgba(242,238,230,.06), 0 1px 2px rgba(0,0,0,.5)}
+:root[data-tema="escuro"] .card:hover{
+  box-shadow:inset 0 1px 0 rgba(242,238,230,.10), 0 20px 46px rgba(0,0,0,.6)}
+:root[data-tema="escuro"] .selo{background:rgba(20,18,15,.78);
+  border-color:rgba(242,238,230,.14)}
+:root[data-tema="escuro"] .card .foto::before{
+  background:linear-gradient(transparent,rgba(20,18,15,.5))}
 *{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth}
 body{background:var(--bg);color:var(--ink);
@@ -949,10 +988,9 @@ img{max-width:100%}
   -webkit-backdrop-filter:blur(22px) saturate(150%);
   border-bottom:1px solid transparent;transition:border-color .25s}
 .topo.colado{border-bottom-color:var(--linha)}
-.barra{display:flex;align-items:center;gap:12px;height:60px}
-.marca{display:flex;align-items:center;gap:9px;font-size:19px;font-weight:800;
+.barra{display:flex;align-items:center;gap:12px;height:86px}
+.marca{display:flex;align-items:center;gap:11px;font-size:19px;font-weight:800;
   font-stretch:112%;letter-spacing:-.045em;white-space:nowrap;flex:none}
-.marca .ts{width:26px;height:26px;flex:none;display:block}
 .marca i{font-style:normal;color:var(--marca)}
 .tema{flex:none;width:40px;height:40px;border-radius:11px;cursor:pointer;
   border:1px solid var(--linha2);background:transparent;color:var(--ink);
@@ -1070,16 +1108,16 @@ img{max-width:100%}
   grid-template-columns:repeat(auto-fill,minmax(196px,1fr))}
 .card{background:var(--sup);border:1px solid var(--linha);border-radius:var(--r);
   overflow:hidden;display:flex;flex-direction:column;position:relative;
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.055), 0 1px 2px rgba(0,0,0,.4);
+  box-shadow:0 1px 2px rgba(26,35,56,.07), 0 1px 1px rgba(26,35,56,.05);
   transform-style:preserve-3d;
   transition:opacity .4s,transform .32s cubic-bezier(.22,.7,.2,1),
     border-color .22s,background .22s,box-shadow .32s}
 .card.esconde{display:none}
 .js .card{opacity:0;transform:translateY(16px) scale(.985)}
 .js .card.dentro{opacity:1;transform:none}
-.card:hover{background:var(--sup2);border-color:rgba(255,61,110,.42);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.09), 0 20px 46px rgba(0,0,0,.55),
-             0 0 0 1px rgba(255,61,110,.10)}
+.card:hover{background:var(--sup);border-color:var(--marca);
+  transform:translateY(-3px);
+  box-shadow:0 18px 40px rgba(26,35,56,.16), 0 0 0 1px rgba(200,56,94,.16)}
 .card.saindo{opacity:0;transform:scale(.96);pointer-events:none}
 
 .card .foto{aspect-ratio:1;position:relative;overflow:hidden;background:var(--foto)}
@@ -1373,6 +1411,74 @@ img{max-width:100%}
   font-size:13.5px;font-weight:600;margin-bottom:14px;transition:color .2s}
 .voltar:hover{color:var(--marca)}
 
+
+/* ══ ELEMENTOS DE ARTE (ERA Residence, dos prints de 31/08) ═══════════════ */
+
+/* ── títulos em serif display, caixa alta ───────────────────────────────
+   No print 2 do ERA, "NEW GOLDEN MILE" ocupa meia tela em serif de caixa alta
+   com marinho sobre creme. É a diferença entre "texto grande" e "tipografia":
+   a mesma palavra passa a ter opinião. */
+.abre h1,.dest-off,.cat-l .cn,.grupo-faixa h3,.cat-topo h1,h2{
+  font-family:var(--serif);font-weight:400;font-stretch:normal}
+.abre h1{font-size:clamp(52px,12.5vw,168px);line-height:.82;
+  letter-spacing:-.02em;text-transform:uppercase}
+.abre h1 em{color:var(--marca)}
+.cat-l .cn{font-size:clamp(30px,5.4vw,64px);letter-spacing:-.01em;
+  text-transform:uppercase}
+.dest-off{font-size:clamp(38px,6vw,76px);letter-spacing:-.02em}
+.grupo-faixa h3,.cat-topo h1{letter-spacing:-.01em}
+.abertura h2,.dest-rot h2{font-family:var(--serif);font-weight:400;
+  font-size:clamp(20px,2.6vw,28px);letter-spacing:0;text-transform:uppercase}
+
+/* ── selo circular com o nome girando ───────────────────────────────────
+   O ERA tem um selo com "ERA RESIDENCE" em círculo e um ornamento no meio,
+   fixo no canto de toda tela. É o elemento que mais grita "isto é uma marca",
+   e custa um SVG.
+   ⚠️ 40s por volta, não 8: girar rápido vira spinner de carregamento, e
+   spinner é a coisa mais barata que existe. Devagar, o olho lê como objeto. */
+.selo-marca{position:relative;width:74px;height:74px;flex:none;display:block}
+.selo-marca svg{width:100%;height:100%;display:block}
+.selo-marca .anel{animation:gira-selo 40s linear infinite;transform-origin:50% 50%}
+@keyframes gira-selo{to{transform:rotate(360deg)}}
+.selo-marca text{font-family:var(--serif);font-size:8.4px;letter-spacing:.34em;
+  fill:var(--ink);text-transform:uppercase}
+.selo-marca .ts-mini{fill:var(--marca)}
+@media(max-width:700px){.selo-marca{width:54px;height:54px}
+  .selo-marca text{font-size:9.6px}}
+
+/* ── coluna lateral: numeração e "role" na vertical ─────────────────────
+   Nos quatro prints tem um número pequeno ("23", "31", "37") e a palavra
+   SCROLL escrita na vertical, na margem esquerda. É detalhe de revista: não
+   informa quase nada e diz tudo sobre quem fez. */
+.margem{position:fixed;left:clamp(8px,1.6vw,20px);top:0;bottom:0;width:22px;
+  z-index:30;pointer-events:none;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:16px;
+  font-size:9.5px;letter-spacing:.24em;text-transform:uppercase;
+  color:var(--muted);mix-blend-mode:difference;opacity:.9}
+.margem span{writing-mode:vertical-rl;transform:rotate(180deg)}
+.margem .num{font-family:var(--serif);font-size:13px;letter-spacing:0;
+  writing-mode:horizontal-tb;transform:none;
+  font-variant-numeric:tabular-nums}
+.margem .risco{width:1px;height:clamp(28px,5vh,54px);background:currentColor;
+  opacity:.4}
+@media(max-width:900px){.margem{display:none}}
+
+/* ── a foto invade o título ──────────────────────────────────────────────
+   No print 2 a buganvília rosa passa POR CIMA de "NEW GOLDEN MILE". É o que
+   quebra a sensação de caixas empilhadas — dois elementos ocupando o mesmo
+   espaço, um na frente do outro.
+   ⚠️ `pointer-events:none` porque ela cobre o título: sem isso, o clique na
+   área da foto não chega no que está embaixo. */
+.abre{position:relative;isolation:isolate}
+.abre-foto{position:absolute;right:clamp(-10px,-1vw,0px);
+  bottom:clamp(-18px,-2vw,-6px);width:clamp(180px,30vw,420px);z-index:2;
+  pointer-events:none;filter:drop-shadow(0 22px 44px rgba(26,35,56,.28));
+  opacity:0;transform:translateY(26px) rotate(3deg);
+  transition:opacity .9s .25s,transform 1.1s .25s cubic-bezier(.16,.84,.28,1)}
+.abre.dentro .abre-foto{opacity:1;transform:none}
+.abre-foto img{width:100%;display:block;border-radius:12px}
+@media(max-width:640px){.abre-foto{width:150px;bottom:-8px;opacity:.85}}
+
 /* ══ SEÇÕES ═══════════════════════════════════════════════════════════════ */
 section{padding:clamp(40px,6vw,72px) 0}
 #produtos{padding-top:4px}
@@ -1507,7 +1613,7 @@ footer a{border-bottom:1px solid var(--linha)}
      ela convence quem já está explorando, não quem acabou de chegar. -->
 <div class="topo" id="topo">
   <div class="wrap barra">
-    <a class="marca" href="#topo" aria-label="topshop"><svg class="ts" viewBox="0 0 32 32" aria-hidden="true"><path d="M6 0h13.4L32 12.6V26a6 6 0 0 1-6 6H6a6 6 0 0 1-6-6V6a6 6 0 0 1 6-6Z" fill="#FF3D6E"/><circle cx="23.6" cy="8.4" r="2.1" fill="#0B0C0F" opacity=".55"/><path d="M6.6 12.4h13.2v3.5h-4.8v10.4h-3.6V15.9H6.6z" fill="#fff"/></svg><span>top<i>shop</i></span></a>
+    <a class="marca" href="index.html" aria-label="topshop"><span class="selo-marca" aria-hidden="true"><svg viewBox="0 0 100 100"><defs><path id="anel-t" d="M50,50 m-37,0 a37,37 0 1,1 74,0 a37,37 0 1,1 -74,0"/></defs><g class="anel"><text><textPath href="#anel-t" startOffset="0%">topshop · achados dos nossos vídeos · </textPath></text></g><g transform="translate(50 50)"><path class="ts-mini" transform="translate(-11 -11)" d="M4 0h9.6L22 8.6V18a4 4 0 0 1-4 4H4a4 4 0 0 1-4-4V4a4 4 0 0 1 4-4Z"/><path transform="translate(-11 -11)" fill="var(--bg)" d="M4.6 8.4h9.2v2.5h-3.3v7.4H7.9v-7.4H4.6z"/></g></svg></span><span>top<i>shop</i></span></a>
     <label class="buscabox">
       <input id="busca" type="search" placeholder="O que você viu no vídeo?"
              autocomplete="off" aria-label="Buscar produto">
@@ -1516,6 +1622,17 @@ footer a{border-bottom:1px solid var(--linha)}
     <button class="tema" id="tema" type="button" aria-label="Trocar entre claro e escuro">☾</button>
     <a class="zap" href="{{GRUPO_TOPO}}" target="_blank" rel="noopener">Grupo</a>
   </div>
+</div>
+
+<!-- ⚠️ A MARGEM É PURO DETALHE DE REVISTA, e é de propósito. Nos quatro
+     prints do ERA tem um número pequeno e a palavra SCROLL na vertical, na
+     borda esquerda. Não informa quase nada e diz tudo sobre quem fez o site.
+     `mix-blend-mode:difference` pra ela funcionar sobre foto clara ou escura
+     sem precisar saber o que tem atrás. -->
+<div class="margem" aria-hidden="true">
+  <span>role</span>
+  <div class="risco"></div>
+  <div class="num" id="margem-num">01</div>
 </div>
 
 <main class="wrap">
@@ -1842,6 +1959,27 @@ cards.forEach(function(c){
 document.getElementById('g-x').addEventListener('click', fechar);
 veu.addEventListener('click', fechar);
 addEventListener('keydown', function(e){ if (e.key === 'Escape' && !gav.hidden) fechar(); });
+
+/* ══ NÚMERO DA MARGEM ════════════════════════════════════════════════════
+   No ERA o número da lateral muda conforme a seção — 23, 31, 37. Não é
+   contador de nada: é paginação de revista, e serve pra dizer "você está em
+   algum lugar de uma coisa maior". Aqui ele conta as seções de verdade. */
+(function(){
+  var alvo = document.getElementById('margem-num');
+  if (!alvo) return;
+  var secoes = [].slice.call(document.querySelectorAll('main > section, main > a.tudo'));
+  if (!secoes.length) return;
+  var obs = new IntersectionObserver(function(ents){
+    ents.forEach(function(en){
+      if (!en.isIntersecting) return;
+      var i = secoes.indexOf(en.target) + 1;
+      alvo.textContent = (i < 10 ? '0' : '') + i;
+    });
+  }, {rootMargin: '-45% 0px -45% 0px'});
+  secoes.forEach(function(x){ obs.observe(x); });
+})();
+
+/* o tema começa no CREME e o botão diz pra onde vai */
 /* ══ TEMA CLARO/ESCURO ═══════════════════════════════════════════════════
    ⚠️ A PREFERÊNCIA DO SISTEMA É O PADRÃO, e a escolha manual vence. Quem nunca
    clicou recebe o que o celular dele já diz (`prefers-color-scheme`); quem
@@ -1854,13 +1992,19 @@ addEventListener('keydown', function(e){ if (e.key === 'Escape' && !gav.hidden) 
   var raiz = document.documentElement, bt = document.getElementById('tema');
   var guardado = null;
   try { guardado = localStorage.getItem('topshop-tema'); } catch (e) {}
+  /* ⚠️ O CREME É O PADRÃO AGORA. Era o escuro, e o Dre resumiu em uma frase:
+     "tá com clima de velório". As referências que ele mandou brilham no claro
+     — o ERA usa creme com marinho, não preto. Quem prefere escuro clica uma
+     vez e a escolha fica; quem tem o celular em modo escuro também recebe o
+     escuro. Mudou só quem NÃO tem preferência nenhuma: recebia luto, agora
+     recebe luz. */
   var escuro = guardado ? guardado === 'escuro'
-             : !matchMedia('(prefers-color-scheme: light)').matches;
+             : matchMedia('(prefers-color-scheme: dark)').matches;
   function pintar(){
     raiz.setAttribute('data-tema', escuro ? 'escuro' : 'claro');
-    if (bt) bt.textContent = escuro ? '☾' : '☀';
+    if (bt) bt.textContent = escuro ? '☀' : '☾';
     var m = document.querySelector('meta[name=theme-color]');
-    if (m) m.setAttribute('content', escuro ? '#0B0C0F' : '#F7F7F9');
+    if (m) m.setAttribute('content', escuro ? '#14120F' : '#F2EEE6');
   }
   pintar();
   if (bt) bt.addEventListener('click', function(){
