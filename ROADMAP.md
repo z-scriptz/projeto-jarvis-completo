@@ -785,8 +785,32 @@ o carregamento.
   pessoa procura na vitrine. 📌 E o argumento dele vale registro — "a maioria
   vai entrar em Todos ou na barra de pesquisa": **categoria é atalho, busca é o
   caminho principal.** Refinar categoria não é onde está o retorno.
-- ⏳ **O minerador traz mensagem que não é oferta.** O filtro está no site;
-  a origem não foi tratada.
+- ✅ **Origem tratada (01/09).** O portão de oferta vive agora no minerador,
+  ANTES de chamar a API: quem posta oferta põe preço ou link de loja; quem posta
+  recado não põe nenhum dos dois. ⚠️ Link de convite não conta — "siga nossos
+  canais" vem com chat.whatsapp.com, e aceitar qualquer http faria o recado
+  passar justamente pelo que o denuncia.
+  **Medido no `--diag` em 33 mensagens reais dos 4 grupos: 1 barrado (3%), zero
+  falso positivo.** O barrado era "mudou de número de telefone", que foi movido
+  pro filtro de recado de sistema — 📌 quando um portão de trás pega o que era
+  do portão da frente, o conserto é no da frente.
+  ⚠️ **A evidência que carrega o peso é o LINK.** Os 4 grupos postam com
+  s.shopee.com.br visível; se algum passar a postar sem link, o portão começa a
+  comer oferta de verdade. O `--diag` é onde isso aparece antes do prejuízo.
+- ⏳ **`fotografia.py` no cron (`10 4 * * *`)** — instalado pelo Dre. Confirmar
+  na primeira madrugada que ele tratou o que o minerador trouxe.
+- ✅ **WhatsApp, "não achei a caixa de mensagem":** segunda chance depois de
+  1,5s (rodapé montado não quer dizer editor montado — o React pinta os botões
+  antes do campo), e o aviso passou a contar os campos editáveis da página pra
+  dizer QUAL das duas causas foi. Os consertos são opostos: marcação mudou vs.
+  editor não montou. 📌 Mesma lição do "sessão caída" que era "ainda carregando".
+- ⚠️ **`py_compile` NÃO É VERIFICAÇÃO.** Ele responde "isso é Python válido?"; a
+  pergunta que importa é "isso CARREGA?". Um `re.compile` no nível de módulo num
+  arquivo que só importava `re` dentro de funções passou no py_compile e
+  explodiu no primeiro comando do Dre. Agora: importar de verdade.
+- ⚠️ **`ImportError` em script que roda no cron todo dia quase nunca é
+  dependência faltando — é interpretador errado.** `python3` do sistema vs
+  `.venv/bin/python`. O sinal está no prompt.
 - ✅ **Deploy do site FEITO (01/09, 02:37).** No ar em topshopoficial.com.br com
   286 produtos, 1302 leituras de preço e 144 sparklines desenhadas — o mesmo 144
   que o log chama de "já com média de verdade", 1 pra 1. Os outros 126 têm menos
