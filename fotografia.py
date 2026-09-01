@@ -386,6 +386,8 @@ def main():
                     help="folha antes/depois das N primeiras, sem escrever nada")
     ap.add_argument("--refazer", action="store_true",
                     help="reprocessa mesmo o que já está no manifesto")
+    ap.add_argument("--sortear", action="store_true",
+                    help="amostra espalhada pela fila, em vez das primeiras")
     ap.add_argument("--limite", type=int, default=0)
     args = ap.parse_args()
 
@@ -403,6 +405,14 @@ def main():
 
     manifesto = {} if args.refazer else carregar_manifesto()
     if args.prova:
+        # ⚠️ AS PRIMEIRAS DA FILA NÃO SÃO UMA AMOSTRA. A fila entra em ordem de
+        # mineração: as do topo vieram todas da mesma leva, do mesmo grupo,
+        # muitas vezes do mesmo vendedor. Provar nelas é provar num nicho e
+        # concluir sobre 297. 📌 Semente fixa: a amostra é espalhada MAS
+        # repetível, senão duas rodadas não são comparáveis.
+        if args.sortear:
+            import random
+            random.Random(7).shuffle(urls)
         urls = urls[:args.prova]
     elif args.limite:
         urls = urls[:args.limite]
