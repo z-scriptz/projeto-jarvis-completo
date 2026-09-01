@@ -423,6 +423,15 @@ _FRASES_SISTEMA = (
     # "Seu código de segurança com +55 11 94718-2512 mudou. Clique para..."
     "código de segurança",
     "codigo de seguranca",
+    # ⚠️ ACHADO PELO PORTÃO DE OFERTA, não por este filtro (01/09). O --diag
+    # mostrou "+55 19 99978-5392 mudou de número de telefone" sendo barrado lá
+    # na frente, como "não é oferta" — verdade, mas tarde: aqui é mais barato e
+    # a contagem fica honesta (recado de sistema é recado de sistema, não uma
+    # oferta reprovada). 📌 Quando um portão de trás pega o que era do portão
+    # da frente, o conserto é no da frente.
+    "mudou de número de telefone",
+    "mudou de numero de telefone",
+    "mudou para",
     "mudou o número de telefone",
     "criptografia de ponta a ponta",
     "esta empresa usa",
