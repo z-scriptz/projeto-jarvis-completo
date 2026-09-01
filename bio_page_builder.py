@@ -43,6 +43,18 @@ except Exception:
         log.warning("⚠️  shared/marca_svg.py não encontrado — o site vai sair "
                     "com o desenho ANTIGO da marca. Deploye o módulo.")
 
+MANIFESTO_FOTOS = Path(__file__).parent.parent / "shared" / "fotos_manifesto.json"
+
+# ⚠️ SEM MANIFESTO O SITE NÃO QUEBRA, SÓ NÃO GANHA. Cada foto cai na URL
+# original da loja, exatamente como antes de existir o pipeline. 📌 Recurso
+# novo que derruba o que já funcionava não é recurso, é regressão.
+_FOTOS = {}
+try:
+    if MANIFESTO_FOTOS.exists():
+        _FOTOS = json.loads(MANIFESTO_FOTOS.read_text(encoding="utf-8"))
+except Exception as e:
+    log.warning(f"   ⚠️  manifesto de fotos ilegível ({e}) — usando as originais")
+
 SAIDA_HTML = Path(__file__).parent.parent / "site" / "index.html"
 JSON_FILA = Path(__file__).parent.parent / "shared" / "produtos_fila.json"
 # ⚠️ O REGISTRO DO QUE FOI MANDADO, não da fila. A fila é intenção; este
@@ -404,16 +416,51 @@ def _loja(p: dict) -> tuple:
     return LOJAS.get((p.get("plataforma") or "shopee").lower(), LOJA_PADRAO)
 
 
+# larguras que o pipeline grava (fotografia.LARGURAS)
+_LARGS_FOTO = (320, 640, 960)
+
+
+def _foto(p, papel="card", tam=640):
+    """(src, atributos extras) pra montar o <img> de um produto.
+
+    Devolve a foto TRATADA quando existe e serve pro papel; senão a original.
+    📌 O `papel` é o que impede um infográfico de virar a foto grande da
+    abertura: quem decide não é o layout, é a classe que o pipeline mediu."""
+    url = (p.get("imagem") or "").strip()
+    if not url:
+        return "", ""
+    reg = _FOTOS.get(url)
+    if not reg or not reg.get("larguras"):
+        return url, ""
+    classe = reg.get("classe", "C")
+    if papel == "hero" and classe != "A":
+        return url, ""
+    ident = reg["id"]
+    # ⚠️ É O srcset QUE PAGA A CONTA DE HOSPEDAR. Card de 170px baixando 960px
+    # é pior que hotlinkar a Shopee — a gente teria trocado CDN deles por
+    # servidor nosso e ainda mandado mais bytes.
+    fontes = " ".join(f"f/{ident}_{L}.webp {L}w" for L in _LARGS_FOTO)
+    src = f"f/{ident}_{tam if tam in _LARGS_FOTO else 640}.webp"
+    return src, f' srcset="{fontes}" sizes="(max-width:700px) 45vw, 340px"'
+
+
+def _classe_foto(p) -> str:
+    reg = _FOTOS.get((p.get("imagem") or "").strip()) or {}
+    return reg.get("classe", "")
+
+
 def _foto_html(p: dict, titulo: str, novo: bool = False) -> str:
     """Foto do produto com os três estados previstos: carregando (esqueleto),
     ok, e sem-foto (a Amazon hoje não devolve imagem)."""
-    img = html.escape(p.get("imagem", ""))
+    src, extra = _foto(p, "card", 320)
+    img = html.escape(src)
     emoji = _loja(p)[1]
     if not img:
         return (f'<div class="foto sem-foto"><em class="fb">{emoji}</em>'
                 f'{_selos_html(p, novo)}</div>')
     return (f'<div class="foto carregando">'
-            f'<img src="{img}" alt="{titulo}" loading="lazy" decoding="async">'
+            f'<img src="{img}"{extra} alt="{titulo}" loading="lazy" '
+            f'decoding="async">'
             f'<em class="fb">{emoji}</em>{_selos_html(p, novo)}</div>')
 
 
@@ -422,8 +469,10 @@ def _card_destaque(p: dict) -> str:
     veio. Continua o vídeo em vez de recomeçar do zero."""
     titulo = html.escape(_titulo_legivel(p.get("titulo") or p.get("nome", ""), 70))
     link = html.escape(p.get("link", "#"))
-    img = html.escape(p.get("imagem", ""))
-    capa = (f'<img class="capa" src="{img}" alt="{titulo}" decoding="async">'
+    src, extra = _foto(p, "card", 640)
+    img = html.escape(src)
+    capa = (f'<img class="capa" src="{img}"{extra} alt="{titulo}" '
+            f'decoding="async">'
             if img else f'<em class="capa-fb">{_loja(p)[1]}</em>')
     return f"""
     <a class="moldura" id="moldura" href="{link}" target="_blank" rel="noopener">
@@ -691,8 +740,13 @@ def _abre_foto(produtos: list) -> str:
     com_foto = [p for p in produtos if (p.get("imagem") or "").strip()]
     if not com_foto:
         return ""
-    alvo = max(com_foto, key=_peso)
-    return (f'<div class="abre-foto"><img src="{html.escape(alvo["imagem"])}" '
+    # ⚠️ AQUI A CLASSE MANDA MAIS QUE O DESCONTO. Esta foto ocupa um terço da
+    # primeira tela; um infográfico de vendedor nesse tamanho desmonta a página
+    # inteira. Havendo qualquer produto tratado, ele ganha do maior desconto.
+    editoriais = [p for p in com_foto if _classe_foto(p) == "A"]
+    alvo = max(editoriais or com_foto, key=_peso)
+    src, extra = _foto(alvo, "hero", 960)
+    return (f'<div class="abre-foto"><img src="{html.escape(src)}"{extra} '
             f'alt="" loading="eager" decoding="async"></div>')
 
 
@@ -716,14 +770,16 @@ def _destaque_editorial(produtos: list) -> str:
     titulo = html.escape(_titulo_legivel(estrela.get("titulo")
                                          or estrela.get("nome", ""), 78))
     link = html.escape(estrela.get("link", "#"))
-    img = html.escape(estrela.get("imagem", ""))
+    _src_e, _ex_e = _foto(estrela, "card", 960)
+    img = html.escape(_src_e)
+    _extra_e = _ex_e
     marca = (f'{r["caiu"]}% mais barato' if r.get("caiu")
              else (f'{r["off"]}% off' if r.get("off") else "Achado do dia"))
     numero = (f'-{r["caiu"]}%' if r.get("caiu")
               else (f'-{r["off"]}%' if r.get("off") else "novo"))
     rot = "Baixou de preço" if r.get("caiu") else "Achado do dia"
 
-    foto = (f'<img src="{img}" alt="" loading="eager" decoding="async">'
+    foto = (f'<img src="{img}"{_extra_e} alt="" loading="eager" decoding="async">'
             if img else "")
     serie = (r.get("serie") or [])
     return (
@@ -763,8 +819,12 @@ def _categorias_editorial(produtos: list) -> str:
         itens = porcat.get(cat) or []
         if len(itens) < 3:
             continue
-        com_foto = next((i for i in itens if (i.get("imagem") or "").strip()), None)
-        fundo = (f'<img class="cf" src="{html.escape(com_foto["imagem"])}" '
+        # 📌 A capa da categoria prefere uma foto tratada: é ela que dá o tom
+        # da seção inteira. Sem nenhuma, vale qualquer uma com foto.
+        com_foto = (next((i for i in itens if _classe_foto(i) == "A"), None)
+                    or next((i for i in itens if (i.get("imagem") or "").strip()), None))
+        _sc, _ex = _foto(com_foto, "card", 640) if com_foto else ("", "")
+        fundo = (f'<img class="cf" src="{html.escape(_sc)}"{_ex} '
                  f'alt="" loading="lazy">' if com_foto else "")
         linhas.append(
             f'<a class="cat-l" href="todos.html?c={html.escape(cat)}">'
@@ -2578,6 +2638,21 @@ addEventListener('keydown', function(e){ if (e.key === 'Escape' && !gav.hidden) 
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
     e.preventDefault();
     scrollTo({top: 0, behavior: calmo ? 'auto' : 'smooth'});
+    /* ⚠️ ROLAGEM SUAVE É CANCELÁVEL. O navegador aborta a animação se o layout
+       mudar no meio — e com foto carregando, o layout MUDA. O sintoma é a
+       página parar no meio do caminho, e ele é intermitente por natureza:
+       depende de a imagem chegar durante a animação. 📌 Quem descobriu foi um
+       teste que falhava 1 em 2 — flaky ali não era teste ruim, era o defeito
+       aparecendo na frequência dele. Aqui a saída não é confiar: é OLHAR se a
+       rolagem parou de andar, e terminar na mão se parou longe do topo. */
+    var ultimo = scrollY, parado = 0;
+    (function conferir(){
+      if (scrollY === 0) return;
+      parado = (scrollY === ultimo) ? parado + 1 : 0;
+      ultimo = scrollY;
+      if (parado > 12) { scrollTo(0, 0); return; }   /* ~200ms sem andar */
+      requestAnimationFrame(conferir);
+    })();
   });
 })();
 

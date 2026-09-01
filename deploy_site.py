@@ -261,6 +261,33 @@ def _deduplicar(produtos, cache):
     return saida
 
 
+def _publicar_fotos():
+    """Sincroniza as fotos tratadas pro repositório do site. True se mudou.
+
+    ⚠️ SÓ COPIA O QUE FALTA OU MUDOU DE TAMANHO. Reescrever 900 webp iguais a
+    cada 2 horas encheria o histórico do git do site de commit sem conteúdo — e
+    o repo do site é o que sobe pro ar, não um backup.
+
+    📌 Não apaga o que sobrou: uma foto que saiu da vitrine hoje pode voltar
+    amanhã, e um 404 numa página em cache é pior que um webp órfão de 40 KB."""
+    origem = BASE_DIR / "shared" / "fotos"
+    if not origem.exists():
+        return False
+    destino = SITE_REPO / "f"
+    destino.mkdir(parents=True, exist_ok=True)
+    novas = bytes_ = 0
+    for foto in origem.glob("*.webp"):
+        alvo = destino / foto.name
+        if alvo.exists() and alvo.stat().st_size == foto.stat().st_size:
+            continue
+        alvo.write_bytes(foto.read_bytes())
+        novas += 1
+        bytes_ += foto.stat().st_size
+    if novas:
+        _log(f"fotos publicadas: {novas} arquivo(s) ({bytes_/1e6:.1f} MB)")
+    return novas > 0
+
+
 def _publicar_fonte():
     """Copia a fonte pro repositório do site. Devolve True se mudou algo.
 
@@ -347,6 +374,7 @@ def main():
             _log(f"não consegui enriquecer preços: {str(e)[:80]}")
 
     mudou_fonte = _publicar_fonte()
+    mudou_fotos = _publicar_fotos()
 
     # ⚠️ DUAS PÁGINAS DESDE 31/08, E A SEGUNDA NÃO É OPCIONAL. A home passou a
     # ESCOLHER (um destaque, categorias, o convite) em vez de despejar os 300
@@ -370,7 +398,7 @@ def main():
     mudou_html = (_difere(idx, html) or _difere(cat, html_cat)
                   or _difere(leg, html_leg))
 
-    if not mudou_html and not mudou_fonte:
+    if not mudou_html and not mudou_fonte and not mudou_fotos:
         # ⚠️ "sem mudança" NÃO quer dizer "nada pendente". Se um push anterior
         # falhou, o commit ficou aqui e a vitrine no ar está velha — e este
         # return sairia por cima disso sem nunca tentar de novo. Foi assim que

@@ -308,6 +308,46 @@ def tratar(im):
     return assinar(pronta), "A", motivo
 
 
+# ── nota e escolha por papel ─────────────────────────────────────────────
+# ⚠️ HOJE TODO PRODUTO TEM UMA FOTO SÓ: a API de afiliado da Shopee devolve
+# `imageUrl` no singular. Mercado Livre, Amazon e SHEIN devolvem várias — e
+# quando isso entrar, a diferença tem que ser de DADO, não de refatoração.
+# 📌 Por isso a nota e a escolha por papel já existem e já funcionam com N=1.
+# O que eu NÃO fiz foi o motor de curadoria completo: sem várias fotas ele não
+# teria entrada nenhuma, e código sem entrada não se prova — só apodrece.
+PAPEIS = {
+    "hero": {"classes": "A", "lado_min": 700},   # a foto grande da abertura
+    "card": {"classes": "AB", "lado_min": 320},
+    "lista": {"classes": "ABC", "lado_min": 0},  # o catálogo aceita tudo
+}
+
+
+def nota(registro: dict) -> int:
+    """0-100, só com o que foi MEDIDO. Nada de 'parece boa'.
+
+    A classe manda (é ela que diz se a foto entra no chão da marca), a
+    resolução entra como piso e o enquadramento desempata: produto ocupando
+    entre 25% e 65% do quadro é o que respira bem numa grade."""
+    base = {"A": 70, "B": 45, "C": 15}.get(registro.get("classe", "C"), 15)
+    lado = int(registro.get("lado", 0) or 0)
+    res = min(20, int(lado / 60))                     # 1200px = 20 pontos
+    cob = float(registro.get("cobertura", 0) or 0)
+    enq = 10 - min(10, int(abs(cob - .45) * 40)) if cob else 0
+    return max(0, min(100, base + res + enq))
+
+
+def escolher(registros: list, papel: str = "card"):
+    """O melhor registro pra este papel, ou None se nenhum servir.
+
+    Com uma foto por produto isto devolve ela ou nada — e é esse 'ou nada' que
+    já vale hoje: é o que impede um infográfico de virar a foto grande."""
+    regra = PAPEIS.get(papel, PAPEIS["card"])
+    aptos = [r for r in registros
+             if r.get("classe", "C") in regra["classes"]
+             and int(r.get("lado", 0) or 0) >= regra["lado_min"]]
+    return max(aptos, key=nota) if aptos else None
+
+
 # ── entrada e saída ──────────────────────────────────────────────────────
 def _id(url: str) -> str:
     return hashlib.sha1(url.encode("utf-8")).hexdigest()[:14]
@@ -388,7 +428,8 @@ def main():
             print(f"  {i:>3} {classe}  {motivo}")
             continue
         registro = {"classe": classe, "motivo": motivo, "id": ident,
-                    "quando": int(time.time())}
+                    "lado": min(im.size), "quando": int(time.time())}
+        registro["nota"] = nota(registro)
         if pronta is not None:
             registro["larguras"] = gravar(pronta, ident)
         manifesto[url] = registro
