@@ -2222,10 +2222,19 @@ _JS_CLICAR_ANEXO = """
   // O '+' e um SPAN de 24x24 (medido no despejo de 20/08). Quem escuta o
   // clique e o BOTAO em volta dele, nao o icone. Clicar no span pode nao
   // acionar nada — foi a diferenca que nunca tinha sido testada.
+  // ⚠️ O '+' VIROU "ANEXAR" (medido no --diag-anexo de 01/09). O despejo
+  // mostrou <button rotulo='Anexar'> com <span data-icon=ic-attach-file>, e o
+  // seletor so procurava plus-rounded/clip — entao "nao achei o +" nao queria
+  // dizer "o WhatsApp nao deixa", queria dizer "mudaram o nome do icone".
+  // 📌 Procurar pelo ROTULO tambem, que e traducao e muda menos que o
+  // nome interno do icone.
   const alvo = document.querySelector(
       "[data-testid='plus-rounded'],span[data-icon='plus-rounded']," +
-      "span[data-icon='clip'],span[data-icon='attach-menu-plus']");
-  if (!alvo) return {ok: false, motivo: 'nao achei o icone do +'};
+      "span[data-icon='clip'],span[data-icon='attach-menu-plus']," +
+      "span[data-icon='ic-attach-file'],span[data-icon='attach-file']," +
+      "button[aria-label='Anexar'],button[aria-label='Attach']," +
+      "button[aria-label*='nexar' i],button[title*='nexar' i]");
+  if (!alvo) return {ok: false, motivo: 'nao achei o icone do + nem o botao Anexar'};
   const bt = alvo.closest("button,[role='button'],div[tabindex]") || alvo;
   const r = bt.getBoundingClientRect();
   return {
