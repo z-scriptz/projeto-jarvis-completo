@@ -77,6 +77,8 @@ sys.path.insert(0, str(BASE))
 
 METRICAS = BASE / "shared" / "metricas_posts.jsonl"
 MIN_AMOSTRA = 8          # abaixo disso a linha sai marcada, não some
+# "estourou" = passou disto vezes a mediana da própria conta.
+LIMIAR = float(os.environ.get("ESTUDO_ESTOURO", "3"))
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -216,6 +218,17 @@ def main() -> int:
         por_conta.setdefault(r.get("conta") or "?", []).append(_valor(r, a.metrica))
     medianas = {c: (statistics.median(v) or 0) for c, v in por_conta.items()}
 
+    # ⚠️ CONTA MORTA QUEBRA A NORMALIZAÇÃO — é o MESMO bug do "+3767%", uma
+    # camada acima. O @topshoppet_ tem mediana de alcance **3**: dividir por 3
+    # transforma um post de 178 (que é pouco) em "59× a mediana", e ele sobe pro
+    # topo da lista passando na frente de um post de 1737 alcance real.
+    # Conta que não está sendo entregue não mede gancho: mede a conta.
+    PISO_CONTA = float(os.environ.get("ESTUDO_PISO_CONTA", "20"))
+    mortas = {c: m for c, m in medianas.items() if m < PISO_CONTA}
+    if mortas and len(mortas) < len(medianas):
+        regs = [r for r in regs if (r.get("conta") or "?") not in mortas]
+        medianas = {c: m for c, m in medianas.items() if c not in mortas}
+
     def val(r):
         bruto = _valor(r, a.metrica)
         if a.bruto:
@@ -244,6 +257,9 @@ def main() -> int:
                          sorted(medianas.items(), key=lambda kv: -kv[1]))
         print(f"   mediana de cada conta: {det}")
     print(f"   mediana geral: {base:.2f} {unidade}")
+    if mortas:
+        det = ", ".join(f"{c} (mediana {m:.0f})" for c, m in sorted(mortas.items()))
+        print(f"   ⛔ conta(s) fora por não estarem sendo entregues: {det}")
     if descartados:
         print(f"   ⛔ {descartados} post(s) fora: alcance abaixo de "
               f"{PISO:.0%} da mediana da própria conta — não foram entregues, "
@@ -268,25 +284,44 @@ def main() -> int:
         # ou seja, não eram posts com pouco emoji, eram posts não entregues.
         # Dividir por um número perto de zero explode qualquer diferença.
         morto = (msem < 0.05 * base) or (mcom < 0.05 * base)
-        delta = (100.0 * (mcom - msem) / msem) if msem else 0.0
-        linhas.append((delta, nome, len(com), len(sem), mcom, msem, morto))
+        # ── TAXA DE ESTOURO ────────────────────────────────────────────────
+        # A mediana é quase cega nesta distribuição. Nos dados reais do Dre a
+        # mediana é 1,0 e os melhores posts batem 11-14× — cauda pesada, como
+        # todo alcance orgânico. Um traço que DOBRE a chance de estourar mexe
+        # pouquíssimo na mediana, porque a mediana é o post do meio e o meio não
+        # estoura nunca.
+        # E "estourar" é a pergunta que interessa: o Dre quer um viral, não um
+        # post levemente acima do meio.
+        ec = sum(1 for r in com if val(r) >= LIMIAR)
+        es = sum(1 for r in sem if val(r) >= LIMIAR)
+        tc, ts = 100.0 * ec / len(com), 100.0 * es / len(sem)
+        linhas.append((tc - ts, nome, len(com), len(sem), mcom, msem, morto,
+                       ec, tc, es, ts))
 
     linhas.sort(reverse=True)
-    fmt = "{:>8.0f}" if a.bruto else "{:>8.2f}"
-    print(f"   {'traço':<42} {'posts':>5} {'com':>8} {'sem':>8}   dif")
-    print("   " + "─" * 76)
-    for delta, nome, n, nsem, mcom, msem, morto in linhas:
+    estouros = sum(1 for r in regs if val(r) >= LIMIAR)
+    print(f"   ⚡ ESTOURO = post que passou de {LIMIAR:.0f}× a mediana da conta. "
+          f"{estouros} de {len(regs)} ({100.0*estouros/max(1,len(regs)):.1f}%).")
+    print("      A coluna que importa é esta; a mediana é quase cega numa "
+          "distribuição de cauda pesada.\n")
+    print(f"   {'traço':<40} {'posts':>5} {'estourou':>13} {'sem o traço':>13}"
+          f"   mediana")
+    print("   " + "─" * 82)
+    for (_ord, nome, n, nsem, mcom, msem, morto, ec, tc, es, ts) in linhas:
         if morto:
-            marca = "  ⛔ grupo morto, ignore"
+            marca = "  ⛔"
         elif n < MIN_AMOSTRA or nsem < MIN_AMOSTRA:
-            marca = "  ⚠️ pouco caso"
-        elif abs(delta) < 15:
-            marca = "  · dentro do ruído"
+            marca = "  ⚠️"
+        elif ec < 3:
+            # 1 ou 2 estouros num traço é uma coincidência com nome de achado.
+            marca = "  ⚠️"
         else:
-            marca = ""
-        sinal = "+" if delta >= 0 else ""
-        print(f"   {nome:<42} {n:>5} " + fmt.format(mcom) + " " + fmt.format(msem)
-              + f"  {sinal}{delta:>5.0f}%{marca}")
+            marca = "   "
+        med = f"{'+' if mcom >= msem else ''}{100.0*(mcom-msem)/msem:>4.0f}%" if msem else "    ?"
+        print(f"   {nome:<40} {n:>5}   {ec:>2}/{n:<3} {tc:>4.1f}%   "
+              f"{es:>3}/{nsem:<3} {ts:>4.1f}%   {med}{marca}")
+    print("\n   ⚠️ = amostra pequena ou menos de 3 estouros (coincidência com "
+          "nome de achado) · ⛔ = grupo de comparação morto")
 
     print("\n   ⚠️ ISTO É CORRELAÇÃO, NÃO CAUSA. O alcance de um Reel vem do")
     print("      gancho, do produto, do vídeo, do áudio e do horário juntos.")

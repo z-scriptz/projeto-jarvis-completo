@@ -960,6 +960,56 @@ Ou seja, o item que o Dre pôs pra "depois, quando utilizarmos a ferramenta"
 implementação prontas — falta portar pro renderizador de Reel, que é bem menos
 do que eu tinha estimado.
 
+### 🐕 A NORMALIZAÇÃO TINHA O MESMO BUG DO EMOJI, UMA CAMADA ACIMA
+
+2ª rodada, com a tabela já limpa: `@topshoppet_` aparece com **mediana de
+alcance 3**. Dividir por 3 transforma um post de 178 (que é pouco) em
+**"59× a mediana"** — e ele sobe pro topo da lista passando na frente de um post
+de 1737 de alcance real.
+
+É o MESMO defeito do "+3767%": divisão por número perto de zero. Eu tinha
+consertado no nível do traço e deixado passar no nível da conta. Conta que não
+está sendo entregue não mede gancho — mede a conta. Agora sai, e o log diz qual
+e por quê.
+
+### ⚡ MEDIANA É CEGA PRA VIRAL — a métrica estava errada, não só suja
+
+A 2ª rodada deu **TODOS os 15 traços dentro de ±14%**, todos marcados "dentro do
+ruído". Parece "nada funciona". Não é: é a métrica errada.
+
+A distribuição do alcance orgânico tem cauda pesada — mediana 1,0 e os melhores
+posts em **11×, 13×, 14×**. A mediana é o post do MEIO, e o post do meio nunca
+estoura. Um traço que DOBRE a chance de viralizar mexe quase nada nela.
+
+E "estourar" é a pergunta que o Dre está fazendo. Ele não quer um post levemente
+acima do meio; quer um viral. Então a coluna nova é **TAXA DE ESTOURO**: que
+fração dos posts com o traço passou de 3× a mediana da própria conta.
+
+Verificado num fixture com a forma real dos dados (cauda pesada, 8% de estouro,
+traço plantado com 3× mais chance):
+
+```
+condicional (se/quem)     4/19  21,1%  ×  7/116  6,0%     mediana diz  -17%
+1ª pessoa (eu/meu)        3/69   4,3%  ×  8/66  12,1%     mediana diz   +3%
+```
+
+A mediana aponta pro lado ERRADO nos dois. A taxa de estouro acerta os dois.
+Guarda de superstição: traço com menos de 3 estouros sai marcado — 1 ou 2 é
+coincidência com nome de achado.
+
+### 🙃 E A MINHA LEITURA DOS 16 NÃO SOBREVIVEU AOS 16 SEGUINTES
+
+Na 1ª rodada eu li os 8 melhores e os 8 piores e escrevi que o padrão era
+**sensação física concreta** (braço, mão, raiva) contra benefício abstrato.
+A 2ª rodada trouxe outros 16, e o fundo tem *"meus **pés cansados** faziam parte
+do pacote"* e *"o segredo de uma **boca** 'uau'"* — as duas são sensação física,
+as duas no fundo.
+
+Eu achei um padrão em 8 itens e o próximo conjunto de 8 o desmentiu. É o mesmo
+erro que passei a sessão inteira caçando nos outros lugares, cometido por mim na
+leitura qualitativa. **Fica sem hipótese até a taxa de estouro falar** — inventar
+a segunda história depois que a primeira caiu é como se constrói superstição.
+
 ### ⚠️ DÍVIDA DE DEPLOY QUE ESTA MUDANÇA TORNA URGENTE
 
 O próprio roadmap já registra: **`agents/narrated_video_agent.py` na VPS está
