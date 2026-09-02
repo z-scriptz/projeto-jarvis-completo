@@ -30,6 +30,30 @@
 #   · e ela imprime a mediana geral do lado, pra comparação ser contra a base
 #     e não contra o nada.
 #
+# ⚠️ A 1ª RODADA REAL (329 posts, 02/09) MOSTROU DOIS DEFEITOS MEUS, e os dois
+# viraram conserto aqui:
+#
+#   1. "tem emoji  +3767%"  — número gigante e FALSO. O grupo "sem emoji" tinha
+#      22 posts com mediana de alcance **3**. Post com alcance 3 não é post com
+#      pouco emoji: é post que não foi entregue. O traço estava pegando carona
+#      num grupo morto. Agora exijo amostra dos DOIS lados e grito quando um
+#      deles tem mediana perto de zero.
+#
+#   2. O fundo da lista era CARROSSEL, não Reel. O próprio metricas_posts.py
+#      avisa: *"as duas coisas têm alcance típico bem diferente"*. Comparar
+#      forma de gancho misturando os dois compara FORMATO, não gancho. Agora o
+#      padrão é só Reel (`--tipo`).
+#
+#   3. E o alcance bruto mistura o TAMANHO DA CONTA. Um post do @topshop.__ e um
+#      do @topshoppet_ não competem na mesma escala; qualquer traço que apareça
+#      mais numa conta grande ganha um bônus que não é dele. Agora cada post é
+#      medido contra a MEDIANA DA PRÓPRIA CONTA (`--bruto` desliga).
+#
+# Com esses três, a tabela da 1ª rodada perde o número de 3767% e o resto fica
+# dentro de ±13% — que, lido honestamente, é: NENHUM traço de forma move o
+# ponteiro. O que separava os 8 melhores dos 8 piores estava no ASSUNTO, não na
+# forma. Isso é resultado, não fracasso da ferramenta.
+#
 # COMO LER: um traço que aparece muito e tem mediana ACIMA da geral é candidato
 # a virar regra no prompt do hook_alana. Um traço com 3 posts não é nada ainda —
 # é um pedido de mais amostra.
@@ -42,6 +66,7 @@
 
 import argparse
 import json
+import os
 import re
 import statistics
 import sys
@@ -143,6 +168,10 @@ def main() -> int:
                     choices=("alcance", "curtidas", "engajamento"))
     ap.add_argument("--exemplos", action="store_true",
                     help="mostra os 8 melhores e os 8 piores ganchos")
+    ap.add_argument("--tipo", default="reel", choices=("reel", "carrossel", "tudo"),
+                    help="misturar carrossel com Reel compara FORMATO, não gancho")
+    ap.add_argument("--bruto", action="store_true",
+                    help="não normaliza pela conta (mistura tamanho de conta)")
     a = ap.parse_args()
 
     if not METRICAS.exists():
@@ -162,6 +191,11 @@ def main() -> int:
             continue
         if a.nicho and (r.get("nicho") or "") != a.nicho:
             continue
+        # `tipo` só é gravado pro carrossel (metricas_posts._carrosseis);
+        # ausente = Reel.
+        tipo = (r.get("tipo") or "reel").strip().lower()
+        if a.tipo != "tudo" and tipo != a.tipo:
+            continue
         regs.append(r)
 
     if len(regs) < MIN_AMOSTRA * 2:
@@ -171,10 +205,51 @@ def main() -> int:
         if not regs:
             return 1
 
-    valores = [_valor(r, a.metrica) for r in regs]
-    base = statistics.median(valores)
-    print(f"📊 {len(regs)} post(s) medidos · métrica: {a.metrica}")
-    print(f"   mediana geral: {base:.1f}   (é contra ela que cada linha compara)\n")
+    # ── NORMALIZAÇÃO POR CONTA ────────────────────────────────────────────
+    # Sem isto, o alcance bruto carrega o TAMANHO DA CONTA junto. Um traço que
+    # por acaso aparece mais no @topshop.__ (a maior) ganha um bônus que é da
+    # conta, não do gancho — e a tabela credita ao gancho.
+    # Cada post vira "quantas vezes a mediana da PRÓPRIA conta", então 1,0 = um
+    # post mediano pra aquela conta, em qualquer conta.
+    por_conta = {}
+    for r in regs:
+        por_conta.setdefault(r.get("conta") or "?", []).append(_valor(r, a.metrica))
+    medianas = {c: (statistics.median(v) or 0) for c, v in por_conta.items()}
+
+    def val(r):
+        bruto = _valor(r, a.metrica)
+        if a.bruto:
+            return bruto
+        m = medianas.get(r.get("conta") or "?", 0)
+        return (bruto / m) if m else 0.0
+
+    # ── POST NÃO ENTREGUE NÃO É MEDIÇÃO DE GANCHO ─────────────────────────
+    # O guard de "grupo morto" trata o sintoma numa linha; a causa é que posts
+    # com alcance perto de zero entram no grupo "sem" de TODO traço e puxam
+    # todas as comparações. Alcance 3 numa conta cuja mediana é 115 não diz
+    # nada sobre o texto: diz que o Instagram não entregou o post.
+    # Eles saem da conta, e a quantidade é IMPRESSA — descarte silencioso é
+    # como se fabrica um número bonito sem perceber.
+    PISO = float(os.environ.get("ESTUDO_PISO", "0.10"))
+    vivos = [r for r in regs if not medianas.get(r.get("conta") or "?", 0)
+             or _valor(r, a.metrica) >= PISO * medianas[r.get("conta") or "?"]]
+    descartados = len(regs) - len(vivos)
+
+    unidade = a.metrica if a.bruto else "× a mediana da conta"
+    base = statistics.median([val(r) for r in vivos]) if vivos else 0.0
+    print(f"📊 {len(regs)} post(s) · tipo {a.tipo} · métrica: {a.metrica}"
+          f"{'' if a.bruto else ' (normalizado por conta)'}")
+    if not a.bruto and len(medianas) > 1:
+        det = " · ".join(f"{c} {m:.0f}" for c, m in
+                         sorted(medianas.items(), key=lambda kv: -kv[1]))
+        print(f"   mediana de cada conta: {det}")
+    print(f"   mediana geral: {base:.2f} {unidade}")
+    if descartados:
+        print(f"   ⛔ {descartados} post(s) fora: alcance abaixo de "
+              f"{PISO:.0%} da mediana da própria conta — não foram entregues, "
+              f"e medir texto neles é medir a entrega")
+    regs = vivos
+    print()
 
     linhas = []
     for nome, teste in TRACOS.items():
@@ -182,35 +257,49 @@ def main() -> int:
             com = [r for r in regs if _cita_produto(r)]
         else:
             com = [r for r in regs if teste(r.get("hook") or "")]
-        sem = [r for r in regs if r not in com]
+        ids = {id(r) for r in com}
+        sem = [r for r in regs if id(r) not in ids]
         if not com or not sem:
             continue
-        mcom = statistics.median([_valor(r, a.metrica) for r in com])
-        msem = statistics.median([_valor(r, a.metrica) for r in sem])
+        mcom = statistics.median([val(r) for r in com])
+        msem = statistics.median([val(r) for r in sem])
+        # ⚠️ GRUPO DE COMPARAÇÃO MORTO INVENTA EFEITO GIGANTE. Foi assim que
+        # "tem emoji" saiu +3767%: os 22 sem emoji tinham mediana de alcance 3,
+        # ou seja, não eram posts com pouco emoji, eram posts não entregues.
+        # Dividir por um número perto de zero explode qualquer diferença.
+        morto = (msem < 0.05 * base) or (mcom < 0.05 * base)
         delta = (100.0 * (mcom - msem) / msem) if msem else 0.0
-        linhas.append((delta, nome, len(com), mcom, msem))
+        linhas.append((delta, nome, len(com), len(sem), mcom, msem, morto))
 
     linhas.sort(reverse=True)
+    fmt = "{:>8.0f}" if a.bruto else "{:>8.2f}"
     print(f"   {'traço':<42} {'posts':>5} {'com':>8} {'sem':>8}   dif")
-    print("   " + "─" * 74)
-    for delta, nome, n, mcom, msem in linhas:
-        marca = "  ⚠️ pouco caso" if n < MIN_AMOSTRA else ""
+    print("   " + "─" * 76)
+    for delta, nome, n, nsem, mcom, msem, morto in linhas:
+        if morto:
+            marca = "  ⛔ grupo morto, ignore"
+        elif n < MIN_AMOSTRA or nsem < MIN_AMOSTRA:
+            marca = "  ⚠️ pouco caso"
+        elif abs(delta) < 15:
+            marca = "  · dentro do ruído"
+        else:
+            marca = ""
         sinal = "+" if delta >= 0 else ""
-        print(f"   {nome:<42} {n:>5} {mcom:>8.0f} {msem:>8.0f}  "
-              f"{sinal}{delta:>5.0f}%{marca}")
+        print(f"   {nome:<42} {n:>5} " + fmt.format(mcom) + " " + fmt.format(msem)
+              + f"  {sinal}{delta:>5.0f}%{marca}")
 
     print("\n   ⚠️ ISTO É CORRELAÇÃO, NÃO CAUSA. O alcance de um Reel vem do")
     print("      gancho, do produto, do vídeo, do áudio e do horário juntos.")
     print("      Traço com poucos posts é pedido de mais amostra, não achado.")
 
     if a.exemplos:
-        ordenados = sorted(regs, key=lambda r: _valor(r, a.metrica))
-        print(f"\n── os 8 de MENOR {a.metrica} ──")
-        for r in ordenados[:8]:
-            print(f"   {_valor(r, a.metrica):>7.0f}  {(r.get('hook') or '').replace(chr(10),' / ')[:66]}")
-        print(f"\n── os 8 de MAIOR {a.metrica} ──")
-        for r in ordenados[-8:]:
-            print(f"   {_valor(r, a.metrica):>7.0f}  {(r.get('hook') or '').replace(chr(10),' / ')[:66]}")
+        ordenados = sorted(regs, key=val)
+        for titulo, fatia in (("MENOR", ordenados[:8]), ("MAIOR", ordenados[-8:])):
+            print(f"\n── os 8 de {titulo} {a.metrica} ──")
+            for r in fatia:
+                print(f"   {_valor(r, a.metrica):>7.0f} ({val(r):4.2f}×)  "
+                      f"{(r.get('conta') or '?')[:16]:<16} "
+                      f"{(r.get('hook') or '').replace(chr(10),' / ')[:52]}")
         print("\n   Ler estes 16 na mão vale mais que a tabela inteira: a tabela")
         print("   conta a FORMA, e o que decide costuma estar no assunto.")
     return 0

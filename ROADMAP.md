@@ -896,6 +896,70 @@ cara que **não isola o gancho** — alcance vem de gancho + produto + vídeo +
 ver a tabela com os dados reais é que vale mexer no `hook_alana` — mudar o
 gerador antes de ler a medição seria trocar meu gosto pelo gosto anterior.
 
+### 📉 A 1ª RODADA DO ESTUDO: o número gigante era artefato, e o resto é ruído
+
+329 posts. A tabela veio com **"tem emoji +3767%"** e todo o resto entre -8% e
++13%. Os dois fatos são o mesmo fato: **a ferramenta estava medindo errado.**
+
+**O 3767% é falso.** O grupo "sem emoji" tinha 22 posts com mediana de alcance
+**3**. Post com alcance 3 não é post com pouco emoji — é post que o Instagram
+não entregou. Dividir por um número perto de zero explode qualquer diferença.
+
+Três consertos, e o terceiro é o que mais importa:
+
+1. **Post não entregue sai da conta.** O guard de "grupo morto" trata o sintoma
+   numa linha; a causa é que esses posts entram no grupo "sem" de TODO traço e
+   puxam todas as comparações. Piso: 10% da mediana da própria conta, e a
+   quantidade descartada é IMPRESSA — descarte silencioso é como se fabrica um
+   número bonito sem perceber.
+2. **Carrossel fora do padrão.** O fundo da lista era carrossel, não Reel — o
+   próprio `metricas_posts.py` avisa que "as duas coisas têm alcance típico bem
+   diferente". Misturar compara FORMATO, não gancho.
+3. **Normalização por conta.** Alcance bruto carrega o tamanho da conta junto:
+   um traço que por acaso aparece mais no @topshop.__ ganha um bônus que é da
+   conta. Cada post virou "× a mediana da PRÓPRIA conta" — 1,0 é um post mediano
+   em qualquer conta.
+
+### 🔍 E O ACHADO REAL NÃO ESTAVA NA TABELA
+
+Com tudo dentro de ±13%, a leitura honesta é: **nenhum traço de FORMA move o
+ponteiro.** Não é fracasso da ferramenta — é resultado, e é o que o próprio
+cabeçalho dela avisava ("a tabela conta a FORMA, e o que decide costuma estar no
+assunto").
+
+O que separa os 8 melhores dos 8 piores está no ASSUNTO:
+
+| alcance | gancho |
+|---|---|
+| 1737 | "Nunca imaginei que ter **braços fortes** fosse tão rápido" |
+| 1597 | "agora minhas **mãos** não param mais de ficar" |
+| 1487 | "sentia falta daquele **conforto de telefone que não encosta na cara**" |
+| 1388 | "**descarregar a raiva** seria tão simples" |
+| 1288 | "Meu **braço** já tava pedindo socorro nos passeios" |
+| — | — |
+| 2 | "Pequenas coisas que mudaram meu dia a dia" |
+| 2 | "Achadinhos que mudaram o jeito de me vestir" |
+| 1 | "um bom cheiro era só pra ocasiões especiais" |
+
+Os de cima têm **sensação física concreta** — braço, mão, raiva, o telefone
+encostando na cara. Os de baixo têm **benefício abstrato**. Nenhum dos dois
+grupos se distingue por pessoa gramatical, tamanho ou emoji.
+
+⚠️ E UMA PROVA CONTRÁRIA, que fica registrada porque esconder seria pior: o 2º
+maior alcance (1299) é *"Corre ver isso antes que viralize e suma das
+prateleiras"* — a construção que o Dre vetou em 21/08. n=1, alcance não é
+conversão, e o veto foi por marca (decisão dele, não medição). Mas o dado existe
+e está aqui.
+
+### ✳️ O DESTAQUE POR PALAVRA JÁ EXISTE — só não no Reel
+
+Investigando os `*asteriscos*` no fundo da lista: eles não são lixo, são o
+MARCADOR DE DESTAQUE, e `carrossel_render._RX_MARCA` já pinta a palavra marcada.
+Ou seja, o item que o Dre pôs pra "depois, quando utilizarmos a ferramenta"
+(*"apenas a palavra principal em amarelo ou verde-neon"*) tem convenção e
+implementação prontas — falta portar pro renderizador de Reel, que é bem menos
+do que eu tinha estimado.
+
 ### ⚠️ DÍVIDA DE DEPLOY QUE ESTA MUDANÇA TORNA URGENTE
 
 O próprio roadmap já registra: **`agents/narrated_video_agent.py` na VPS está
