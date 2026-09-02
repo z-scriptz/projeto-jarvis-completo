@@ -144,7 +144,10 @@ def quadro(nicho: str, gancho: str = None) -> Image.Image:
     # no @. O renderizador de verdade faz a mesma conta pelo `.h` do clipe.
     if not os.environ.get("SELO_DY"):
         cx0, cy0, cx1, cy1 = f_nome.getbbox("TopShop")
-        selo_dy = nome_dy + cy0 + (cy1 - cy0 - selo_tam) // 2
+        # sobe um tico: centro geométrico lê como baixo, porque o olho alinha
+        # pela altura-x. Mesma constante do renderizador de verdade.
+        subir = int(os.environ.get("SELO_SUBIR", round(nome_font * 0.08)))
+        selo_dy = nome_dy + cy0 + (cy1 - cy0 - selo_tam) // 2 - subir
     d.ellipse((selo_x, logo_y + selo_dy, selo_x + selo_tam, logo_y + selo_dy + selo_tam),
               fill=(58, 141, 245))
     d.text((texto_x, logo_y + handle_dy), HANDLES.get(nicho, "@topshop.__"),

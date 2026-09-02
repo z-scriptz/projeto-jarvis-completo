@@ -751,6 +751,64 @@ Nota boa do mesmo log: `TOPSHOP_BG`, `FORCE_BG`, `HOOK_FONTE` e
 `HOOK_FONTE_PRETO` **não estão no `.env`** — a chave que anularia a paleta
 inteira já estava limpa.
 
+### 💬 O 1º COMENTÁRIO: 3 frases, e a régua que nunca chegou aqui
+
+O Dre: *"o primeiro comentário que o jarvis faz no post tá muito feio, vamos
+fixar 3 melhores frases pra ele, até mesmo dá pra divulgar o grupo do whats"*.
+
+O banco existia desde 22/08 (reclamação dele sobre REPETIÇÃO). O problema agora
+era a QUALIDADE — e uma das frases era *"esse aqui some rápido, corre ver na
+bio"*: a MESMA construção que ele vetou nos ganchos em 21/08 (*"'corre ver isso'
+é gramaticalmente errado [...] só é um anúncio"*). A régua entrou no
+`hook_alana` e nunca chegou ao `comentarios.py`. **Régua que vale num arquivo só
+não é régua.**
+
+Molde novo, 3 por formato: uma fala do PRODUTO, uma pede AÇÃO barata
+(salvar/comentar), uma leva pro GRUPO DO WHATSAPP. 1 em 3 e não 3 em 3 —
+encher os grupos é meta corrente, mas todo comentário puxando pro grupo vira
+panfleto. Medido em 600 sorteios: 34,7% / 33,5% / 31,8%.
+
+⚠️ **No Instagram link em comentário NÃO É CLICÁVEL.** Por isso a frase do grupo
+manda pra BIO, onde o botão já existe (topshopoficial.com.br). No Facebook, onde
+o link funciona, vai o `chat.whatsapp.com` direto — e vem de
+`bio_page_builder.GRUPO_WHATSAPP`, não copiado: duas cópias do convite
+significam que, no dia em que ele for trocado, uma manda gente pra grupo morto
+sem dar erro em lugar nenhum.
+
+### 🔁 ENCURTAR O BANCO QUASE MATOU O ANTI-REPETIÇÃO — DUAS VEZES
+
+`LEMBRAR=4` com banco de 3: as 3 ficariam "recentes", `novas` sairia vazia e o
+`or disponiveis` cairia em **sorteio puro** — exatamente o que o arquivo existe
+pra impedir, sem sintoma nenhum além de frases repetindo. Lembrar de tudo é o
+mesmo que não lembrar de nada.
+
+Primeira correção: `teto = len - 1`. Renderizei e estava errada também — com 3
+frases ele lembra 2, sobra 1 candidata e a rotação vira **ciclo fixo
+1-2-3-1-2-3**. Nunca repete, e lê como robô do mesmo jeito, só que por
+regularidade. `teto = len // 2` resolve os dois e preserva o comportamento de
+hoje nos bancos de 8 (lembrava 4). Verificado: 0 repetições consecutivas em 13
+transições, sem ciclo.
+
+### 🔵 CENTRO GEOMÉTRICO ≠ CENTRO ÓPTICO
+
+Depois de centrar o selo na tinta medida, o Dre: *"selo um pouco + pra cima"*.
+Ele está certo e tem nome: o olho alinha pela altura-x das minúsculas, não pela
+caixa da fonte, e "TopShop" tem só duas maiúsculas. Medir resolveu o
+desalinhamento grosso; o ajuste fino é percepção, não geometria. `SELO_SUBIR`,
+8% do corpo do nome (4px em NOME_FONT=52).
+
+### 🎨 TOM FECHADO
+
+moda `#E6DFD3` → **`#DDD2BE`** · beleza `#F7E6E3` → **`#F0D5D0`** (+1 tom cada,
+escolha dele olhando os três degraus renderizados). As outras quatro ficam.
+
+### ✅ A DÍVIDA DO Jul16 ESTÁ VENCIDA
+
+`diff agents/narrated_video_agent.py` contra a versão nova: 47 linhas só na VPS,
+e **todas** das regiões que eu editei (o bloco de paleta antigo, o de fonte, o
+comentário do encolhimento). Os dois arquivos estavam em sincronia — a nota de
+dívida no roadmap descrevia um estado que já não existia. Deploy liberado.
+
 ### ⚠️ DÍVIDA DE DEPLOY QUE ESTA MUDANÇA TORNA URGENTE
 
 O próprio roadmap já registra: **`agents/narrated_video_agent.py` na VPS está

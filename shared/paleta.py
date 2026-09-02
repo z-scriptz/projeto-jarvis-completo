@@ -54,14 +54,19 @@ import os
 # contas parecidas com nenhuma. As opções que ficaram de fora estão anotadas
 # ao lado, pra troca ser um hex e não uma pesquisa.
 #
+# ⚠️ MODA E BELEZA SUBIRAM UM TOM em 02/09. Na 1ª prévia renderizada o Dre:
+# *"moda e beleza ficaram bem clarinhas"*. Estavam quase brancas — a cor não
+# chegava a ler como identidade, lia como off-white. `previa_paleta.py --fundo
+# moda=#HEX` existe justamente pra essa decisão ser tomada olhando.
+#
 # ⚠️ "geral" ERA PRETO e passa a ser BRANCO. É a conta principal (@topshop.__),
 # a do print. O grid dela vai ficar meio preto / meio branco por umas semanas,
 # até os posts novos empurrarem os antigos pra baixo. Isso é consequência
 # conhecida do pedido, não efeito colateral — mas é visível, então está escrito.
 _FUNDOS = {
     "geral":  ("#FFFFFF", "branco puro"),          # alt: cinza neutro #F4F4F4
-    "moda":   ("#E6DFD3", "areia"),                # alt: cinza claro #DEDEDA
-    "beleza": ("#F7E6E3", "rosa-quartzo claro"),   # alt: pêssego #FBE4D3 · nude #EFE0D4
+    "moda":   ("#DDD2BE", "areia"),                # +1 tom (Dre, 02/09) · era #E6DFD3
+    "beleza": ("#F0D5D0", "rosa-quartzo"),         # +1 tom (Dre, 02/09) · era #F7E6E3
     "casa":   ("#DFE5D8", "sálvia clara"),         # alt: cimento queimado #DEDCD5
     "tech":   ("#0E0E10", "grafite"),              # alt: preto puro #000000
     "pet":    ("#FDEBB8", "amarelo-sol suave"),    # alt: azul-bebê #D6E9F7

@@ -1190,7 +1190,16 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
                 try:
                     tinta_h = int(nome.h) - 2 * _mx
                     if tinta_h > 0:
-                        selo_dy = _nome_dy + _mx + (tinta_h - _selo_tam) // 2
+                        # ⚠️ CENTRO GEOMÉTRICO ≠ CENTRO ÓPTICO. Centrado na
+                        # bala, o selo LÊ como se estivesse baixo — porque o
+                        # olho alinha pela altura-x das minúsculas, não pela
+                        # caixa da fonte, e "TopShop" tem só duas maiúsculas.
+                        # O Dre viu antes de eu medir: *"selo um pouco + pra
+                        # cima"*. 8% do corpo do nome = 4px em NOME_FONT=52.
+                        _subir = int(os.environ.get(
+                            "SELO_SUBIR", round(_nome_font * 0.08)))
+                        selo_dy = (_nome_dy + _mx
+                                   + (tinta_h - _selo_tam) // 2 - _subir)
                 except Exception:
                     pass
 
