@@ -196,9 +196,19 @@ def main() -> int:
             continue
         if a.nicho and (r.get("nicho") or "") != a.nicho:
             continue
-        # `tipo` só é gravado pro carrossel (metricas_posts._carrosseis);
-        # ausente = Reel.
-        tipo = (r.get("tipo") or "reel").strip().lower()
+        # `tipo` só é gravado pro carrossel (metricas_posts._carrosseis) — mas
+        # ⚠️ NEM TODO CARROSSEL TEM O CAMPO. Os do @topshoppet_ vazaram pro
+        # conjunto de Reel e me fizeram concluir que a conta estava punida
+        # (mediana 3), quando 3 dos 5 posts medidos eram carrossel e os 2 Reels
+        # de verdade tinham 148 e 178 — em linha com as outras contas.
+        #
+        # O `*asterisco*` denuncia: é o marcador de destaque do
+        # `carrossel_render._RX_MARCA` e SÓ existe em carrossel. Heurística, mas
+        # de precisão alta e custo zero — e melhor que confiar num campo que
+        # nem sempre foi gravado.
+        tipo = (r.get("tipo") or "").strip().lower()
+        if not tipo:
+            tipo = "carrossel" if re.search(r"\*[^*]+\*", r.get("hook") or "") else "reel"
         if a.tipo != "tudo" and tipo != a.tipo:
             continue
         regs.append(r)

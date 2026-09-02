@@ -1067,6 +1067,75 @@ Isso muda a ordem de gastar: **comprar acervo (raspagem ou R$800 de Kling) pra
 uma conta que não está sendo entregue é jogar conteúdo bom num cano fechado.**
 Diagnosticar primeiro custa zero e leva minutos.
 
+### 🧨 O `--detalhe` DESMONTOU O PRÓPRIO ACHADO — e era pra isso que ele existia
+
+Abertos os dois traços vencedores, eles são **os mesmos posts contados três
+vezes**. Os 6 estouros de "condicional" são exatamente os 6 de "imperativo
+negativo", e ambos estão dentro dos 10 de "verbo de comando". Não são três
+descobertas independentes: é uma fórmula, medida três vezes.
+
+A composição real dos 10 estouros do traço vencedor:
+
+| fórmula | estouros / posts | taxa |
+|---|---|---|
+| "Não mostre isso pra quem [identidade]" | 6 / 25 | 24% |
+| "Corre ver isso antes que…" | 4 / ~7 | ~57% |
+
+⚠️ A segunda é a construção **vetada pelo Dre em 21/08**. Ela tem a maior taxa
+da tabela inteira — e mesmo assim NÃO vira recomendação: n=7, com **três textos
+idênticos** entre os 4 estouros, e o veto foi de marca, que é decisão dele e não
+medição. Registrado porque esconder prova contrária é pior que ter que explicá-la.
+
+### 💥 O MESMO TEXTO DEU 1299 E DEU 103
+
+Este é o achado que importa, e ele saiu de LER a lista em vez de somar:
+
+```
+"Corre ver isso antes que viralize e suma das prateleiras"   1299  (11,30×)
+"Corre ver isso antes que viralize e suma das prateleiras"    103  ( 0,90×)
+
+"Não mostre isso pra quem é apaixonado por tecnologia"       1178  (10,24×)
+"Não mostre isso pra quem é apaixonado por tecnologia"        378  ( 3,29×)
+"Não mostre isso pra quem é apaixonado por tecnologia"        134  ( 1,17×)
+```
+
+**Texto idêntico, 12× de diferença.** Com o gancho constante, tudo o que varia é
+produto, vídeo, áudio e horário — e a variação é ENORME. Ou seja: a correlação
+de forma existe (24% × 15%), mas ela é pequena perto do que o gancho **não**
+explica.
+
+📌 CONSEQUÊNCIA DIRETA PRA DECISÃO DOS R$3.000: **o gancho não é a alavanca.**
+Vale ajustar o prompt (é de graça), mas quem está segurando o alcance é o VÍDEO.
+Isso reforça a intuição que o Dre já tinha em 01/09 — *"acredito que o meio certo
+é criar conteúdo com IA mesmo"* — e agora tem número por trás.
+
+### 🐕 EU ERREI SOBRE O PET, E ELE ESTAVA CERTO
+
+Na rodada anterior eu escrevi: *"mediana 3 é o número de uma conta que o
+Instagram parou de distribuir"* e recomendei não gastar antes de diagnosticar.
+**Estava errado.** O `diag_conta.py` mostrou o que a conta tem:
+
+```
+5 posts medidos em 7 semanas — e destes:
+   2, 3, 3   →  "Ninguém acreditou que foi *só isso*…"   ← ASTERISCOS = CARROSSEL
+   148, 178  →  os dois Reels de verdade
+```
+
+Os 148/178 estão **em linha com as outras contas** (106–131). A conta não está
+punida: ela quase não posta, e a amostra medida é dominada por carrossel. A
+causa é exatamente a que o Dre deu na primeira frase — *"topshoppet é foda pq
+não tem vídeo pra ele"*. Acervo, não punição.
+
+⚠️ E O DEFEITO ERA MEU DE NOVO: o filtro `--tipo reel` não pegou esses
+carrosséis porque **nem todo carrossel tem o campo `tipo`** gravado. Eles vazaram
+pro conjunto de Reel, derrubaram a mediana da conta pra 3, e a partir daí eu
+construí uma teoria de punição em cima de um artefato. Terceira vez nesta sessão
+que um número sujo quase virou decisão.
+
+Conserto: o `*asterisco*` denuncia o carrossel (é o marcador do
+`carrossel_render._RX_MARCA` e só existe lá). Heurística, mas de precisão alta,
+custo zero, e melhor que confiar num campo que nem sempre foi gravado.
+
 ### ⚠️ DÍVIDA DE DEPLOY QUE ESTA MUDANÇA TORNA URGENTE
 
 O próprio roadmap já registra: **`agents/narrated_video_agent.py` na VPS está
