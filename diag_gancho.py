@@ -23,6 +23,15 @@
 #
 # ⚠️ ISTO NÃO CONSERTA NADA. Só mede. Os posts listados aqui já estão no ar.
 #
+# ⚠️ E A PRIMEIRA MEDIÇÃO DELE ESTAVA ERRADA — vale mais registrar isso do que
+# o número. Na 1ª rodada sobre os 120 posts do Dre ele apontou 22 (18,3%). Li os
+# 22 um a um: **19 eram falso positivo**, todos pela palavra "casa" ou "cozinha"
+# aparecendo como CENÁRIO ("cabelo de salão EM CASA", "o tempero certo NA
+# COZINHA"). Eu quase entreguei 18,3% como o tamanho do problema — medição
+# errada virando decisão, que é o defeito que o shared/categorias.py inteiro
+# existe pra impedir. O conserto está em `hook_alana._AMBIENTE`.
+# Depois do conserto, sobre os mesmos casos: 3 reais pegos, 19 falsos → 3.
+#
 # USO (na VPS, dentro de ~/jarvis):
 #   .venv/bin/python diag_gancho.py              # os últimos 120 posts
 #   .venv/bin/python diag_gancho.py --tudo

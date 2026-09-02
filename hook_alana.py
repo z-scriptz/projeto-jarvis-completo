@@ -293,15 +293,23 @@ _CONCRETO = {
     "pele":      ("pele", "skincare", "hidrat", "facial", "creme", "sérum",
                   "serum", "corporal"),
     "cachorro":  ("cachorro", "pet", "gato", "coleira", "raç", "comedouro"),
+    # relógio/bolsa/óculos entram porque "estar arrumado" É sobre eles também —
+    # o "Relógio de Pulso" caía num gancho sobre se vestir bem (medido em 02/09).
     "roupa":     ("roupa", "camisa", "vestido", "calça", "moda", "blusa",
-                  "jaqueta", "casaco", "short"),
+                  "jaqueta", "casaco", "short", "relógio", "relogio",
+                  "bolsa", "óculos", "oculos", "cinto", "acessório"),
     "treino":    ("treino", "academ", "fitness", "muscula", "yoga", "corrida"),
     "academia":  ("treino", "academ", "fitness", "muscula", "yoga"),
     "corpo":     ("corpo", "fitness", "emagrec", "modelador", "massage"),
     "setup":     ("setup", "mouse", "teclado", "monitor", "notebook", "gamer",
                   "cadeira gamer", "headset"),
     "gadget":    ("gadget", "eletron", "usb", "bluetooth", "led", "smart"),
-    "cabelo":    ("cabelo", "cabelud", "escova", "secador", "shampoo", "gloss"),
+    # "cachos"/"modelador"/"chapinha" entraram em 02/09: o "Modelador Cachos
+    # Taiff" era barrado por um gancho sobre CABELO, que é literalmente o que
+    # ele faz. Buraco de vocabulário, achado rodando o filtro sobre 120 posts.
+    "cabelo":    ("cabelo", "cabelud", "escova", "secador", "shampoo", "gloss",
+                  "cachos", "modelador", "chapinha", "prancha", "ondul",
+                  "babyliss"),
     "beleza":    ("beleza", "maquia", "batom", "blush", "pele", "unha", "gloss"),
     "mulher":    ("feminin", "vestido", "blush", "batom", "sandália", "bolsa"),
     # ⚠️ VEÍCULO ENTROU EM 02/09, e entrou por um post que foi AO AR.
@@ -313,13 +321,41 @@ _CONCRETO = {
     # família de veículo aqui pra barrar. As três variações de grafia estão
     # separadas de propósito: "carro" não casa com "automóvel".
     "carro":     ("carro", "automot", "veicul", "veícul", "pneu", "volante",
-                  "farol", "garagem", "painel do carro", "porta-copo"),
+                  "farol", "garagem", "escapamento", "ponteira", "apito",
+                  "painel do carro", "porta-copo"),
     "automóvel": ("carro", "automot", "veicul", "veícul", "pneu", "volante"),
     "veículo":   ("carro", "automot", "veicul", "veícul", "pneu", "volante"),
     "pneu":      ("pneu", "carro", "automot", "moto", "bicicleta", "bike"),
     "moto":      ("moto", "motocicl", "capacete", "carro", "bicicleta", "bike"),
 }
 
+
+# ⚠️ CENÁRIO NÃO É PRODUTO — e isto foi MEDIDO, não deduzido (02/09).
+#
+# Rodei o filtro estrito sobre os 120 últimos posts do Dre. Ele apontou 22
+# (18,3%). Li os 22 um por um: **19 eram FALSO POSITIVO**, e 19 pelo mesmo
+# motivo — a palavra "casa" (ou "cozinha"):
+#
+#   Triturador de Alimentos  × "pra cortar uma coisinha de nada NA COZINHA"
+#   Modelador de Cachos      × "cabelo de salão EM CASA era só talento"
+#   Pipoqueira               × "snack de filme EM CASA vinha com culpa"
+#   Fechadura Digital        × "preocupada em quem tinha acesso à MINHA CASA"
+#
+# Todos perfeitos. Em português, "em casa" e "na cozinha" são CENÁRIO — o lugar
+# onde a cena acontece — e praticamente todo gancho relatável usa um dos dois.
+# Exigir que o NOME DO PRODUTO contenha "casa" pra liberar a frase é exigir uma
+# coisa que quase nenhum produto de casa tem no nome ("Kit Porta Temperos").
+#
+# ⚠️ Eu quase publiquei os 18,3% como se fosse o tamanho do problema. Seria uma
+# medição errada virando decisão — o defeito que o `shared/categorias.py` inteiro
+# existe pra impedir. E pior: em produção o filtro estaria REJEITANDO ganchos
+# bons e empurrando um em cada seis pro banco de reserva, em silêncio.
+#
+# Só entram aqui palavras que descrevem ONDE ou EM QUE ATIVIDADE a cena se passa.
+# "celular", "cabelo", "cachorro", "roupa", "carro" NÃO entram: essas nomeiam um
+# OBJETO, e objeto errado no gancho é justamente o defeito que a gente caça.
+_AMBIENTE = {"casa", "cozinha", "cozinhar", "cozinhando", "academia",
+             "treino", "corpo", "mulher"}
 
 # As famílias de `_CONCRETO` que são NATIVAS de cada pool da reserva. Serve pra
 # não rejeitar uma frase por falar do próprio assunto do nicho de onde ela veio.
@@ -370,7 +406,9 @@ def _conflita(frase: str, produto: str, nicho: str = "", extra: str = "",
     #   RESERVA  (pool finito, esvaziar dói)     → estrito=False, isenção vale
     #   GEMINI   (dá pra pedir outro, é de graça) → estrito=True, sem isenção
     # Rigor é barato onde existe segunda tentativa e caro onde não existe.
-    nativas = () if estrito else (
+    # No estrito, o que sai de cena são as palavras de CENÁRIO (`_AMBIENTE`) —
+    # não as do nicho. Medido: sem isso o filtro erra 19 em 22.
+    nativas = _AMBIENTE if estrito else (
         _NATIVO_DO_NICHO.get(_chave_nicho(nicho), ()) if nicho else ())
     for palavra, parentes in _CONCRETO.items():
         if palavra in nativas:

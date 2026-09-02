@@ -52,13 +52,10 @@ LEMBRAR = int(os.environ.get("COMENT_LEMBRAR", "4"))
 # quando o DM está de fato ligado — foi assim que o `auto_resposta` acabou
 # mentindo pra cliente em julho, e a lição vale aqui igual.
 # ══════════════════════════════════════════════════════════════════════════
-# ⚠️ ENCURTADO PRA 3 POR FORMATO EM 02/09, A PEDIDO DO DRE — *"o primeiro
-# comentário que o jarvis faz no post tá muito feio, vamos fixar 3 melhores
-# frases"*. E ele tem razão sobre a qualidade, mas o encurtamento tem um preço
-# que precisa estar escrito: com 8 frases a chance de repetir a anterior era 1
-# em 8; com 3, é 1 em 3. A memória (`LEMBRAR`) é o que segura isso, e por isso
-# ela passou a se ajustar ao tamanho do banco logo abaixo — com 3 frases e
-# memória de 4, TODAS ficariam "recentes" e o anti-repetição morreria calado.
+# ⚠️ REESCRITO EM 02/09. O Dre: *"o primeiro comentário que o jarvis faz no
+# post tá muito feio, vamos fixar 3 melhores frases, até mesmo dá pra divulgar o
+# grupo do whats"*. Ele pediu 3 e mandou 6 — ficaram as 6, porque banco maior é
+# menos chance de parecer robô e o custo de guardar as seis é zero.
 #
 # ⚠️ E SAIU O "CORRE VER". A frase *"esse aqui some rápido, corre ver na bio"*
 # estava aqui desde 22/08 — a MESMA construção que o Dre vetou nos ganchos em
@@ -66,36 +63,56 @@ LEMBRAR = int(os.environ.get("COMENT_LEMBRAR", "4"))
 # interesse na pessoa, só é um anúncio"*. A régua foi aplicada ao hook_alana e
 # nunca chegou neste arquivo. Régua que vale num arquivo só não é régua.
 #
-# O molde das três: uma fala do PRODUTO, uma pede AÇÃO barata (salvar/comentar),
-# e uma leva pro GRUPO DO WHATSAPP. Encher os grupos é meta corrente, e o 1º
-# comentário é o espaço mais barato que a gente tem — mas 3 de 3 puxando pro
-# grupo viraria panfleto, então é 1 em 3.
+# O GRUPO DO WHATSAPP entra em 1 de cada 3~4 frases, não em todas: encher os
+# grupos é meta corrente e o 1º comentário é o espaço mais barato que existe,
+# mas todo comentário puxando pro grupo vira panfleto.
 #
 # ⚠️ NO INSTAGRAM LINK EM COMENTÁRIO NÃO É CLICÁVEL. Por isso a frase do grupo
 # manda pra BIO (onde o botão do grupo já existe, no topshopoficial.com.br) em
 # vez de colar um `chat.whatsapp.com` que ninguém consegue tocar. No Facebook,
 # onde o link funciona, ele vai direto — ver `_FB`.
+#
+# ⚠️ ESTAS SEIS SÃO DO DRE, PALAVRA POR PALAVRA (02/09). Eu tinha escrito três;
+# ele mandou as dele e são melhores — e a diferença é ensinável, então fica
+# registrada em vez de só substituída:
+#
+#   as minhas DESCREVIAM   "salva aí pra não perder depois"
+#   as dele CONVERSAM      "salva aí antes que você esqueça o nome 😂"
+#
+# As dele têm uma opinião ("o perigo é comprar um e depois querer outro"), fazem
+# uma pergunta de verdade ("quero saber se presta mesmo") e admitem dúvida —
+# coisas que um anúncio não faz. É a mesma régua dos ganchos, aplicada ao
+# comentário: situação reconhecível em vez de chamada pra ação.
+#
+# São SEIS e não três (ele pediu "3 melhores" e mandou 6): mais frases = menos
+# chance de parecer robô, e o custo de manter as seis é zero.
 _IG_REEL = [
-    "quem já tem um desses sabe do que eu tô falando 👀",
-    "salva aí pra não perder depois 🔖",
-    "tá tudo na bio 💛 e no grupo do WhatsApp eu mando antes de postar aqui",
+    "deixei na bio 💛 no grupo eu mando os achadinhos antes de aparecerem por aqui.",
+    "isso aí no dia a dia deve facilitar mais do que parece, salva pra lembrar quando precisar 🥰",
+    "o perigo é comprar um e depois querer outro pra cada canto da casa 😂 curte se quer mais produtos assim por aqui",
+    "esse tem muita cara de produto que viraliza e depois some, salva aí antes que você esqueça o nome 😂",
+    "alguém aqui já tem um desses? quero saber se presta mesmo 👀 comenta uma nota de 0 a 10",
+    "os achados que valem a pena vão pro grupo primeiro ✨ link na bio",
 ]
 
-# ⚠️ CARROSSEL PEDE OUTRA COISA. O carrossel entrega CONTEÚDO, e o que faz ele
-# ser entregue de novo é SALVAMENTO e COMENTÁRIO — não clique. Pedir "corre
-# pegar o seu" num post de "3 erros" é falar de um produto que o post nem
-# mostrou.
+# ⚠️ O CARROSSEL NÃO HERDA AS SEIS. Quatro delas falam de COMPRAR ("o perigo é
+# comprar um", "alguém já tem um desses") e o carrossel entrega CONTEÚDO — num
+# post de "3 erros", perguntar se a pessoa já tem um desses é falar de um
+# produto que o post não mostrou. Era exatamente a observação que já estava
+# escrita aqui em 22/08; mantida.
 _IG_CARROSSEL = [
     "salva esse aqui pra não esquecer 🔖",
     "💬 me conta qual te pegou de surpresa",
-    "no grupo do WhatsApp eu mando esses primeiro — o link tá na bio 💛",
+    "curte se quer mais conteúdo assim por aqui 💛",
+    "os achados que valem a pena vão pro grupo primeiro ✨ link na bio",
 ]
 
 # lista de produtos: aí sim faz sentido falar de link
 _IG_LISTA = [
     "💬 qual você levaria primeiro?",
     "salva esse post, a lista é boa 🔖",
-    "os links estão na bio 💛 e no grupo do WhatsApp eu mando um por dia",
+    "alguém aqui já tem um desses? quero saber se presta mesmo 👀 comenta uma nota de 0 a 10",
+    "os achados que valem a pena vão pro grupo primeiro ✨ link na bio",
 ]
 
 # no Facebook o link é CLICÁVEL — outro jogo, outro pedido.
@@ -105,7 +122,7 @@ _IG_LISTA = [
 _FB = [
     "tá aqui ó: {link}",
     "quem quiser ver de perto: {link}",
-    "no grupo do WhatsApp eu mando os achados do dia 👉 {whats}",
+    "os achados que valem a pena vão pro grupo primeiro ✨ {whats}",
 ]
 
 

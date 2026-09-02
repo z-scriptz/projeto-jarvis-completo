@@ -809,6 +809,93 @@ e **todas** das regiões que eu editei (o bloco de paleta antigo, o de fonte, o
 comentário do encolhimento). Os dois arquivos estavam em sincronia — a nota de
 dívida no roadmap descrevia um estado que já não existia. Deploy liberado.
 
+### 📏 18,3% ERA MENTIRA — E EU QUASE ENTREGUEI COMO VERDADE
+
+O `diag_gancho` rodou sobre os 120 últimos posts e apontou **22 (18,3%)**. Li os
+22 um a um antes de comentar. **19 eram FALSO POSITIVO**, e 19 pelo MESMO
+motivo — a palavra "casa" ou "cozinha":
+
+| produto | gancho apontado | veredito |
+|---|---|---|
+| Triturador de Alimentos | "cortar uma coisinha de nada **na cozinha**" | perfeito |
+| Modelador de Cachos | "cabelo de salão **em casa** era só talento" | perfeito |
+| Pipoqueira | "snack de filme **em casa** vinha com culpa" | perfeito |
+| Fechadura Digital | "quem tinha acesso à **minha casa**" | perfeito |
+
+Em português, "em casa" e "na cozinha" são **CENÁRIO** — onde a cena acontece —
+e quase todo gancho relatável usa um dos dois. Exigir que o NOME DO PRODUTO
+contenha "casa" pra liberar a frase é exigir uma coisa que quase nenhum produto
+de casa tem no nome ("Kit Porta Temperos").
+
+Duas consequências, e a segunda é a grave:
+1. eu quase entreguei 18,3% como o tamanho do problema — **medição errada
+   virando decisão**, o defeito que o `shared/categorias.py` inteiro existe pra
+   impedir;
+2. em produção o filtro estaria **rejeitando ganchos bons** e empurrando um em
+   cada seis pro banco de reserva, em silêncio.
+
+Conserto: `_AMBIENTE` — palavras que dizem ONDE/EM QUE ATIVIDADE, excluídas do
+filtro estrito. "celular", "cabelo", "cachorro", "roupa", "carro" ficam de fora
+dela: nomeiam OBJETO, e objeto errado é o defeito que a gente caça.
+
+Dois buracos de vocabulário achados no mesmo exercício: "Modelador Cachos" não
+casava com a família `cabelo` (faltavam cachos/modelador/chapinha) e "Relógio de
+Pulso" não casava com `roupa` (faltavam relógio/bolsa/óculos — "estar arrumado"
+é sobre eles também).
+
+**Placar final nos 24 casos** (22 reais + os 2 históricos): 19 falsos positivos
+→ 3, os 5 mismatches reais todos pegos, 0 falso negativo grave. Os 3 que sobram
+são retóricos ("só carro e casa passavam de pai pra filho" num relógio) e o
+custo é uma retentativa.
+
+### 💬 AS FRASES DO DRE GANHARAM DAS MINHAS, E A DIFERENÇA É ENSINÁVEL
+
+Ele mandou 6. Ficaram as 6 (pediu 3; banco maior = menos cara de robô, custo
+zero). O que as dele têm:
+
+```
+minha:  "salva aí pra não perder depois"                        DESCREVE
+dele:   "salva aí antes que você esqueça o nome 😂"              CONVERSA
+dele:   "o perigo é comprar um e depois querer outro"           tem OPINIÃO
+dele:   "quero saber se presta mesmo 👀 comenta uma nota"        admite DÚVIDA
+```
+
+Opinião, pergunta de verdade e dúvida — três coisas que um anúncio não faz. É a
+mesma régua dos ganchos aplicada ao comentário. ⚠️ O CARROSSEL NÃO HERDA as
+seis: quatro falam de COMPRAR, e num post de "3 erros" perguntar "alguém já tem
+um desses?" é falar de um produto que o post não mostrou.
+
+### 🔬 `estudo_ganchos.py` — a pergunta dos ganchos vira medição
+
+O Dre: *"quero que o jarvis estude os melhores ganchos [...] pode dar uma olhada
+nesses perfis"*. Eu podia responder com opinião. Em 01/09 isso já quase custou
+caro — apliquei CTR de tráfego pago numa pergunta de social orgânico e ele me
+parou. A lição vale aqui: gancho que funciona pro @achad0ideal é **hipótese**,
+não resposta.
+
+E o dado existe: `metricas_posts.jsonl` grava **hook + alcance + curtidas** por
+post. Então o script classifica cada gancho por traço ESTRUTURAL (pessoa
+gramatical, pergunta, condicional, imperativo negativo, contraste, abertura,
+tamanho, cita ou não o produto) e compara a MEDIANA de quem tem contra quem não
+tem.
+
+As hipóteses vieram dos dois perfis: @achad0ideal usa 2ª pessoa + imperativo
+negativo (*"não mostre isso a uma pessoa friorenta"* — convida a MARCAR alguém);
+@ofertasdaflorzinha usa condicional (*"Se você tem uma estante de livros"* —
+filtra por identificação). **Nenhum dos dois usa a nossa forma dominante**
+("Eu vivia…", "Achava que…"), que é 1ª pessoa e testemunho. Essa é a hipótese
+central a testar.
+
+Três defesas contra superstição, porque n é pequeno: mediana e não média (um
+viral distorce média), traço com <8 posts sai marcado "pouco caso", e a mediana
+geral fica impressa ao lado pra comparação ser contra a base. O cabeçalho diz na
+cara que **não isola o gancho** — alcance vem de gancho + produto + vídeo +
+áudio + horário juntos.
+
+⚠️ **O script mede, não conclui, e ainda não mudou nenhum prompt.** Só depois de
+ver a tabela com os dados reais é que vale mexer no `hook_alana` — mudar o
+gerador antes de ler a medição seria trocar meu gosto pelo gosto anterior.
+
 ### ⚠️ DÍVIDA DE DEPLOY QUE ESTA MUDANÇA TORNA URGENTE
 
 O próprio roadmap já registra: **`agents/narrated_video_agent.py` na VPS está
