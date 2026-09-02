@@ -138,6 +138,13 @@ def quadro(nicho: str, gancho: str = None) -> Image.Image:
     d.text((texto_x, logo_y + nome_dy), "TopShop", font=f_nome, fill=p["tinta_rgb"])
     larg_nome = d.textlength("TopShop", font=f_nome)
     selo_x = texto_x + larg_nome + int(os.environ.get("SELO_DX", 12))
+    # o selo CENTRA NA TINTA DO NOME, medida — não num deslocamento cravado.
+    # Era `logo_y + 14`, que não sabe onde a tinta começa nem quanto ela mede:
+    # com handle curto a folga escondia; com "@topshopbeauty._" o selo encostava
+    # no @. O renderizador de verdade faz a mesma conta pelo `.h` do clipe.
+    if not os.environ.get("SELO_DY"):
+        cx0, cy0, cx1, cy1 = f_nome.getbbox("TopShop")
+        selo_dy = nome_dy + cy0 + (cy1 - cy0 - selo_tam) // 2
     d.ellipse((selo_x, logo_y + selo_dy, selo_x + selo_tam, logo_y + selo_dy + selo_tam),
               fill=(58, 141, 245))
     d.text((texto_x, logo_y + handle_dy), HANDLES.get(nicho, "@topshop.__"),
@@ -187,7 +194,19 @@ def main() -> int:
     ap.add_argument("--nicho", help="só este nicho, em 1080x1920")
     ap.add_argument("--gancho", help="texto do gancho (use \\n pra 2 linhas)")
     ap.add_argument("--saida", default="", help="caminho do PNG")
+    ap.add_argument("--fundo", action="append", default=[], metavar="NICHO=#HEX",
+                    help="testa outro tom sem editar código: --fundo moda=#DDD3C2")
     a = ap.parse_args()
+
+    # trocar um tom é uma linha de comando, não um deploy: decidir cor é olhar,
+    # e olhar precisa ser barato.
+    for par in a.fundo:
+        nicho, _, hexa = par.partition("=")
+        nicho = nicho.strip().lower()
+        if nicho not in _FUNDOS or not hexa.strip():
+            print(f"⚠️  ignorei --fundo {par!r} (nicho desconhecido ou hex vazio)")
+            continue
+        _FUNDOS[nicho] = (hexa.strip(), "teste")
 
     gancho = a.gancho.replace("\\n", "\n") if a.gancho else None
     if a.nicho:

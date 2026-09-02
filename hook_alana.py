@@ -304,6 +304,20 @@ _CONCRETO = {
     "cabelo":    ("cabelo", "cabelud", "escova", "secador", "shampoo", "gloss"),
     "beleza":    ("beleza", "maquia", "batom", "blush", "pele", "unha", "gloss"),
     "mulher":    ("feminin", "vestido", "blush", "batom", "sandália", "bolsa"),
+    # ⚠️ VEÍCULO ENTROU EM 02/09, e entrou por um post que foi AO AR.
+    # O @topshop.__ publicou um climatizador de ambiente — vídeo de resfriar o
+    # quarto, legenda sobre dormir bem — com o gancho "Eu vivia recarregando o
+    # gás do ar do CARRO sem resolver". O Dre: *"é por causa dessas coisas que
+    # mata o vídeo e a retenção cai, às vezes foi entregue pro público errado"*.
+    # "ar condicionado" puxa "ar do carro" com facilidade, e não havia NENHUMA
+    # família de veículo aqui pra barrar. As três variações de grafia estão
+    # separadas de propósito: "carro" não casa com "automóvel".
+    "carro":     ("carro", "automot", "veicul", "veícul", "pneu", "volante",
+                  "farol", "garagem", "painel do carro", "porta-copo"),
+    "automóvel": ("carro", "automot", "veicul", "veícul", "pneu", "volante"),
+    "veículo":   ("carro", "automot", "veicul", "veícul", "pneu", "volante"),
+    "pneu":      ("pneu", "carro", "automot", "moto", "bicicleta", "bike"),
+    "moto":      ("moto", "motocicl", "capacete", "carro", "bicicleta", "bike"),
 }
 
 
@@ -320,7 +334,8 @@ _NATIVO_DO_NICHO = {
 }
 
 
-def _conflita(frase: str, produto: str, nicho: str = "") -> bool:
+def _conflita(frase: str, produto: str, nicho: str = "", extra: str = "",
+              estrito: bool = False) -> bool:
     """A frase fala de uma coisa que o produto não é?
 
     'Meu celular vivia descarregando' + um mouse = a pessoa lê sobre bateria e
@@ -338,8 +353,25 @@ def _conflita(frase: str, produto: str, nicho: str = "") -> bool:
 
     Medido em 16/08: casa 3 → 14 frases utilizáveis com o mesmo produto.
     """
-    f, p = frase.lower(), (produto or "").lower()
-    nativas = _NATIVO_DO_NICHO.get(_chave_nicho(nicho), ()) if nicho else ()
+    # `extra` é a DESCRIÇÃO do produto, e existe por causa do defeito que esta
+    # própria docstring descreve: o nome é proxy ruim de assunto. A descrição
+    # é o mesmo texto que o Gemini leu pra escrever o gancho — se ela fala de
+    # carro, gancho de carro é legítimo e não deve ser barrado.
+    f = frase.lower()
+    p = f"{produto or ''} {extra or ''}".lower()
+    # ⚠️ A ISENÇÃO POR NICHO DESARMAVA O PRÓPRIO CASO QUE CRIOU ESTA FUNÇÃO.
+    # Medido em 02/09: `_conflita("Meu celular vivia descarregando", "Mouse
+    # Gamer", nicho="tech")` devolve **False** — porque "celular" é nativa de
+    # tech e o laço faz `continue`. Ou seja, o mouse de 03/08 passaria de novo
+    # hoje. As duas correções estão certas e se anulam: a de 03/08 quer barrar
+    # assunto errado, a de 16/08 quer não esvaziar um banco finito.
+    #
+    # `estrito` resolve escolhendo por CONTEXTO em vez de por regra única:
+    #   RESERVA  (pool finito, esvaziar dói)     → estrito=False, isenção vale
+    #   GEMINI   (dá pra pedir outro, é de graça) → estrito=True, sem isenção
+    # Rigor é barato onde existe segunda tentativa e caro onde não existe.
+    nativas = () if estrito else (
+        _NATIVO_DO_NICHO.get(_chave_nicho(nicho), ()) if nicho else ())
     for palavra, parentes in _CONCRETO.items():
         if palavra in nativas:
             continue
@@ -868,6 +900,22 @@ def gerar_hook_alana(produto: str, descricao: str = "", nicho: str = "") -> str:
             if not via:
                 break
             motivo = _proibido(via)
+            # ⚠️ O GANCHO DO GEMINI NÃO PASSAVA PELA REGRA DE ASSUNTO (02/09).
+            # `_conflita` filtrava só a RESERVA (linha 512). O modelo escrevia o
+            # que quisesse e ia direto pra tela — foi assim que um climatizador
+            # de ambiente saiu com "Eu vivia recarregando o gás do ar do CARRO",
+            # com a legenda e o vídeo falando de dormir bem. Três textos, dois
+            # produtos.
+            #
+            # O custo disso não é estético: quem lê "carro" e vê um climatizador
+            # não entende e pula, e o Instagram lê a saída como sinal e entrega
+            # pro público errado na próxima. O Dre nomeou antes de mim.
+            #
+            # Aqui a descrição entra junto do nome de propósito: é o MESMO texto
+            # que o modelo leu. Se a descrição fala de carro, o gancho de carro
+            # é legítimo — a regra barra invenção, não assunto.
+            if not motivo and _conflita(via, produto, nicho, descricao, estrito=True):
+                motivo = "fala de uma coisa que o produto não é"
             if not motivo:
                 _registrar(via)
                 return via

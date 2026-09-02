@@ -1170,15 +1170,40 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
             else:
                 # fallback estimado (fim_topshop_x é definido lá em cima)
                 selo_x = fim_topshop_x + int(os.environ.get("SELO_DX", 12))
+
+            # ── E A VERTICAL TAMBÉM MEDE O CLIP DESENHADO (02/09) ─────────────
+            # O Dre, olhando a prévia das 6 contas: *"só o selo mesmo ficou
+            # desalinhado"*. Estava — e por um deslocamento cravado no olho
+            # (`logo_y + 14`), que não sabe onde a tinta do nome começa nem
+            # quanto ela mede. Num handle curto (@topshop.__) a folga escondia o
+            # erro; num longo (@topshopbeauty._) o selo encostava no @.
+            #
+            # A `margin=(_m,_m)` do _textclip_esq é (x, y): `.h` carrega a mesma
+            # margem transparente em cima e embaixo que `.w` carrega nos lados.
+            # Então a tinta do nome mede `h - 2m` e o selo centra nela.
+            #
+            # É a MESMA correção que a horizontal levou em 19/08 — "medir uma
+            # coisa e desenhar outra" — só que na vertical, onde ela não tinha
+            # sido feita. SELO_DY no .env continua ganhando (depuração).
+            selo_dy = _selo_dy
+            if nome is not None and not os.environ.get("SELO_DY"):
+                try:
+                    tinta_h = int(nome.h) - 2 * _mx
+                    if tinta_h > 0:
+                        selo_dy = _nome_dy + _mx + (tinta_h - _selo_tam) // 2
+                except Exception:
+                    pass
+
             selo = ImageClip(str(selo_aparado))
             selo = _with_duration(selo, dur_total)
             selo = _with_start(selo, 0.0)
-            selo = _with_position(selo, (selo_x, logo_y + _selo_dy))
+            selo = _with_position(selo, (selo_x, logo_y + selo_dy))
             camadas.append(selo)
-            log.info(f"   ✔️  Selo em x={selo_x} · fim da tinta do TopShop="
+            log.info(f"   ✔️  Selo em x={selo_x} dy={selo_dy} (cravado seria "
+                     f"{_selo_dy}) · fim da tinta do TopShop="
                      f"{(texto_x + fim_tinta) if fim_tinta else '?'} "
-                     f"(clip={getattr(nome, 'w', '?')} margem={_mx if nome is not None else '?'} "
-                     f"contorno={SW_NOME})")
+                     f"(clip={getattr(nome, 'w', '?')}×{getattr(nome, 'h', '?')} "
+                     f"margem={_mx if nome is not None else '?'} contorno={SW_NOME})")
         except Exception as e:
             log.warning(f"   ⚠️  Selo verificado falhou: {e}")
     else:

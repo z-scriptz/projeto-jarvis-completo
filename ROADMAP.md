@@ -670,6 +670,87 @@ fica invisível, sem erro em lugar nenhum. Sem `--aplicar` o script só mostra.
 - **Destaques numerados (01-50, 51-100)** e **canal exclusivo aos 5k** — são
   automação de Instagram, não de render. Ficam pra etapa própria.
 
+### 🚗 O GANCHO DO CARRO: achado, e é ESTRUTURAL
+
+O Dre confirmou o produto: climatizador de ambiente. Vídeo resfriando o quarto,
+legenda sobre dormir bem, e o gancho na tela dizendo *"Eu vivia recarregando o
+gás do ar do CARRO sem resolver"*. E ele nomeou o custo melhor do que eu:
+*"é por causa dessas coisas que mata o vídeo e a retenção cai, às vezes foi
+entregue pro público errado"*.
+
+A pista que resolveu foi dele: **"a legenda é sempre a certa"**. Gancho e
+legenda saem do MESMO `nome_produto` + `descricao`, os dois pelo Gemini
+(`gerar_hook_alana` / `gerar_legenda_curiosidade`). Se uma acerta e a outra
+erra com a mesma entrada, a diferença está no que cada uma atravessa depois.
+
+E estava. `_conflita()` — a regra que pergunta *"a frase fala de uma coisa que
+o produto não é?"* — só era chamada em UM lugar: `_fallback`, linha 512, sobre
+o banco de reserva. **O gancho do Gemini ia direto pra tela sem nenhuma
+checagem de assunto.** Duas correções:
+
+1. `_conflita` passa a filtrar TAMBÉM a saída do Gemini, recebendo a descrição
+   junto do nome (é o mesmo texto que o modelo leu — se a descrição fala de
+   carro, gancho de carro é legítimo; a regra barra invenção, não assunto).
+2. `_CONCRETO` ganhou **família de veículo**. Não existia nenhuma: nem na
+   reserva "carro" seria barrado. "Ar condicionado" puxa "ar do carro" fácil.
+
+### 🔁 E UMA CORREÇÃO ANULAVA A OUTRA
+
+Testando, apareceu o que eu não procurava: `_conflita("Meu celular vivia
+descarregando", "Mouse Gamer", nicho="tech")` devolve **False**. O mouse de
+03/08 — o caso que CRIOU a função — passaria de novo hoje. A isenção
+`_NATIVO_DO_NICHO`, adicionada em 16/08 pra não esvaziar o banco da casa
+(3 frases de 14), faz `continue` em "celular" porque ela é nativa de tech.
+
+As duas estão certas e se anulavam. Resolvido por CONTEXTO, não por regra única:
+
+| caminho | pool | rigor |
+|---|---|---|
+| reserva | finito, esvaziar dói | `estrito=False` — isenção vale |
+| Gemini | pede outro, é de graça | `estrito=True` — sem isenção |
+
+Rigor é barato onde existe segunda tentativa e caro onde não existe. Os dois
+casos históricos voltam a ser barrados, e o organizador de armário de 16/08
+continua passando. 6 casos verificados.
+
+### 📓 `diag_gancho.py` — foi 1 post ou 30?
+
+Consertar é metade; a outra é saber o tamanho. O gancho fica queimado no vídeo
+e só é legível assistindo cada um — mas o `posts_ledger.jsonl` grava o gancho
+de todo post desde sempre. O diagnóstico roda a regra nova sobre o passado e
+lista os posts com produto, gancho e legenda lado a lado. Usa a LEGENDA como
+retrato do produto, justamente porque ela é a que acerta. Não conserta nada:
+os posts listados já estão no ar.
+
+### 🔵 O SELO — e a metade da correção de 19/08 que ficou faltando
+
+O Dre, na prévia: *"só o selo mesmo ficou desalinhado"*. Estava, e a causa é a
+MESMA de 19/08 ("medir uma coisa e desenhar outra") — só que na vertical, onde
+o conserto nunca foi feito. O x já media o clipe desenhado; o y era `logo_y +
+14`, cravado no olho, que não sabe onde a tinta do nome começa nem quanto mede.
+Com handle curto (@topshop.__) a folga escondia; com @topshopbeauty._ o selo
+encostava no @.
+
+A `margin=(_m,_m)` do `_textclip_esq` é (x, y): `.h` carrega a mesma margem
+transparente que `.w` carrega nos lados. Então a tinta mede `h - 2m` e o selo
+centra nela. Conferido no recorte do cabeçalho.
+
+### 🎨 TOM: moda e beleza saíram claras demais
+
+Reação do Dre à prévia. `previa_paleta.py --fundo moda=#DDD2BE` passa a existir
+pra testar tom sem editar código — decidir cor é olhar, e olhar precisa ser
+barato. Três degraus renderizados pra cada um; a escolha é dele.
+
+### 🔧 fontTools não estava no venv da VPS
+
+`.venv/bin/python baixar_fontes.py` → `No module named 'fontTools'`. A Poppins
+veio (é estática), a Montserrat não (precisa ser fatiada da variável). O plano
+B funcionou como desenhado. Falta `.venv/bin/pip install fonttools`.
+
+Nota boa do mesmo log: `TOPSHOP_BG`, `FORCE_BG`, `HOOK_FONTE` e
+`HOOK_FONTE_PRETO` **não estão no `.env`** — a chave que anularia a paleta
+inteira já estava limpa.
+
 ### ⚠️ DÍVIDA DE DEPLOY QUE ESTA MUDANÇA TORNA URGENTE
 
 O próprio roadmap já registra: **`agents/narrated_video_agent.py` na VPS está
