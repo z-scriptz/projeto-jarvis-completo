@@ -1136,6 +1136,56 @@ Conserto: o `*asterisco*` denuncia o carrossel (é o marcador do
 `carrossel_render._RX_MARCA` e só existe lá). Heurística, mas de precisão alta,
 custo zero, e melhor que confiar num campo que nem sempre foi gravado.
 
+### 💰 O LOOP DO DINHEIRO FECHOU (o código; o número depende da API)
+
+O Dre autorizou: *"quero, pode fazer"*. `shopee_affiliate.relatorio_conversao()`
++ `dinheiro.py`.
+
+⚠️ **A FUNÇÃO NÃO ASSUME O SCHEMA.** O `probe_conversao.py` nunca foi rodado,
+então eu NÃO SEI o nome da query nem os campos. Inventar um schema plausível
+seria o pior desfecho: o código "funcionaria", devolveria vazio, e **vazio é
+indistinguível de "não vendeu nada"**. Então ela descobre por introspecção,
+tenta as formas conhecidas em ordem, e diz qual funcionou.
+
+**Três desfechos, nomeados, nunca somados:**
+
+| desfecho | o que é |
+|---|---|
+| `ok:False` | bug/schema — **"eu não sei"**, não "vendeu zero" |
+| `ok:True`, 0 conversões | resultado de negócio: o clique não vira compra |
+| conversão órfã | etiqueta quebrada, ou link publicado fora do Jarvis |
+
+### 🧾 E O TESTE PEGOU UMA ATRIBUIÇÃO ERRADA ANTES DE SUBIR
+
+Primeira versão casava por QUALQUER sub_id. O contrato é
+`[canal, nicho, produto, FONTE, video]` — e as quatro primeiras **se repetem em
+post após post**. "ig" é etiqueta de todos.
+
+Medido no fixture: uma conversão de um vídeo que **não existe no diário** foi
+contada como casada, e **R$4,75 inteiros foram creditados a um post que ganhou
+R$1,50**.
+
+Atribuição errada é pior que atribuição nenhuma — ela vira "esse formato
+converte" e vira decisão de R$3.000. Regra nova, dura: etiqueta que aponta pra
+mais de um post **não amarra nada**, e a conversão vira órfã declarada. Depois
+do conserto: 2,35 → triturador · 1,50 → fone · 0,90 órfã. Correto.
+
+### 🎬 "AINDA NÃO FIZEMOS VÍDEOS IA" — e isso é o item mais importante da decisão
+
+O Dre: *"ainda não fizemos vídeos IAs, não sabemos fazer isso da maneira certa,
+apesar de parecer simples."* É a observação mais valiosa da conversa, porque
+nomeia o risco que o número de payback NÃO captura: **os R$800 compram créditos,
+não habilidade.**
+
+O que o projeto já tem: `video_provider.py` está **PLACEHOLDER** (o próprio
+cabeçalho diz), `providers_config.json` tem `usar_api_video: false` e lista
+kling/runway/pika como opções nunca ligadas. Ou seja, zero linhas de código
+testadas contra qualquer API de vídeo por IA, e zero vídeos gerados.
+
+📌 Consequência pro plano: comprar o pacote grande antes de gerar o primeiro
+vídeo é pagar pela curva de aprendizado no preço cheio. O caminho barato existe
+e não foi tentado.
+
 ### ⚠️ DÍVIDA DE DEPLOY QUE ESTA MUDANÇA TORNA URGENTE
 
 O próprio roadmap já registra: **`agents/narrated_video_agent.py` na VPS está

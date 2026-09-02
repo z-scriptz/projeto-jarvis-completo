@@ -776,3 +776,110 @@ def main():
 if __name__ == "__main__":
     import sys
     sys.exit(main())
+
+# =================================================================
+# RELATÓRIO DE CONVERSÃO — o "loop do dinheiro"
+#
+# POR QUE ISSO EXISTE (02/09/2026)
+# ────────────────────────────────
+# Até hoje o Jarvis sabe o que PUBLICOU e sabe o ALCANCE de cada post. Não sabe
+# o que VENDEU. O loop está aberto na ponta que importa: R$1,67 de comissão em
+# 375 posts é o único número financeiro que a gente tem, e ele não diz de QUAL
+# post veio — então não dá pra saber se algum formato converte.
+#
+# O Dre está decidindo gastar R$3.000, sendo ~R$800 numa ferramenta de vídeo por
+# IA. *"a gente pode investir os 800 em ferramentas IAs e fazer explodir vários
+# vídeos, ou pode gastar, e não ganhar nada."* Sem saber quanto vale um clique,
+# essa decisão é aposta. Com esse número, é conta.
+#
+# ⚠️ ESTA FUNÇÃO NÃO ASSUME O SCHEMA DA SHOPEE. Eu não rodei o
+# `probe_conversao.py` ainda, então NÃO SEI o nome exato da query nem os campos
+# — e inventar um schema plausível seria o pior resultado possível: o código
+# "funcionaria", devolveria vazio, e vazio é indistinguível de "não vendeu
+# nada". Em vez disso ela DESCOBRE por introspecção, tenta as formas conhecidas
+# em ordem, e devolve qual caminho funcionou. Quando nada funciona, ela diz
+# "não consegui ler" — que é diferente de "não vendeu".
+# =================================================================
+
+# As formas que a API da Shopee já usou pro relatório de conversão, em ordem de
+# probabilidade. Cada uma é (nome_da_query, campos_internos). A lista existe
+# porque a Shopee mudou esse endpoint mais de uma vez e nenhuma documentação
+# pública acompanha; tentar em ordem custa uma chamada e evita um palpite.
+_FORMAS_CONVERSAO = [
+    ("conversionReport",
+     "conversionId purchaseTime clickTime utmContent "
+     "orders { orderId items { itemName itemId shopId "
+     "itemTotalCommission actualAmount } }"),
+    ("conversionReport",
+     "conversionId purchaseTime "
+     "orders { orderId items { itemName itemId itemTotalCommission } }"),
+    ("shopeeOfferV2", None),          # só pra detectar que a conta responde
+]
+
+
+def _campos_da_query(nome: str) -> list:
+    """Os campos que a API declara pra uma query. [] se a introspecção estiver
+    desligada — e aí quem chama tenta as formas conhecidas às cegas."""
+    q = ('{ __type(name: "Query") { fields { name args { name } } } }')
+    r = _executar_graphql(q)
+    try:
+        campos = ((r.get("data") or {}).get("__type") or {}).get("fields") or []
+    except Exception:
+        return []
+    return [c for c in campos if nome.lower() in (c.get("name") or "").lower()]
+
+
+def relatorio_conversao(dias: int = 30, limite: int = 200) -> dict:
+    """As conversões dos últimos `dias`, com os sub_ids que amarram ao post.
+
+    Returns:
+        {"ok": True, "conversoes": [...], "query": "<a que funcionou>",
+         "bruto": <resposta crua da 1ª tentativa que deu certo>}
+        {"ok": False, "erro": "...", "tentativas": [...]}
+
+    ⚠️ `ok: True` com `conversoes: []` significa "a API respondeu e não há
+    conversão no período" — que é um resultado. `ok: False` significa "não
+    consegui ler", que NÃO é. Quem chama tem que tratar os dois diferente:
+    confundir os dois é como se conclui "não vendeu nada" de um bug.
+    """
+    fim = int(time.time())
+    ini = fim - int(dias) * 24 * 3600
+
+    disponivel_ok, motivo = disponivel()
+    if not disponivel_ok:
+        return {"ok": False, "erro": motivo, "tentativas": []}
+
+    # 1) o que a API DIZ que existe (quando deixa perguntar)
+    achados = _campos_da_query("conversion") or _campos_da_query("report")
+    nomes_reais = [c.get("name") for c in achados if c.get("name")]
+
+    tentativas = []
+    ordem = list(_FORMAS_CONVERSAO)
+    # se a introspecção revelou um nome que não está na minha lista, ele vai na
+    # frente: a API é a autoridade, não o meu palpite de 02/09.
+    for n in nomes_reais:
+        if not any(n == f[0] for f in ordem):
+            ordem.insert(0, (n, _FORMAS_CONVERSAO[0][1]))
+
+    for nome, campos in ordem:
+        if not campos:
+            continue
+        q = ("query { %s(purchaseTimeStart: %d, purchaseTimeEnd: %d, limit: %d) "
+             "{ nodes { %s } pageInfo { hasNextPage scrollId } } }"
+             % (nome, ini, fim, int(limite), campos))
+        r = _executar_graphql(q)
+        if r.get("_erro"):
+            tentativas.append({"query": nome, "erro": r["_erro"][:180]})
+            continue
+        nos = (((r.get("data") or {}).get(nome) or {}).get("nodes"))
+        if nos is None:
+            tentativas.append({"query": nome, "erro": "respondeu sem 'nodes'"})
+            continue
+        return {"ok": True, "conversoes": nos, "query": nome,
+                "periodo": {"de": ini, "ate": fim}, "tentativas": tentativas}
+
+    return {"ok": False,
+            "erro": "nenhuma forma conhecida do relatório de conversão "
+                    "respondeu — rode `probe_conversao.py` e me mande a saída",
+            "nomes_que_a_api_declara": nomes_reais,
+            "tentativas": tentativas}
