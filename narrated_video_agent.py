@@ -673,6 +673,27 @@ def _fonte_montserrat(peso: str = "Bold") -> Optional[str]:
     return None
 
 
+def _fonte_gancho(peso: str = "Light") -> tuple:
+    """(caminho, familia) da fonte do GANCHO, no peso pedido.
+
+    O Dre pediu "montserrat light, poppins, ou algo grande". A ordem aqui é
+    essa mesma, e existe uma segunda opção de verdade porque a Montserrat
+    estática precisa ser FATIADA da variável pelo fontTools (o Google não
+    publica mais os pesos prontos) — e fontTools pode não estar no venv.
+
+    Devolve (None, "") quando nenhuma das duas está na pasta, pra quem chama
+    poder gritar. Cair calado na Liberation é entregar o feed velho achando que
+    entregou o novo.
+    """
+    familia = os.environ.get("HOOK_FAMILIA", "").strip()
+    ordem = [familia] if familia else ["Montserrat", "Poppins"]
+    for fam in ordem:
+        alvo = BRAND_DIR / f"{fam}-{peso}.ttf"
+        if alvo.exists():
+            return str(alvo), fam
+    return None, ""
+
+
 def _brand_asset(nome: str) -> Optional[Path]:
     """Retorna o caminho de um asset de marca se existir (logo_ts.png etc)."""
     p = BRAND_DIR / nome
@@ -984,32 +1005,80 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
     camadas = []
     fonte_bold = _fonte_montserrat("Bold") or _resolver_fonte_textclip(TextClip)
 
-    # ── ESTILO POR FUNDO: geral=preto (texto branco), demais=branco (texto preto,
-    # estilo Alana). O produtor seta TOPSHOP_BG por vídeo (preto/branco). ──
-    _bg = os.environ.get("TOPSHOP_BG", "preto").strip().lower()
-    _claro = _bg in ("branco", "white", "bege", "claro")
-    if _claro:      # fundo BRANCO (estilo Alana): texto preto, @ cinza, sem contorno
-        C_NOME, SC_NOME, SW_NOME = "black", "black", 0
-        C_HANDLE = "#7a7a7a"
-        C_HOOK, SC_HOOK, SW_HOOK = "black", "black", 0
-    else:           # fundo PRETO: texto branco com contorno preto (legível)
-        C_NOME, SC_NOME, SW_NOME = "white", "black", 3
-        C_HANDLE = "white"
-        C_HOOK, SC_HOOK = "white", "black"
-        SW_HOOK = int(os.environ.get("HK_STROKE_PRETO", 4))  # contorno + grosso no preto
-    # fonte do HOOK: fundo BRANCO usa Regular (fino, elegante, estilo Alana);
-    # fundo PRETO usa BOLD pra as letras brancas DESTACAREM sobre o vídeo.
+    # ── ESTILO POR PALETA DE NICHO (02/09) ───────────────────────────────────
+    # Era: `_bg in ("branco","white","bege","claro")` — três palavras decidindo
+    # tudo, com a mesma regra copiada em produzir_tiktok e no hunter. Agora a
+    # paleta é uma só (shared/paleta.py) e o nicho é quem manda.
+    #
+    # A tinta NÃO é mais "black ou white": é derivada da luminância do fundo lá
+    # dentro. É o que impede o pedido literal do Dre ("tech: preto puro" +
+    # "a fonte deve ser preta") de virar um retângulo preto.
+    try:
+        from shared.paleta import do_ambiente as _paleta_do_ambiente
+        _pal = _paleta_do_ambiente()
+    except Exception as _e:      # paleta quebrada não pode derrubar a produção
+        log.warning(f"   ⚠️  paleta indisponível ({str(_e)[:80]}) — cai no preto/branco antigo")
+        _bg = os.environ.get("TOPSHOP_BG", "preto").strip().lower()
+        _cl = _bg in ("branco", "white", "bege", "claro")
+        _pal = {"claro": _cl,
+              "tinta_hex": "#000000" if _cl else "#FFFFFF",
+              "secundaria_hex": "#7a7a7a" if _cl else "#FFFFFF",
+              "contorno": 0 if _cl else int(os.environ.get("HK_STROKE_PRETO", 4)),
+              "nicho": "?", "fundo_hex": "?", "fundo_nome": "fallback",
+              "destaque_hex": "?"}
+    _claro = _pal["claro"]
+    C_NOME, SC_NOME, SW_NOME = _pal["tinta_hex"], "black", (0 if _claro else 3)
+    C_HANDLE = _pal["secundaria_hex"]
+    C_HOOK, SC_HOOK, SW_HOOK = _pal["tinta_hex"], "black", _pal["contorno"]
+
+    # ── FONTE DO GANCHO: Montserrat, peso leve, grande (pedido do Dre) ────────
+    # "fonte de letra: montserrat light, poppins, ou algo grande, deve ser preto"
+    #
+    # O peso é env (HOOK_PESO) e não constante porque nos dois perfis de
+    # referência o gancho é REGULAR, não Light — Light em 48px sobre a borda do
+    # vídeo perde corpo. Light é o que ele pediu e é o padrão; trocar pra
+    # Regular é uma variável de ambiente, não um deploy.
+    #
+    # ⚠️ CAIR NA FONTE ANTIGA TEM QUE DOER DE LER. A Montserrat mora em
+    # assets/brand/ (fora do Git, só na VPS). Se o .ttf do peso pedido não
+    # estiver lá, o vídeo sai com Liberation e NINGUÉM percebe olhando o log —
+    # foi assim que a logo errada foi parar num vídeo do @topshopcasa_.
     _LIB = "/usr/share/fonts/truetype/liberation/"
-    if _claro:
-        _hk_fonte = os.environ.get("HOOK_FONTE", _LIB + "LiberationSans-Regular.ttf")
-    else:
-        _hk_fonte = os.environ.get("HOOK_FONTE_PRETO", _LIB + "LiberationSans-Bold.ttf")
+    _hk_peso = os.environ.get("HOOK_PESO", "Light")
+    _hk_fonte = os.environ.get("HOOK_FONTE") if _claro else os.environ.get("HOOK_FONTE_PRETO")
+    if not _hk_fonte:
+        _hk_fonte, _fam = _fonte_gancho(_hk_peso)
+        if not _hk_fonte:
+            log.warning(
+                f"   ⚠️  NEM MONTSERRAT-{_hk_peso.upper()}.TTF NEM POPPINS-{_hk_peso.upper()}.TTF "
+                f"ESTÃO EM {BRAND_DIR}. O gancho vai sair na fonte antiga "
+                f"(Liberation): o vídeo NÃO vai ter a cara nova, e nada mais "
+                f"além desta linha vai avisar. "
+                f"Rode: .venv/bin/python baixar_fontes.py")
+            _hk_fonte = (_LIB + ("LiberationSans-Regular.ttf" if _claro
+                                 else "LiberationSans-Bold.ttf"))
     if not (_hk_fonte and Path(_hk_fonte).exists()):
         _hk_fonte = fonte_bold
+    log.info(f"   🎨 {_pal.get('nicho','?')}: fundo {_pal.get('fundo_hex','?')} "
+             f"({_pal.get('fundo_nome','?')}) · tinta {_pal['tinta_hex']} · "
+             f"fonte {Path(_hk_fonte).name if _hk_fonte else '?'}")
 
-    logo_x = int(os.environ.get("LOGO_X", 100))    # + à direita (era 65)
-    logo_y = int(os.environ.get("LOGO_Y", 112))    # + pra baixo (era 90)
-    logo_tam = int(os.environ.get("LOGO_TAM", 120))
+    # ── GEOMETRIA: a coluna do texto É a coluna do vídeo ──────────────────────
+    # O render.py já amarrava os dois; este arquivo não, e usava LOGO_X=100
+    # absoluto. Com VIDEO_W_FRAC subindo de 0,82 pra 0,90 (pedido: "aumentar o
+    # vídeo nas bordas"), a borda esquerda do vídeo vai de 97 pra 54 — logo e
+    # gancho ficariam 46px pra dentro do vídeo, desalinhados.
+    # Derivando, mexer na largura do vídeo move a coluna inteira junto.
+    # ⚠️ LOGO_X/HK_MARGEM no .env AINDA GANHAM. Se estiverem lá com os valores
+    # velhos, esta derivação nunca acontece — é o mesmo mecanismo que fez o
+    # SELO_DX do código ser ignorado por duas rodadas.
+    _borda_video = int((LARGURA - int(LARGURA * float(os.environ.get("VIDEO_W_FRAC", 0.90)))) / 2)
+    logo_x = int(os.environ.get("LOGO_X", _borda_video))
+    logo_y = int(os.environ.get("LOGO_Y", 168))    # era 112 — "abaixar + o header"
+    logo_tam = int(os.environ.get("LOGO_TAM", 140))  # era 120 — "aumentar + o logo"
+    # tudo o que foi calibrado contra um logo de 120px acompanha a escala, em
+    # vez de virar mais três números pra acertar no olho.
+    _k = logo_tam / 120.0
 
     # ── Logo TS REDONDO (canto superior esquerdo) ──
     # logo POR CONTA/NICHO: a produção seta TOPSHOP_LOGO (ex.: logo_ts_tech.png,
@@ -1029,8 +1098,34 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
         except Exception as e:
             log.warning(f"   ⚠️  Logo TS falhou: {e}")
 
-    texto_x = logo_x + logo_tam + int(os.environ.get("TEXTO_DX", 16))  # DEPOIS do logo
-    _nome_font = int(os.environ.get("NOME_FONT", 56))   # tamanho do "TopShop"
+    texto_x = logo_x + logo_tam + int(os.environ.get("TEXTO_DX", 16))
+    # ⚠️ A TIPOGRAFIA DO CABEÇALHO NÃO ESCALA COM O LOGO, DE PROPÓSITO.
+    # O pedido foi "aumentar + o logo e abaixar", não "aumentar o nome". O
+    # tamanho do nome já foi calibrado no olho pelo Dre e está no .env da VPS
+    # (52/42, registrado em render.py:105). Na 1ª prévia eu escalei os dois por
+    # _k e o selo azul foi parar em cima do "@topshopbeauty._" — mexer no que
+    # já estava resolvido criou um defeito que não existia.
+    # 52/42 aqui deixa este renderizador e o render.py finalmente com o MESMO
+    # padrão, que é o valor real de produção (antes eram 56/46, letra morta).
+    _nome_font = int(os.environ.get("NOME_FONT", 52))
+    _handle_font = int(os.environ.get("HANDLE_FONT", 42))
+    # ⚠️ O @ E O SELO PENDURAM NO NOME, NÃO NO LOGO (achado na 1ª prévia, 02/09).
+    # Eu tinha escalado os dois por _k (= LOGO_TAM/120) e o selo azul caiu EM
+    # CIMA do "@topshopmoda_": o vão entre o nome e o @ é um fato tipográfico do
+    # TAMANHO DO NOME, e o .env da VPS tem NOME_FONT=52 (não 56), então as duas
+    # escalas divergem — logo cresce 1,17×, nome cresce 1,25×.
+    #
+    # As constantes abaixo reproduzem EXATAMENTE os números de produção quando
+    # NOME_FONT=52, que é o que está no ar hoje:
+    #     handle_dy = -12 + round(52 × 1,038) = 42   ✔ é o valor de produção
+    #     selo_dy   = -12 + round(52 × 0,50)  = 14   ✔ idem
+    #     selo_tam  =       round(52 × 0,885) = 46   ✔ idem
+    # Ou seja: no tamanho de hoje nada muda, e em qualquer outro tamanho a
+    # relação se mantém em vez de precisar de três números novos no olho.
+    _nome_dy = int(os.environ.get("NOME_DY", round(-12 * _k)))
+    _handle_dy = int(os.environ.get("HANDLE_DY", _nome_dy + round(_nome_font * 1.038)))
+    _selo_dy = int(os.environ.get("SELO_DY", _nome_dy + round(_nome_font * 0.50)))
+    _selo_tam = int(os.environ.get("SELO_TAM", round(_nome_font * 0.885)))
 
     # ── 'TopShop' PRETO (Bold) com contorno BRANCO ──
     nome = _textclip_esq(TextClip, MARCA_NOME, _nome_font, C_NOME, SW_NOME, SC_NOME, fonte_bold)
@@ -1038,7 +1133,7 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
     if nome is not None:
         nome = _with_duration(nome, dur_total)
         nome = _with_start(nome, 0.0)
-        nome = _with_position(nome, (texto_x, logo_y - 12))
+        nome = _with_position(nome, (texto_x, logo_y + _nome_dy))
         camadas.append(nome)
 
     # ── Selo verificado — vai DEPOIS da tinta do 'TopShop'.
@@ -1061,7 +1156,7 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
     #
     # AGORA MEDE O PRÓPRIO CLIP DESENHADO. Não existe mais um segundo clip pra
     # divergir do primeiro — que era a causa, não o sintoma.
-    selo_aparado = _emoji_aparado("verificado.png", 46)
+    selo_aparado = _emoji_aparado("verificado.png", _selo_tam)
     if selo_aparado is not None:
         try:
             fim_tinta = None
@@ -1078,7 +1173,7 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
             selo = ImageClip(str(selo_aparado))
             selo = _with_duration(selo, dur_total)
             selo = _with_start(selo, 0.0)
-            selo = _with_position(selo, (selo_x, logo_y + 14))
+            selo = _with_position(selo, (selo_x, logo_y + _selo_dy))
             camadas.append(selo)
             log.info(f"   ✔️  Selo em x={selo_x} · fim da tinta do TopShop="
                      f"{(texto_x + fim_tinta) if fim_tinta else '?'} "
@@ -1093,21 +1188,23 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
     # lê o handle em tempo de render (multi-conta): a produção seta TOPSHOP_HANDLE
     # por vídeo antes de renderizar; cai no MARCA_HANDLE default se não setado.
     _handle_txt = os.environ.get("TOPSHOP_HANDLE", MARCA_HANDLE) or MARCA_HANDLE
-    handle = _textclip_esq(TextClip, _handle_txt, int(os.environ.get("HANDLE_FONT", 46)),
+    handle = _textclip_esq(TextClip, _handle_txt, _handle_font,
                            C_HANDLE, (0 if _claro else 3), "black", fonte_bold)
     if handle is not None:
         handle = _with_duration(handle, dur_total)
         handle = _with_start(handle, 0.0)
-        handle = _with_position(handle, (texto_x, logo_y + 42))
+        handle = _with_position(handle, (texto_x, logo_y + _handle_dy))
         camadas.append(handle)
 
     # ── HOOK à ESQUERDA, 1 OU 2 linhas, cor por fundo (estilo Alana) ──────────
     # >>> tudo tunável por .env (ajuste fino olhando 1 render de teste) <<<
-    HK_FONT_MAX = int(os.environ.get("HK_FONT", 48))
+    HK_FONT_MAX = int(os.environ.get("HK_FONT", 60))     # era 48 — "algo grande"
     HK_FONT_MIN = int(os.environ.get("HK_FONT_MIN", 34))
-    HK_MARGEM   = int(os.environ.get("HK_MARGEM", 55))   # margem ESQUERDA (hook + header)
-    HK_ALTURA_LINHA = int(os.environ.get("HK_ALT_LINHA", 62))
-    HK_MAX_LARG = LARGURA - HK_MARGEM - int(os.environ.get("HK_MARGEM_DIR", 45))
+    # a margem do gancho é a BORDA DO VÍDEO, dos dois lados: a coluna do texto
+    # e a coluna da mídia são a mesma, e simétrica.
+    HK_MARGEM   = int(os.environ.get("HK_MARGEM", _borda_video))
+    HK_ALTURA_LINHA = int(os.environ.get("HK_ALT_LINHA", 76))   # era 62, acompanha a fonte
+    HK_MAX_LARG = LARGURA - HK_MARGEM - int(os.environ.get("HK_MARGEM_DIR", _borda_video))
     HK_EMOJI_TAM = int(os.environ.get("HK_EMOJI", 40))
 
     _emoji_do_txt, hook_txt_limpo = _separar_emoji_hook(hook_txt)
@@ -1149,24 +1246,43 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
 
     # parágrafos = quebra EXPLÍCITA "\n" (formato Alana: frase / A Shopee:); senão 1.
     _paras = [l.strip() for l in hook_txt_limpo.split("\n") if l.strip()] or [hook_txt_limpo]
-    # encolhe a fonte só até a MAIOR palavra caber (piso de segurança); a quebra
-    # por largura cuida do resto — assim frase longa VIRA 2 linhas em vez de vazar.
-    while HK_FONT > HK_FONT_MIN and max(
-            (_larg(w, HK_FONT) for p in _paras for w in p.split()), default=0) > HK_MAX_LARG:
+
+    def _quebrar_tudo(fnt):
+        """(linhas, índice da linha que leva o emoji) nesta fonte."""
+        linhas, emoji_linha = [], 0
+        for _pi, _par in enumerate(_paras):
+            _wl = _wrap(_par, fnt)
+            if _pi == 0:
+                emoji_linha = len(_wl) - 1   # emoji no fim da 1ª frase
+            linhas += _wl
+        return linhas, emoji_linha
+
+    # ENCOLHE ATÉ CABER EM 2 LINHAS, não só até a maior palavra caber.
+    #
+    # O critério antigo (palavra mais larga) deixava passar 3 linhas, e 3 linhas
+    # já era apertado no layout velho. No layout novo — logo maior e mais baixo,
+    # vídeo maior e mais baixo — a faixa acima do vídeo encolheu de 470 pra 500
+    # menos um cabeçalho de 140: 3 linhas ENCOSTAM no vídeo.
+    # Duas linhas também é o que o Dre pediu explicitamente ("use duas linhas de
+    # texto no topo") e é o que os dois perfis de referência fazem, sem exceção.
+    _linhas, _emoji_linha = _quebrar_tudo(HK_FONT)
+    while HK_FONT > HK_FONT_MIN and len(_linhas) > 2:
         HK_FONT -= 2
-    _linhas, _emoji_linha = [], 0
-    for _pi, _p in enumerate(_paras):
-        _wl = _wrap(_p, HK_FONT)
-        if _pi == 0:
-            _emoji_linha = len(_wl) - 1   # emoji no fim da 1ª frase (sua última linha)
-        _linhas += _wl
+        _linhas, _emoji_linha = _quebrar_tudo(HK_FONT)
     _n = len(_linhas)
+    if _n > 2:
+        # não trunco: o gancho inteiro vai no aviso. Aviso que corta a evidência
+        # é meio aviso — e aqui a evidência é o texto que precisa ser reescrito.
+        log.warning(
+            f"   ⚠️  GANCHO NÃO CABE EM 2 LINHAS nem em {HK_FONT_MIN}px: saiu com "
+            f"{_n} linhas e vai ENCOSTAR no vídeo. {len(hook_txt_limpo)} caracteres: "
+            f"{hook_txt_limpo!r}")
 
     # POSIÇÃO VERTICAL: ancora o RODAPÉ do hook logo acima do topo do vídeo
     # (VIDEO_Y no hunter). Assim 1 OU 2 linhas ficam sempre "coladas" em cima do
     # vídeo, estilo Alana — sem precisar calibrar HK_Y por fora. HK_Y absoluto
     # ainda funciona como override (debug).
-    _video_top = int(os.environ.get("VIDEO_Y", 470))
+    _video_top = int(os.environ.get("VIDEO_Y", 500))   # era 470 — "abaixar + o vídeo"
     _gap = int(os.environ.get("HK_GAP_VIDEO", 16))
     if os.environ.get("HK_Y"):
         HK_Y = int(os.environ["HK_Y"])
@@ -1220,9 +1336,27 @@ def _criar_cta_fixo(dur_total: float, mp) -> list:
     """
     (_, _, ImageClip, _, _, _, TextClip) = mp
     camadas = []
+
+    # ── DESLIGADO POR PADRÃO DESDE 02/09 ─────────────────────────────────────
+    # O Dre: "retirar o CTA 'COMENTE QUERO', aumentar o vídeo nas bordas, igual
+    # ao perfil deles". Nenhum dos dois perfis que estão crescendo
+    # (@achad0ideal, @ofertasdaflorzinha) queima CTA no vídeo — os dois pedem o
+    # comentário na LEGENDA. E os 1672px onde essa barra morava são exatamente
+    # onde o Instagram desenha a própria interface do Reels por cima.
+    #
+    # A função continua existindo, e ligada por CTA_ATIVO=1, porque o caminho de
+    # ANÚNCIO pode querer CTA queimado — lá o vídeo roda fora do feed.
+    if os.environ.get("CTA_ATIVO", "0").strip().lower() not in ("1", "true", "sim"):
+        log.info("   🚫 CTA queimado desligado (CTA_ATIVO=0) — o pedido sai na legenda")
+        return camadas
+
     fonte_bold = _fonte_montserrat("Bold") or _resolver_fonte_textclip(TextClip)
-    _bg = os.environ.get("TOPSHOP_BG", "preto").strip().lower()
-    _claro = _bg in ("branco", "white", "bege", "claro")
+    try:
+        from shared.paleta import do_ambiente as _paleta_do_ambiente
+        _claro = _paleta_do_ambiente()["claro"]
+    except Exception:
+        _bg = os.environ.get("TOPSHOP_BG", "preto").strip().lower()
+        _claro = _bg in ("branco", "white", "bege", "claro")
     C_CTA = "black" if _claro else "white"
     SW_CTA = 0 if _claro else 4
 

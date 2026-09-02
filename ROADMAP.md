@@ -527,6 +527,157 @@ Ex.: "O segredo pra ter um iPhone 17 sem gastar / uma fortuna ✨".
 
 ---
 
+## 🗓️ Dia 2026-09-02 — cada conta ganhou cor, e o vídeo saiu de dentro da moldura
+
+### 👀 O QUE OS DOIS PERFIS QUE CRESCEM FAZEM E O NOSSO NÃO FAZIA
+
+O Dre mandou três prints lado a lado: **@achad0ideal** (1 mês, 16k), o nosso
+**@topshop.__** e **@ofertasdaflorzinha** (3 anos, 450k). A leitura dele:
+*"o formato de vídeo dos dois é idêntico, já o meu? muito diferente"*. Está
+certo, e as diferenças de layout são cinco:
+
+| | eles | nós (antes) |
+|---|---|---|
+| fundo | claro, com cor própria | preto, igual em tudo |
+| vídeo | quase da borda, 90%+ | 82%, sobrando moldura |
+| vídeo (fim) | ~93% da altura | 86%, e ainda vinha CTA |
+| CTA no vídeo | **nenhum** — vai na legenda | `COMENTE "QUERO"` queimado |
+| cabeçalho | ~11% do topo, grande | 5,8%, pequeno |
+
+**MAS O DEFEITO MAIOR NÃO É LAYOUT, É PAREAMENTO.** No print do @topshop.__,
+o gancho queimado no vídeo diz *"Eu vivia recarregando o gás do ar do carro
+sem resolver"* e a legenda, logo ao lado, fala de **sono, temperatura ambiente
+e termorregulação**. São dois produtos diferentes no mesmo post. Nenhuma paleta
+conserta isso, e é o tipo de coisa que faz a pessoa sair do perfil.
+
+Não achei a causa — procurei e descartei duas hipóteses: `hook_alana` não tem
+cache, e no caminho do hunter o `campeao` que alimenta gancho e legenda é o
+MESMO dicionário da mineração. Fica registrado como aberto, com o print como
+prova, em vez de virar uma teoria bonita que ninguém verificou.
+
+Segundo ponto de registro: o REGISTRO da legenda. A nossa lê como *resumo de
+artigo* ("Em termos de neurociência do sono..."); a da florzinha lê como
+conversa ("Outro detalhe que achei interessante é..."). Mesmo produto, duas
+distâncias diferentes de quem lê.
+
+### 🎨 A PALETA VIROU MÓDULO, PORQUE A REGRA ESTAVA EM TRÊS ARQUIVOS
+
+O "fundo" era uma PALAVRA — preto/branco/bege — decidida por uma linha
+copiada três vezes:
+
+```
+_bg_padrao = "preto" if nicho in ("geral","") else "branco"
+produzir_tiktok:408 · telegram_repurpose_hunter:1674 · render:485
+```
+
+Três cópias é o desenho exato que fez o @topshopcasa_ publicar com a logo do
+@topshop.__ (o dicionário sem "casa", em dois arquivos). Com 6 nichos e uma
+cor pra cada, não sobreviveria. Agora é **`shared/paleta.py`**, importado.
+
+| nicho | fundo | |
+|---|---|---|
+| geral | `#FFFFFF` | branco puro — **era preto**, o grid do @topshop.__ vai ficar misto por semanas |
+| moda | `#E6DFD3` | areia |
+| beleza | `#F7E6E3` | rosa-quartzo claro |
+| casa | `#DFE5D8` | sálvia clara |
+| tech | `#0E0E10` | grafite |
+| pet | `#FDEBB8` | amarelo-sol suave |
+
+**O `claro` É DERIVADO DA LUMINÂNCIA, não é coluna da tabela.** O pedido do Dre
+tinha uma contradição literal — *"tecnologia: preto puro"* e *"a fonte deve ser
+preta"* — resolvida por ele mesmo duas linhas depois (*"se o fundo for escuro,
+a letra deve ser branca"*). Derivando, essa regra deixa de depender de alguém
+lembrar dela: paleta escura não CONSEGUE gerar tinta escura, nem que troquem o
+hex amanhã. Verificado: `FORCE_BG=preto` num nicho claro devolve tinta branca.
+
+### 📐 O QUE MUDOU DE GEOMETRIA (e o que eu deliberadamente não toquei)
+
+`VIDEO_W_FRAC` 0,82→**0,90** · `VIDEO_Y` 470→**500** · `LOGO_TAM` 120→**140** ·
+`LOGO_Y` 112→**168** · `HK_FONT` 48→**60** · `HK_ALT_LINHA` 62→**76** ·
+`VIDEO_RAIO` **28** (novo) · `CTA_ATIVO` **0**.
+
+O vídeo passa a ir de y=500 a y=1796 (972×1296). A faixa acima dele fica
+lotada: 168 de topo + 140 de logo + 24 de vão + 152 de gancho + 16 = 500,
+zero folga. Por isso o encolhimento do gancho passou a mirar **2 linhas** (era
+"até a maior palavra caber", que deixava 3 passarem) e, quando nem em 34px
+cabe, o log **grita com o texto inteiro**. Exercitado com stub: gancho de 145
+caracteres → 3 linhas → aviso.
+
+**LOGO_X e HK_MARGEM viraram DERIVADOS da borda do vídeo.** O render.py já
+amarrava texto e mídia na mesma coluna; o narrated_video_agent não, e usava
+`LOGO_X=100` absoluto — com o vídeo indo pra 0,90 a borda vai de 97 pra 54 e o
+cabeçalho ficaria 46px pra dentro do vídeo.
+
+**O QUE NÃO MEXI, DE PROPÓSITO:** `NOME_FONT` (52), `HANDLE_FONT` (42),
+`TEXTO_DX` (8), `SELO_DX` (28). Eu tinha listado os três primeiros pra remoção,
+e a **primeira prévia renderizada** mostrou por quê era errado: com o nome
+saltando de 52 pra 65, o selo verificado foi parar EM CIMA do
+`@topshopbeauty._`. O pedido era *"aumentar + o logo"*, não aumentar o nome —
+alargar o escopo sozinho criou um defeito que não existia. De quebra, o padrão
+do código (56/46, letra morta) foi alinhado ao valor real de produção (52/42),
+e agora os dois renderizadores concordam.
+
+### 🔵 O SELO PENDURA NO NOME, NÃO NO LOGO
+
+Primeira tentativa: escalei `handle_dy`, `selo_dy` e `selo_tam` por
+`LOGO_TAM/120`. Errado — o vão entre o nome e o @ é fato tipográfico do
+**tamanho do nome**, e as duas escalas divergem (logo 1,17×, nome 1,25×).
+Agora derivam de `NOME_FONT`, com constantes que reproduzem EXATAMENTE os
+números de produção quando `NOME_FONT=52`: 1,038 → dy 42 · 0,50 → dy 14 ·
+0,885 → tam 46. No tamanho de hoje nada muda; em qualquer outro, a relação se
+mantém em vez de virar três números novos pra acertar no olho.
+
+### ⭕ CANTO ARREDONDADO SEM MÁSCARA — e a matemática que estava errada
+
+`_cantos_arredondados` **pinta o canto com a cor do fundo** em vez de usar
+máscara alfa. Escolha, não atalho: máscara no MoviePy muda de API entre v1 e v2
+e falha diferente em cada uma; e aqui o vídeo é SEMPRE composto sobre um
+`ColorClip` sólido da paleta, então pintar é indistinguível de recortar.
+⚠️ Por isso mesmo NÃO serve sobre fundo com foto.
+
+A primeira versão usava o índice do pixel no SDF. Medido antes de subir:
+**5.180 pixels tocados por quadro** em vez dos ~700 dos quatro cantos — a borda
+reta inteira caía exatamente sobre o contorno e ganhava meio-tom, ou seja, um
+**halo de 1px da cor do fundo em volta do vídeo inteiro**. É o centro do pixel
+(+0,5) que conta. Depois do conserto: 788 pixels, bordas retas intactas.
+
+### 🔤 A MONTSERRAT ESTÁTICA NÃO EXISTE MAIS
+
+Testado antes de escrever: `ofl/montserrat/static/Montserrat-Light.ttf` → **404**;
+só existe a variável `Montserrat[wght].ttf`. E baixar a variável e torcer não
+resolve: o Pillow a abriria no peso padrão (400) e o "Light" sairia Regular,
+**sem erro nenhum**. Então `baixar_fontes.py` agora FATIA com
+`fontTools.varLib.instancer` (testado: sai com name "Montserrat Light", sem
+fvar, Pillow lê `('Montserrat','Light')`). Poppins entra como plano B de
+verdade, porque o fontTools pode não estar no venv.
+
+E o fallback GRITA: cair na Liberation é entregar o feed velho achando que
+entregou o novo — o mesmo silêncio da logo errada.
+
+### ⚙️ `layout_v2.py` — porque mudar o código NÃO muda o vídeo
+
+16 chaves: 9 pra definir, 7 pra REMOVER. **A mais perigosa é `TOPSHOP_BG`**: se
+estiver fixa no `.env`, as 6 contas renderizam na mesma cor e a paleta inteira
+fica invisível, sem erro em lugar nenhum. Sem `--aplicar` o script só mostra.
+
+### 🚧 O QUE NÃO FIZ, E POR QUE ESTÁ DITO
+
+- **Palavra em destaque (amarelo/verde-neon).** As cores existem na paleta
+  (`destaque_hex`), mas NINGUÉM as pinta: o gerador de gancho não marca palavra
+  nenhuma. O Dre situou o item no *"foco pra explodir os reels DEPOIS quando
+  utilizarmos a ferramenta"*. Meio-construído seria pior que não construído.
+- **Áudio em alta por conta** — subsistema separado (`audio_selector_agent`).
+- **Destaques numerados (01-50, 51-100)** e **canal exclusivo aos 5k** — são
+  automação de Instagram, não de render. Ficam pra etapa própria.
+
+### ⚠️ DÍVIDA DE DEPLOY QUE ESTA MUDANÇA TORNA URGENTE
+
+O próprio roadmap já registra: **`agents/narrated_video_agent.py` na VPS está
+em Jul16** e o fix do emoji foi só pra raiz. Esta mudança mexe justamente nesse
+arquivo. **Diferenciar antes de sobrescrever** — não é deploy de rotina.
+
+---
+
 ## 🗓️ Dia 2026-09-01 — o site parou de parecer gerado, e o rodapé virou documento
 
 ### 🌡️ "CLIMA DE VELÓRIO" NÃO ERA ESCURIDÃO, ERA TEMPERATURA

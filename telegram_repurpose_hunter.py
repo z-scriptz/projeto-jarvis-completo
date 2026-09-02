@@ -684,6 +684,59 @@ def _image_transform(clip, func):
     return clip.fl_image(func)
 
 
+def _cantos_arredondados(clip, larg: int, alt: int, cor_fundo, raio: int = None):
+    """Arredonda os cantos da faixa de vídeo — "bordas do vídeo: 3:4 levemente
+    arredondadas" (Dre, 02/09), que é o que os dois perfis de referência fazem.
+
+    ⚠️ PINTA OS CANTOS COM A COR DO FUNDO, não usa máscara de transparência.
+    Isso é escolha, não atalho: máscara em MoviePy muda de API entre a v1 e a v2
+    (`with_mask` × `set_mask`, `ismask` × `is_mask`) e falha de formas diferentes
+    em cada uma. Aqui o vídeo é sempre composto sobre um ColorClip SÓLIDO da
+    paleta, então pintar o canto com essa cor é pixel a pixel indistinguível de
+    recortar — e não depende de nenhuma API que possa mudar.
+    ⚠️ E é justamente por isso que esta função NÃO SERVE sobre fundo com foto ou
+    gradiente: ali o canto pintado apareceria como um quadradinho de cor chapada.
+
+    A borda é suavizada em ~1px (senão o arco sai serrilhado num quadro de
+    972px), e só os ~700 pixels dos quatro cantos são tocados por quadro.
+    """
+    raio = int(os.environ.get("VIDEO_RAIO", 28)) if raio is None else int(raio)
+    if raio <= 0 or larg <= 2 * raio or alt <= 2 * raio:
+        return clip
+    try:
+        # ⚠️ CENTRO DO PIXEL (+0,5), não o índice. Com o índice cru, o pixel da
+        # borda reta cai EXATAMENTE sobre o contorno da forma e recebe meio-tom:
+        # o resultado não é canto arredondado, é um halo de 1px da cor do fundo
+        # em volta do vídeo inteiro. Medido antes de subir: 5.180 pixels tocados
+        # por quadro em vez dos ~700 dos quatro cantos.
+        ys = np.arange(alt).reshape(-1, 1) + 0.5
+        xs = np.arange(larg).reshape(1, -1) + 0.5
+        # distância "pra fora" do retângulo interno: 0 nas bordas retas, cresce
+        # só dentro das quatro caixas de canto (SDF de retângulo arredondado).
+        dx = np.maximum(0, np.maximum(raio - xs, xs - (larg - raio)))
+        dy = np.maximum(0, np.maximum(raio - ys, ys - (alt - raio)))
+        dist = np.sqrt((dx * dx + dy * dy).astype(np.float32))
+        opac = np.clip(raio - dist + 0.5, 0.0, 1.0)      # 1 dentro, 0 fora
+        idx = np.nonzero(opac < 1.0)
+        if len(idx[0]) == 0:
+            return clip
+        a = opac[idx].reshape(-1, 1)
+        cor = np.array(cor_fundo, dtype=np.float32).reshape(1, 3)
+        fundo = cor * (1.0 - a)
+
+        def _pintar(f):
+            f = f.copy()
+            f[idx] = (f[idx].astype(np.float32) * a + fundo).astype(np.uint8)
+            return f
+
+        return _image_transform(clip, _pintar)
+    except Exception:
+        # canto quadrado é um vídeo feio; canto quadrado + exceção é um vídeo
+        # que não sai. O aviso fica no log e a produção continua.
+        log.exception("cantos arredondados falharam — o vídeo sai com canto reto")
+        return clip
+
+
 def _aplicar_mirror_x(clip):
     try:
         from moviepy.video import fx as vfx  # importa o fx localmente para evitar falhas
@@ -1198,29 +1251,42 @@ def _reproduzir_video_sync(src: Path, dst: Path, produto: str,
                 _import_moviepy as _brand_mp_import, _brand_asset)
             _ColorClip = _brand_mp_import()[5]
 
-            # FUNDO por nicho: geral=preto, contas novas=branco (estilo Alana).
-            # O produtor seta TOPSHOP_BG (preto/branco) por vídeo antes de renderizar.
-            _bgm = os.environ.get("TOPSHOP_BG", "preto").strip().lower()
-            if _bgm in ("branco", "white"):
-                _cor_bg = (255, 255, 255)
-            elif _bgm in ("bege", "claro"):
-                _cor_bg = (232, 224, 210)
-            else:
-                _cor_bg = (0, 0, 0)
+            # FUNDO pela PALETA DO NICHO (shared/paleta.py). Era a mesma escada
+            # de ifs de produzir_tiktok e render.py — três cópias da mesma regra,
+            # que é o desenho que já pôs a logo errada num vídeo (shared/marca.py).
+            try:
+                from shared.paleta import do_ambiente as _paleta_do_ambiente, resumo as _paleta_resumo
+                # sem argumento de propósito: `nicho` é local do `produzir()`, e
+                # esta função roda noutro escopo. Quem atravessa a fronteira é o
+                # ambiente (TOPSHOP_NICHO / TOPSHOP_BG), setado pelo produtor.
+                _pal = _paleta_do_ambiente()
+                _cor_bg = _pal["fundo_rgb"]
+                log.info(f"   🎨 {_paleta_resumo(_pal)}")
+            except Exception:
+                log.exception("paleta indisponível — fundo cai no preto/branco antigo")
+                _bgm = os.environ.get("TOPSHOP_BG", "preto").strip().lower()
+                _cor_bg = ((255, 255, 255) if _bgm in ("branco", "white")
+                           else (232, 224, 210) if _bgm in ("bege", "claro")
+                           else (0, 0, 0))
             _fundo_bg = _ColorClip(size=(LARGURA_ALVO, ALTURA_ALVO), color=_cor_bg)
             _fundo_bg = _clip_timing(_fundo_bg, dur=alvo, start=0.0, pos=("center", "center"))
             abertos.append(_fundo_bg)
 
             # VÍDEO reduzido (3:4), posicionado deixando espaço p/ header+hook em cima
             # e CTA embaixo. Largura e Y do topo tunáveis por .env.
-            _fracw = float(os.environ.get("VIDEO_W_FRAC", "0.82"))
+            # 0,90 (era 0,82) e Y 500 (era 470): "aumentar o vídeo nas bordas,
+            # igual ao perfil deles, e abaixar + o vídeo". Em 1080×1920 isso dá
+            # 972×1296, de y=500 a y=1796 — 124px de respiro embaixo, contra os
+            # 269px + barra de CTA de antes.
+            _fracw = float(os.environ.get("VIDEO_W_FRAC", "0.90"))
             _larg_v = int(LARGURA_ALVO * _fracw)
             _alt_full = int(_larg_v * ALTURA_ALVO / LARGURA_ALVO)    # 9:16 escalado
             _alt_v = int(_larg_v * 4 / 3)                            # 3:4
             _vid = _resize_clip(base, (_larg_v, _alt_full))
             _yc = max(0, (_alt_full - _alt_v) // 2)
             _vid = _crop_clip(_vid, x1=0, x2=_larg_v, y1=_yc, y2=_yc + _alt_v)
-            _video_y = int(os.environ.get("VIDEO_Y", "470"))
+            _vid = _cantos_arredondados(_vid, _larg_v, _alt_v, _cor_bg)
+            _video_y = int(os.environ.get("VIDEO_Y", "500"))
             _vid = _clip_timing(_vid, pos=("center", _video_y))
             abertos.append(_vid)
 
@@ -1669,10 +1735,18 @@ async def processar_mensagem_telegram(msg, sub_id: str = "hunter_radar"):
             nicho = _RC.nicho_do_produto(nome_produto, categoria)
         except Exception:
             nicho = "geral"
-    # FUNDO + LOGO por nicho (idêntico ao produzir_tiktok → feed uniforme)
-    _bg_padrao = "preto" if nicho in ("geral", "") else "branco"
-    os.environ["TOPSHOP_BG"] = (os.environ.get("FORCE_BG")
-                                or os.environ.get("BG_" + nicho.upper(), _bg_padrao))
+    # FUNDO + LOGO por nicho (idêntico ao produzir_tiktok → feed uniforme).
+    # A paleta agora é IMPORTADA (shared/paleta.py), não copiada — pelo mesmo
+    # motivo que a logo passou a ser, logo abaixo.
+    try:
+        from shared.paleta import aplicar_no_ambiente as _aplicar_paleta
+        _aplicar_paleta(nicho, log=log)
+    except Exception:
+        log.exception("paleta indisponível — fundo pela regra antiga")
+        _bg_padrao = "preto" if nicho in ("geral", "") else "branco"
+        os.environ["TOPSHOP_NICHO"] = nicho or "geral"
+        os.environ["TOPSHOP_BG"] = (os.environ.get("FORCE_BG")
+                                    or os.environ.get("BG_" + nicho.upper(), _bg_padrao))
     # mesma regra do produzir_tiktok, IMPORTADA e não copiada: o dicionário
     # duplicado nestes dois arquivos foi o que deixou "casa" de fora e pôs a
     # logo do @topshop.__ num vídeo do @topshopcasa_.

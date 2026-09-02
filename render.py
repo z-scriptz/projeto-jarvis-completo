@@ -113,9 +113,9 @@ SUPER = 2                      # a placa é renderizada em 2x: sobra de pixel
 # Ou seja: a leitura vertical de um print serve pra aproximar; a horizontal
 # não serviu. E eu tinha ainda MEXIDO no VIDEO_W_FRAC (0,82 → 0,78) pra fechar
 # uma conta que só não fechava porque o VIDEO_Y estava errado — desfeito.
-LOGO_X = int(os.environ.get("LOGO_X", 86))
-LOGO_Y = int(os.environ.get("LOGO_Y", 210))
-LOGO_TAM = int(os.environ.get("LOGO_TAM", 118))
+LOGO_X = int(os.environ.get("LOGO_X", int((1080 - int(1080 * float(os.environ.get("VIDEO_W_FRAC", 0.90)))) / 2)))
+LOGO_Y = int(os.environ.get("LOGO_Y", 168))
+LOGO_TAM = int(os.environ.get("LOGO_TAM", 140))
 NOME_FONT = int(os.environ.get("NOME_FONT", 52))
 HANDLE_FONT = int(os.environ.get("HANDLE_FONT", 42))
 TEXTO_DX = int(os.environ.get("TEXTO_DX", 16))
@@ -134,27 +134,29 @@ SELO_DX = int(os.environ.get("SELO_DX", 12))
 # isso é o dono da marca. Gerar a comparação foi certo; concluir por ele, não.
 SELO_TAM = 46
 
-HK_MARGEM = int(os.environ.get("HK_MARGEM", 89))
-HK_MARGEM_DIR = int(os.environ.get("HK_MARGEM_DIR", 100))
-HK_FONT = int(os.environ.get("HK_FONT", 46))
+HK_MARGEM = int(os.environ.get("HK_MARGEM", LOGO_X))
+HK_MARGEM_DIR = int(os.environ.get("HK_MARGEM_DIR", LOGO_X))
+HK_FONT = int(os.environ.get("HK_FONT", 60))
 HK_FONT_MIN = int(os.environ.get("HK_FONT_MIN", 34))
 # atenção ao nome: a variável é HK_ALT_LINHA, não HK_ALTURA_LINHA. Ler o nome
 # errado é ler o padrão sempre, e o .env do Dre nunca chegaria aqui.
-HK_ALTURA_LINHA = int(os.environ.get("HK_ALT_LINHA", 62))
+HK_ALTURA_LINHA = int(os.environ.get("HK_ALT_LINHA", 76))
 HK_GAP_VIDEO = int(os.environ.get("HK_GAP_VIDEO", 20))
 HK_EMOJI_TAM = int(os.environ.get("HK_EMOJI", 40))
 
 # A FAIXA DA MÍDIA É FIXA, e é o hook que se move: o rodapé do hook é ancorado
 # logo acima do vídeo, então a mídia fica sempre no mesmo lugar e o hook cresce
 # pra cima. Com 1 ou 2 linhas o bloco de vídeo não dança entre um post e outro.
-VIDEO_Y = int(os.environ.get("VIDEO_Y", 540))
-VIDEO_W_FRAC = float(os.environ.get("VIDEO_W_FRAC", 0.82))   # 885px de largura
+VIDEO_Y = int(os.environ.get("VIDEO_Y", 500))
+VIDEO_W_FRAC = float(os.environ.get("VIDEO_W_FRAC", 0.90))   # 972px de largura
 VIDEO_ASPECTO = 4 / 3          # 3:4 -> 1180px de altura
 
 CTA_TEXTO = 'COMENTE "QUERO"'
 CTA_EMOJI = "👇"               # é 👇, não 👉 — o CTA aponta pro campo de comentário
 CTA_FONT = int(os.environ.get('CTA_FONT', 52))
 CTA_Y = int(os.environ.get('CTA_Y', 1740))
+# desligado desde 02/09 — ver narrated_video_agent._criar_cta_fixo
+CTA_ATIVO = os.environ.get("CTA_ATIVO", "0").strip().lower() in ("1", "true", "sim")
 
 # A NotoColorEmoji é bitmap (CBDT): o Pillow só a abre no tamanho da strike.
 # Desenha-se em 109 e reduz-se — é o que faz o emoji sair colorido e nítido.
@@ -487,7 +489,27 @@ def _cor_fundo(nicho: str) -> tuple:
     FORCE_BG (testar os dois) ou BG_<NICHO>. Replicar a regra aqui, com os
     mesmos nomes, é o que impede o vídeo original de sair com fundo diferente
     do vídeo reciclado na MESMA conta.
+
+    ⚠️ ATUALIZADO EM 02/09: a regra virou shared/paleta.py, com uma cor por
+    nicho. O texto acima descreve o desenho ANTIGO e fica porque explica por que
+    a duplicação existia — três cópias da mesma linha, que é o mesmo desenho que
+    pôs a logo do @topshop.__ num vídeo do @topshopcasa_.
     """
+    try:
+        from shared.paleta import do_nicho, do_ambiente
+        # respeita FORCE_BG / BG_<NICHO> / TOPSHOP_BG como antes; sem nenhum
+        # deles, vale a paleta do nicho.
+        forcado = (os.environ.get("FORCE_BG")
+                   or os.environ.get("BG_" + (nicho or "").upper())
+                   or os.environ.get("TOPSHOP_BG"))
+        if forcado:
+            os.environ["TOPSHOP_BG"] = forcado
+            p = do_ambiente(nicho)
+        else:
+            p = do_nicho(nicho)
+        return p["claro"], p["fundo_rgb"]
+    except Exception:
+        pass
     padrao = "preto" if (nicho or "geral") in ("geral", "") else "branco"
     bg = (os.environ.get("FORCE_BG")
           or os.environ.get("BG_" + (nicho or "").upper())
@@ -555,7 +577,7 @@ def _layout(edl: dict, imgs: list, avisos: list) -> dict:
                       f"(cabem ~{HOOK_MAX_SUGERIDO}): {hook_txt!r}")
 
     y_cta = CTA_Y
-    if y_cta < y_midia + h_midia + 20:
+    if CTA_ATIVO and y_cta < y_midia + h_midia + 20:
         avisos.append(
             f"o CTA (y={y_cta}) encosta no rodapé do vídeo "
             f"(y={y_midia + h_midia}) — no template publicado há uma faixa "
@@ -838,7 +860,10 @@ def _camada_marca(edl: dict, lay: dict, destino: Path, avisos: list) -> Path:
     # `COMENTE "QUERO" 👇` — o texto e a posição são os do template
     # (CTA_TEXTO/CTA_FONT/CTA_Y). O emoji é 👇, apontando pro campo de
     # comentário; eu tinha posto 👉 por ter lido o print em vez do código.
-    cta = os.environ.get("CTA_TEXTO", CTA_TEXTO)
+    # ⚠️ DESLIGADO POR PADRÃO desde 02/09 (CTA_ATIVO=0): o pedido sai na
+    # legenda, como nos dois perfis de referência, e os 1740px onde a barra
+    # ficava são onde o Instagram desenha a própria interface do Reels.
+    cta = os.environ.get("CTA_TEXTO", CTA_TEXTO) if CTA_ATIVO else ""
     if cta:
         cta = f"{cta} {os.environ.get('CTA_EMOJI', CTA_EMOJI)}".strip()
         f_cta = _fonte(CTA_FONT)

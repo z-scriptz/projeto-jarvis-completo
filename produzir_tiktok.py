@@ -404,12 +404,20 @@ def _produzir(pasta: Path, pj: Path, video_src: Path) -> bool:
         except Exception:
             nicho = "geral"
 
-    # FUNDO por nicho: geral (@topshop.__) = PRETO (mantém o grid da principal);
-    # contas novas (beleza/tech) = BRANCO (estilo Alana). Override por BG_<NICHO>.
-    _bg_padrao = "preto" if nicho in ("geral", "") else "branco"
-    os.environ["TOPSHOP_BG"] = (os.environ.get("FORCE_BG")          # p/ testar os 2
-                                or os.environ.get("BG_" + nicho.upper(), _bg_padrao))
-    _log(f"   🎨 fundo '{os.environ['TOPSHOP_BG']}' (nicho {nicho or 'geral'})")
+    # FUNDO pela PALETA DO NICHO (shared/paleta.py, 02/09). Era
+    #   _bg_padrao = "preto" if nicho in ("geral","") else "branco"
+    # escrito igual aqui, no hunter e no render.py. Com 6 nichos e uma cor
+    # própria pra cada, três cópias dessa linha não sobreviveriam — é o mesmo
+    # desenho que fez o @topshopcasa_ publicar com a logo do @topshop.__.
+    try:
+        from shared.paleta import aplicar_no_ambiente as _aplicar_paleta
+        _aplicar_paleta(nicho, log=_log)
+    except Exception as _e:
+        _log(f"   ⚠️  paleta indisponível ({str(_e)[:60]}) — fundo pela regra antiga")
+        _bg_padrao = "preto" if nicho in ("geral", "") else "branco"
+        os.environ["TOPSHOP_NICHO"] = nicho or "geral"
+        os.environ["TOPSHOP_BG"] = (os.environ.get("FORCE_BG")
+                                    or os.environ.get("BG_" + nicho.upper(), _bg_padrao))
 
     # LOGO por conta/nicho: cada perfil tem sua marca. O nome sai do NICHO
     # (shared/marca.py), não de um dicionário escrito à mão — foi um dicionário
