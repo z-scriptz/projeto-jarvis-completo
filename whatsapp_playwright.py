@@ -1383,6 +1383,34 @@ def _print_erro(pagina, motivo: str) -> Path:
     return caminho
 
 
+# ⚠️ A FOTO TRATADA JÁ EXISTE E NINGUÉM ESTAVA USANDO. O fotografia.py monta
+# 128 produtos no chão creme, com sombra e a dobra rosa, e grava em
+# shared/fotos/<id>_960.webp. O grupo baixava a foto CRUA da Shopee — fundo
+# branco estourado, texto chinês, selo de promoção. 📌 O trabalho já estava
+# feito; faltava o caminho até ele.
+_MANIFESTO_FOTOS = BASE_DIR / "shared" / "fotos_manifesto.json"
+_DIR_FOTOS = BASE_DIR / "shared" / "fotos"
+
+
+def _foto_tratada(url: str):
+    """O arquivo local da versão editorial, ou None.
+
+    Só classe A: B e C não foram tratadas, e mandar a original é o que já
+    acontecia. Devolver None aqui não é falha — é 'não tem versão melhor'."""
+    if not url:
+        return None
+    try:
+        import json as _json
+        man = _json.loads(_MANIFESTO_FOTOS.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    reg = man.get(url.strip()) or {}
+    if reg.get("classe") != "A" or not reg.get("larguras"):
+        return None
+    p = _DIR_FOTOS / f"{reg['id']}_960.webp"
+    return p if p.exists() else None
+
+
 def _baixar_foto(url: str) -> Path:
     """Baixa a foto do produto pra um arquivo temporário. None se não der.
 
@@ -2652,13 +2680,21 @@ def enviar(quantos: int, teste: bool = False) -> int:
                         # caminho antigo, desligado por padrão (ver COM_FOTO no
                         # topo). Se a foto falhar em qualquer etapa, cai no
                         # texto — que ainda vende.
-                        foto = _baixar_foto(it.get("imagem", ""))
+                        # a tratada primeiro; a crua é a reserva
+                        tratada = _foto_tratada(it.get("imagem", ""))
+                        foto = tratada or _baixar_foto(it.get("imagem", ""))
                         if foto:
+                            _log(f"   🖼️  foto {'EDITORIAL' if tratada else 'crua'}"
+                                 f": {foto.name}")
                             foi = _enviar_com_foto(pagina, foto, texto)
-                            try:
-                                foto.unlink()
-                            except Exception:
-                                pass
+                            # ⚠️ só apaga o que EU baixei. A tratada é acervo:
+                            # apagar aqui destruiria o trabalho do pipeline e o
+                            # site perderia a imagem junto.
+                            if not tratada:
+                                try:
+                                    foto.unlink()
+                                except Exception:
+                                    pass
 
                     if not foi:
                         # se a prévia de imagem não fechou, digitar aqui
