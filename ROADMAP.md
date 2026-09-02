@@ -777,6 +777,45 @@ topo): 1º a rolagem suave sendo **abortada** pelo layout mudando; 2º ela sendo
 (medido: 1163 → 1636 → 0). O 1º era da página, o 2º era do teste medindo durante
 o carregamento.
 
+### 📵 O GRUPO MANDOU LINK PELADO POR DUAS SEMANAS
+
+⚠️ **`cartão apareceu: 0` · `não vi cartão: 36`.** Não foi regressão — a
+funcionalidade **nunca funcionou**. Em 19/08 o COM_FOTO foi desligado com a
+conclusão "o menu de anexo não abre pra automação, não existe seletor a
+corrigir", e a aposta virou "o WhatsApp monta o cartão sozinho a partir da URL
+da Shopee". O log gritou 36 vezes que o cartão não vinha e ninguém leu — eu
+inclusive, com o arquivo aberto na frente.
+
+📌 **Conclusão de investigação vira PREMISSA e para de ser testada.** A de 19/08
+pode ter sido correta no dia e apodrecido depois; de um jeito ou de outro,
+ninguém remediu por duas semanas enquanto o grupo mandava nome + link azul —
+num grupo de achadinho, onde a foto É o produto.
+
+**A causa real, medida no `--diag-anexo` de 01/09:** o botão "+" virou
+`<button aria-label="Anexar">` com `data-icon=ic-attach-file`, e o seletor só
+procurava `plus-rounded`/`clip`. **Duas semanas de link pelado por um ícone
+renomeado.** O menu abre normalmente, e o `expect_file_chooser` — que o código
+JÁ tinha — pega o diálogo do sistema.
+
+⚠️ **E EU QUASE ERREI DE NOVO NA MESMA TELA.** Li `input[0] accept='image/*'` no
+diag e escrevi "a gente nem precisa do menu" — esquecendo que o próprio arquivo
+documenta que esse input persistente é o da FIGURINHA, e que anexar nele já saiu
+figurinha. Seis diagnósticos errados estão escritos ali em cima justamente pra
+isso não se repetir.
+
+📌 **E o trabalho já estava feito, faltava o caminho:** o grupo ia baixar a foto
+CRUA da Shopee enquanto 128 tratadas (chão creme, sombra, dobra) dormiam em
+`shared/fotos`. Agora vai a editorial, com a crua de reserva.
+
+### 📊 O RESUMO DO META INVENTOU UM NÚMERO
+
+O relatório dizia "61% do seu investimento (R$ 1.853,00) está no Instagram" — e
+o Dre nunca gastou isso. ⚠️ **Um número irreconhecível contamina os outros:**
+CTR 4,69%, CPR R$0,11 e "16,85% abaixo do benchmark" vieram do mesmo parágrafo,
+e eu estava prestes a recomendar decisão de verba em cima deles.
+📌 **Resumo gerado não é fonte.** Número que vira decisão de dinheiro sai da
+tabela do Gerenciador, por anúncio.
+
 ### ⏳ Aberto no fim do dia
 
 - ✅ **Relógio fica em Tech** (decidido pelo Dre, 01/09). O site diverge do
