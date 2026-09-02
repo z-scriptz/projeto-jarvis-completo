@@ -1010,6 +1010,63 @@ erro que passei a sessão inteira caçando nos outros lugares, cometido por mim 
 leitura qualitativa. **Fica sem hipótese até a taxa de estouro falar** — inventar
 a segunda história depois que a primeira caiu é como se constrói superstição.
 
+### ⚡ 3ª RODADA: apareceu sinal, e os três primeiros dizem a mesma coisa
+
+Com conta morta fora, posts não entregues fora, carrossel fora e normalização
+por conta, **45 de 298 Reels estouraram (15,1% passaram de 3× a mediana da
+própria conta)**. E a tabela deixou de ser plana:
+
+| traço | estourou | sem o traço | × a base |
+|---|---|---|---|
+| abre com verbo de comando | **10/34 · 29,4%** | 13,3% | **2,2×** |
+| condicional (se/quem) | **6/25 · 24,0%** | 14,3% | **1,7×** |
+| imperativo negativo | **6/27 · 22,2%** | 14,4% | **1,5×** |
+| 1ª pessoa (eu/meu) | 27/169 · 16,0% | 14,0% | 1,1× |
+| 2 linhas | 6/52 · 11,5% | 15,9% | 0,7× |
+| **cita o produto** | **5/47 · 10,6%** | 15,9% | **0,7×** |
+
+Os três de cima têm a mesma natureza: **o gancho FALA COM A PESSOA usando um
+verbo** — comando, condicional, imperativo negativo. São exatamente as fórmulas
+dos dois perfis que o Dre mandou (@achad0ideal "não mostre isso a uma pessoa
+friorenta", @ofertasdaflorzinha "Se você tem uma estante de livros"). A hipótese
+que abriu o arquivo sobreviveu à medição.
+
+E a nossa forma DOMINANTE — 1ª pessoa em testemunho, 169 dos 298 posts — está em
+16,0% contra 14,0%: **em cima da base**. Não é ruim; é neutra. Metade do
+catálogo escrito na forma que não move nada.
+
+`cita o produto` em 0,7× é o achado contra-intuitivo: repetir o nome do produto
+no gancho ATRAPALHA. Os dois perfis de referência não fazem isso — falam da
+situação e deixam o produto aparecer no vídeo.
+
+### 🔎 E POR ISSO EXISTE O `--detalhe`
+
+⚠️ O traço vencedor casa `olha|veja|para|pare|corre|marca|salva|não` — e
+**"corre" é a palavra da construção que o Dre vetou em 21/08**. Se metade dos 10
+estouros forem "Corre ver isso antes que viralize…" (que está na lista dos 8
+maiores alcances), o achado não é "verbo de comando": é uma frase específica que
+ele não quer usar. Um agregado cuja composição ninguém abriu é como se
+transforma medição em superstição — e esta sessão já teve três casos disso.
+
+`--detalhe "verbo de comando"` lista os posts do traço e conta a primeira
+palavra dos que estouraram. **Nenhuma regra vai pro prompt antes dessa conta.**
+
+### 🐕 @topshoppet_: mediana 3 é problema de ENTREGA, não só de acervo
+
+O Dre: *"topshoppet é foda pq não tem vídeo pra ele, preciso raspar perfis
+virais do tiktok, ou produzir conteudo com os 3k"*. O acervo vazio é real e já
+está registrado (`roteador_contas.py:171` — "ZERO pro @topshoppet_ e ZERO pro
+@topshopmoda_, e as duas contas estavam no ar").
+
+⚠️ MAS MEDIANA DE ALCANCE **3** NÃO É SINTOMA DE POUCO CONTEÚDO. Conta nova com
+9 seguidores entrega mais que 3. As outras cinco estão entre 106 e 130 com o
+mesmo sistema, o mesmo horário e o mesmo tipo de vídeo. Alcance 3 é o número de
+uma conta que o Instagram parou de distribuir.
+
+Isso muda a ordem de gastar: **comprar acervo (raspagem ou R$800 de Kling) pra
+uma conta que não está sendo entregue é jogar conteúdo bom num cano fechado.**
+Diagnosticar primeiro custa zero e leva minutos.
+
 ### ⚠️ DÍVIDA DE DEPLOY QUE ESTA MUDANÇA TORNA URGENTE
 
 O próprio roadmap já registra: **`agents/narrated_video_agent.py` na VPS está

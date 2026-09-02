@@ -174,6 +174,9 @@ def main() -> int:
                     help="misturar carrossel com Reel compara FORMATO, não gancho")
     ap.add_argument("--bruto", action="store_true",
                     help="não normaliza pela conta (mistura tamanho de conta)")
+    ap.add_argument("--detalhe", default="", metavar="PEDACO_DO_NOME",
+                    help="lista os posts de UM traço — sem isso, um traço que "
+                         "ganha é um agregado cuja composição ninguém viu")
     a = ap.parse_args()
 
     if not METRICAS.exists():
@@ -326,6 +329,39 @@ def main() -> int:
     print("\n   ⚠️ ISTO É CORRELAÇÃO, NÃO CAUSA. O alcance de um Reel vem do")
     print("      gancho, do produto, do vídeo, do áudio e do horário juntos.")
     print("      Traço com poucos posts é pedido de mais amostra, não achado.")
+
+    # ── ABRIR UM TRAÇO ────────────────────────────────────────────────────
+    # ⚠️ POR QUE ISTO É NECESSÁRIO, E NÃO UM LUXO: "abre com verbo de comando"
+    # casa `olha|veja|para|pare|corre|marca|salva|não` — e "corre" é a palavra
+    # da construção que o Dre VETOU em 21/08. Se metade dos estouros do traço
+    # vencedor forem "Corre ver isso…", o achado não é "verbo de comando", é
+    # "uma frase específica que ele não quer usar". Agregado cuja composição
+    # ninguém abriu é exatamente como se transforma medição em superstição.
+    if a.detalhe:
+        alvo = [n for n in TRACOS if a.detalhe.lower() in n.lower()]
+        if not alvo:
+            print(f"\n⚠️  nenhum traço com {a.detalhe!r} no nome. "
+                  f"Opções: {', '.join(TRACOS)}")
+            return 1
+        nome = alvo[0]
+        teste = TRACOS[nome]
+        com = ([r for r in regs if _cita_produto(r)] if nome == "cita o produto"
+               else [r for r in regs if teste(r.get("hook") or "")])
+        com.sort(key=val, reverse=True)
+        estourou = [r for r in com if val(r) >= LIMIAR]
+        print(f"\n── {nome}: {len(com)} post(s), {len(estourou)} estouraram ──")
+        for r in com:
+            marca = "⚡" if val(r) >= LIMIAR else "  "
+            print(f"   {marca} {_valor(r, a.metrica):>6.0f} ({val(r):5.2f}×)  "
+                  f"{(r.get('hook') or '').replace(chr(10),' / ')[:60]}")
+        # a primeira palavra é o que o traço realmente pegou
+        from collections import Counter
+        c = Counter(((r.get("hook") or "").strip().split() or ["?"])[0].lower()
+                    for r in estourou)
+        if c:
+            print("\n   primeira palavra dos que estouraram: "
+                  + " · ".join(f"{w} {n}" for w, n in c.most_common()))
+        return 0
 
     if a.exemplos:
         ordenados = sorted(regs, key=val)
