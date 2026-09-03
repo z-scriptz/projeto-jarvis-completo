@@ -1593,6 +1593,54 @@ mais barato e a duração pra 5s, e LER o "Custo estimado". Se cair pra ~US$0,12
 os 700 vídeos são reais e a conta inverte. Se ficar em US$1,26, são 63. **A
 página responde isso de graça, em dois cliques.**
 
+### ↩️ CORREÇÃO: o "≈700 vídeos" NÃO era isca — eu que estava errado
+
+Na rodada anterior eu chamei o `US$80 ≈ 700 vídeos` de isca, comparando com o
+`$1,26` do playground. O catálogo completo mostra que **o número é real**:
+
+```
+US$80 ÷ US$0,12 (Pollo 2.0 · 10s · US$0,012/s) = 667 clipes
+```
+
+Os $1,26 eram do **Kling 3.0 Omni · 15s · com áudio** — o topo da linha. Comparei
+o preço do pacote contra o modelo mais caro da casa e chamei a diferença de
+propaganda enganosa. Era escolha de modelo, não isca. Foi o mesmo erro de método
+que passei o dia caçando: conclusão tirada de uma amostra que não representava o
+conjunto.
+
+### 💲 O CATÁLOGO DE IMAGE-TO-VIDEO, ORDENADO (é o que interessa pras nossas fotos)
+
+| modelo | US$/s | R$/clipe 10s | clipes c/ US$80 |
+|---|---|---|---|
+| **Pollo 2.0** | **0,012** | **0,65** | **667** |
+| Hailuo 02 | 0,020 | 1,08 | 400 |
+| Pollo 1.5 · Kling 1.0 | 0,024 | 1,30 | 333 |
+| Kling 2.5 Turbo | 0,036 | 1,94 | 222 |
+| Kling 3.0 | 0,066 | 3,56 | 121 |
+| Sora 2 | 0,100 | 5,40 | 80 |
+
+**R$0,65 por clipe** no Pollo 2.0. A conta do dia inteiro muda de patamar: o
+mesmo US$80 que rendia 63 clipes do Kling 3.0 Omni rende **667** aqui.
+
+### 📐 A CONTA REFEITA — de 41× pra 2,7%
+
+```
+PELA MÉDIA:    333 reels × R$0,1676 = R$55,86 contra R$432  ⇒ falta 7,7×
+               (otimista: R$118,78 ⇒ falta 3,6×)
+
+PELO ACERTO:   o post de R$24 paga 37 clipes de Pollo 2.0
+               ⇒ 1 acerto a cada 37 clipes (2,7%) já empata
+```
+
+E hoje **15% dos posts estouram em alcance**. Se estouro de alcance virasse
+estouro de venda na mesma proporção, isso fecha com folga de 5×. Se não virar
+nenhum, perde 7,7×. **É essa a aposta, e agora ela está escrita em número.**
+
+⚠️ O que ainda não se sabe e nenhuma tabela responde: **se o Pollo 2.0 presta.**
+US$0,012/s é o modelo mais barato do catálogo inteiro — pode ser ótimo pra
+animar foto de produto (movimento sutil, sem inventar nada) ou pode ser lixo.
+Testar isso custa **US$1** (83 clipes) do pacote mínimo de US$80.
+
 ### ⚠️ DÍVIDA DE DEPLOY QUE ESTA MUDANÇA TORNA URGENTE
 
 O próprio roadmap já registra: **`agents/narrated_video_agent.py` na VPS está
