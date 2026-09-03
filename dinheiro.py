@@ -127,6 +127,9 @@ def main() -> int:
                     help="custo de uma ferramenta (ex: 800) pra calcular o payback")
     ap.add_argument("--bruto", action="store_true",
                     help="imprime a resposta crua da API (pra depurar o schema)")
+    ap.add_argument("--amarra", action="store_true",
+                    help="POR QUE a comissão não casou com post — diagnostica as "
+                         "duas chaves (sub_id e item_id) em vez de só contar órfãs")
     a = ap.parse_args()
 
     try:
@@ -185,6 +188,46 @@ def main() -> int:
 
     # ── a junção: comissão × post, pelo sub_id ────────────────────────────
     posts = _carregar(LEDGER)
+
+    if a.amarra:
+        # ⚠️ "33 órfãs" não é diagnóstico, é sintoma. Órfã pode ser (a) venda de
+        # link publicado fora do Jarvis, (b) etiqueta que a API não devolve, ou
+        # (c) chave vazia do NOSSO lado. As três pedem consertos diferentes e
+        # só uma delas é problema nosso — contar órfã sem separar isso foi o que
+        # me fez escrever "quase sempre é venda de fora", que era palpite.
+        com_item = [p for p in posts if str(p.get("item_id") or "").strip()]
+        com_sub = [p for p in posts if (p.get("sub_ids") or [])]
+        print("\n══ DIAGNÓSTICO DA AMARRA ══")
+        print(f"   posts no diário: {len(posts)}")
+        print(f"   com item_id gravado: {len(com_item)}  "
+              f"({100.0*len(com_item)/max(1,len(posts)):.0f}%)")
+        print(f"   com sub_ids gravados: {len(com_sub)}  "
+              f"({100.0*len(com_sub)/max(1,len(posts)):.0f}%)")
+        itens_conv = {str(i.get("itemId") or "").strip()
+                      for n in conversoes for pe in (n.get("orders") or [])
+                      for i in (pe.get("items") or [])}
+        itens_conv.discard("")
+        itens_led = {str(p.get("item_id") or "").strip() for p in com_item}
+        itens_led.discard("")
+        print(f"\n   itemIds distintos nas conversões: {len(itens_conv)}")
+        print(f"   itemIds distintos no diário:      {len(itens_led)}")
+        print(f"   ⇒ em comum: {len(itens_conv & itens_led)}")
+        if not itens_led:
+            print("\n   ⛔ O DIÁRIO NÃO TEM itemId EM NENHUM POST.")
+            print("      `posts_ledger._item_id()` extrai o padrão `i.LOJA.ITEM`")
+            print("      da URL — e o que costuma ser gravado é o SHORT LINK de")
+            print("      afiliado (s.shopee.com.br/xxxx), que não carrega itemId.")
+            print("      Então a chave nasce vazia e nenhuma venda casa por ela.")
+            print("      ⇒ conserto: passar `url_shopee=` (a URL longa) no")
+            print("         `registrar()`, ou resolver o short link antes.")
+        elif not (itens_conv & itens_led):
+            print("\n   ⚠️ As duas listas existem e NÃO se cruzam: as vendas do")
+            print("      período são de produtos que a gente não postou.")
+        print("\n   Exemplos de itemId nas conversões: "
+              + ", ".join(list(itens_conv)[:5]))
+        print("   Exemplos de itemId no diário:      "
+              + (", ".join(list(itens_led)[:5]) or "(nenhum)"))
+        return 0
 
     # ⚠️ SÓ ETIQUETA ÚNICA PODE AMARRAR UMA COMISSÃO A UM POST.
     #

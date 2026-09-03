@@ -1260,6 +1260,79 @@ perguntas custam R$0 e se respondem na documentação antes de qualquer compra:
 - o crédito expira? em quanto tempo?
 - a saída é 9:16 / 3:4 nativo, ou só 16:9? (o template do Reel é 3:4)
 
+### 💥 R$121,16 EM 90 DIAS — 85× o que o roadmap dizia
+
+O `dinheiro.py` rodou de verdade: **34 conversões, R$121,16**. O roadmap
+registrava *"R$1,67 no total"* e essa frase guiou meses de conversa sobre "o
+funil não converte". **Convertia.** Ninguém tinha como ver.
+
+⚠️ E 33 das 34 são ÓRFÃS. Eu tinha escrito no código que órfã "quase sempre é
+venda de link publicado FORA do Jarvis". **Era palpite, e os nomes desmentem:**
+
+```
+R$ 13,48 + 10,52  Pedicuro Elétrico Profissional        → beleza
+R$  8,00          INOVA FreeClip Fone Bluetooth         → tech
+R$  5,36          Roupeiro Guarda-Roupa Portátil        → casa
+R$  4,94          MEIDOO Prateleira para Cozinha        → casa
+R$ 21,41          Macaco Jacaré Hidráulico              → esse sim, de fora
+```
+
+Quatro dos seis maiores são **exatamente os nossos nichos**. A amarra está
+quebrada, não são vendas alheias.
+
+### 🔑 A CHAVE NASCE VAZIA — e o `--amarra` provou
+
+"33 órfãs" é sintoma, não diagnóstico. Órfã pode ser (a) venda de fora, (b)
+etiqueta que a API não devolve, (c) chave vazia do NOSSO lado. Três consertos
+diferentes, e só um é problema nosso. Contar órfã sem separar isso foi o que me
+fez escrever "quase sempre é venda de fora".
+
+`dinheiro.py --amarra` compara as duas chaves dos dois lados. Reproduzido em
+fixture com a forma real dos dados:
+
+```
+com sub_ids gravados: 340 (100%)
+com item_id gravado:    0 (  0%)      ⛔
+itemIds nas conversões: 34 · no diário: 0 · em comum: 0
+```
+
+**`posts_ledger._item_id()` extrai o padrão `i.LOJA.ITEM` da URL — e o que é
+gravado é o SHORT LINK de afiliado (`s.shopee.com.br/xxxx`), que não carrega
+itemId nenhum.** A chave nasce vazia desde sempre.
+
+E o sub_id, que está gravado em 100% dos posts, não resolve porque o nó do
+`conversionReport` não devolve etiqueta (a introspecção do tipo do nó também
+falhou — "não consegui listar").
+
+📌 Ou seja: **as duas pontas da amarra estão rompidas, cada uma por um motivo
+diferente**, e o dinheiro que já existe não tem como ser atribuído a post. Este
+é o conserto que vale mais que qualquer decisão de gasto — sem ele, R$121 ou
+R$1.210 continuam ilegíveis.
+
+### 💵 O PACOTE DA KLING NÃO CUSTA R$800 — custa ~5× isso
+
+Os prints da `kling.ai/dev/pricing` (API de vídeo):
+
+| pacote | preço | unidades | validade |
+|---|---|---|---|
+| Padrão 1 | **US$ 700** | 5.000 | **180 dias, sem rollover** |
+| Padrão 2 | US$ 2.100 | 15.000 | 180 dias |
+
+⚠️ **O menor pacote da API é US$ 700.** A R$5–5,5/dólar isso é
+**R$3.500–3.850** — mais que os R$3.000 inteiros do orçamento, e ~5× o R$800
+que vinha sendo usado como premissa. O R$800 provavelmente veio do plano de
+CONSUMIDOR (o site tem assinatura mensal barata), que é outro produto: não tem
+API, então não automatiza.
+
+O consumo, pela tabela: Kling 3.0, 1080p, sem áudio nativo = **0,8 unidade/s**.
+Um vídeo de 10s = 8 unidades → 5.000 unidades = **~625 vídeos de 10s**. O custo
+unitário é ótimo (~R$6/vídeo); o problema é o TICKET DE ENTRADA e os 180 dias
+sem rollover — 625 vídeos em 6 meses são ~3,5/dia, viável no ritmo atual, mas o
+que sobrar evapora.
+
+⚠️ Existe uma aba **"Plano de Teste"** ao lado de "Plano de 180 Dias" nos
+prints, e ninguém abriu. É a única coisa da página que pode mudar a conta.
+
 ### ⚠️ DÍVIDA DE DEPLOY QUE ESTA MUDANÇA TORNA URGENTE
 
 O próprio roadmap já registra: **`agents/narrated_video_agent.py` na VPS está
