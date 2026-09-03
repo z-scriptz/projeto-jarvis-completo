@@ -1333,6 +1333,54 @@ que sobrar evapora.
 ⚠️ Existe uma aba **"Plano de Teste"** ao lado de "Plano de 180 Dias" nos
 prints, e ninguém abriu. É a única coisa da página que pode mudar a conta.
 
+### 🎬 O PLANO DE TESTE DA KLING RESOLVE A DISCUSSÃO — US$9,80, não US$700
+
+A aba que ninguém tinha aberto tem dois pacotes, com 30% na 1ª compra e até 5
+compras. Contas feitas com a tabela da própria página (Kling 3.0, 1080p, sem
+áudio nativo = 0,8 unidade/s):
+
+| pacote | US$ | unid. | validade | clipes 10s | US$/clipe |
+|---|---|---|---|---|---|
+| **Teste 1** | **9,80** | 100 | 30 dias | **12** | 0,78 |
+| **Teste 2** | **98** | 1.000 | 30 dias | **125** | 0,78 |
+| Padrão 1 | 700 | 5.000 | 180 dias | 625 | 1,12 |
+
+⚠️ **O pacote de teste é 30% MAIS BARATO POR CLIPE que o Padrão** (US$0,78 ×
+US$1,12). E 5 compras do Teste 2 = US$490 pelas mesmas 5.000 unidades do Padrão
+1, que custa US$700 — **US$210 a menos**. A única coisa que o Padrão compra é
+janela: 180 dias contra 30.
+
+⚠️ **CLIPE NÃO É REEL.** A Kling entrega 5 ou 10 segundos; um Reel de 20-30s
+pede 2 a 3 clipes emendados. Então:
+
+```
+Teste 1  (US$9,80 ≈ R$53)   →  ~6 reels de 20s   ← responde "presta?"
+Teste 2  (US$98   ≈ R$530)  →  ~62 reels de 20s  ← ~4,2 clipes/dia por 30 dias
+```
+
+### 🔁 O DESACORDO SOBRE "TESTAR ANTES" SE RESOLVE SOZINHO
+
+Eu sugeri R$50-100 por 5-10 vídeos; o Dre respondeu, com razão, que *"é melhor
+já colocar os 800 e fazer 200+"* — porque 5-10 vídeos não ensinam workflow e o
+unitário era 4× pior. **Nós dois estávamos certos sobre o preço errado.**
+
+Com o Teste 1 real: **R$53 por ~12 clipes**, sem penalidade de unitário (é o
+MAIS barato dos dois), e sobram 4 compras com desconto. Não é "teste caro pra
+aprender pouco" — é a mesma taxa do pacote grande, num pedaço menor.
+
+📌 A ordem que sai da tabela, e não do meu gosto:
+1. **Teste 1 (US$9,80)** — responde o que só se responde gerando: a saída é
+   vertical nativa? o produto REAL aparece ou a IA inventa um parecido (fatal
+   num perfil de afiliado)? quanto tempo do prompt ao arquivo publicável?
+2. Se passar, **Teste 2 (US$98)** — 30 dias, ~4 clipes/dia, cobre ~1/3 do
+   volume atual (ele posta ~6/dia em 6 contas).
+3. O Padrão 1 só faz sentido quando o consumo diário já for conhecido e o
+   problema for a janela de 30 dias, não o preço.
+
+⚠️ E o `usar_api_video` continua `false` com `video_provider.py` em PLACEHOLDER:
+**nenhuma linha do projeto fala com essa API ainda.** O Teste 1 também paga o
+custo de descobrir isso.
+
 ### ⚠️ DÍVIDA DE DEPLOY QUE ESTA MUDANÇA TORNA URGENTE
 
 O próprio roadmap já registra: **`agents/narrated_video_agent.py` na VPS está
