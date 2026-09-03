@@ -1532,6 +1532,67 @@ O único canal com resposta medida e imediata continua sendo o tráfego pago que
 já roda (R$0,11/clique, 233 cliques). Não é empolgante, mas é o único com número
 do lado de fora.
 
+### 💵 R$ 0,1676 POR POST — o primeiro número real do projeto (03/09)
+
+`dinheiro.py --dias 90 --nome`: **17 de 34 conversões casaram** (16 por
+parecença de nome). R$56,98 atribuídos de R$121,16. **R$ 0,1676 por post
+publicado** — 50× o R$0,0033 de antes, e a primeira vez que esse número existe.
+
+E ele revela a forma do negócio:
+
+```
+R$ 24,00  kit lixador de pé elétrico       ← um único post
+R$ 14,62  dispenser automático de sabonete
+R$  7,27  fones de condução óssea
+R$  0,56  suporte de celular para moto
+```
+
+**Um post fez 43% de tudo o que foi atribuído.** Não é negócio de média, é de
+acerto — o que muda como qualquer investimento em produção deve ser avaliado.
+
+⚠️ Os R$64 órfãos restantes ainda incluem Roupeiro, Prateleira, FreeClip e
+Vaporizador — nichos nossos. Provavelmente parte é nossa e o casamento por nome
+não pegou. O número real está entre R$0,1676 e R$0,3564 por post.
+
+### 🎣 "COMPENSA PRA CACETE ISSO AQUI, NÃO?" — o "≈700 vídeos" é isca
+
+O Dre mandou o print da Pollo API: `US$80 ≈ 700 vídeos`. Mas **o print AO LADO,
+do mesmo site**, mostra o playground com Kling 3.0 Omni · 9:16 · 15s · áudio e
+**"Custo estimado $1,26"**.
+
+| pacote | promete | no modelo do próprio print | diferença |
+|---|---|---|---|
+| US$80 | 700 vídeos | **63** | **11×** |
+| US$350 | 2.900 | 278 | 10× |
+| US$5.000 | 41.700 | 3.968 | 11× |
+
+O "≈700 vídeos" é calculado com o modelo mais barato na duração mais curta. Com
+o modelo que ele tinha aberto na tela, US$80 compra 63 vídeos, não 700.
+
+**A conta com o número real:**
+
+```
+US$80 (R$432) ÷ US$1,26 = 63 vídeos = 63 posts
+63 × R$0,1676 = R$10,64   ⇒ precisa converter 41× melhor pra empatar
+63 × R$0,3564 = R$22,63   ⇒ (otimista) 19× melhor
+```
+
+### 🎯 MAS A MÉDIA É A MÉTRICA ERRADA — de novo
+
+Foi o mesmo erro do estudo de gancho (mediana cega pra cauda pesada), agora no
+dinheiro. Um post fez R$24. Isso paga 3,5 vídeos de 15s do modelo caro:
+
+**basta 1 acerto a cada 3,5 vídeos (28%) pra empatar.**
+
+Hoje 15% dos posts estouram em alcance. Se estouro em alcance virasse estouro em
+venda na mesma proporção, a coisa fica perto de fechar. Não é conclusão — é a
+pergunta certa, e agora ela é respondível com o `dinheiro.py` rodando mensal.
+
+📌 O que fazer ANTES de comprar: no playground da Pollo, trocar o modelo pro
+mais barato e a duração pra 5s, e LER o "Custo estimado". Se cair pra ~US$0,12,
+os 700 vídeos são reais e a conta inverte. Se ficar em US$1,26, são 63. **A
+página responde isso de graça, em dois cliques.**
+
 ### ⚠️ DÍVIDA DE DEPLOY QUE ESTA MUDANÇA TORNA URGENTE
 
 O próprio roadmap já registra: **`agents/narrated_video_agent.py` na VPS está
