@@ -27,7 +27,34 @@ IG_PERFIS_TXT = BASE_DIR / "instagram_perfis.txt"   # mesma esteira, fonte Insta
 VISTOS = BASE_DIR / "shared" / "tiktok_vistos.json"
 INBOX = BASE_DIR / "inbox_tiktok"
 
-MIN_VIEWS = 50_000      # min de views (default; override por MIN_VIEWS no .env — aplicado após _carregar_env)
+# ── PISO DE VIEWS DO TIKTOK: 50.000 → 5.000 em 04/09/2026 ───────────────────
+# Decisão do Dre: *"50k ta alto demais, pra nossa conta que ta pegando 1k 2k,
+# o corte minimo pode ficar entre 5k"*.
+#
+# O argumento que sustenta não é a comparação com o alcance dele (são números
+# de coisas diferentes: views do gringo no TikTok × alcance nosso no Reel). São
+# estes dois:
+#
+#   1. SUPPLY É O GARGALO. 6 contas × 6 posts/dia. Nos 5 vídeos reais do
+#      @seyis.shop (358 · 6.312 · 406 · 805.900 · 5.289) o piso de 50k deixava
+#      passar UM (1/5). A 5k passam TRÊS (3/5) — triplica a fila desta fonte, e
+#      o volume total vem das outras 43.
+#   2. VIRALIDADE DA FONTE É PREDITOR FRACO — medido aqui, não suposto: o
+#      `estudo_ganchos` mostrou o MESMO texto de gancho rendendo 1299 e 103 de
+#      alcance (12×). Se o próprio gancho não prevê, views do vídeo de origem
+#      preveem menos ainda. Filtrar duro por um sinal fraco é só perder fila.
+#
+# ⚠️ MUDEI O DEFAULT DO CÓDIGO, não só o `.env`. O roadmap já registra que "o
+# .env vence o código" — o que também significa que, no dia em que a chave
+# sumir do `.env` (edição à mão, VPS nova, restauração de backup), o piso
+# voltaria calado pra 50k e a fila secaria sem ninguém entender por quê. Os
+# dois alinhados é o que impede isso.
+#
+# ⚠️ O TIKTOK USA ESTE NÚMERO ABSOLUTO. O corte RELATIVO (`_melhores_do_perfil`,
+# top N% de cada perfil) só roda no ramo do Instagram. Perfil pequeno e bom
+# ainda pode dar zero — é o buraco do @topshoppet_. Se acontecer, a saída é
+# estender o corte relativo pro TikTok, não zerar o piso.
+MIN_VIEWS = 5_000       # min de views (override por MIN_VIEWS no .env — aplicado após _carregar_env)
 MAX_DUR = 90            # segundos
 POR_PERFIL = 40         # quantos vídeos recentes checar por perfil (--limite muda)
 

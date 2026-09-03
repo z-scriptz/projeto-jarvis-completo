@@ -542,7 +542,33 @@ primeiro comando é `.venv/bin/pip install -U yt-dlp`, antes de olhar a lista de
 perfis. E a trava por canal segura a barra enquanto isso: ela viu "ZERO keeper
 em 48" e **não penalizou ninguém**.
 
-### ⚠️ A ARMADILHA DA PRÓXIMA RODADA: o piso de 50k é ABSOLUTO no TikTok
+### 📉 PISO DO TIKTOK: 50.000 → 5.000 (decisão do Dre, no mesmo dia)
+
+*"50k ta alto demais, pra nossa conta que ta pegando 1k 2k, o corte minimo pode
+ficar entre 5k"*. Eu tinha escrito abaixo "não baixar o MIN_VIEWS por reflexo" —
+e ele baixou com razão. O que eu tratei como "filtro funcionando" era filtro
+estrangulando a fila:
+
+```
+piso 50.000 → 1/5 passam   (só o epilador de 805k)
+piso  5.000 → 3/5 passam   (triplica a fila desta fonte)
+```
+
+O argumento que sustenta não é a comparação com o alcance dele (são números de
+coisas diferentes), são dois outros:
+
+1. **Supply é o gargalo** — 6 contas × 6 posts/dia.
+2. **Viralidade da fonte é preditor fraco, e isso está MEDIDO aqui**: o
+   `estudo_ganchos` mostrou o mesmo texto de gancho rendendo 1299 e 103 de
+   alcance (12×). Se o gancho não prevê, views do vídeo de origem preveem
+   menos. Filtrar duro por sinal fraco é só perder fila.
+
+⚠️ **Mudei o DEFAULT DO CÓDIGO, não só o `.env`.** O roadmap já registra que "o
+.env vence o código" — o que também significa que, no dia em que a chave sumir
+do `.env` (edição à mão, VPS nova, backup restaurado), o piso voltaria calado
+pra 50k e a fila secaria sem ninguém entender por quê.
+
+### ⚠️ O QUE CONTINUA VALENDO: o piso do TikTok é ABSOLUTO
 
 `tiktok_coletor.py:1384`:
 
@@ -556,10 +582,10 @@ chamado **no ramo do Instagram** (linha 523). O TikTok pega o número absoluto.
 Nos 5 vídeos reais do `@seyis.shop`: 358 · 6.312 · 406 · **805.900** · 5.289.
 **Quatro de cinco são descartados.**
 
-Isso não é necessariamente defeito — combinado com `--limite 200` é exatamente
-a tese do Dre: varre o acervo fundo e o piso alto separa o que virou viral em
-2024/2025. **Não baixar o MIN_VIEWS por reflexo** quando o log mostrar muitos
-"fora do filtro"; é o filtro funcionando.
+↩️ Aqui eu tinha escrito *"não baixar o MIN_VIEWS por reflexo, é o filtro
+funcionando"*. **Estava errado** — com 44 fontes e 6 contas pra abastecer, o
+que eu chamei de filtro era gargalo. Fica como registro de que "o filtro está
+certo" precisa ser demonstrado com a fila que ele deixa passar, não assumido.
 
 ⚠️ Mas herda o problema que o `_melhores_do_perfil` foi criado pra resolver:
 perfil pequeno e bom dá **zero**. É o mesmo buraco do @topshoppet_. Se alguma
