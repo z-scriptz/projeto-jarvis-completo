@@ -1641,6 +1641,70 @@ US$0,012/s é o modelo mais barato do catálogo inteiro — pode ser ótimo pra
 animar foto de produto (movimento sutil, sem inventar nada) ou pode ser lixo.
 Testar isso custa **US$1** (83 clipes) do pacote mínimo de US$80.
 
+### ↩️ SEGUNDA CORREÇÃO NA MESMA PÁGINA: meu preço estava 8× errado
+
+O Dre foi CONFIGURAR o playground: *"colocando as piores configurações nele,
+480p e 5sec — se a gente colocar 10 sec e 720p sobe pra $0,96"*.
+
+Eu tinha lido `$0,012/s` no card e multiplicado por 10 segundos. **O
+`US$/s` do catálogo é a tarifa da configuração MAIS BARATA**, não uma taxa que
+vale em qualquer resolução. Medido por ele: 720p · 10s = **US$0,96**, oito
+vezes o meu US$0,12.
+
+Duas vezes seguidas errando a mesma página — primeiro chamando o "700 vídeos"
+de isca, agora subcotando 8×. As duas vezes por ler número de vitrine em vez de
+configurar a coisa. **O playground mostra o custo estimado ANTES de gerar; eu
+tinha essa fonte e usei a tabela.**
+
+### 📐 A CONTA COM O NÚMERO MEDIDO
+
+**R$5,18 por clipe** de 10s/720p. US$80 (R$432) = 83 clipes.
+
+```
+reel de 10s (1 clipe)    83 reels   R$ 5,18 cada
+reel de 20s (2 clipes)   42 reels   R$10,37 cada
+reel de 30s (3 clipes)   28 reels   R$15,55 cada
+
+payback (reel de 10s):  83 × R$0,1676 = R$13,97  ⇒ falta 31×
+                        83 × R$0,3564 = R$29,70  ⇒ falta 15× (otimista)
+pela regra do acerto:   o post de R$24 paga 4,6 clipes
+                        ⇒ precisa 22% de taxa de acerto · hoje o estouro é 15%
+```
+
+Falta pouco, mas falta — e "pouco" aqui é a diferença entre pagar e não pagar.
+
+### 💎 MAS TODO O CUSTO ASSUME IA EM TUDO, E O GATE JÁ EXISTE
+
+`daemon_maestro:89` já tem `producao_premium_campeoes: True` e
+`producao_premium_comissao_min: 15.0` — a máquina JÁ separa produto campeão por
+comissão e já troca o modelo do Fal quando é premium. A infra pra gastar
+seletivamente está construída desde antes desta conversa.
+
+E os dados de comissão mostram por que isso é o que fecha a conta:
+
+| comissão | produto | paga quantos clipes |
+|---|---|---|
+| R$24,00 | kit lixador de pé | 4,6 |
+| R$14,62 | dispenser de sabonete | 2,8 |
+| R$7,27 | fones de condução óssea | 1,4 |
+| R$4,35 | urso pelúcia | 0,8 |
+| R$0,56 | suporte moto/bike | 0,1 |
+
+**Os 3 primeiros = 81% de toda a comissão.** Sete dos dez produtos não pagam
+nem UM clipe. Pôr IA em tudo é subsidiar os 7 com o lucro dos 3.
+
+```
+TUDO em IA (6/dia)        R$933/mês    ← insustentável
+só premium (~1/dia)       R$156/mês
+só premium (~2/semana)    R$ 45/mês    ← cabe no que o negócio já fatura
+```
+
+📌 **Sobre "10s tá bom pra produto?": sim.** E 5s provavelmente também — o Reel
+não precisa ser um clipe só. O template já tem gancho na tela e a foto tratada
+pode servir de abertura/fecho, e o Instagram premia RETENÇÃO: 10s vistos
+inteiros valem mais que 30s vistos pela metade. Se 5s bastar, o custo cai pela
+metade e a conta muda de lado — vale medir no playground antes de decidir.
+
 ### ⚠️ DÍVIDA DE DEPLOY QUE ESTA MUDANÇA TORNA URGENTE
 
 O próprio roadmap já registra: **`agents/narrated_video_agent.py` na VPS está
