@@ -527,6 +527,68 @@ Ex.: "O segredo pra ter um iPhone 17 sem gastar / uma fortuna ✨".
 
 ---
 
+## 🗓️ Dia 2026-09-04 — o TikTok voltou com um `pip install -U`
+
+### ✅ ERA O `yt-dlp`, E SÓ
+
+`2026.7.4` → `2026.8.19` e as 48 fontes voltaram. O teste manual em
+`@seyis.shop` devolveu os 5 vídeos com metadado completo, `view_count`
+incluído. **48 de 48 mudas era extrator velho, não handle errado** — o que a
+resposta REAL de 3 das 48 já indicava.
+
+📌 **VAI ACONTECER DE NOVO.** O TikTok muda o site e o extrator quebra; é o
+custo desse canal. Quando o log encher de `Failed to parse JSON ... char 0`, o
+primeiro comando é `.venv/bin/pip install -U yt-dlp`, antes de olhar a lista de
+perfis. E a trava por canal segura a barra enquanto isso: ela viu "ZERO keeper
+em 48" e **não penalizou ninguém**.
+
+### ⚠️ A ARMADILHA DA PRÓXIMA RODADA: o piso de 50k é ABSOLUTO no TikTok
+
+`tiktok_coletor.py:1384`:
+
+```python
+piso = MIN_VIEWS_IG if fonte == "instagram" else MIN_VIEWS   # 50_000
+```
+
+E o `_melhores_do_perfil` (o corte RELATIVO, top 60% de cada perfil) só é
+chamado **no ramo do Instagram** (linha 523). O TikTok pega o número absoluto.
+
+Nos 5 vídeos reais do `@seyis.shop`: 358 · 6.312 · 406 · **805.900** · 5.289.
+**Quatro de cinco são descartados.**
+
+Isso não é necessariamente defeito — combinado com `--limite 200` é exatamente
+a tese do Dre: varre o acervo fundo e o piso alto separa o que virou viral em
+2024/2025. **Não baixar o MIN_VIEWS por reflexo** quando o log mostrar muitos
+"fora do filtro"; é o filtro funcionando.
+
+⚠️ Mas herda o problema que o `_melhores_do_perfil` foi criado pra resolver:
+perfil pequeno e bom dá **zero**. É o mesmo buraco do @topshoppet_. Se alguma
+fonte gringa boa ficar muda, a saída é estender o corte relativo pro TikTok, não
+derrubar o piso global.
+
+### 🔄 A INVERSÃO QUE MUDA O PLANO DAS FONTES
+
+A tese do acervo 2024/2025 é o motivo de manter as 4 fontes de Instagram. Só que:
+
+| canal | profundidade real |
+|---|---|
+| TikTok (`--flat-playlist --playlist-end N`) | **200+, funciona** |
+| Instagram (Playwright, 10 rolagens) | **12, teto duro** |
+
+**Quem tem acervo acessível é o TikTok, não o Instagram.** As 4 fontes de IG que
+ele guardou justamente pelo acervo são as que não dão pra minerar fundo hoje.
+
+### 🧹 E o `recuperar_fontes.py` não recuperou nada
+
+O Dre: *"clau pq vc voltou as fontes? só quero aquelas que eu te mandei dos
+gringos"*. **Não voltou** — ele rodou sem `--gravar`, que só LISTA. O arquivo
+seguiu com 4, e o próprio relatório dizia `instagram_perfis.txt: 4 perfil(is)
+HOJE`. Erro meu de comunicação: mostrei 95 nomes numa tela e a leitura natural
+disso é "ele restaurou". O modo padrão ser somente-leitura estava certo; o que
+faltou foi eu dizer isso na frase, não no `--help`.
+
+---
+
 ## 🗓️ Dia 2026-09-03 (madrugada) — eu apaguei 98 fontes com uma linha de deploy
 
 ### 🔥 O ERRO, QUE FOI MEU
