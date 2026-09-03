@@ -582,7 +582,18 @@ def _produzir(pasta: Path, pj: Path, video_src: Path) -> bool:
         # link carregava [canal, nicho, produto, fonte]: os dois lados nunca
         # tiveram como se encontrar. Agora grava a MESMA lista, e o `video_id`
         # solto no extra pra quem for cruzar não precisar saber a posição.
-        _reg(produto=nome, link=link, categoria=categoria_ledger, hook=hook,
+        # ⚠️ `url_shopee` FALTAVA AQUI, E ISSO CEGOU O DINHEIRO INTEIRO (03/09).
+        # `posts_ledger._item_id()` extrai o padrão `i.LOJA.ITEM` da URL — e o
+        # `link` é o SHORT LINK de afiliado (s.shopee.com.br/xxxx), que não
+        # carrega itemId nenhum. Sem este argumento a chave nasce VAZIA.
+        # Medido: 0% dos 340 posts do diário têm item_id, e por isso 33 das 34
+        # conversões (R$121 em 90 dias) não puderam ser atribuídas a post algum.
+        # O `telegram_repurpose_hunter` sempre passou; este produtor — que é o
+        # principal — nunca passou. Dois produtores, um omitindo o campo: é o
+        # mesmo desenho que já tinha deixado 42 de 85 posts sem `plataforma`.
+        _reg(produto=nome, link=link,
+             url_shopee=info.get("origem_url", "") or info.get("product_link", ""),
+             categoria=categoria_ledger, hook=hook,
              legenda=legenda, slug=slug,
              sub_ids=_subids("ig", nicho, nome, perfil_fonte, id_video),
              plataforma=plataforma,                # shopee / amazon

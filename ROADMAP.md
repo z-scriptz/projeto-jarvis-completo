@@ -1481,6 +1481,57 @@ melhor: é que o produto deixa de ser algo que o modelo precisa adivinhar. E as
 testado. O que falhou antes foi outra coisa, e falhou por um motivo que a gente
 agora sabe qual é.
 
+### 🔧 A CAUSA DO item_id VAZIO: um argumento faltando no produtor principal
+
+`produzir_tiktok.py:585` chamava `_reg(produto=, link=, ...)` **sem
+`url_shopee=`**. O `link` é o short link de afiliado, que não carrega itemId —
+então `posts_ledger._item_id()` devolvia "" em 100% dos posts.
+
+O `telegram_repurpose_hunter` SEMPRE passou o campo. O `produzir_tiktok` — que é
+o produtor principal — nunca passou. **Dois produtores, um omitindo o campo:** é
+literalmente o mesmo desenho que já tinha deixado 42 de 85 posts sem
+`plataforma`, e que está registrado num comentário 10 linhas acima da correção.
+O erro estava documentado ao lado do lugar onde se repetiu.
+
+A URL longa já estava disponível no escopo (`info["origem_url"]`, usada duas
+vezes ali perto). Faltava só passar.
+
+### 🕰️ E PRA LER O PASSADO: `dinheiro.py --nome`
+
+O conserto acima vale do próximo post em diante. Os R$121 que já entraram
+continuam sem chave — mas o diário guarda `produto` e a conversão traz
+`itemName`. `--nome` casa por palavras significativas em comum.
+
+⚠️ É APROXIMAÇÃO e a saída diz quantas foram assim. Duas salvaguardas: mínimo de
+2 palavras significativas, e **recusa empate** — dois posts com a mesma
+pontuação devolvem None. Atribuir no desempate seria sortear qual post leva o
+crédito.
+
+Verificado em fixture com os nomes reais das conversões: Pedicuro e FreeClip
+casaram com os posts certos; o **Macaco Jacaré Hidráulico continuou órfão** — que
+é o correto, esse realmente não é do catálogo.
+
+### 🧭 "TEM ALGUM SITE QUE COMPENSA INVESTIR A FUNDO? DE VERDADE"
+
+Resposta honesta registrada, porque ela contradiz o entusiasmo das últimas
+rodadas: **nenhum, hoje.** E o motivo não é preço.
+
+O que este dia mediu, em sequência:
+- mesmo gancho, 12× de diferença de alcance ⇒ o texto não é a alavanca
+- nenhum traço de forma fora do ruído ⇒ nem a forma é
+- R$121 entraram em 90 dias e 33 de 34 não puderam ser atribuídas
+- as duas chaves de atribuição estavam rompidas, uma delas por argumento faltando
+
+Comprar capacidade de produção enquanto não se consegue medir o que a produção
+produz é comprar mais de uma coisa que não se sabe avaliar. **Neste único dia,
+quatro números que eu quase entreguei como verdade estavam errados por medição
+ruim** (3767%, 18,3%, "conta punida", "R$0,0285 por post"). O gargalo não é
+ferramenta — é leitura.
+
+O único canal com resposta medida e imediata continua sendo o tráfego pago que
+já roda (R$0,11/clique, 233 cliques). Não é empolgante, mas é o único com número
+do lado de fora.
+
 ### ⚠️ DÍVIDA DE DEPLOY QUE ESTA MUDANÇA TORNA URGENTE
 
 O próprio roadmap já registra: **`agents/narrated_video_agent.py` na VPS está

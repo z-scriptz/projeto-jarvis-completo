@@ -120,6 +120,44 @@ def _subids_do_no(no: dict) -> list:
     return [str(b).strip() for b in brutos if str(b).strip()]
 
 
+_IRRELEVANTES = {"de", "da", "do", "para", "pra", "com", "sem", "e", "o", "a",
+                 "os", "as", "em", "por", "no", "na", "um", "uma", "kit", "mini",
+                 "portatil", "portátil", "profissional", "original", "novo"}
+
+
+def _palavras(txt: str) -> set:
+    import re
+    return {p for p in re.findall(r"[a-zà-ÿ0-9]{4,}", (txt or "").lower())
+            if p not in _IRRELEVANTES}
+
+
+def _casar_por_nome(nome_item: str, posts: list, minimo: int = 2):
+    """O post cujo NOME mais se parece com o do item vendido.
+
+    ⚠️ ISTO É APROXIMAÇÃO, e existe só pra recuperar o PASSADO. O `item_id`
+    nasceu vazio em 100% dos posts (produzir_tiktok não passava `url_shopee`),
+    então a comissão que já entrou não tem chave exata — mas o diário guarda o
+    nome do produto e a conversão traz o `itemName`.
+    Exige `minimo` palavras significativas em comum, e RECUSA empate: dois posts
+    com a mesma pontuação devolvem None. Atribuir no desempate seria escolher no
+    cara-ou-coroa qual post levou o crédito, e é exatamente o tipo de número
+    bonito e falso que este arquivo existe pra não produzir.
+    """
+    alvo = _palavras(nome_item)
+    if len(alvo) < minimo:
+        return None
+    melhor, placar, empate = None, 0, False
+    for post in posts:
+        n = len(alvo & _palavras(post.get("produto", "")))
+        if n > placar:
+            melhor, placar, empate = post, n, False
+        elif n == placar and n > 0:
+            empate = True
+    if placar < minimo or empate:
+        return None
+    return melhor
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="quanto vale um post")
     ap.add_argument("--dias", type=int, default=30)
@@ -127,6 +165,9 @@ def main() -> int:
                     help="custo de uma ferramenta (ex: 800) pra calcular o payback")
     ap.add_argument("--bruto", action="store_true",
                     help="imprime a resposta crua da API (pra depurar o schema)")
+    ap.add_argument("--nome", action="store_true",
+                    help="RECUPERA O PASSADO: casa por parecença de nome quando a "
+                         "chave exata falta. Aproximado — a saída marca quanto é.")
     ap.add_argument("--amarra", action="store_true",
                     help="POR QUE a comissão não casou com post — diagnostica as "
                          "duas chaves (sub_id e item_id) em vez de só contar órfãs")
@@ -263,7 +304,7 @@ def main() -> int:
             cont_item.setdefault(it, []).append(post)
     por_item = {i: v[0] for i, v in cont_item.items() if len(v) == 1}
 
-    casados, orfas, total, sem_valor = [], [], 0.0, 0
+    casados, orfas, total, sem_valor, aproximados = [], [], 0.0, 0, 0
     for no in conversoes:
         val = _comissao_do_no(no)
         if val == 0.0:
@@ -276,6 +317,15 @@ def main() -> int:
             if s in por_subid:
                 alvo = por_subid[s]
                 break
+        if alvo is None and a.nome:           # plano C: parecença de nome
+            for pedido in (no.get("orders") or []):
+                for item in (pedido.get("items") or []):
+                    alvo = _casar_por_nome(item.get("itemName", ""), posts)
+                    if alvo:
+                        aproximados += 1
+                        break
+                if alvo:
+                    break
         if alvo is None:                      # plano B: pelo itemId do pedido
             for pedido in (no.get("orders") or []):
                 for item in (pedido.get("items") or []):
@@ -293,6 +343,9 @@ def main() -> int:
         print(f"   ⚠️ {sem_valor} conversão(ões) sem campo de comissão que eu "
               f"reconheça — rode com --bruto e me mande, o nome do campo mudou")
     print(f"   {len(casados)} casada(s) com post · {len(orfas)} órfã(s)")
+    if aproximados:
+        print(f"   ⚠️ {aproximados} delas casaram por PARECENÇA DE NOME, não por")
+        print(f"      chave — é estimativa pra ler o passado, não contabilidade.")
     if orfas:
         print("   ⚠️ ÓRFÃ = comissão real que não casou com nenhum post nosso —")
         print("      nem por etiqueta, nem por itemId. Quase sempre é venda de")
