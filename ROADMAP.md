@@ -527,6 +527,83 @@ Ex.: "O segredo pra ter um iPhone 17 sem gastar / uma fortuna ✨".
 
 ---
 
+## 🗓️ Dia 2026-09-03 — o prompt virou arquivo, porque a lição não pode morar no chat
+
+### 🎬 `prompt_video_ia.py` — o prompt que não deixa o produto virar outro
+
+O Dre pediu *"me faça um prompt pra testar aqui"*. Virou **arquivo na raiz**, não
+mensagem: o aprendizado do clipe do Runway (produto mudou 4× em 10s) só vale se
+sobreviver ao chat.
+
+Dois modos:
+
+| modo | pra quê | o produto vem de |
+|---|---|---|
+| `--modo imagem` (padrão) | **o certo pra afiliado** | da FOTO real de `shared/fotos/` |
+| `--modo texto` | só pra comparar com o teste do Runway | o modelo INVENTA |
+
+```bash
+python3 prompt_video_ia.py --produto "Kit Lixador de Pé Elétrico"
+python3 prompt_video_ia.py --produto "..." --modo texto --segundos 10
+python3 prompt_video_ia.py --produto "..." --movimento luz|giro|aproxima|mao|flutua
+```
+
+### 🧨 AS TRÊS CAUSAS DA DERIVA, NA ORDEM EM QUE IMPORTAM
+
+1. **Text-to-video.** O modelo não tem o produto — inventa um a cada cena.
+   Nenhuma frase de prompt conserta ausência de informação. O prompt do ChatGPT
+   dizia, com todas as letras, *"consistent product, no morphing"*. Não adiantou.
+2. **Troca de cena.** No clipe do Dre o produto mudou **exatamente nos cortes**
+   (quarto → mão → sala → pedestal). Cada corte é uma chance de reinventar. Por
+   isso os dois modos travam `ONE single continuous shot`.
+3. **Descrever o produto no modo imagem-para-vídeo.** Contraintuitivo e é o erro
+   mais comum: se a foto JÁ define o produto, adjetivo no prompt dá licença pro
+   modelo reinterpretar. No i2v o nome do produto entra **entre parênteses, como
+   referência** — nunca como instrução de desenho. O prompt descreve MOVIMENTO.
+
+Os `MOVIMENTOS` seguem a mesma regra: só câmera ou movimento mínimo do objeto.
+Nada que peça pro modelo desenhar uma parte que a foto não mostra — é aí que ele
+inventa.
+
+### 🎨 A COR DO FUNDO É LIDA, NÃO REPETIDA
+
+`FUNDO` puxa `fotografia.CREME` (`fotografia.py:81` = `(242,238,230)` = `#F2EEE6`)
+com fallback pro literal se o import falhar (PIL/numpy). **Hex repetido é hex que
+um dia diverge** — e vídeo de fundo branco puro ao lado de foto creme na mesma
+conta lê como duas marcas. Testado nos dois caminhos: com e sem `fotografia.py`
+no path, os dois dão `#F2EEE6`.
+
+### ✅ O CRITÉRIO DE ACEITAÇÃO (constante `CRITERIO`, impressa a cada execução)
+
+**Não é "ficou bonito". É "é o MESMO produto no primeiro e no último quadro?"**
+
+1. **Produto idêntico?** Pause no segundo 1 e no último, lado a lado. Se mudou,
+   REPROVA — por mais bonito que esteja.
+2. **É o produto da foto?** (só no modo imagem) "Parecido" não serve.
+3. **Mãos.** Conta os dedos.
+4. **Corte.** Teve troca de cena? Foi ali que o produto derivou.
+5. **Primeiro segundo.** O produto já está em quadro? O gancho do Reel é 1-3s.
+
+Reprovar em 1, 2 ou 4 = o modelo não serve pra afiliado, **independente do preço**.
+
+📌 Primeiro teste deve ser o **Kit Lixador de Pé Elétrico** — R$24,00, 43% de toda
+a comissão atribuída pelo `dinheiro.py`. Se algum produto merece o primeiro dólar,
+é o único que já provou que vende.
+
+⚠️ **Suba a foto TRATADA** (`shared/fotos/`, fundo creme, recorte limpo) — não a
+crua da Shopee. A foto é que define o produto; o prompt só move.
+
+### 🚚 Deploy
+
+```bash
+cd ~/jarvis && git fetch pjc claude/opa-clau-dgs591
+git show FETCH_HEAD:prompt_video_ia.py > prompt_video_ia.py
+```
+
+(raiz — não é pacote; só depende de `argparse` + o import opcional de `fotografia`)
+
+---
+
 ## 🗓️ Dia 2026-09-02 — cada conta ganhou cor, e o vídeo saiu de dentro da moldura
 
 ### 👀 O QUE OS DOIS PERFIS QUE CRESCEM FAZEM E O NOSSO NÃO FAZIA
