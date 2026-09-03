@@ -801,20 +801,92 @@ if __name__ == "__main__":
 # "não consegui ler" — que é diferente de "não vendeu".
 # =================================================================
 
+# ✅ SCHEMA CONFIRMADO EM 02/09/2026 (probe rodado na conta do Dre).
+#
+# A API declara estas queries:
+#   shopOfferV2 · shopeeOfferV2 · productOfferV2
+#   conversionReport · validatedReport · partnerOrderReport
+#   listItemFeeds · getItemFeedData
+#
+# E `conversionReport` RESPONDE, com dados reais:
+#   nodes { conversionId purchaseTime
+#           orders { orderId items { itemName itemId shopId
+#                                    itemTotalCommission actualAmount } } }
+#
+# ⚠️ MAS A CONSULTA DO PROBE NÃO PEDIU OS sub_ids — e sem eles a comissão é um
+# número solto, não um número LIGADO A UM POST. Saber que entrou R$3,92 sem
+# saber de qual vídeo é quase tão inútil quanto não saber. Por isso a função
+# INTROSPECTA o tipo do nó e pede o campo de etiqueta pelo nome real, em vez de
+# eu chutar "subIds" e receber um erro que derruba a query inteira (GraphQL
+# rejeita a consulta toda quando UM campo não existe — o mesmo comportamento
+# que o `obter_dados_produto` já documenta).
+#
+# ⚠️ E EXISTE `validatedReport`. Em programa de afiliado, "conversão" é o pedido
+# feito e "validado" é a comissão que a plataforma confirmou que vai pagar —
+# pedido cancelado ou devolvido some. Pra decidir gasto, o número que vale é o
+# validado. Ele fica aqui como segunda forma, e o relatório diz qual usou.
+
 # As formas que a API da Shopee já usou pro relatório de conversão, em ordem de
 # probabilidade. Cada uma é (nome_da_query, campos_internos). A lista existe
 # porque a Shopee mudou esse endpoint mais de uma vez e nenhuma documentação
 # pública acompanha; tentar em ordem custa uma chamada e evita um palpite.
+_BASE_CONVERSAO = ("conversionId purchaseTime "
+                   "orders { orderId items { itemName itemId shopId "
+                   "itemTotalCommission actualAmount } }")
+
+# nomes que o campo de etiqueta já teve. A introspecção decide qual existe; esta
+# lista só define a ORDEM de preferência quando mais de um aparece.
+_CAMPOS_SUBID = ("subIds", "subId", "utmContent", "utmSource", "sub_id")
+
 _FORMAS_CONVERSAO = [
-    ("conversionReport",
-     "conversionId purchaseTime clickTime utmContent "
-     "orders { orderId items { itemName itemId shopId "
-     "itemTotalCommission actualAmount } }"),
-    ("conversionReport",
-     "conversionId purchaseTime "
-     "orders { orderId items { itemName itemId itemTotalCommission } }"),
-    ("shopeeOfferV2", None),          # só pra detectar que a conta responde
+    ("conversionReport", _BASE_CONVERSAO),   # ✅ confirmado respondendo
+    ("validatedReport", _BASE_CONVERSAO),    # comissão CONFIRMADA (a que paga)
+    ("partnerOrderReport", _BASE_CONVERSAO),
 ]
+
+
+def _campos_do_no(nome_query: str) -> list:
+    """Os campos que o NÓ de um relatório expõe.
+
+    Existe porque GraphQL rejeita a consulta INTEIRA quando um campo não existe:
+    pedir `subIds` no escuro não devolve "sem subIds", devolve nada. Perguntar
+    antes custa uma chamada e é a diferença entre a comissão amarrar num post ou
+    ficar solta.
+    """
+    q = ('{ __type(name: "Query") { fields { name type { name kind '
+         'ofType { name kind } } } } }')
+    r = _executar_graphql(q)
+    try:
+        fields = ((r.get("data") or {}).get("__type") or {}).get("fields") or []
+    except Exception:
+        return []
+    alvo = next((f for f in fields if f.get("name") == nome_query), None)
+    if not alvo:
+        return []
+    t = alvo.get("type") or {}
+    nome_tipo = t.get("name") or (t.get("ofType") or {}).get("name")
+    if not nome_tipo:
+        return []
+    # o tipo do relatório -> o campo `nodes` -> o tipo do nó
+    r2 = _executar_graphql('{ __type(name: "%s") { fields { name type '
+                           '{ name kind ofType { name } } } } }' % nome_tipo)
+    try:
+        f2 = ((r2.get("data") or {}).get("__type") or {}).get("fields") or []
+    except Exception:
+        return []
+    no = next((f for f in f2 if f.get("name") == "nodes"), None)
+    if not no:
+        return []
+    tn = no.get("type") or {}
+    nome_no = tn.get("name") or (tn.get("ofType") or {}).get("name")
+    if not nome_no:
+        return []
+    r3 = _executar_graphql('{ __type(name: "%s") { fields { name } } }' % nome_no)
+    try:
+        f3 = ((r3.get("data") or {}).get("__type") or {}).get("fields") or []
+    except Exception:
+        return []
+    return [f.get("name") for f in f3 if f.get("name")]
 
 
 def _campos_da_query(nome: str) -> list:
@@ -864,9 +936,13 @@ def relatorio_conversao(dias: int = 30, limite: int = 200) -> dict:
     for nome, campos in ordem:
         if not campos:
             continue
+        # pergunta ao nó quais etiquetas ele tem, e pede só as que existem
+        disponiveis = _campos_do_no(nome)
+        etiquetas = [c for c in _CAMPOS_SUBID if c in disponiveis]
+        campos_pedidos = campos + ((" " + " ".join(etiquetas)) if etiquetas else "")
         q = ("query { %s(purchaseTimeStart: %d, purchaseTimeEnd: %d, limit: %d) "
              "{ nodes { %s } pageInfo { hasNextPage scrollId } } }"
-             % (nome, ini, fim, int(limite), campos))
+             % (nome, ini, fim, int(limite), campos_pedidos))
         r = _executar_graphql(q)
         if r.get("_erro"):
             tentativas.append({"query": nome, "erro": r["_erro"][:180]})
@@ -876,6 +952,8 @@ def relatorio_conversao(dias: int = 30, limite: int = 200) -> dict:
             tentativas.append({"query": nome, "erro": "respondeu sem 'nodes'"})
             continue
         return {"ok": True, "conversoes": nos, "query": nome,
+                "etiquetas": etiquetas,
+                "campos_do_no": disponiveis,
                 "periodo": {"de": ini, "ate": fim}, "tentativas": tentativas}
 
     return {"ok": False,

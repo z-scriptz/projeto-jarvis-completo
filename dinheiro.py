@@ -33,12 +33,45 @@
 
 import argparse
 import json
+import os
 import sys
 from collections import defaultdict
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parent
 sys.path.insert(0, str(BASE))
+
+
+def _carregar_env():
+    """⚠️ SEM ISTO O SCRIPT MENTE. Rodado sem o .env, o cliente da Shopee diz
+    "SHOPEE_APP_ID não configurado" e o relatório inteiro sai como
+    "não consegui ler" — indistinguível de um problema de schema.
+    Aconteceu na 1ª execução real (02/09): o `probe_conversao.py` funcionou e
+    este aqui não, pela ÚNICA diferença de que o probe carrega o .env e eu tinha
+    esquecido. É o mesmo defeito que o hook_alana registra no cabeçalho dele
+    ("era o único da cadeia que NÃO carregava o .env"), cometido de novo.
+    Em produção quem injeta é o systemd; na mão, é isto."""
+    for cand in (BASE / ".env", Path(".env")):
+        if not cand.exists():
+            continue
+        try:
+            linhas = cand.read_text(encoding="utf-8").splitlines()
+        except Exception:
+            return
+        for linha in linhas:
+            linha = linha.strip()
+            if not linha or linha.startswith("#") or "=" not in linha:
+                continue
+            if linha.lower().startswith("export "):
+                linha = linha[7:]
+            k, _, v = linha.partition("=")
+            k, v = k.strip(), v.strip().strip('"').strip("'")
+            if k and not os.environ.get(k):
+                os.environ[k] = v
+        return
+
+
+_carregar_env()
 
 LEDGER = BASE / "shared" / "posts_ledger.jsonl"
 METRICAS = BASE / "shared" / "metricas_posts.jsonl"
@@ -126,6 +159,18 @@ def main() -> int:
     conversoes = rel.get("conversoes") or []
     print(f"✅ a API respondeu pela query `{rel.get('query')}` · "
           f"{len(conversoes)} conversão(ões) no período")
+
+    # ⚠️ SEM CAMPO DE ETIQUETA, A AMARRA É IMPOSSÍVEL — e isso precisa ser dito
+    # ANTES da tabela, senão o relatório sai com "100% órfãs" e parece que as
+    # nossas etiquetas quebraram, quando na verdade a API não devolve etiqueta
+    # nenhuma. Diagnóstico errado manda consertar o lado certo do problema.
+    if not rel.get("etiquetas"):
+        print("\n⚠️  O NÓ DESTE RELATÓRIO NÃO EXPÕE sub_id.")
+        print(f"   Campos que ele tem: {rel.get('campos_do_no') or '(não consegui listar)'}")
+        print("   Sem etiqueta não dá pra dizer QUAL post vendeu — o total abaixo")
+        print("   é real, mas a atribuição por post fica impossível por esta via.")
+        print("   Caminho alternativo: `validatedReport` / `partnerOrderReport`,")
+        print("   ou casar por itemId contra o produto do post.")
     if a.bruto and conversoes:
         print(json.dumps(conversoes[:3], ensure_ascii=False, indent=2)[:2000])
 
@@ -164,6 +209,17 @@ def main() -> int:
         print(f"   ({ambiguas} etiqueta(s) genérica(s) ignorada(s) na amarra — "
               f"'ig', 'casa' e afins apontam pra vários posts)")
 
+    # PLANO B DA AMARRA: o itemId. Quando o relatório não traz etiqueta, ainda
+    # dá pra casar pelo PRODUTO — o `posts_ledger` grava `item_id`. É mais fraco
+    # (dois posts do mesmo produto ficam ambíguos, e aí a regra dura vale igual),
+    # mas é a diferença entre atribuir e não atribuir.
+    cont_item = {}
+    for post in posts:
+        it = str(post.get("item_id") or "").strip()
+        if it:
+            cont_item.setdefault(it, []).append(post)
+    por_item = {i: v[0] for i, v in cont_item.items() if len(v) == 1}
+
     casados, orfas, total, sem_valor = [], [], 0.0, 0
     for no in conversoes:
         val = _comissao_do_no(no)
@@ -177,6 +233,15 @@ def main() -> int:
             if s in por_subid:
                 alvo = por_subid[s]
                 break
+        if alvo is None:                      # plano B: pelo itemId do pedido
+            for pedido in (no.get("orders") or []):
+                for item in (pedido.get("items") or []):
+                    it = str(item.get("itemId") or "").strip()
+                    if it and it in por_item:
+                        alvo = por_item[it]
+                        break
+                if alvo:
+                    break
         (casados if alvo else orfas).append((no, val, alvo))
 
     print(f"\n💵 comissão somada no período: R$ {total:,.2f}".replace(",", "X")
@@ -186,8 +251,15 @@ def main() -> int:
               f"reconheça — rode com --bruto e me mande, o nome do campo mudou")
     print(f"   {len(casados)} casada(s) com post · {len(orfas)} órfã(s)")
     if orfas:
-        print("   ⚠️ ÓRFÃ = comissão que existe mas não achei o post. Etiqueta")
-        print("      quebrada, ou venda de link publicado fora do Jarvis.")
+        print("   ⚠️ ÓRFÃ = comissão real que não casou com nenhum post nosso —")
+        print("      nem por etiqueta, nem por itemId. Quase sempre é venda de")
+        print("      link publicado FORA do Jarvis (link seu, no WhatsApp, num")
+        print("      grupo). Vale olhar os nomes abaixo antes de concluir:")
+        for no, val, _ in sorted(orfas, key=lambda t: -t[1])[:6]:
+            nomes = [i.get("itemName", "?") for p in (no.get("orders") or [])
+                     for i in (p.get("items") or [])]
+            print(f"      R$ {val:5.2f}  {(nomes[0] if nomes else '?')[:58]}"
+                  .replace(".", ","))
 
     # ── por post, e depois a conta que decide ─────────────────────────────
     por_post = defaultdict(float)
@@ -203,15 +275,33 @@ def main() -> int:
     n_posts = len({m.get("shortcode") for m in metricas if m.get("shortcode")}) or len(posts)
     alcance = sum(float(m.get("alcance") or 0) for m in metricas)
 
+    # ⚠️ A CONTA USA SÓ O QUE CASOU COM POST. Dividir o total (que inclui as
+    # órfãs) pelo número de posts credita ao Jarvis venda que veio de outro
+    # lugar — e o número resultante viraria "cada post vale X", que é
+    # exatamente a mentira que este arquivo existe pra não contar.
+    atribuido = sum(v for _n, v, alvo in casados if alvo)
     print("\n══ A CONTA QUE DECIDE ══")
+    if not casados:
+        print("   ⛔ NENHUMA comissão casou com um post nosso.")
+        print("   Então NÃO EXISTE 'valor por post' pra calcular: o dinheiro do")
+        print("   período entrou por outro caminho. Somar assim mesmo daria um")
+        print("   número bonito e falso.")
+        print("\n   O que isso responde sobre os R$800: nada ainda — mas diz onde")
+        print("   olhar primeiro. Ou a etiqueta não está voltando da Shopee, ou")
+        print("   os posts realmente não venderam no período. São problemas")
+        print("   diferentes e o conserto de um não serve pro outro.")
+        return 0
+    print(f"   (usando só as {len(casados)} casadas: R$ {atribuido:.2f}"
+          .replace(".", ",") + f" de R$ {total:.2f})".replace(".", ","))
     if n_posts:
-        print(f"   R$ {total / n_posts:.4f} por post publicado   ({n_posts} posts)")
+        print(f"   R$ {atribuido / n_posts:.4f} por post publicado   ({n_posts} posts)"
+              .replace(".", ",", 1))
     if alcance:
-        print(f"   R$ {1000 * total / alcance:.2f} por 1.000 de alcance   "
+        print(f"   R$ {1000 * atribuido / alcance:.2f} por 1.000 de alcance   "
               f"({alcance:,.0f} de alcance somado)".replace(",", "."))
 
-    if a.custo and n_posts and total > 0:
-        por_post_val = total / n_posts
+    if a.custo and n_posts and atribuido > 0:
+        por_post_val = atribuido / n_posts
         precisa = a.custo / por_post_val
         print(f"\n   Pra pagar R$ {a.custo:.0f} no ritmo de hoje seriam "
               f"**{precisa:,.0f} posts**.".replace(",", "."))

@@ -1186,6 +1186,80 @@ testadas contra qualquer API de vídeo por IA, e zero vídeos gerados.
 vídeo é pagar pela curva de aprendizado no preço cheio. O caminho barato existe
 e não foi tentado.
 
+### ✅ O RELATÓRIO DE CONVERSÃO EXISTE E RESPONDE (03/09)
+
+O probe rodou. A API declara `conversionReport`, **`validatedReport`** e
+`partnerOrderReport` — e o primeiro devolve dados reais:
+
+```
+conversionId 241989597136981 · Luva NitrilC5 · comissão 1,9593 · valor 27,99
+conversionId 241978248105489 · Luva NitrilC5 · comissão 3,9186 · valor 55,98
+conversionId 241484198105519 · Acessórios de fone · comissão 2,6865
+```
+
+⚠️ **R$8,56 em três conversões de 14 dias.** O roadmap registrava "R$1,67 no
+total" — esse número está velho, ou nunca cobriu tudo.
+
+⚠️ **E OS PRODUTOS NÃO SÃO DO CATÁLOGO.** "Luva NitrilC5 resistência a cortes
+nível D(5) Medix" é EPI industrial; não é geral, casa, tech, moda, beleza nem
+pet. Forte indício de que essa comissão **não veio dos posts do Jarvis** — o que
+é exatamente o que a categoria "órfã" existe pra revelar, em vez de virar um
+"cada post rende R$0,03" falso.
+
+### 🐛 O `dinheiro.py` NÃO CARREGAVA O .env — de novo o mesmo defeito
+
+Primeira execução real: o `probe_conversao.py` funcionou e o `dinheiro.py` disse
+`SHOPEE_APP_ID não configurado`. A ÚNICA diferença é que o probe tem
+`_carregar_env()` e eu esqueci no outro. Em produção o systemd injeta; na mão,
+não.
+
+O pior é o sintoma: sem o .env, o erro sai como **"não consegui ler o
+relatório"** — indistinguível de problema de schema. O `hook_alana` tem um
+parágrafo inteiro no cabeçalho sobre exatamente isso (*"era o único da cadeia
+que NÃO carregava o .env"*), e eu repeti.
+
+### 🏷️ O NÓ PODE NÃO TER sub_id — e aí a amarra some sem avisar
+
+A consulta do probe não pediu etiquetas, então não se sabe se o nó tem. E
+GraphQL **rejeita a consulta inteira** quando um campo não existe: pedir
+`subIds` no escuro não devolve "sem subIds", devolve nada.
+
+Agora a função INTROSPECTA o tipo do nó, descobre o nome real do campo
+(`subIds` · `subId` · `utmContent` · …) e pede só o que existe. Quando não há
+nenhum, o relatório **diz isso antes da tabela** — senão a saída viraria "100%
+órfãs" e mandaria consertar as nossas etiquetas, quando o problema é que a API
+não devolve etiqueta nenhuma. Diagnóstico errado conserta o lado errado.
+
+Plano B da amarra: **itemId**. Mais fraco (dois posts do mesmo produto ficam
+ambíguos, e aí a regra dura vale igual), mas é a diferença entre atribuir e não.
+
+### 🚫 E COM ZERO CASADAS, NÃO EXISTE "VALOR POR POST"
+
+Terceiro defeito pego no teste: com nenhuma conversão casada, a conta ainda
+dividia o total — **incluindo as órfãs** — pelo número de posts. Isso credita ao
+Jarvis venda que veio de outro lugar e produz "cada post vale R$0,0285", que é
+número bonito e falso. Agora a conta usa **só o atribuído**, e com zero casadas
+ela se recusa a calcular e diz por quê.
+
+### 💸 "MELHOR JÁ COLOCAR OS 800 E FAZER 200+" — ele tem razão, e eu estava errado
+
+Eu tinha sugerido R$50-100 pra 5-10 vídeos antes do pacote. O Dre: *"é melhor já
+colocar os 800 e fazer 200+ kkkkk"*.
+
+Ele está certo em duas frentes e eu estava errado numa:
+1. **5-10 vídeos não ensinam workflow.** Dá pra ver se a ferramenta presta, não
+   pra aprender a usá-la. Meu "teste" era pequeno demais pra responder a
+   pergunta que eu mesmo disse que ele precisava responder.
+2. **O custo unitário é 4× pior** (R$10-20/vídeo contra ~R$4).
+
+O que continua valendo do meu lado, e é o que importa: **a variável de risco não
+é o preço, é a VALIDADE do crédito.** R$800 de crédito que expira em 30 dias,
+com workflow ainda não descoberto, é diferente de R$800 permanente. E duas
+perguntas custam R$0 e se respondem na documentação antes de qualquer compra:
+
+- o crédito expira? em quanto tempo?
+- a saída é 9:16 / 3:4 nativo, ou só 16:9? (o template do Reel é 3:4)
+
 ### ⚠️ DÍVIDA DE DEPLOY QUE ESTA MUDANÇA TORNA URGENTE
 
 O próprio roadmap já registra: **`agents/narrated_video_agent.py` na VPS está
