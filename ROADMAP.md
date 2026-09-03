@@ -1381,6 +1381,58 @@ aprender pouco" — é a mesma taxa do pacote grande, num pedaço menor.
 **nenhuma linha do projeto fala com essa API ainda.** O Teste 1 também paga o
 custo de descobrir isso.
 
+### 🔁 TEM SUBSTITUTO PRA KLING — E ELE JÁ ESTÁ NO REPO
+
+O Dre: *"530 reais por 62 reels? tem algo que substitui o kling não? isso ta
+caro pra cacete"*. Tem, e o mais irônico é que **`fal_provider.py` já existe no
+projeto** — agregador fal.ai, com lib oficial + fallback REST, lendo `FAL_KEY`
+e `FAL_MODEL`. Foi construído e nunca ligado (`usar_api_video: false`).
+
+Preços de setembro/2026 (fontes no fim da entrada). Clipe de 10s:
+
+| opção | US$/s | US$/clipe 10s | com US$98 | compromisso |
+|---|---|---|---|---|
+| **fal · Seedance 1.0 Lite 720p** | **0,036** | **0,36** | **272 clipes** | pay-as-you-go |
+| fal · Wan 2.5 480p | 0,050 | 0,50 | 196 | resolução baixa demais |
+| fal · Kling 2.5 Turbo Pro | 0,070 | 0,70 | 140 | pay-as-you-go |
+| Kling API direto 1080p | 0,078 | 0,78 | 125 | **pacote mín. + expira em 30d** |
+| fal · Wan 2.5 1080p | 0,150 | 1,50 | 65 | mais caro que a Kling |
+
+**O mesmo dinheiro compra 2,2× mais no Seedance Lite** (272 × 125 clipes), e
+o compromisso desaparece: fal é por uso, sem pacote mínimo e **sem crédito que
+expira**. Dá pra testar com US$10 em vez de US$9,80 travados numa janela de 30
+dias.
+
+⚠️ O trade-off honesto é RESOLUÇÃO: 720p contra os 1080p da Kling. Na faixa do
+template o vídeo ocupa 972px de largura, então 720p sobe ~1,35× — perceptível de
+perto, e o Instagram recomprime tudo de qualquer jeito. Vale testar antes de
+descartar; não vale fingir que é igual.
+
+### 🖼️ E A JOGADA QUE NINGUÉM HAVIA FEITO: IMAGE-TO-VIDEO COM AS NOSSAS FOTOS
+
+O Seedance 1.0 Lite mais barato é **image-to-video**. E nós temos **128 fotos
+tratadas classe A** (fundo creme, recorte por u2net, do pipeline de 01/09)
+paradas no `shared/fotos/`.
+
+Isso resolve estruturalmente o risco que eu tinha levantado como o mais grave da
+compra — *"a IA inventa um produto parecido, e num perfil de afiliado a pessoa
+clica e recebe outra coisa"*. Partindo da FOTO REAL do produto, não tem o que
+inventar: a IA só põe movimento no que já é verdadeiro.
+
+📌 Ou seja, o caminho barato e o caminho correto são o mesmo caminho, e ele usa
+um ativo que já foi construído e está ocioso.
+
+### ⚠️ O QUE ESTE COMPARATIVO **NÃO** DIZ
+
+Preço por clipe não é preço por clipe UTILIZÁVEL. Se o Seedance precisar de 3
+tentativas pro clipe prestar e a Kling de 1, a conta inverte. **Ninguém neste
+projeto gerou um único vídeo por IA ainda** — então esse número é desconhecido,
+e é justamente o que os primeiros US$10 compram.
+
+Fontes: [buildmvpfast](https://www.buildmvpfast.com/api-costs/ai-video) ·
+[fal Seedance Lite i2v](https://fal.ai/models/fal-ai/bytedance/seedance/v1/lite/image-to-video) ·
+[ofox — alternativas por custo/segundo](https://ofox.ai/blog/fal-ai-alternatives-video-generation-api-2026/)
+
 ### ⚠️ DÍVIDA DE DEPLOY QUE ESTA MUDANÇA TORNA URGENTE
 
 O próprio roadmap já registra: **`agents/narrated_video_agent.py` na VPS está
