@@ -527,6 +527,157 @@ Ex.: "O segredo pra ter um iPhone 17 sem gastar / uma fortuna ✨".
 
 ---
 
+## 🗓️ Dia 2026-09-03 (tarde) — a virada: raspar gringo em vez de gerar por IA
+
+O Dre cortou a linha de vídeo por IA: *"foda-se essas ferramentas de geração de
+vídeo, depois a gente investe nisso"*. A tese nova é a do perfil que ele viu
+fazer +10k: **raspar conteúdo de conta gringa**. Ele mandou ~40 perfis de
+TikTok gringo que postam produto Amazon (*"mas também dá pra achar na shopee,
+mercado livre, shein, magalu"*).
+
+### 🔍 A REVISÃO ANTES DE CODAR ACHOU A ESTEIRA JÁ PRONTA
+
+Não precisava construir quase nada. `tiktok_coletor.py` (1365 linhas) já:
+lista os virais do perfil → identifica o produto por **Gemini Vision** → acha na
+Shopee → gera o link de afiliado com `sub_id` de atribuição → baixa sem
+watermark → **descarta vídeo com marca d'água de terceiro** → auto-crop da
+moldura estática. `produzir_tiktok.py` é a fase 3 (template + hook + narração).
+
+O que faltava eram exatamente as duas coisas que ele pediu.
+
+### 🔊 O DEFEITO QUE A FONTE GRINGA TRANSFORMOU EM URGENTE
+
+`telegram_repurpose_hunter.py:183` → `CFG_AUDIO_ORIGINAL_VOL = 1.0`, e o
+`_narrar_e_trocar_audio` tinha **quatro** caminhos de falha (import do
+`narracao_ia`, Gemini/ElevenLabs, e dois do ffmpeg). **Todos os quatro
+devolviam `False` deixando o áudio ORIGINAL no vídeo** — e o próprio código
+mandava alerta no Telegram dizendo *"risco de copyright/crédito"* e publicava
+assim mesmo.
+
+Com fonte brasileira isso passava. Com fonte **gringa** é voz em inglês em cima
+de Reel em português.
+
+📌 Novo `_so_musica(video, nome)` — o plano B: troca o áudio por **trilha só**.
+Não depende de Gemini nem de ElevenLabs, só de ffmpeg + um arquivo na pasta de
+trilhas: **funciona justamente quando a narração não funciona**. Volume próprio
+(`MUSICA_SO_VOL`, 0.85) porque aqui a trilha é o áudio principal, não leito por
+baixo de voz — os 0,10 do `MUSICA_FUNDO_VOL` sairiam quase mudos.
+
+O `_avisa` agora **tenta o plano B antes de avisar** e diz o que realmente saiu.
+O alerta antigo dizia sempre "áudio ORIGINAL" — o que passaria a ser mentira
+quando a trilha salvasse. Alerta que mente é pior que alerta nenhum.
+
+### ✂️ CORTE DA INTRO — `corte_inicio`
+
+Pedido: *"pode cortar os 2 primeiros segundos e já começar na ação do produto"*.
+O motivo é medido: **o gancho do Reel é 1-3s** (`estudo_ganchos`), então 2s de
+carimbo alheio ("Amazon Gadgets") queimam a janela inteira que decide a
+retenção.
+
+Três camadas, em ordem de autoridade:
+
+| # | fonte | quando ganha |
+|---|---|---|
+| 1 | `corte=2` no `tiktok_perfis.txt` | o Dre VIU o padrão no perfil |
+| 2 | `CORTE_INTRO_AUTO=1` (detector) | quando não há marcação |
+| 3 | `0.0` | padrão — vídeo inteiro |
+
+O detector é a ideia do `_detectar_caixa` girada 90°: aquele usa variância no
+**espaço** pra achar a janela do produto dentro da moldura; este usa variância
+no **tempo** pra achar onde a ação começa. A régua (`base`) vem do **meio** do
+vídeo — sem ela, um vídeo naturalmente paradão (produto no pedestal) seria lido
+como intro inteira e o corte comeria o produto.
+
+⚠️ **Só reconhece carimbo PARADO.** Intro animada se mexe igual ao produto e o
+detector devolve `0.0` (vídeo inteiro). É de propósito, e é por isso que a
+marcação manual existe e ganha dele.
+
+**Onde cada coisa mora:** medido no coletor (o vídeo cru está na mão), gravado
+no `plano.json`, aplicado no render. Gravar o número em vez de cortar o arquivo
+deixa auditar e sobrescrever depois.
+
+⚠️ **O corte é aplicado ANTES do `_aplicar_velocidade`** no hunter. Foi medido na
+régua do vídeo original; depois da velocidade o segundo 2 não é mais o segundo 2.
+
+### 🛡️ AS TRAVAS (é a parte que mais importa)
+
+`teto = min(CORTE_INTRO_MAX=4s, 25% da duração)` e **sobra mínima de 6s**. Sem
+isso um `corte=10` num clipe de 12s deixaria 2s e o render alongaria em loop —
+vídeo pior que o original. As travas valem **também pra marcação manual**, e o
+log diz quando reduziu.
+
+### 🧪 `teste_corte_intro.py` — 16 checagens, roda sem ffmpeg
+
+A decisão pura (`_onde_comeca_acao`) nasceu **separada** da extração de frames
+justamente pra isso: se eu testasse o conjunto, precisaria de vídeo de amostra e
+o teste só rodaria na VPS — ou seja, nunca.
+
+```
+python3 teste_corte_intro.py     # ✅ 16/16, ~0s
+```
+
+Cobre: carimbo de 2s (acha 2.00s), abertura já em movimento (não corta), intro
+animada (não corta e admite), vídeo paradão sem régua (não corta), quieto curto
+demais, tremida de recompressão nos dois lados do limiar, o parser
+`corte=`+`#nicho` em qualquer ordem e com vírgula decimal, e as quatro travas.
+
+📌 **Uma expectativa MINHA falhou, não o código**: esperei 5.0s pro caso
+`corte=10` num vídeo de 20s (25% = 5s) e esqueci que o teto é `min(4, 5)` = 4.
+Corrigi o teste, não o código — 4s é o teto absoluto e está certo.
+
+### 📇 AS FONTES — 48 perfis no `tiktok_perfis.txt` (eram 16)
+
+30 novos da lista dele + 2 variantes de conflito. Nicho marcado **só onde o @
+diz o nicho** (6 casa, 4 tech); nome de pessoa fica sem tag, porque a produção
+roteia pelo produto e **chutar nicho manda o vídeo pra conta errada** — pior que
+não marcar.
+
+⚠️ **DOIS CONFLITOS PONTO-vs-UNDERSCORE.** No TikTok `.` e `_` são caracteres
+diferentes: uma das duas grafias não existe e vai dar 404.
+
+```
+   já no arquivo         na lista do Dre
+   anya.bumag            anya_bumag
+   home_appliances513    home.appliances513
+```
+
+Não chutei — deixei as duas. A poda por coleta (`_atualizar_saude_e_podar`)
+comenta sozinha a que não render vídeo em `COLETAS_ZERO` rodadas. **Quem morrer,
+morreu certo, e de graça.**
+
+7 da lista dele já estavam no arquivo (elnazhamai, airlandolists,
+homekitchgadgets1, seyis.shop, tkjusticebuy, bestfindhomeitems, dannikafaith) e
+`seyis.shop` vinha duplicado na própria lista. 48 perfis, zero duplicado,
+zero linha malformada — conferido pelo parser.
+
+### 🚚 Deploy
+
+```bash
+cd ~/jarvis && git fetch pjc claude/opa-clau-dgs591
+git show FETCH_HEAD:tiktok_coletor.py            > tiktok_coletor.py
+git show FETCH_HEAD:produzir_tiktok.py           > produzir_tiktok.py
+git show FETCH_HEAD:tiktok_perfis.txt            > tiktok_perfis.txt
+git show FETCH_HEAD:teste_corte_intro.py         > teste_corte_intro.py
+git show FETCH_HEAD:telegram_repurpose_hunter.py > integrations/telegram_repurpose_hunter.py
+.venv/bin/python teste_corte_intro.py            # espera 16/16
+```
+
+⚠️ `telegram_repurpose_hunter.py` vai pra **`integrations/`**, os outros pra raiz.
+
+### ⏭️ O QUE FALTA NESTA FRENTE
+
+- [ ] **Ligar o detector**: `CORTE_INTRO_AUTO=1` só depois de olhar 2-3 vídeos
+      com o corte aplicado. É medição nova, não confio nela sem ver.
+- [ ] **Marcar os perfis de carimbo** com `corte=2` conforme ele for vendo —
+      a marcação manual ganha do detector.
+- [ ] **Pasta de trilhas**: o plano B só funciona com arquivo em
+      `MUSICA_FUNDO_DIR` (padrão `assets/inbox/audio`). Se estiver vazia, o
+      áudio gringo continua saindo — o log grita, mas confere antes.
+- [ ] **O bug nas contas** que ele mencionou (*"aconteceu um bug em algumas
+      contas, mas isso a gente vê agorinha"*) — não investiguei, é o próximo.
+
+---
+
 ## 🗓️ Dia 2026-09-03 — o prompt virou arquivo, porque a lição não pode morar no chat
 
 ### 🎬 `prompt_video_ia.py` — o prompt que não deixa o produto virar outro

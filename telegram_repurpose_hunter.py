@@ -1141,6 +1141,25 @@ def _reproduzir_video_sync(src: Path, dst: Path, produto: str,
         # 2) Carrega fonte, aplica velocidade e define duração-alvo ─────────
         base = VideoFileClip(str(src))
         abertos.append(base)
+        # 2a) PULA A INTRO do criador ("Amazon Gadgets", nome do canal) e começa
+        # na ação do produto. O número vem medido do coletor (`corte_inicio` no
+        # plano.json). ⚠️ TEM DE SER ANTES DA VELOCIDADE: foi medido na régua do
+        # vídeo original, e depois do _aplicar_velocidade o segundo 2 não é mais
+        # o segundo 2.
+        _ini = 0.0
+        try:
+            _ini = max(0.0, float(plano.get("corte_inicio") or 0))
+        except (TypeError, ValueError):
+            _ini = 0.0
+        if _ini > 0:
+            _dur0 = float(base.duration or 0)
+            if _dur0 - _ini >= 3.0:
+                base = _subclip(base, _ini, _dur0)
+                log.info("✂️  intro: pulei %.1fs — começa na ação (sobra %.1fs)",
+                         _ini, _dur0 - _ini)
+            else:
+                log.warning("corte_inicio %.1fs deixaria só %.1fs de %.1fs — "
+                            "mantenho o vídeo inteiro", _ini, _dur0 - _ini, _dur0)
         if CFG_VELOCIDADE and CFG_VELOCIDADE != 1.0:
             base = _aplicar_velocidade(base, CFG_VELOCIDADE)
         dur_src = float(base.duration or CFG_DUR_MAX)

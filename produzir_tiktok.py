@@ -257,30 +257,90 @@ def _dur_media(p) -> float:
         return 0.0
 
 
+def _so_musica(video: Path, nome: str) -> bool:
+    """PLANO B DO ÁUDIO — troca o áudio original por TRILHA SÓ.
+
+    ⚠️ POR QUE EXISTE (03/09/2026): as fontes agora são perfis GRINGOS, e o
+    `_narrar_e_trocar_audio` tinha QUATRO caminhos de falha (import, Gemini/
+    ElevenLabs, e dois do ffmpeg) — e todos os quatro devolviam False deixando
+    o vídeo com o áudio ORIGINAL. O próprio código já avisava no Telegram
+    "risco de copyright/crédito" e publicava assim mesmo. Com fonte brasileira
+    isso passava; com fonte gringa é voz em INGLÊS no Reel em português.
+
+    Pedido do Dre: *"se tiver alguma narração por cima, ao invés de música,
+    pode raspar e colocar musica viral, ou uma música normal por cima"*.
+
+    Isto não depende de Gemini nem de ElevenLabs — só de ffmpeg e de um arquivo
+    na pasta de trilhas. Ou seja: funciona justamente quando a narração não.
+    Volume próprio (MUSICA_SO_VOL): a trilha aqui é o áudio PRINCIPAL, não um
+    leito por baixo de voz — os 0,10 do MUSICA_FUNDO_VOL sairiam quase mudos.
+    """
+    if os.getenv("MUSICA_SE_FALHAR", "1").strip().lower() not in ("1", "true", "sim"):
+        return False
+    musica = _escolher_musica()
+    if not musica:
+        _log(f"   ⚠️ sem trilha em {_dir_musica()} — NÃO consigo tirar o áudio gringo")
+        return False
+    vol = max(0.05, min(1.0, _f("MUSICA_SO_VOL", 0.85)))
+    out = video.parent / f"_mustmp_{os.getpid()}.mp4"
+    _dur = _dur_media(video)
+    _tcap = ["-t", f"{_dur:.3f}"] if _dur > 0 else []
+    cmd = ["ffmpeg", "-y", "-i", str(video),
+           "-stream_loop", "-1", "-i", str(musica),
+           "-filter_complex", f"[1:a]volume={vol:.3f}[a]",
+           "-map", "0:v:0", "-map", "[a]",
+           "-c:v", "copy", "-c:a", "aac", "-b:a", "128k",
+           *_tcap, "-shortest", str(out)]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+    except subprocess.TimeoutExpired:
+        _log("   ⚠️ plano B (trilha) estourou 180s")
+        return False
+    if r.returncode == 0 and out.exists() and out.stat().st_size > 1000:
+        out.replace(video)
+        _log(f"   🎵 áudio gringo REMOVIDO — trilha '{musica.name}' no lugar")
+        return True
+    _log(f"   ⚠️ plano B (trilha) falhou: {(r.stderr or '')[-140:]}")
+    try:
+        out.unlink()
+    except Exception:
+        pass
+    return False
+
+
 def _narrar_e_trocar_audio(video: Path, nome: str, contexto: str, nicho: str = "") -> bool:
     """Gera a narração (ElevenLabs, voz do nicho, roteiro do vídeo) e SUBSTITUI o áudio
     do vídeo por ela — mata o áudio original (fim do copyright/crédito a terceiro).
     Mixa uma TRILHA DE FUNDO baixinha por baixo (loopada até o fim do vídeo), pra
     nunca ficar silêncio quando a narração acaba antes do vídeo.
-    Best-effort: se algo falhar, mantém o vídeo com o áudio original."""
+
+    Se a narração não sair, cai no `_so_musica` (plano B) — o áudio original só
+    fica se AS DUAS coisas falharem, e aí o alerta do Telegram diz isso."""
     if os.getenv("NARRAR_TIKTOK", "1").strip().lower() not in ("1", "true", "sim"):
         return False
 
     def _avisa(motivo):
+        """Tenta o plano B e avisa o que REALMENTE saiu no vídeo — o alerta
+        antigo dizia sempre "áudio ORIGINAL", o que passaria a ser mentira
+        quando a trilha salvasse."""
+        salvou = _so_musica(video, nome)
+        saiu = ("Saiu com TRILHA (sem voz) — áudio gringo removido."
+                if salvou else
+                "Vídeo saiu com o áudio ORIGINAL (risco de copyright/crédito).")
         _log(f"   🚨 alerta: narração falhou ({motivo})")
         _alerta_telegram(f"🚨 <b>Jarvis — narração falhou</b>\n🎬 {nome[:60]}\n"
-                         f"⚠️ {motivo}\nVídeo saiu com o áudio ORIGINAL "
-                         f"(risco de copyright/crédito). Re-narra quando puder.")
+                         f"⚠️ {motivo}\n{saiu} Re-narra quando puder.")
+        return salvou
 
     try:
         from narracao_ia import gerar as _gerar_narr
     except Exception:
-        _log("   narracao_ia indisponível — mantém áudio original")
+        _log("   narracao_ia indisponível")
         _avisa("narracao_ia indisponível (import)")
         return False
     narr = video.parent / (video.stem + "_narr.mp3")
     if not _gerar_narr(nome, contexto, narr, nicho):
-        _log("   narração não gerada — mantém áudio original")
+        _log("   narração não gerada")
         _avisa("roteiro (Gemini) ou voz (ElevenLabs) falhou")
         return False
 
@@ -337,12 +397,12 @@ def _narrar_e_trocar_audio(video: Path, nome: str, contexto: str, nicho: str = "
         out.replace(video)
         _log(f"   🎙️  áudio original SUBSTITUÍDO por {tag}")
         return True
-    _log(f"   ⚠️ troca de áudio falhou (mantém original): {(r.stderr or '')[-160:]}")
-    _avisa("ffmpeg (troca de áudio) falhou")
+    _log(f"   ⚠️ troca de áudio falhou: {(r.stderr or '')[-160:]}")
     try:
-        out.unlink()
+        out.unlink()        # limpa ANTES do plano B (que grava outro temp)
     except Exception:
         pass
+    _avisa("ffmpeg (troca de áudio) falhou")
     return False
 
 
@@ -449,7 +509,12 @@ def _produzir(pasta: Path, pj: Path, video_src: Path) -> bool:
         "link_afiliado": link,
         "musica_fundo": "",
         "hook": hook,
+        # segundos de intro do criador a pular (medido pelo tiktok_coletor).
+        # O hunter aplica isso no subclip ANTES da velocidade.
+        "corte_inicio": info.get("corte_inicio", 0) or 0,
     }
+    if plano["corte_inicio"]:
+        _log(f"   ✂️  intro: pulando {float(plano['corte_inicio']):.1f}s")
 
     # 1) RE-PRODUÇÃO (mesma esteira do hunter: 9:16, template, narração, hook)
     destino = H.INBOX_VIDEOS / f"{slug}.mp4"

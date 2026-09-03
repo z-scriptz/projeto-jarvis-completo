@@ -1,6 +1,17 @@
 # Perfis-FONTE do TikTok (1 por linha) — o coletor puxa os virais DELES.
 # Aceita com @, sem @, ou URL completa. Linhas com # sao ignoradas.
 # Mais perfis = mais variedade, menos repeticao. Adicione a vontade.
+#
+# SINTAXE DA LINHA:
+#   perfil                    → nicho decidido pelo produto na producao
+#   perfil #casa              → forca o nicho (a conta que vai postar)
+#   perfil corte=2            → pula os 2 primeiros segundos (intro do criador)
+#   perfil #tech corte=2      → os dois juntos, em qualquer ordem
+#
+# ⚠️ `corte=N` é pra perfil que SEMPRE abre com carimbo/intro ("Amazon Gadgets",
+# nome do canal, contagem). Marque quando VIR o padrao no perfil — a marcacao
+# manual ganha do detector automatico (CORTE_INTRO_AUTO), que erra em intro
+# ANIMADA (ele so reconhece carimbo PARADO).
 
 # --- casa / cozinha / utilidades ---
 home_appliances513
@@ -25,3 +36,62 @@ dannikafaith
 seyis.shop
 bestfindhomeitems
 tkjusticebuy
+
+# ══════════════════════════════════════════════════════════════════════
+# LOTE 03/09 — 30 perfis gringos de produto Amazon (lista do Dre).
+# Nicho marcado SO onde o @ diz o nicho. Nome de pessoa fica sem tag: a
+# producao roteia pelo PRODUTO, e chutar nicho manda o video pra conta
+# errada (pior que nao marcar).
+# ══════════════════════════════════════════════════════════════════════
+
+# --- casa / cozinha ---
+best_home_gadgets #casa
+kitchen_in_china #casa
+ourwintonhome #casa
+adollshome #casa
+nicelife.hacks #casa
+cozyprimefinds #casa
+
+# --- tech / gadgets ---
+gadgetitnow.us #tech
+buythegadgets #tech
+mad.fones #tech
+pixoloom #tech
+
+# --- achados gerais (o @ nao diz o nicho) ---
+giftgenius.co
+smartfindsss
+vecoto.com
+sam.shan.shops
+steamer.vault
+bk_owner
+glenxda
+goodmaterialrecord3
+brookes_buys
+simplysalfinds
+ryans.amazing.finds
+everythingenvy
+amaziiiigfinds
+products.abl
+abbyubfg2um
+
+# --- perfil pessoal / lifestyle ---
+mrsmckennabarry
+sarah.colussi
+teresalauracaruso
+mrs.nikialexa
+karissa.brighton
+
+# ══════════════════════════════════════════════════════════════════════
+# ⚠️ DOIS CONFLITOS PONTO-vs-UNDERSCORE (03/09). No TikTok `.` e `_` sao
+# caracteres DIFERENTES: uma das duas grafias nao existe e vai dar 404.
+# Nao chutei — deixei as duas. A poda por coleta
+# (`_atualizar_saude_e_podar`) comenta sozinha a que nao render video em
+# COLETAS_ZERO rodadas. Quem morrer, morreu certo.
+#
+#   ja no arquivo         na lista do Dre        (03/09)
+#   anya.bumag            anya_bumag
+#   home_appliances513    home.appliances513
+# ══════════════════════════════════════════════════════════════════════
+anya_bumag
+home.appliances513

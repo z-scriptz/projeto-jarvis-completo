@@ -989,10 +989,14 @@ def _fonte_do_arg(a: str) -> tuple:
 
 
 def _perfis_do_arquivo(caminho: Path, fonte: str) -> list:
-    """Lê 1 perfil por linha. Nicho OPCIONAL via '#nicho' no fim da linha
-    (ex.: '@bgbeautyloja #beleza') — o vídeo herda esse nicho na produção.
-    Sem tag → nicho '' (aí a produção roteia pelo produto). Retorna
-    (perfil, fonte, nicho)."""
+    """Lê 1 perfil por linha. Nicho OPCIONAL via '#nicho' (ex.: '@loja #beleza')
+    — o vídeo herda esse nicho na produção. Sem tag → nicho '' (aí a produção
+    roteia pelo produto). Retorna (perfil, fonte, nicho).
+
+    Também aceita `corte=N` (segundos de intro a pular, ex.: '@x #tech corte=2').
+    Isso NÃO entra na tupla — vai pro `_CORTE_PERFIL`, porque a tupla de 3 é
+    desempacotada em 5 lugares e mudar a aridade quebraria todos eles.
+    As duas marcas valem em qualquer ordem."""
     if not caminho.exists():
         return []
     out = []
@@ -1000,11 +1004,25 @@ def _perfis_do_arquivo(caminho: Path, fonte: str) -> list:
         l = l.strip()
         if not l or l.startswith("#"):
             continue
-        nicho = ""
+        nicho, corte = "", 0.0
+        # corte PRIMEIRO: se o #nicho saísse antes, um "corte=2" no fim da linha
+        # deixaria de estar "no fim" pro regex do nicho — e vice-versa. Tirar as
+        # duas marcas antes de sobrar o @ resolve a ordem.
+        m = re.search(r"\bcorte\s*=\s*(\d+(?:[.,]\d+)?)", l, re.I)
+        if m:
+            try:
+                corte = float(m.group(1).replace(",", "."))
+            except ValueError:
+                corte = 0.0
+            l = (l[:m.start()] + " " + l[m.end():]).strip()
         m = re.search(r"#(\w+)\s*$", l)      # tag de nicho no fim: "@perfil #beleza"
         if m:
             nicho = m.group(1).lower()
             l = l[:m.start()].strip()
+        if not l:
+            continue                          # linha que só tinha marcações
+        if corte > 0:
+            _CORTE_PERFIL[_norm_perfil(l)] = corte
         out.append((l, fonte, nicho))
     return out
 
@@ -1028,6 +1046,154 @@ def _detectar_caixa(frames, thr_std=8.0, frac=0.06, pad=6):
     if w < W * 0.25 or h < H * 0.25 or (w * h) / float(W * H) > 0.985:
         return None                              # caixa degenerada → não corta
     return int(x0), int(y0), int(x1), int(y1)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# CORTE DA INTRO — o gringo abre com carimbo ("Amazon Gadgets", nome do canal)
+# e a AÇÃO DO PRODUTO só começa depois. No Reel o gancho é 1-3s (medido no
+# estudo_ganchos), então 2s de carimbo alheio queima a janela INTEIRA que
+# decide a retenção. Pedido do Dre em 03/09: "cortar os 2 primeiros segundos
+# e já começar na ação do produto".
+#
+# A mesma ideia do `_detectar_caixa` (variância no tempo revela o que é
+# conteúdo e o que é enfeite), só que no eixo do TEMPO em vez do espaço.
+#
+# ⚠️ SÓ RECONHECE CARIMBO PARADO. Intro ANIMADA (texto entrando, contagem) se
+# mexe igual ao produto, e aí o detector devolve 0.0 — o vídeo sai inteiro.
+# Isso é de propósito: a marcação manual `corte=N` no tiktok_perfis.txt existe
+# justamente pra esses, e ganha do detector.
+
+# perfil (normalizado) → segundos de corte fixo, lido do tiktok_perfis.txt.
+# Dict de módulo em vez de 4º item da tupla: a tupla (perfil, fonte, nicho) é
+# desempacotada em 5 lugares e mudar a aridade quebraria todos.
+_CORTE_PERFIL: dict = {}
+
+
+def _onde_comeca_acao(diffs: list, dt: float, base: float,
+                      quieto: float = 0.35, minimo: float = 0.6) -> float:
+    """DECISÃO PURA (sem ffmpeg, sem I/O) — por isso é testável.
+
+    `diffs[i]` = quanto o frame i+1 mudou em relação ao i (0-255, escala de
+    cinza). `dt` = intervalo entre frames. `base` = movimento TÍPICO do vídeo,
+    medido no MEIO dele — é a régua: sem ela, um vídeo naturalmente paradão
+    (produto no pedestal) seria lido como intro inteira.
+
+    Devolve o segundo em que a ação começa, ou 0.0 quando não há o que cortar.
+    """
+    if base <= 0.5:
+        return 0.0                    # vídeo inteiro parado → não sei dizer
+    limiar = base * quieto
+    i = 0
+    while i < len(diffs) and diffs[i] < limiar:
+        i += 1
+    if i == 0:
+        return 0.0                    # já abre se mexendo → nada a cortar
+    if i >= len(diffs):
+        return 0.0                    # janela toda parada → suspeito, não corto
+    # `diffs[i-1]` quieto ⇒ frame[i-1] ≈ frame[i]: o carimbo dura até i*dt.
+    # Corto EM i*dt e não em (i+1)*dt de propósito: sobrar 0,2s de carimbo é
+    # inofensivo, comer o primeiro instante da ação não é.
+    t = i * dt
+    return round(t, 2) if t >= minimo else 0.0
+
+
+def _frames_cinza(video: Path, inicio: float, dur: float, fps: float,
+                  tag: str) -> list:
+    """Extrai frames em UMA chamada de ffmpeg (filtro fps) e devolve arrays
+    HxW em escala de cinza. Uma chamada por trecho, não uma por frame: são ~20
+    frames e 20 processos custariam ~7s por vídeo."""
+    import numpy as np
+    from PIL import Image
+    saida = video.parent / f".ci_{tag}_%03d.jpg"
+    padrao = f".ci_{tag}_"
+    try:
+        subprocess.run(["ffmpeg", "-y", "-ss", f"{inicio:.2f}", "-t", f"{dur:.2f}",
+                        "-i", str(video), "-vf", f"fps={fps:g},scale=240:-2",
+                        "-q:v", "4", str(saida)], capture_output=True, timeout=60)
+        arqs = sorted(p for p in video.parent.glob(f"{padrao}*.jpg"))
+        out = []
+        for p in arqs:
+            try:
+                out.append(np.asarray(Image.open(p).convert("L"), dtype=np.int16))
+            except Exception:
+                pass
+        return out if len({a.shape for a in out}) <= 1 else []
+    finally:
+        for p in video.parent.glob(f"{padrao}*.jpg"):
+            try:
+                p.unlink()
+            except Exception:
+                pass
+
+
+def _diffs(frames: list) -> list:
+    import numpy as np
+    return [float(np.abs(frames[i + 1] - frames[i]).mean())
+            for i in range(len(frames) - 1)]
+
+
+def _corte_intro(video: Path, dur: float, perfil: str = "") -> float:
+    """Quantos segundos pular no começo. Ordem de autoridade:
+
+       1. `corte=N` do tiktok_perfis.txt  → o Dre VIU o padrão, ganha de tudo
+       2. CORTE_INTRO_AUTO=1              → detector (só carimbo parado)
+       3. 0.0                             → vídeo inteiro
+
+    Best-effort em toda falha: devolve 0.0 e o vídeo sai inteiro."""
+    fixo = _CORTE_PERFIL.get(_norm_perfil(perfil), 0.0)
+    teto = min(float(os.getenv("CORTE_INTRO_MAX", "4")), max(0.0, dur) * 0.25)
+    sobra_min = float(os.getenv("CORTE_INTRO_SOBRA", "6"))
+
+    def _cap(t: float, origem: str) -> float:
+        """Nenhum corte pode roubar o vídeo: teto de 25% da duração e sobra
+        mínima. Sem isso um clipe de 8s viraria 4s e o render alonga em loop."""
+        if t <= 0:
+            return 0.0
+        if t > teto:
+            _log(f"   (corte {origem} {t:.1f}s > teto {teto:.1f}s — uso o teto)")
+            t = teto
+        if dur and (dur - t) < sobra_min:
+            _log(f"   (corte {origem}: sobrariam {dur - t:.1f}s < {sobra_min:.0f}s "
+                 f"— não corto)")
+            return 0.0
+        return round(t, 2)
+
+    if fixo > 0:
+        t = _cap(fixo, f"fixo de @{perfil}")
+        if t > 0:
+            _log(f"   ✂️  intro: pulo {t:.1f}s (corte= do tiktok_perfis.txt)")
+        return t
+
+    if os.getenv("CORTE_INTRO_AUTO", "0").strip().lower() not in ("1", "true", "sim"):
+        return 0.0
+    if dur < sobra_min + 1:
+        return 0.0
+    try:
+        import numpy  # noqa: F401  (só pra falhar cedo e com mensagem clara)
+        from PIL import Image  # noqa: F401
+    except Exception:
+        _log("   (corte-intro: falta numpy/Pillow — pulo)")
+        return 0.0
+    try:
+        fps = float(os.getenv("CORTE_INTRO_FPS", "5"))
+        dt = 1.0 / fps
+        janela = min(float(os.getenv("CORTE_INTRO_JANELA", "4")), teto + dt)
+        ini = _frames_cinza(video, 0.0, janela, fps, "ini")
+        # a RÉGUA vem do meio do vídeo, onde a ação já está rolando
+        meio = _frames_cinza(video, max(0.0, dur * 0.5), 1.0, fps, "mid")
+        if len(ini) < 3 or len(meio) < 3:
+            return 0.0
+        dmeio = _diffs(meio)
+        base = sorted(dmeio)[len(dmeio) // 2]        # mediana = régua robusta
+        t = _onde_comeca_acao(_diffs(ini), dt, base)
+        t = _cap(t, "auto")
+        if t > 0:
+            _log(f"   ✂️  intro: pulo {t:.1f}s (carimbo parado detectado; "
+                 f"movimento típico {base:.1f})")
+        return t
+    except Exception as e:
+        _log(f"   (corte-intro falhou, vídeo inteiro: {str(e)[:70]})")
+        return 0.0
 
 
 def _auto_crop(video: Path) -> bool:
@@ -1312,8 +1478,13 @@ def main():
                 _log("     🚫 marca d'água detectada — descarto (não credita terceiro)")
                 shutil.rmtree(pasta, ignore_errors=True)
                 continue
+            # onde a AÇÃO começa. Medido aqui (o vídeo cru está na mão e o
+            # ffmpeg é barato) e APLICADO no render — assim o número fica
+            # gravado no plano.json e dá pra auditar/sobrescrever depois.
+            corte_ini = _corte_intro(arq, float(meta.get("duracao") or 0), perfil)
             produtos_vistos[chave_prod] = int(time.time())   # só marca o que FICOU
             (pasta / "plano.json").write_text(json.dumps({
+                "corte_inicio": corte_ini,
                 "fonte": fonte, "nicho_fonte": nicho_fonte, "plataforma": plataforma,
                 "perfil_fonte": perfil.lstrip("@").lower(),   # PERFIL curado (p/ CEO medir/podar)
                 "url": meta["url"], "uploader": meta["uploader"],
