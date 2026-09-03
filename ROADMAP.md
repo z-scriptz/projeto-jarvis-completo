@@ -527,6 +527,99 @@ Ex.: "O segredo pra ter um iPhone 17 sem gastar / uma fortuna ✨".
 
 ---
 
+## 🗓️ Dia 2026-09-03 (madrugada) — eu apaguei 98 fontes com uma linha de deploy
+
+### 🔥 O ERRO, QUE FOI MEU
+
+Eu li o `instagram_perfis.txt` **do repo** (36 perfis), tratei como se fosse o de
+produção, e mandei uma linha de deploy que sobrescreve:
+
+```bash
+git show FETCH_HEAD:instagram_perfis.txt > instagram_perfis.txt
+```
+
+A VPS tinha **98 fontes**. O arquivo cresceu lá (`add_fontes.py`, poda
+automática) e nunca voltou pro git — o do repo estava velho. Arquivo rastreado +
+modificação nunca commitada = o `git show` come, e não há commit pra desfazer.
+
+O log da rodada anterior já dizia `IG: 98 fontes`, e eu não conferi contra o
+arquivo que estava mandando sobrescrever.
+
+⚠️ **A REGRA, PRA NÃO REPETIR:** `git show FETCH_HEAD:X > X` só é seguro pra
+arquivo que o **repo é dono** (código). Pra arquivo que a **produção edita**
+(listas de fonte, `.env`, estado), o repo é a cópia velha — sobrescrever é
+perder. Nas linhas de deploy, esses arquivos precisam de `diff` antes, ou de
+merge, nunca de `>`.
+
+📌 `recuperar_fontes.py` reconstrói a lista de `shared/fontes_saude.json` (que
+guarda TODA fonte varrida, tenha rendido ou não) cruzando com o ledger pra
+marcar quais **já renderam vídeo** — essas são prova de que a fonte presta. E
+ele **ACRESCENTA, nunca sobrescreve**: a ferramenta que existe pra consertar o
+defeito não pode repetir o defeito.
+
+### 🚨 E ESSAS 98 ERAM A ÚNICA COISA PRODUZINDO
+
+Na mesma rodada: **TikTok 0 de 48; Instagram 23 produtos casados.**
+
+```
+canal 'tiktok' deu ZERO keeper em 48 fonte(s) — trato como pane do canal
+```
+
+45 das 48 deram `Failed to parse JSON ... char 0` (resposta VAZIA), 2 deram
+`Unable to extract secondary user ID` e 1 (`giftgenius.co`) deu *"This account
+does not have any videos posted"*. **Não são os handles**: 3 das 48 receberam
+resposta REAL do TikTok, então o caminho funciona às vezes — é bloqueio/limite
+de taxa no `yt-dlp`, não perfil errado. (E o `giftgenius.co` "sem vídeos" no
+TikTok confirma o que o Dre disse: é conta de Instagram.)
+
+✅ **A trava por canal de 18/08 fez o trabalho dela** — reconheceu pane de canal
+e **não penalizou as 48 fontes**. Sem ela, 3 rodadas assim comentariam a lista
+inteira.
+
+📌 O caminho provado já existe no código: o Instagram só voltou a funcionar com
+**Playwright + Chromium real + proxy**, e o `ig_playwright.autores_hashtag_tiktok`
+JÁ abre `tiktok.com` desse jeito. Listar perfil por ali é portar um padrão que
+funciona, não inventar um.
+
+### ↩️ MINHA HIPÓTESE DO `BG_<NICHO>` ESTAVA ERRADA
+
+O `diag_layout.py` rodou no `.env` de verdade e **o `.env` está limpo**: os seis
+nichos resolvem pela paleta, e `BG_TECH`/`BG_MODA` **nem existem** lá. A única
+chave achada foi `BG_GERAL=branco` — que resolve pro mesmo `#FFFFFF` da paleta,
+ou seja, inofensiva (o diagnóstico marcou "ok", corretamente). Removida.
+
+A geometria também está toda certa no `.env`: `VIDEO_Y=500`, `VIDEO_W_FRAC=0.90`,
+`VIDEO_RAIO=28`, `HK_FONT=60`, `CTA_ATIVO=0`.
+
+**Então o que causou o defeito nos prints foi só o código velho**: o
+`agents/narrated_video_agent.py` estava em **Jul16** na VPS, com
+`LARGURA*0.95` + posição centralizada + `fundo.png` + sem canto arredondado. Os
+vídeos dos prints foram feitos por ele. O deploy desta noite é o conserto — e a
+prova vem no próximo vídeo de tech/moda, não em mais análise minha.
+
+📌 Foi o `diag_layout.py` que derrubou minha própria hipótese, que é pra isso que
+ele existe. Terceira vez que evidência indireta minha não sobrevive à medição.
+
+### 🧹 SOBROU: cópia velha do hunter na raiz da VPS
+
+```
+❌ telegram_repurpose_hunter.py: cantos=NÃO
+✅ integrations/telegram_repurpose_hunter.py: cantos=sim
+```
+
+O `produzir_tiktok` importa `integrations` primeiro e só cai na raiz se falhar —
+então hoje não morde. Mas é uma cópia de Jul esperando um import errado.
+
+### ⛔ `--limite 200` NÃO FUNCIONA NO INSTAGRAM
+
+`ig_playwright._listar_reels_bruto` tem `for _ in range(10)` — teto de 10
+rolagens — e a grade devolveu **12 reels** em todo perfil, com `--limite 200`
+passado. A mineração de acervo 2024/2025, que é a razão de manter essas 4
+fontes, **não acontece por esse caminho ainda**. É trabalho a fazer, não algo
+que já esteja ligado.
+
+---
+
 ## 🗓️ Dia 2026-09-03 (noite) — o bug das duas contas era DOIS RENDERIZADORES
 
 ### 🐛 O RELATO
