@@ -63,6 +63,18 @@ VIDEOS_DIR    = PROJETO_ROOT / "videos"
 TMP_DIR       = PROJETO_ROOT / "videos" / "_tmp_narrated"
 
 LARGURA, ALTURA = 1080, 1920   # canvas 9:16 (vídeo 3:4 reduzido fica centralizado dentro)
+
+# GEOMETRIA DA FAIXA DE VÍDEO — importada, nunca recalculada aqui. Foi a
+# recalculada (`LARGURA*0.95` + posição centralizada) que desalinhou o gancho
+# do vídeo em @topshoptech_ e @topshopmoda_. Ver shared/moldura.py.
+# Dois caminhos porque o repo é plano e a VPS usa pacotes.
+try:
+    from shared import moldura as _moldura
+except ImportError:              # pragma: no cover
+    try:
+        import moldura as _moldura      # type: ignore
+    except ImportError:
+        _moldura = None
 # Template de marca topshop — liga/desliga e textos. Carimba identidade no vídeo.
 TEMPLATE_MARCA = True
 MARCA_NOME = "TopShop"
@@ -992,6 +1004,37 @@ def _emoji_do_produto(produto: str, so_alta: bool = False):
     return emo
 
 
+def _paleta() -> dict:
+    """A paleta do nicho, com fallback que NÃO derruba a produção.
+
+    ⚠️ É FUNÇÃO DE MÓDULO, e isso é o conserto. Antes o dict vivia numa variável
+    `_pal` local do `_criar_camadas_topo`, e o `montar_video` — que precisa da
+    MESMA cor pro fundo sólido e pro canto arredondado — não alcançava ela.
+    Emprestar variável entre escopos foi o mesmo defeito que deu NameError no
+    `telegram_repurpose_hunter._reproduzir_video_sync` (o `nicho` fora de
+    escopo). Quem cruza a fronteira é o AMBIENTE, e é dele que isto lê.
+
+    A tinta NÃO é "black ou white": é derivada da luminância do fundo dentro do
+    `shared/paleta.py`. É o que impede o pedido literal do Dre ("tech: preto
+    puro" + "a fonte deve ser preta") de virar um retângulo preto.
+    """
+    try:
+        from shared.paleta import do_ambiente
+        return do_ambiente()
+    except Exception as e:       # paleta quebrada não pode derrubar a produção
+        log.warning(f"   ⚠️  paleta indisponível ({str(e)[:80]}) — "
+                    f"cai no preto/branco antigo")
+        _bg = os.environ.get("TOPSHOP_BG", "preto").strip().lower()
+        _cl = _bg in ("branco", "white", "bege", "claro")
+        return {"claro": _cl,
+                "tinta_hex": "#000000" if _cl else "#FFFFFF",
+                "secundaria_hex": "#7a7a7a" if _cl else "#FFFFFF",
+                "contorno": 0 if _cl else int(os.environ.get("HK_STROKE_PRETO", 4)),
+                "nicho": "?", "fundo_hex": "?", "fundo_nome": "fallback",
+                "fundo_rgb": (255, 255, 255) if _cl else (0, 0, 0),
+                "destaque_hex": "?"}
+
+
 def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
                         produto: str = "") -> list:
     """
@@ -1013,19 +1056,7 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
     # A tinta NÃO é mais "black ou white": é derivada da luminância do fundo lá
     # dentro. É o que impede o pedido literal do Dre ("tech: preto puro" +
     # "a fonte deve ser preta") de virar um retângulo preto.
-    try:
-        from shared.paleta import do_ambiente as _paleta_do_ambiente
-        _pal = _paleta_do_ambiente()
-    except Exception as _e:      # paleta quebrada não pode derrubar a produção
-        log.warning(f"   ⚠️  paleta indisponível ({str(_e)[:80]}) — cai no preto/branco antigo")
-        _bg = os.environ.get("TOPSHOP_BG", "preto").strip().lower()
-        _cl = _bg in ("branco", "white", "bege", "claro")
-        _pal = {"claro": _cl,
-              "tinta_hex": "#000000" if _cl else "#FFFFFF",
-              "secundaria_hex": "#7a7a7a" if _cl else "#FFFFFF",
-              "contorno": 0 if _cl else int(os.environ.get("HK_STROKE_PRETO", 4)),
-              "nicho": "?", "fundo_hex": "?", "fundo_nome": "fallback",
-              "destaque_hex": "?"}
+    _pal = _paleta()
     _claro = _pal["claro"]
     C_NOME, SC_NOME, SW_NOME = _pal["tinta_hex"], "black", (0 if _claro else 3)
     C_HANDLE = _pal["secundaria_hex"]
@@ -1385,12 +1416,7 @@ def _criar_cta_fixo(dur_total: float, mp) -> list:
         return camadas
 
     fonte_bold = _fonte_montserrat("Bold") or _resolver_fonte_textclip(TextClip)
-    try:
-        from shared.paleta import do_ambiente as _paleta_do_ambiente
-        _claro = _paleta_do_ambiente()["claro"]
-    except Exception:
-        _bg = os.environ.get("TOPSHOP_BG", "preto").strip().lower()
-        _claro = _bg in ("branco", "white", "bege", "claro")
+    _claro = _paleta()["claro"]      # a 3ª cópia do mesmo try/except — agora uma
     C_CTA = "black" if _claro else "white"
     SW_CTA = 0 if _claro else 4
 
@@ -1524,34 +1550,64 @@ def montar_video(produto: str, roteiro: dict, narracao_mp3: Path,
             else:
                 hook_txt = "OLHA ISSO 👀"
 
-            # 1) FUNDO DA MARCA atrás de tudo (a imagem escura com spotlight)
+            # 1) FUNDO SÓLIDO DA PALETA DO NICHO atrás de tudo.
+            #
+            # ⚠️ ERA `_brand_asset("fundo.png")` — a imagem escura com spotlight.
+            # Isso ANULAVA a paleta neste renderizador: as contas que passam por
+            # aqui (as de pouca oferta de vídeo, tech e moda) saíam com o fundo
+            # antigo enquanto beauty/casa/geral saíam com a cor do nicho pelo
+            # hunter. Foi o "a cor deles também continuam erradas" do Dre.
+            #
+            # E é pré-requisito do canto arredondado: o `cantos_arredondados`
+            # PINTA o canto com a cor do fundo, então sobre foto/gradiente ele
+            # deixaria um quadradinho de cor chapada. Fundo sólido = canto certo.
             camadas = []
-            fundo_path = _brand_asset("fundo.png")
-            if fundo_path is not None:
-                try:
-                    bg = ImageClip(str(fundo_path))
-                    bg = _resize_clip(bg, largura=LARGURA)
-                    # garante que cobre a altura toda
-                    if bg.h < ALTURA:
-                        bg = _resize_clip(bg, altura=ALTURA)
-                    bg = _with_duration(bg, dur_total)
-                    bg = _with_start(bg, 0.0)
-                    bg = _with_position(bg, ("center", "center"))
-                    camadas.append(bg)
-                    abertos.append(bg)
-                except Exception as e:
-                    log.warning(f"   ⚠️  Fundo da marca falhou: {e}")
+            _pal = _paleta()          # ⚠️ função de módulo: `_pal` do
+                                      # _criar_camadas_topo não chega aqui
+            _fundo_rgb = _pal.get("fundo_rgb") or (255, 255, 255)
+            try:
+                bg = ColorClip(size=(LARGURA, ALTURA), color=tuple(_fundo_rgb))
+                bg = _with_duration(bg, dur_total)
+                bg = _with_start(bg, 0.0)
+                camadas.append(bg)
+                abertos.append(bg)
+                log.info(f"   🎨 fundo {_pal.get('fundo_hex', '?')} "
+                         f"({_pal.get('fundo_nome', '?')}, nicho "
+                         f"{_pal.get('nicho', '?')})")
+            except Exception as e:
+                log.warning(f"   ⚠️  fundo sólido falhou: {e}")
 
-            # 2) O VÍDEO em 3:4, a 95% da largura (quase encostando nas bordas),
-            #    CENTRALIZADO. Canvas 9:16 deixa preto em cima (marca+hook) e
-            #    embaixo (CTA) — igual ao template manual do @topshop._.
-            larg_video = int(LARGURA * 0.95)           # 1026px
-            alt_video = int(larg_video * 4 / 3)         # 3:4 → 1368px
+            # 2) O VÍDEO em 3:4 — MESMA geometria do hunter, importada.
+            #
+            # ⚠️ ERA `LARGURA * 0.95` (1026px) e `("center","center")` (y=276),
+            # enquanto o gancho, 200 linhas acima NESTE MESMO ARQUIVO, era
+            # ancorado em `VIDEO_Y` (500). Duas fontes de verdade pra mesma
+            # medida — o texto caía DENTRO do vídeo. Era o "a letra + vídeo ta
+            # em desordem". Agora as duas leem `shared.moldura.faixa_video()`.
+            if _moldura is None:
+                # sem o módulo o layout volta a divergir do gancho — grito alto
+                # em vez de sair um vídeo torto calado.
+                log.error("   ❌ shared/moldura.py NÃO ENCONTRADO — vídeo sai "
+                          "com a geometria antiga e o gancho vai desalinhar. "
+                          "Faça o deploy de shared/moldura.py.")
+                _fx = {"larg": int(LARGURA * 0.95), "x": None, "y": None,
+                       "raio": 0}
+                _fx["alt"] = int(_fx["larg"] * 4 / 3)
+            else:
+                _fx = _moldura.faixa_video()
+            larg_video, alt_video = _fx["larg"], _fx["alt"]
             vid = _resize_clip(fundo, largura=larg_video)
             vid = _crop_centro(vid, larg_video, alt_video)
-            vid = _with_position(vid, ("center", "center"))
+            if _moldura is not None:
+                vid = _moldura.cantos_arredondados(vid, larg_video, alt_video,
+                                                   _fundo_rgb, _fx["raio"],
+                                                   log=log)
+            vid = _with_position(vid, (_fx["x"], _fx["y"])
+                                 if _fx["x"] is not None else ("center", "center"))
             camadas.append(vid)
             abertos.append(vid)
+            if _moldura is not None:
+                log.info(f"   📐 {_moldura.resumo()}")
 
             # 3) Legendas da fala (por bloco) — posição relativa ao vídeo
             legendas_ok = 0

@@ -43,6 +43,17 @@ BASE_DIR = Path(__file__).parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.append(str(BASE_DIR))
 
+# GEOMETRIA da faixa de vídeo + cantos arredondados: uma regra, um lugar.
+# ⚠️ o import vem DEPOIS do sys.path acima — o hunter roda de dentro de
+# integrations/ na VPS e sem esse append o `shared` não é encontrado.
+try:
+    from shared import moldura as _moldura
+except ImportError:              # pragma: no cover
+    try:
+        import moldura as _moldura      # type: ignore
+    except ImportError:
+        _moldura = None
+
 # Logger compartilhado ou fallback
 try:
     from shared.logger import get_logger
@@ -685,56 +696,21 @@ def _image_transform(clip, func):
 
 
 def _cantos_arredondados(clip, larg: int, alt: int, cor_fundo, raio: int = None):
-    """Arredonda os cantos da faixa de vídeo — "bordas do vídeo: 3:4 levemente
-    arredondadas" (Dre, 02/09), que é o que os dois perfis de referência fazem.
+    """Delega pro `shared/moldura.py`. O CORPO saiu daqui em 03/09.
 
-    ⚠️ PINTA OS CANTOS COM A COR DO FUNDO, não usa máscara de transparência.
-    Isso é escolha, não atalho: máscara em MoviePy muda de API entre a v1 e a v2
-    (`with_mask` × `set_mask`, `ismask` × `is_mask`) e falha de formas diferentes
-    em cada uma. Aqui o vídeo é sempre composto sobre um ColorClip SÓLIDO da
-    paleta, então pintar o canto com essa cor é pixel a pixel indistinguível de
-    recortar — e não depende de nenhuma API que possa mudar.
-    ⚠️ E é justamente por isso que esta função NÃO SERVE sobre fundo com foto ou
-    gradiente: ali o canto pintado apareceria como um quadradinho de cor chapada.
+    Esta função nasceu aqui e ficou 24h sendo a ÚNICA cópia — o
+    `narrated_video_agent.py` não tinha nenhuma, e por isso as contas que passam
+    por ele (@topshoptech_ e @topshopmoda_) saíam de canto quadrado enquanto as
+    outras quatro saíam arredondadas. Foi o "estilo tá quadrado" do Dre.
 
-    A borda é suavizada em ~1px (senão o arco sai serrilhado num quadro de
-    972px), e só os ~700 pixels dos quatro cantos são tocados por quadro.
+    O nome fica como fachada porque os chamadores daqui já usam ele; a regra
+    agora mora em um lugar só, como a paleta. Se o módulo faltar, o vídeo sai de
+    canto reto (feio) em vez de não sair (pior) — e o log grita.
     """
-    raio = int(os.environ.get("VIDEO_RAIO", 28)) if raio is None else int(raio)
-    if raio <= 0 or larg <= 2 * raio or alt <= 2 * raio:
+    if _moldura is None:
+        log.error("shared/moldura.py ausente — vídeo com canto RETO. Deploy dele.")
         return clip
-    try:
-        # ⚠️ CENTRO DO PIXEL (+0,5), não o índice. Com o índice cru, o pixel da
-        # borda reta cai EXATAMENTE sobre o contorno da forma e recebe meio-tom:
-        # o resultado não é canto arredondado, é um halo de 1px da cor do fundo
-        # em volta do vídeo inteiro. Medido antes de subir: 5.180 pixels tocados
-        # por quadro em vez dos ~700 dos quatro cantos.
-        ys = np.arange(alt).reshape(-1, 1) + 0.5
-        xs = np.arange(larg).reshape(1, -1) + 0.5
-        # distância "pra fora" do retângulo interno: 0 nas bordas retas, cresce
-        # só dentro das quatro caixas de canto (SDF de retângulo arredondado).
-        dx = np.maximum(0, np.maximum(raio - xs, xs - (larg - raio)))
-        dy = np.maximum(0, np.maximum(raio - ys, ys - (alt - raio)))
-        dist = np.sqrt((dx * dx + dy * dy).astype(np.float32))
-        opac = np.clip(raio - dist + 0.5, 0.0, 1.0)      # 1 dentro, 0 fora
-        idx = np.nonzero(opac < 1.0)
-        if len(idx[0]) == 0:
-            return clip
-        a = opac[idx].reshape(-1, 1)
-        cor = np.array(cor_fundo, dtype=np.float32).reshape(1, 3)
-        fundo = cor * (1.0 - a)
-
-        def _pintar(f):
-            f = f.copy()
-            f[idx] = (f[idx].astype(np.float32) * a + fundo).astype(np.uint8)
-            return f
-
-        return _image_transform(clip, _pintar)
-    except Exception:
-        # canto quadrado é um vídeo feio; canto quadrado + exceção é um vídeo
-        # que não sai. O aviso fica no log e a produção continua.
-        log.exception("cantos arredondados falharam — o vídeo sai com canto reto")
-        return clip
+    return _moldura.cantos_arredondados(clip, larg, alt, cor_fundo, raio, log=log)
 
 
 def _aplicar_mirror_x(clip):

@@ -7,70 +7,35 @@
 #     YTDLP_COOKIES=/root/jarvis/ig_cookies.txt
 # (ou YTDLP_COOKIES_FROM_BROWSER=chrome). Sem cookies, o IG cai em login wall.
 #
-# Linhas com # são ignoradas. Descomente/adicione os perfis:
+# Linhas com # são ignoradas.
+
+# ══════════════════════════════════════════════════════════════════════════
+# 🧹 LIMPEZA 03/09/2026 — de 36 perfis pra 4
 #
-# achadinhosdashopee
-# achaditchos
-# ofertas.br
-
-# ── achadinhos / Shopee BR (ativos) ────────────────────────────────────────
-jayofertasimperdiveis
-oliviaazfinds
-the_techlabb
-achadinhosda.manaa
-diario.doachadinho
-horadeofertinhaa
-car.dosachados
-achadomila
-achadosonlineweb
-garimposda.kah
-
-# ── gringos: casa, decoração e finds (LIGADOS em 04/08) ───────────────────
-# Ficaram desligados até a conta @topshopcasa_ existir. Agora existe, e o
-# roteador classifica 'casa' desde antes — então o produto de casa que sair
-# destes vídeos vai pra lá sozinho.
+# O Dre: "aquelas fontes do instagram já vimos que não prestava, e eu me
+# enganei, essas são as unicas contas do instagram que pode deixar".
 #
-# Perfil NÃO pertence a conta: o roteador decide pelo PRODUTO, não pela fonte.
-# Um item de beleza que aparecer num destes vai pro @topshopbeauty._ do mesmo
-# jeito. Por isso não existe "perfil da conta gringa" — existe fonte de vídeo.
-ameliauusa
-homeyy__huess
-enalzhamai
-exotic_home_furniture
-neelafinds
-snappypick
-insulorahomes
-recosbyanna
-buddy.pup.us
-
-
-# ── pet / moda / achadinhos BR e gringos (ADICIONADOS 19/08) ──────────────
-# O gatilho: o vigia mostrou 377 pacotes prontos e ZERO pro @topshoppet_ e
-# @topshopmoda_. Faltavam as duas pontas — nicho no roteador (feito no mesmo
-# dia) e fonte de vídeo. Estas são as fontes.
+# Os 36 anteriores (achadinhos BR + gringos de casa/pet/moda dos lotes de
+# 04/08 e 19/08) saíram TODOS. O motivo não é volume, é PRAZO DE VALIDADE:
+# naqueles perfis só o vídeo recente prestava, e o acervo velho era ruim —
+# então cada rodada dependia de eles postarem algo bom, e a fila secava.
 #
-# ⚠️ SEM TAG DE NICHO, DE PROPÓSITO. O Dre: "como o seletor é por nicho, cada
-# vídeo pode ser pra uma conta diferente; se nos perfis abaixo tiver algo
-# referente a tecnologia, e não apenas moda e pet, o vídeo vai pra tecnologia".
-# Escrever '#pet' aqui mandaria TODO vídeo do descontopets pro @topshoppet_,
-# inclusive a câmera de segurança que aparecer no meio — o oposto do que ele
-# pediu. Sem tag, o `_perfis_do_arquivo` devolve nicho '' e quem decide é o
-# roteador, produto a produto.
-achadinhodeverdade
-portalsercriativa
-achadosdagrazy_
-promocaoweb26
-achadosdascar
-estiloquevale
-viciadaemachados
-descontopets
-zenlypaws
-azchpn
-supermelpets
-lovelycatonline
-nomesspupbowl
-fofocraciapet
-meupetfofooficial
-mundopetvideos
-outpaws.us
-justdodealsfinds
+# Estes 4 não têm esse problema. É o achado do dia: dá pra minerar acervo de
+# 2024/2025 e o vídeo continua útil, o que transforma a fila de "o que saiu
+# esta semana" em "meses de produção". Vale mais que 36 fontes perecíveis.
+#
+# ⚠️ NÃO PONHA TAG DE NICHO AQUI (a decisão de 19/08, que continua valendo).
+# O Dre: "como o seletor é por nicho, cada vídeo pode ser pra uma conta
+# diferente; se nos perfis abaixo tiver algo referente a tecnologia, e não
+# apenas moda e pet, o vídeo vai pra tecnologia". Escrever '#tech' no
+# gadgetitnow.us mandaria pro @topshoptech_ TODO vídeo dele, inclusive o item
+# de casa que aparecer no meio. Sem tag, quem decide é o roteador, produto a
+# produto.
+#
+# 📌 O histórico dos 36 removidos não se perde: está no ROADMAP.md e no git.
+# Se um dia uma delas voltar a prestar, é um `git log` de distância.
+# ══════════════════════════════════════════════════════════════════════════
+smartfindsss
+gadgetitnow.us
+giftgenius.co
+best_home_gadgets

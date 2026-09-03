@@ -63,6 +63,27 @@ PLANO = [
      "⚠️ CRÍTICA: fixa, ela achata as 6 contas numa cor só e ANULA a paleta"),
     ("FORCE_BG", REMOVER,
      "⚠️ CRÍTICA: é ferramenta de teste e ganha até do BG_<NICHO>"),
+
+    # ⚠️ O BURACO DE 02/09, ACHADO EM 03/09 ─────────────────────────────────
+    # Este plano removia TOPSHOP_BG e FORCE_BG e PARAVA AÍ. Mas o render.py:503
+    # lê `BG_` + nicho.upper() com prioridade ACIMA da paleta:
+    #
+    #     forcado = (FORCE_BG or BG_<NICHO> or TOPSHOP_BG)
+    #
+    # Ou seja: um `BG_TECH` esquecido no .env continuava mandando, e SÓ naquele
+    # nicho — que é exatamente o sintoma que o Dre relatou ("a cor deles também
+    # continuam erradas", em tech e moda, com as outras 4 certas). O
+    # shared/paleta.py:118 até cita `BG_TECH` como chave que existe na VPS.
+    #
+    # Uma chave por nicho, explícita: o `_FUNDOS` do paleta.py tem seis, e
+    # gerar a lista por loop economizaria seis linhas ao custo de esconder o
+    # que o script mexe no .env. Aqui o explícito vale mais.
+    ("BG_GERAL", REMOVER, "override por nicho — ganha da paleta (⚠️ o buraco)"),
+    ("BG_MODA", REMOVER, "idem — suspeito nº 1 do fundo errado no @topshopmoda_"),
+    ("BG_BELEZA", REMOVER, "idem"),
+    ("BG_CASA", REMOVER, "idem"),
+    ("BG_TECH", REMOVER, "idem — suspeito nº 1 do fundo errado no @topshoptech_"),
+    ("BG_PET", REMOVER, "idem"),
     ("HOOK_FONTE", REMOVER,
      "aponta pra Liberation e ganharia da Montserrat"),
     ("HOOK_FONTE_PRETO", REMOVER,

@@ -527,6 +527,168 @@ Ex.: "O segredo pra ter um iPhone 17 sem gastar / uma fortuna ✨".
 
 ---
 
+## 🗓️ Dia 2026-09-03 (noite) — o bug das duas contas era DOIS RENDERIZADORES
+
+### 🐛 O RELATO
+
+O Dre: *"o bug é nas duas contas: topshoptech e topshopmoda, estilo ta quadrado
+e a letra + vídeo ta em desordem, comparado as outras contas. e aparentemente a
+cor deles também continuam erradas, percebe?"*
+
+Três sintomas, uma causa: **não era conta com defeito, eram dois renderizadores
+que não concordavam.** As contas de pouca oferta de vídeo caem no
+`narrated_video_agent.py` (esteira de assets); as outras passam pelo
+`telegram_repurpose_hunter.py` (repurpose). Só o segundo tinha as mudanças de
+02/09.
+
+### 📐 A CONTRADIÇÃO ESTAVA DENTRO DO MESMO ARQUIVO
+
+`narrated_video_agent.py`, duas linhas a 230 de distância:
+
+```
+linha 1319 (o gancho):  _video_top = VIDEO_Y                  → y=500
+linha 1550 (o vídeo):   _with_position(("center","center"))    → y=276
+```
+
+O gancho era ancorado logo acima de y=500 e o vídeo desenhado em y=276. **O
+texto caía dentro do vídeo** — o "letra + vídeo em desordem", que não era
+desordem nenhuma, era duas fontes de verdade pra mesma medida.
+
+| | o gancho assumia | o vídeo fazia |
+|---|---|---|
+| topo | `VIDEO_Y` = 500 | `center` = 276 |
+| largura | `VIDEO_W_FRAC` = 972px | `LARGURA*0.95` = **1026px** |
+| fundo | paleta do nicho | `fundo.png` (imagem escura) |
+| cantos | — | **quadrados** |
+
+### 🧩 `shared/moldura.py` — o mesmo remédio da paleta
+
+`_cantos_arredondados` existia em **exatamente um** dos três renderizadores
+(`grep -l` provou). `VIDEO_RAIO` era lido só pelo hunter.
+
+📌 **É O MESMO ERRO DE DESENHO QUE A PALETA TEVE**, e o roadmap já registra:
+a regra do fundo estava copiada em três arquivos e isso pôs a logo do
+@topshop.__ num vídeo do @topshopcasa_; a correção foi o `shared/paleta.py`.
+Aqui a geometria estava copiada em dois e desandou o layout de duas contas.
+
+Novo `shared/moldura.py` com `faixa_video()` (larg/alt/x/y/raio/borda, altura
+sempre derivada do 3:4 pra não dar pra pedir 4:3 sem querer) e
+`cantos_arredondados()`. Os **dois** renderizadores importam; o
+`_cantos_arredondados` do hunter virou fachada de 3 linhas que delega, pra não
+mexer nos chamadores. Uma implementação, conferido por `grep -c`.
+
+O `_i()` tolera lixo no `.env` — um `VIDEO_Y=50O` (letra O) já aconteceu, e
+chave ilegível não pode derrubar render.
+
+### 🎨 O BURACO DO `BG_<NICHO>` — por que só DUAS contas erraram a cor
+
+`render.py:503`:
+
+```python
+forcado = (FORCE_BG or BG_<NICHO> or TOPSHOP_BG)   # ganha da paleta
+```
+
+O `layout_v2.py` de 02/09 removia `TOPSHOP_BG` e `FORCE_BG` e **parava aí**. Um
+`BG_TECH` / `BG_MODA` esquecido no `.env` continuava mandando — **e só naquele
+nicho**, o que explica exatamente 2 erradas e 4 certas. O `shared/paleta.py:118`
+até cita `BG_TECH` como chave que existe na VPS.
+
+Agora o plano remove as seis (`BG_GERAL`…`BG_PET`), uma por linha e explícitas —
+gerar por loop economizaria 6 linhas ao custo de esconder o que o script mexe no
+`.env`.
+
+### 🔬 `diag_layout.py` — em vez de eu opinar pelo print
+
+Eu tinha três hipóteses e nenhuma forma de escolher entre elas de fora: quem
+decide é o `.env` da VPS, que eu não vejo. E o roadmap registra **duas vezes** eu
+concluindo de evidência indireta e errando (@topshoppet_ "penalizado", que era
+falta de vídeo; "18,3% de ganchos errados", que eram 2,5%).
+
+Uma linha por nicho, e a coluna que diverge é o defeito:
+
+```
+nicho    paleta diz vai sair   quem manda       veredito
+moda     #DDD2BE    #FFFFFF    BG_MODA          ⚠️ SOBRESCRITO por BG_MODA=branco
+tech     #0E0E10    #000000    BG_TECH          ⚠️ SOBRESCRITO por BG_TECH=preto
+```
+
+### 🐞 DOIS DEFEITOS MEUS, PEGOS ANTES DE SUBIR
+
+1. **`_pal` fora de escopo.** Meu primeiro conserto usava `_pal` no
+   `montar_video`, mas ele é local do `_criar_camadas_topo` — **NameError em
+   produção**. É o mesmo defeito do `nicho` fora de escopo no
+   `_reproduzir_video_sync`. Virou `_paleta()` de módulo, que também apagou a
+   3ª cópia do mesmo `try/except`.
+2. **⚠️ O DIAGNÓSTICO MENTIU.** Com `BG_TECH=preto` ligado ele disse
+   `#0E0E10 · ok` — porque `do_ambiente()` só lê `TOPSHOP_BG`, e é o
+   `render.py` que copia o `BG_<NICHO>` pra dentro dele antes de chamar. Eu
+   chamei `do_ambiente` cru e não imitei o passo. **Um diagnóstico que diz "tá
+   tudo bem" com o bug ligado é pior que nenhum.** Agora reproduz a cascata, e
+   está testado nos dois sentidos.
+3. Bônus: o relatório acusava `TOPSHOP_NICHO=pet — chave global` — era o próprio
+   script se olhando no espelho (o loop escreve a chave pra simular cada nicho).
+   E `usa shared/moldura=sim` no hunter era falso positivo: casava a palavra
+   "moldura" num comentário sobre *moldura estática* do auto-crop. Os dois
+   consertados; alarme falso num script que existe pra achar alarme verdadeiro é
+   o pior defeito que ele pode ter.
+
+### 📇 AS FONTES, LIMPAS DE VERDADE
+
+O Dre: *"limpou as fontes e colocou só essas?"* — **não, eu tinha só
+acrescentado.** As 36 do Instagram continuavam lá.
+
+`instagram_perfis.txt`: **de 36 pra 4** (smartfindsss, gadgetitnow.us,
+giftgenius.co, best_home_gadgets). E eu tinha posto essas 4 no arquivo ERRADO —
+são de Instagram, e eram justamente as que ele **não** marcou "- tiktok" na
+lista. `tiktok_perfis.txt`: 44.
+
+⚠️ **SEM TAG DE NICHO NO IG**, mantendo a decisão de 19/08: um `#tech` no
+gadgetitnow.us mandaria pro @topshoptech_ *todo* vídeo dele, inclusive o item de
+casa do meio. Quem decide é o roteador, produto a produto.
+
+### 🕰️ O ACHADO QUE MUDA A FILA — acervo 2024/2025
+
+*"o bom delas é que podemos pegar vários vídeos antigos 2024/2025 que são bons e
+ainda prestam, diferente de vários perfis do instagram que só servia os mais
+recentes... agora podemos deixar vídeos por vários meses na produção"*.
+
+É o motivo real da limpeza: **não é volume de fontes, é prazo de validade.** 36
+fontes perecíveis exigem que elas postem algo bom nesta semana; 4 com acervo
+aproveitável valem meses de fila.
+
+`POR_PERFIL` (40) virou env. Os 40 eram calibrados pra fonte perecível — varrer
+fundo não valia. E como o `_melhores_do_perfil` fica com os melhores N% **de
+cada perfil**, varrer 200 não afrouxa o critério: dá 5× mais candidatos pro
+mesmo corte.
+
+```bash
+.venv/bin/python tiktok_coletor.py --limite 200   # mineração de acervo
+.venv/bin/python env_set.py POR_PERFIL 200        # ou fixo
+```
+
+### 🚚 Deploy
+
+```bash
+cd ~/jarvis && git fetch pjc claude/opa-clau-dgs591
+git show FETCH_HEAD:shared/moldura.py             > shared/moldura.py
+git show FETCH_HEAD:narrated_video_agent.py       > agents/narrated_video_agent.py
+git show FETCH_HEAD:telegram_repurpose_hunter.py  > integrations/telegram_repurpose_hunter.py
+git show FETCH_HEAD:tiktok_coletor.py             > tiktok_coletor.py
+git show FETCH_HEAD:layout_v2.py                  > layout_v2.py
+git show FETCH_HEAD:diag_layout.py                > diag_layout.py
+git show FETCH_HEAD:tiktok_perfis.txt             > tiktok_perfis.txt
+git show FETCH_HEAD:instagram_perfis.txt          > instagram_perfis.txt
+
+.venv/bin/python diag_layout.py                   # ANTES: mostra o culpado
+.venv/bin/python layout_v2.py --aplicar           # remove os BG_<NICHO>
+.venv/bin/python diag_layout.py                   # DEPOIS: tudo "paleta / ok"
+```
+
+⚠️ `agents/narrated_video_agent.py` na VPS estava em **Jul16** pelo próprio
+roadmap. **Diferenciar antes de sobrescrever** — não é deploy de rotina.
+
+---
+
 ## 🗓️ Dia 2026-09-03 (tarde) — a virada: raspar gringo em vez de gerar por IA
 
 O Dre cortou a linha de vídeo por IA: *"foda-se essas ferramentas de geração de

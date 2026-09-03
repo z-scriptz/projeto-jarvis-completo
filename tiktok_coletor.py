@@ -213,6 +213,24 @@ _carregar_env()
 # agora que o .env está carregado, aplica o override do min de views (se houver)
 MIN_VIEWS = int(os.environ.get("MIN_VIEWS", MIN_VIEWS))
 
+# ── QUANTOS VÍDEOS VARRER POR PERFIL ─────────────────────────────────────────
+# ⚠️ ISTO DEIXOU DE SER DETALHE EM 03/09. O Dre, sobre as 4 fontes novas:
+# *"o bom delas é que podemos pegar vários vídeos antigos 2024/2025 que são
+# bons e ainda prestam, diferente de vários perfis do instagram que só servia
+# os mais recentes... agora podemos deixar vídeos por vários meses na produção"*.
+#
+# Os 40 do padrão eram calibrados pra fonte PERECÍVEL: varrer fundo não valia,
+# porque vídeo velho daqueles perfis era ruim. Nestas 4 o acervo presta, e o
+# `_melhores_do_perfil` fica com os melhores N% DE CADA PERFIL — então varrer
+# 200 em vez de 40 não afrouxa o critério, só dá 5× mais candidatos pra ele
+# escolher. É a diferença entre "o que saiu esta semana" e "meses de fila".
+#
+# Rodada de mineração de acervo (uma vez, demora):
+#     .venv/bin/python tiktok_coletor.py --limite 200
+# Ou fixo no .env, pra valer em toda rodada:
+#     .venv/bin/python env_set.py POR_PERFIL 200
+POR_PERFIL = int(os.environ.get("POR_PERFIL", POR_PERFIL))
+
 # ⚠️ PISO SEPARADO PRO INSTAGRAM, NASCENDO EM 0 (DESLIGADO) — 19/08.
 # O MIN_VIEWS de 50k nunca valeu pro IG: as views vinham 0 do yt-dlp e o
 # filtro só corta quando o número é conhecido. Agora que a grade de reels

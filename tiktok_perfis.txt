@@ -44,8 +44,12 @@ tkjusticebuy
 # errada (pior que nao marcar).
 # ══════════════════════════════════════════════════════════════════════
 
+# ⚠️ QUATRO PERFIS SAIRAM DAQUI EM 03/09: best_home_gadgets, gadgetitnow.us,
+# giftgenius.co e smartfindsss sao do INSTAGRAM, nao do TikTok — eu li errado a
+# lista (eram justamente os que o Dre NAO marcou "- tiktok"). Foram pro
+# instagram_perfis.txt, e sem tag de nicho, como manda a regra de 19/08.
+
 # --- casa / cozinha ---
-best_home_gadgets #casa
 kitchen_in_china #casa
 ourwintonhome #casa
 adollshome #casa
@@ -53,14 +57,11 @@ nicelife.hacks #casa
 cozyprimefinds #casa
 
 # --- tech / gadgets ---
-gadgetitnow.us #tech
 buythegadgets #tech
 mad.fones #tech
 pixoloom #tech
 
 # --- achados gerais (o @ nao diz o nicho) ---
-giftgenius.co
-smartfindsss
 vecoto.com
 sam.shan.shops
 steamer.vault
