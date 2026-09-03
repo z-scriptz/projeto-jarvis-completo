@@ -1705,6 +1705,68 @@ pode servir de abertura/fecho, e o Instagram premia RETENÇÃO: 10s vistos
 inteiros valem mais que 30s vistos pela metade. Se 5s bastar, o custo cai pela
 metade e a conta muda de lado — vale medir no playground antes de decidir.
 
+### 🎥 O PRIMEIRO VÍDEO DE IA QUE PRESTA — e o defeito que mata ele mesmo assim
+
+O Dre gerou no Runway Gen-4.5, 10s, 720×1280, 24fps, prompt do ChatGPT
+(projetor: liga no quarto escuro → feixe → projeção na parede → mão leva pra
+sala → hero shot em pedestal creme).
+
+**O que está genuinamente bom** — e é outro patamar em relação a tudo que o
+projeto produziu até hoje:
+- fotografia de verdade: o feixe cortando o escuro, a queda de luz na colcha, o
+  desfoque da sala. Nada disso existe num vídeo reciclado do Telegram
+- **mãos corretas**, com pegada plausível — o defeito clássico de IA, ausente
+- a projeção é fisicamente coerente (feixe → imagem na parede, perspectiva certa)
+- 9:16 nativo, encaixa no template sem recorte
+
+**E o defeito fatal, que só aparece quadro a quadro:** o produto **MUDA** ao
+longo dos 10 segundos.
+
+```
+quadros 1-4 (quarto)   disco preto oval, lente AZUL na frente
+quadro 5 (mão)         corpo mais retangular, lente na lateral
+quadros 6-7 (sala)     retângulo arredondado, lente VERDE/TEAL
+quadros 8-9            outro corpo, com logo pequeno
+quadro 10 (hero)       caixa retangular, anel VERDE e botão separado
+```
+
+Pelo menos **quatro projetores diferentes** num clipe cujo prompt dizia
+literalmente *"consistent product, no morphing"*.
+
+📌 Isso confirma empiricamente o que eu vinha dizendo como teoria: **é um
+comercial lindo de um produto que não existe.** Text-to-video não tem como
+mostrar o achadinho da Shopee — a informação não está no prompt. Pra afiliado
+isso não é imperfeição, é a falha central: a pessoa clica e recebe outra coisa.
+
+### 💰 O CUSTO REAL DESSE CLIPE
+
+Gen-4.5 = **12 créditos/s** · 10s = **120 créditos**.
+
+| via | custo do clipe de 10s |
+|---|---|
+| API Runway (US$0,01/crédito) | US$1,20 = **R$6,48** |
+| plano Max (US$76/mês, 9.500 cr) | R$5,18 · 79 vídeos/mês |
+| plano Pro (US$28/mês, 2.250 cr) | R$8,06 · **só 18,8 vídeos/mês** |
+| plano Standard (US$12/mês, 625 cr) | R$12,44 · **5,2 vídeos/mês** |
+
+⚠️ **Standard e Pro não servem** pro volume dele (6 posts/dia): 5 e 19 vídeos
+por mês. E é o mais caro da comparação — R$6,48 contra R$1,08 do Hailuo 02.
+
+Pela regra do acerto: o post de R$24 paga 3,7 clipes ⇒ precisa de **27%** de
+taxa de acerto. Hoje o estouro em alcance é 15%.
+
+### 🧭 O QUE ESSE TESTE REALMENTE PROVOU
+
+Não é "Runway é caro". É que **a qualidade cinematográfica já está resolvida** —
+e ela não era o gargalo. O gargalo é FIDELIDADE AO PRODUTO, e nenhum aumento de
+orçamento em text-to-video resolve isso, porque é limitação de entrada, não de
+modelo.
+
+O caminho continua sendo image-to-video a partir das 128 fotos classe A: o
+produto deixa de ser adivinhado. E agora existe o critério de aceitação certo
+pro teste de US$1 — **não é "ficou bonito?", é "é o MESMO produto nos 10
+segundos?"**. O clipe do Runway seria reprovado nesse critério apesar de lindo.
+
 ### ⚠️ DÍVIDA DE DEPLOY QUE ESTA MUDANÇA TORNA URGENTE
 
 O próprio roadmap já registra: **`agents/narrated_video_agent.py` na VPS está
