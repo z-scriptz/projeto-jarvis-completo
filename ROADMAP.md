@@ -1433,6 +1433,54 @@ Fontes: [buildmvpfast](https://www.buildmvpfast.com/api-costs/ai-video) ·
 [fal Seedance Lite i2v](https://fal.ai/models/fal-ai/bytedance/seedance/v1/lite/image-to-video) ·
 [ofox — alternativas por custo/segundo](https://ofox.ai/blog/fal-ai-alternatives-video-generation-api-2026/)
 
+### 🤖 "NENHUM VÍDEO DE IA COM O FAL FICOU BOM" — a causa é estrutural, e eu errei antes
+
+⚠️ PRIMEIRO, UM ERRO MEU: escrevi *"ninguém neste projeto gerou um único vídeo
+por IA ainda"*. **Falso.** Eu olhei `usar_api_video: false` e o PLACEHOLDER do
+`video_provider.py` e concluí. Esses dois não cobrem o caminho do fal, que roda
+por outro lugar (`daemon_maestro` → `production_runner` → `ia_scene_generator`).
+Conclusão tirada de evidência que não cobria o caso.
+
+O Dre: *"ou o jarvis era incompetente, ou o prompt tava muito ruim"*. **Nenhum
+dos dois.** O prompt não era ruim — era ESTRUTURALMENTE INCAPAZ de mostrar o
+produto. Duas causas empilhadas:
+
+**1. É text-to-video.** `daemon_maestro:730` seta
+`FAL_MODEL=fal-ai/kling-video/v2.1/master/text-to-video`. O modelo INVENTA o
+produto do zero. Não existe prompt que faça text-to-video mostrar o achadinho
+real da Shopee — a informação não está lá.
+
+**2. O sujeito do prompt é a CATEGORIA, não o produto.** Reproduzido rodando o
+`scene_prompt_builder` de verdade:
+
+```
+produto: Mini Triturador de Alimentos Sem Fio 250ml
+  → "bright modern kitchen counter, featuring KITCHEN GADGET SPEEDING UP
+     FOOD PREP (product: Mini Triturador de Alimentos Sem Fio 250ml)"
+
+produto: Fone Bluetooth INOVA FreeClip
+  → "modern desk setup, featuring TECH ACCESSORY ORGANIZING THE WORKSPACE
+     (product: Fone Bluetooth INOVA FreeClip)"
+```
+
+O sujeito é um descritor FIXO por categoria (`CATEGORIA_VISUAL[cat]["produto"]`).
+O nome real entra num parêntese no fim — que modelo de vídeo trata como ruído.
+**Kit Porta Temperos e Mini Triturador geram exatamente o mesmo prompt.**
+
+E quando a categoria erra, fica pior: com `fitness_moda`, o triturador virava
+*"elegant young woman near a mirror featuring slimming waist shaper belt"*.
+
+### ✅ E ISSO VALIDA O IMAGE-TO-VIDEO POR MEDIÇÃO, NÃO POR GOSTO
+
+As duas causas somem juntas ao partir da FOTO. Não é opinião sobre qual modelo é
+melhor: é que o produto deixa de ser algo que o modelo precisa adivinhar. E as
+128 fotos classe A já existem, tratadas, paradas no `shared/fotos/`.
+
+📌 O experimento de US$10 mudou de pergunta. Não é mais *"IA de vídeo presta?"* —
+é **"image-to-video a partir da nossa foto tratada presta?"**, que nunca foi
+testado. O que falhou antes foi outra coisa, e falhou por um motivo que a gente
+agora sabe qual é.
+
 ### ⚠️ DÍVIDA DE DEPLOY QUE ESTA MUDANÇA TORNA URGENTE
 
 O próprio roadmap já registra: **`agents/narrated_video_agent.py` na VPS está
