@@ -1296,18 +1296,36 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
     #   • senão 1 linha (cabe na fonte cheia) ou auto-quebra em 2 (emoji na última).
     HK_FONT = HK_FONT_MAX
 
-    def _wrap(txt, fnt):
-        """Quebra GULOSA por largura: enche cada linha até HK_MAX_LARG (não vaza
-        pela direita). Retorna a lista de linhas."""
+    def _wrap(txt, fnt, teto=None):
+        """Quebra GULOSA por largura: enche cada linha até `teto` (não vaza pela
+        direita). Retorna a lista de linhas."""
+        teto = HK_MAX_LARG if teto is None else teto
         out, cur = [], []
         for w in (txt or "").split():
-            if cur and _larg(" ".join(cur + [w]), fnt) > HK_MAX_LARG:
+            if cur and _larg(" ".join(cur + [w]), fnt) > teto:
                 out.append(" ".join(cur)); cur = [w]
             else:
                 cur.append(w)
         if cur:
             out.append(" ".join(cur))
         return out or [txt]
+
+    # ⚠️ O ESPAÇO DO EMOJI PRECISA SER RESERVADO NA QUEBRA (04/09/2026)
+    # ─────────────────────────────────────────────────────────────────
+    # O Dre: *"olha o emoji entrando dentro da frase"* — e culpou o Gemini.
+    # NÃO É O GEMINI: o emoji não é texto, é um PNG colado num x calculado, e o
+    # hook que o modelo escreveu estava correto.
+    #
+    # A conta que quebrava: a linha podia ir até x=1026 (margem 54 + 972 de
+    # HK_MAX_LARG) e o emoji tinha teto de 1080-40-10 = 1030. Quando a linha
+    # enchia, o `min(...)` lá embaixo PUXAVA o emoji de volta pra cima da última
+    # palavra. Linha curta sobrava espaço e ficava bonito; linha cheia o emoji
+    # entrava na frase — por isso parecia aleatório.
+    #
+    # Empurrar o emoji não resolve: não há pra onde. O espaço tem de ser tirado
+    # do orçamento da linha ANTES de decidir onde ela quebra.
+    _EMOJI_RESERVA = (HK_EMOJI_TAM + int(os.environ.get("HK_EMOJI_DX", 18))
+                      + 10) if _emoji_hook else 0
 
     # parágrafos = quebra EXPLÍCITA "\n" (formato Alana: frase / A Shopee:); senão 1.
     _paras = [l.strip() for l in hook_txt_limpo.split("\n") if l.strip()] or [hook_txt_limpo]
@@ -1318,7 +1336,13 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
         for _pi, _par in enumerate(_paras):
             _wl = _wrap(_par, fnt)
             if _pi == 0:
-                emoji_linha = len(_wl) - 1   # emoji no fim da 1ª frase
+                # o emoji vai no fim da 1ª frase — então é ESSA linha que
+                # precisa caber texto + emoji. Só re-quebro se de fato não
+                # couber: reservar sempre encurtaria linha que estava boa.
+                if _EMOJI_RESERVA and _wl:
+                    if _larg(_wl[-1], fnt) + _EMOJI_RESERVA > HK_MAX_LARG:
+                        _wl = _wrap(_par, fnt, HK_MAX_LARG - _EMOJI_RESERVA)
+                emoji_linha = len(_wl) - 1
             linhas += _wl
         return linhas, emoji_linha
 
@@ -1375,8 +1399,16 @@ def _criar_camadas_topo(dur_total: float, hook_txt: str, mp,
                 _y_emo = HK_Y + _emoji_linha * HK_ALTURA_LINHA
                 _lw = _larg(_linhas[_emoji_linha], HK_FONT)
                 _txm = int(os.environ.get("TXT_MARGEM", 8))
+                # ⚠️ SEM MEDIDA, SEM EMOJI. O fallback era `_lw or LARGURA*0.5`
+                # — meia largura do quadro, ou seja: quando a medição falhava o
+                # emoji era plantado NO MEIO DA FRASE. Chutar posição de um
+                # elemento que sobrepõe texto não tem versão boa; o vídeo sem
+                # emoji é publicável, com emoji no meio da frase não é.
+                if not _lw:
+                    raise ValueError("não consegui medir a largura da linha do "
+                                     "gancho — emoji omitido em vez de chutado")
                 # x: depois do fim REAL do texto (margem + largura) + folga tunável
-                _ex = max(10, min(HK_MARGEM + _txm + (_lw or int(LARGURA * 0.5))
+                _ex = max(10, min(HK_MARGEM + _txm + _lw
                                   + int(os.environ.get("HK_EMOJI_DX", 18)),
                                   LARGURA - HK_EMOJI_TAM - 10))
                 # y: centra pela ALTURA DA FONTE (consistente entre claro/escuro; o
