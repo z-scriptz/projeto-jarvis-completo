@@ -113,25 +113,43 @@ def traduzir(termo: str):
     qualquer resposta diferente disso é tradução de verdade."""
     key = os.getenv("GEMINI_API_KEY", "")
     if not key:
-        return ""
+        # ⚠️ tupla, não string. Este `return` ficou pra trás quando a função
+        # passou a devolver (veredito, termo) — e o `not enough values to
+        # unpack` só aparecia sem GEMINI_API_KEY, que é justamente o caminho
+        # que ninguém testa até acontecer na VPS.
+        return "erro", ""
     try:
         from google import genai
         cli = genai.Client(api_key=key)
         r = cli.models.generate_content(
             model="gemini-2.5-flash",
-            contents=("Você recebe o nome de um produto. DECIDA:\n"
-                      "- Se ele JÁ está em português do Brasil, responda "
-                      "exatamente JA_PT. Não melhore, não reescreva, não "
-                      "corrija — mesmo que você ache o nome estranho ou "
-                      "incompleto.\n"
-                      "- Se estiver em outro idioma, responda SÓ com a tradução "
-                      "para português do Brasil, como alguém buscaria numa loja "
-                      "online (2 a 6 palavras, sem aspas, sem explicar).\n"
-                      "- Se não for um produto, responda NAO.\n\n"
-                      "Exemplos: 'Meat Tenderizer' → amaciante de carne; "
-                      "'Escada rolante' → JA_PT; 'Shower Caddy' → organizador "
-                      "de chuveiro; 'Salva alimentos' → JA_PT\n\n"
-                      "Produto: " + termo))
+            # ⚠️ A ORDEM DAS PERGUNTAS IMPORTA, e eu tinha errado (04/09).
+            # Antes eu perguntava "está em português?" ANTES de "é produto?".
+            # Resultado: legenda EM PORTUGUÊS respondia JA_PT e passava —
+            # 'Itens Uma Casa Rica Gastando', 'Coisas Devia Ter Comprado
+            # Antes', 'Produtinhos Shopee Facilitam Faxina'. Só os
+            # não-produtos ESTRANGEIROS eram pegos, que é metade do problema.
+            # "É produto?" tem de vir PRIMEIRO — idioma é a 2ª pergunta.
+            contents=("Você recebe um texto que DEVERIA ser o nome de um "
+                      "produto. Responda em DUAS etapas, nesta ordem:\n\n"
+                      "1) É O NOME DE UM PRODUTO FÍSICO À VENDA? Frase de "
+                      "vídeo, chamada, dica ou lista NÃO é produto — ex.: "
+                      "'Coisas Devia Ter Comprado Antes', 'Itens Uma Casa Rica "
+                      "Gastando', 'Produtinhos Shopee Facilitam Faxina', "
+                      "'Limited time special offer'. Se NÃO for produto, "
+                      "responda exatamente NAO e pare aqui.\n\n"
+                      "2) Sendo produto: se já está em português do Brasil, "
+                      "responda exatamente JA_PT (não melhore, não reescreva, "
+                      "não corrija — mesmo que o nome pareça estranho). Se "
+                      "estiver em outro idioma, responda SÓ com a tradução "
+                      "(2 a 6 palavras, sem aspas, sem explicar).\n\n"
+                      "Exemplos:\n"
+                      "'Meat Tenderizer' → amaciante de carne\n"
+                      "'Escada rolante' → JA_PT\n"
+                      "'Salva alimentos' → JA_PT\n"
+                      "'Coisas Devia Ter Comprado Antes' → NAO\n"
+                      "'Toda dona casa precisa conhecer' → NAO\n\n"
+                      "Texto: " + termo))
         t = (r.text or "").strip().strip('"').split("\n")[0].strip()
         if not t:
             return "erro", ""
@@ -149,6 +167,10 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="conserta produto em inglês no inbox")
     ap.add_argument("--corrigir", action="store_true",
                     help="traduz e reescreve o link (sem isto, só lista)")
+    ap.add_argument("--tudo", action="store_true",
+                    help="checa TODO o inbox, não só o que a peneira marcou "
+                         "(1 chamada por pacote — pega legenda em português "
+                         "que a peneira não vê)")
     a = ap.parse_args()
 
     arq = _carregar_env()
@@ -167,7 +189,14 @@ def main() -> int:
         except Exception:
             continue
         nome = (info.get("produto") or "").strip()
-        if parece_ingles(nome):
+        if info.get("nao_e_produto"):
+            continue                     # já julgado numa rodada anterior
+        # ⚠️ A PENEIRA SÓ VÊ IDIOMA, NÃO VÊ "É PRODUTO?" — e legenda em
+        # PORTUGUÊS passa direto por ela: 'Coisas Devia Ter Comprado Antes',
+        # 'Produtinhos Shopee Facilitam Faxina'. O --tudo existe pra isso: 1
+        # chamada por pacote, que a essa altura é barato perto de publicar um
+        # post que vende a coisa errada.
+        if a.tudo or parece_ingles(nome):
             suspeitos.append((pj, info, nome))
 
     if not suspeitos:
@@ -189,25 +218,40 @@ def main() -> int:
     print(f"   ℹ️  nome em português nesta lista é NORMAL — no --corrigir o "
           f"Gemini responde JA_PT e o link não é tocado.\n")
 
+    if a.tudo:
+        print(f"   🔎 --tudo: checando os {len(suspeitos)} do inbox inteiro\n")
     for pj, info, nome in amazon[:40]:
         print(f"   🔴 {nome[:44]:46} {pj.parent.name[:34]}")
     if len(amazon) > 40:
         print(f"   … e mais {len(amazon) - 40}")
 
     if not a.corrigir:
-        print(f"\n📋 pra corrigir (traduz e reescreve só os 🔴):")
-        print(f"   .venv/bin/python limpar_inbox.py --corrigir")
+        print(f"\n📋 pra corrigir — traduz o link dos 🔴 e marca os NÃO-PRODUTO "
+              f"dos dois grupos:")
+        print(f"   .venv/bin/python limpar_inbox.py --corrigir" +
+              ("  --tudo" if a.tudo else ""))
         return 0
 
     tag = os.getenv("AMAZON_TAG", "").strip()
     dom = os.getenv("AMAZON_DOMAIN", "amazon.com.br").strip() or "amazon.com.br"
+    # ⚠️ SEM TAG NÃO É MOTIVO PRA ABORTAR TUDO. A tag só é necessária pra
+    # REESCREVER link da Amazon; a marcação de não-produto (que é a parte que
+    # impede post errado) não usa tag nenhuma. Abortar aqui deixava o defeito
+    # mais grave sem conserto por falta de uma chave que ele nem usa.
     if not tag:
-        print("❌ AMAZON_TAG vazio no .env — não sei montar o link. Abortando.")
-        return 1
+        print("⚠️  AMAZON_TAG vazio no .env — NÃO vou reescrever link da "
+              "Amazon, mas sigo marcando os não-produto.\n")
 
     ok = ja_pt = lixo = erro = 0
     print()
-    for pj, info, nome in amazon:
+    # ⚠️ O 🟡 ENTRA NO LOOP TAMBÉM (04/09). Antes só o 🔴 era checado, porque
+    # eu pensei "o link dele funciona, então está resolvido". Não está: uma
+    # LEGENDA que casou com um produto qualquer na Shopee tem link que abre e
+    # vende a coisa errada — pior que link morto, porque o clique acontece.
+    # Do 🟡 eu não reescrevo o link (ele foi casado com um título pt-BR real),
+    # só marco quando não é produto.
+    for pj, info, nome in amazon + outros:
+        _so_marcar = (pj, info, nome) not in amazon
         veredito, novo = traduzir(nome)
 
         if veredito == "nao_produto":
@@ -227,8 +271,14 @@ def main() -> int:
             erro += 1
             continue
 
-        if not novo or novo.lower() == nome.lower():
-            print(f"   ⏭️  '{nome[:44]}' — já está em português · intocado")
+        if novo and not tag:
+            print(f"   ⚠️  '{nome[:44]}' → '{novo[:30]}' · SEM AMAZON_TAG, "
+                  f"não reescrevi")
+            erro += 1
+            continue
+
+        if _so_marcar or not novo or novo.lower() == nome.lower():
+            print(f"   ⏭️  '{nome[:44]}' — produto ok · intocado")
             ja_pt += 1
             continue
         info["produto"] = novo
