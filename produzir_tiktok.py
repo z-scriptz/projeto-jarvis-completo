@@ -688,14 +688,57 @@ def _produzir(pasta: Path, pj: Path, video_src: Path) -> bool:
     return True
 
 
+def rodizio(itens: list, quantos: int) -> list:
+    """Intercala nichos: uma rodada não pode ser toda da mesma conta.
+
+    ⚠️ POR QUE ISSO EXISTE (05/09/2026). `produzir_tiktok.py 5` produziu 5 de 5
+    pro @topshoppet_ e ZERO pras outras cinco contas. Não foi escolha: a fila é
+    `sorted(INBOX.iterdir())`, ordem alfabética pura, e as pastas
+    `achadinhos_*` sortam primeiro. Com 2154 pacotes, a ordem alfabética é um
+    sorteio viciado — quem começa com 'a' leva tudo, sempre, todo dia.
+
+    A meta é 1.000 seguidores em TODAS as contas. Cinco contas sem post não
+    chegam lá, por melhor que o vídeo da sexta esteja.
+
+    `itens` são `(nicho, obj)` na ordem da fila; devolve até `quantos` objs
+    intercalando nicho e preservando a ordem original DENTRO de cada nicho —
+    quem estava na frente do seu nicho continua na frente.
+    """
+    baldes: dict = {}
+    ordem: list = []
+    for nicho, obj in itens:
+        if nicho not in baldes:
+            baldes[nicho] = []
+            ordem.append(nicho)
+        baldes[nicho].append(obj)
+
+    out: list = []
+    while len(out) < quantos:
+        levou = False
+        for n in ordem:
+            if not baldes[n]:
+                continue
+            out.append(baldes[n].pop(0))
+            levou = True
+            if len(out) >= quantos:
+                break
+        if not levou:
+            break          # acabaram os baldes antes de encher a rodada
+    return out
+
+
 def _nicho_da_pasta(pj: Path) -> str:
     """Nicho do produto de uma pasta da fila (pra filtrar produção por conta)."""
     try:
         info = json.loads(pj.read_text(encoding="utf-8"))
         # 1) nicho HERDADO da fonte (curadoria manda): '@perfil #beleza' → beleza,
         #    mesmo que o produto não bata palavra-chave de beleza.
+        # ⚠️ ESTA LISTA ESTAVA DESATUALIZADA (achado em 05/09/2026): tinha só
+        # beleza/tech/geral, mas casa, moda e pet têm conta desde 21/08. Fonte
+        # marcada '#pet' caía no roteamento por produto e podia ir pra outra
+        # conta — a curadoria manual era ignorada nas três contas mais novas.
         nf = (info.get("nicho_fonte") or "").strip().lower()
-        if nf in ("beleza", "tech", "geral"):
+        if nf in ("beleza", "tech", "geral", "casa", "moda", "pet"):
             return nf
         # 2) senão, roteia pelo PRODUTO (comportamento antigo).
         nome = info.get("produto") or info.get("termo") or ""
@@ -715,10 +758,13 @@ def main():
     # args: [N] e/ou "--nicho X". Ex.: 'produzir_tiktok.py --nicho tech 4'
     quantos = MAX_PADRAO
     nicho_alvo = ""
+    sem_rodizio = False
     _args = sys.argv[1:]
     for _i, _a in enumerate(_args):
         if _a == "--nicho" and _i + 1 < len(_args):
             nicho_alvo = _args[_i + 1].strip().lower()
+        elif _a == "--sem-rodizio":
+            sem_rodizio = True
         elif _a.isdigit():
             quantos = max(1, int(_a))
 
@@ -734,8 +780,25 @@ def main():
         _log(f"filtro de nicho '{nicho_alvo}' → {len(fila)} na fila")
     _log(f"{len(fila)} viral(is) no inbox · produzindo até {quantos} nesta rodada")
 
+    # RODÍZIO DE CONTA (05/09/2026). Sem isto a rodada inteira cai numa conta só
+    # — ver docstring do `rodizio()`. Desligado com --sem-rodizio, e sem efeito
+    # quando já existe --nicho (aí a conta foi escolhida de propósito).
+    lote = fila[:quantos]
+    if not sem_rodizio and not nicho_alvo and len(fila) > quantos:
+        # ⚠️ só olha a FRENTE da fila: `_nicho_da_pasta` lê JSON e importa o
+        # roteador. Com 2154 pacotes, classificar tudo pra escolher 5 seria
+        # gastar minutos pra economizar segundos.
+        _janela = fila[:max(quantos * 20, 120)]
+        _pares = [(_nicho_da_pasta(t[1]), t) for t in _janela]
+        lote = rodizio(_pares, quantos)
+        _contagem = {}
+        for _n, _ in _pares:
+            _contagem[_n] = _contagem.get(_n, 0) + 1
+        _log(f"   🔀 rodízio em {len(_janela)} da frente da fila: "
+             + " · ".join(f"{k}={v}" for k, v in sorted(_contagem.items())))
+
     ok = 0
-    for pasta, pj, vid in fila[:quantos]:
+    for pasta, pj, vid in lote:
         try:
             sucesso = _produzir(pasta, pj, vid)
         except Exception as e:
@@ -750,7 +813,7 @@ def main():
             except Exception:
                 pass
 
-    _log(f"fim: {ok}/{min(quantos, len(fila))} produzidos. O daemon posta nos horários. 🚚")
+    _log(f"fim: {ok}/{len(lote)} produzidos. O daemon posta nos horários. 🚚")
     return 0
 
 

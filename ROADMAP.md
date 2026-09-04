@@ -576,6 +576,65 @@ do mesmo TIPO (dois suportes de celular), e aí o SIM no embaralhado está certo
 65% o código dizia "frouxo", cuja mensagem é *"os ❌ podem até estar certos"* —
 e nesse caso não estão. "Não está julgando" engole "é frouxo".
 
+---
+
+## 🗓️ Dia 2026-09-05 (b) — a ordem alfabética era um sorteio viciado
+
+### O que apareceu
+
+`produzir_tiktok.py 5` produziu **5 de 5 pro @topshoppet_**. Zero pras outras
+cinco contas. Não foi balanceamento nem azar:
+
+```python
+for pasta in sorted(INBOX.iterdir()):     # ordem alfabética PURA
+```
+
+As pastas `achadinhos_do_mundo_pet_*` e `achadinhos_imperd_veis_*` sortam
+primeiro. Com **2154 pacotes na fila**, alfabético não é ordem — é sorteio
+viciado: quem começa com 'a' leva a rodada inteira, todo dia, pra sempre.
+
+**A meta é 1.000 seguidores em TODAS as contas.** Cinco contas sem post não
+chegam lá, por melhor que o vídeo da sexta esteja.
+
+### Efeito colateral que eu não tinha visto
+
+A rodada foi feita justamente pra **conferir o layout de tech e moda**. Como as
+duas contas não receberam nada, a confirmação era **impossível por construção**.
+O comando estava errado, não a produção.
+
+### O conserto: `rodizio()` (`teste_rodizio.py`, 11/11)
+
+Intercala nichos preservando a ordem dentro de cada um. Só olha a **frente da
+fila** (`max(quantos*20, 120)`), porque `_nicho_da_pasta` lê JSON e importa o
+roteador — classificar 2154 pacotes pra escolher 5 seria gastar minutos pra
+economizar segundos.
+
+Ligado por padrão. `--sem-rodizio` desliga; `--nicho X` já o dispensa (a conta
+foi escolhida de propósito).
+
+⚠️ **O rodízio espalha o que existe, não inventa.** Se a fila só tem pet, 5 pet
+está certo — e o teste trava isso.
+
+### Bug encontrado de tabela
+
+`_nicho_da_pasta` só aceitava `beleza/tech/geral` como nicho herdado da fonte.
+**Casa, moda e pet têm conta desde 21/08** — fonte marcada `#pet` caía no
+roteamento por produto e a curadoria manual era ignorada nas três contas mais
+novas. Lista corrigida.
+
+### ⏳ Fica em aberto
+
+- **`Naninha Para Bebê Antialérgica Suporte Para Chupeta` foi pro @topshoppet_**,
+  com hook sobre chupeta perdida. Produto de bebê na conta de pet. O defeito é
+  no classificador (`roteador_contas.nicho_do_produto`), não no rodízio.
+- **A fila está mastigando estoque brasileiro antigo**, não o acervo gringo
+  recém-coletado — de novo por causa da ordem alfabética. Decidir se o material
+  novo fura a fila.
+
+---
+
+## 🗓️ Dia 2026-09-05 — o juiz não pode ser o próprio jurado (cont.)
+
 ### Regra que fica
 
 > **Antes de um modelo bloquear trabalho em lote, ele passa por controle
