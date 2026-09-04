@@ -527,6 +527,98 @@ Ex.: "O segredo pra ter um iPhone 17 sem gastar / uma fortuna ✨".
 
 ---
 
+## 🗓️ Dia 2026-09-04 (noite) — a fila encheu, e eu errei a conta do gasto
+
+### 📈 O NÚMERO DO DIA: 157 → 495 → 2171
+
+| | | |
+|---|---|---|
+| coleta anterior | 157 produtos | piso 50k, visão só em termo inválido |
+| coleta seguinte | **495** | piso 5k |
+| fila no inbox | **2171 pacotes** | mais de 1 ano a 6 posts/dia |
+
+**O gargalo de supply que este projeto perseguiu por semanas acabou.** As fontes
+gringas + piso de 5k + visão em termo não-checado, juntos.
+
+### 💸 ⚠️ EU DISSE "CENTAVOS" E CUSTOU R$50+
+
+Recomendei o `--tudo` (2171 chamadas) dizendo *"são centavos"*. **Não medi, e
+errei.** O Dre: *"ja gastou 50+ reais kkkk"*.
+
+📌 O erro de método: dei número de custo sem calcular, empurrando uma ação que
+gasta. "Barato" tem de ser conta, não impressão — é a mesma regra que este
+roadmap aplica a alcance e comissão, e eu não apliquei a mim.
+
+A conta fechada, que muda a leitura mas não desculpa o erro:
+
+```
+R$50 ÷ 2171 pacotes            = R$ 0,023 por pacote
+ganho medido (dinheiro.py)     = R$ 0,1676 por post
+                                 ⇒ custo é 1/7 do retorno
+```
+
+E o grosso **não** foi a limpeza de texto — foram as chamadas de **VISÃO na
+coleta** (3 frames por vídeo; imagem custa muito mais que texto). As 2171
+chamadas de texto do `--tudo` essas sim eram centavos. Ou seja: eu errei a
+estimativa da ação certa e acertei sem querer a da errada.
+
+### 🧹 `limpar_inbox.py` — e três defeitos meus que os DADOS DELE pegaram
+
+O script nasceu pra consertar produto com nome em inglês (`Corn Kernel Stripper`
+→ busca da Amazon que não devolve nada). Cada rodada dele achou um erro meu:
+
+1. **Medição enviesada.** Anunciei "3 falsos positivos em 14". Na amostra real
+   dele: **16 em 39, 41%**. Eu tinha escolhido produtos pt-BR que quase todos
+   tinham "de" ou acento. Corrigido virando a função em PENEIRA declarada — quem
+   decide é o Gemini, não a régua.
+2. **"repita igual" faz o modelo MELHORAR.** Com 41% de falso positivo, isso
+   reescreveria dezenas de links certos (`Escada rolante` → `Esteira rolante`).
+   Trocado por `JA_PT`, uma saída explícita pra "não é o meu caso".
+3. **A ordem das perguntas.** Eu perguntava "está em português?" ANTES de "é
+   produto?" — então legenda EM PORTUGUÊS respondia JA_PT e passava:
+   `'Coisas Devia Ter Comprado Antes'`, `'Produtinhos Shopee Facilitam Faxina'`.
+   Só pegava não-produto estrangeiro, metade do problema.
+
+E dois pegos por teste antes de subir: sem `AMAZON_TAG` o script abortava tudo
+(inclusive a marcação, que não usa tag), e o `return ""` antecipado do
+`traduzir()` dava `ValueError` no único caminho que ninguém testa.
+
+**Resultado:** ~52 links corrigidos, ~40 marcados como não-produto (incluindo 16
+legendas em espanhol de fonte antiga do IG). Marca, não apaga — `nao_e_produto`
+no plano.json, e o `produzir_tiktok._pendentes` pula. Reversível tirando a
+chave, testado nos dois sentidos.
+
+### 🔍 "DARIA PRA TIRAR PRINT E JOGAR NO GOOGLE?"
+
+Pergunta dele. A ideia está certa e **já roda** — é o `👁️ Gemini viu (3
+frames)`. Sobre o Google: Lens **não tem API pública**, Custom Search não aceita
+imagem, SerpAPI custa ~US$50/mês, Bing Visual Search é a alternativa oficial.
+
+📌 Mas o que o Google resolveria não é identificação (resolvida) e sim
+**qualidade do match**, onde de fato há defeito:
+
+```
+'Abridor de Casca de Ovo' → 'Copo Térmico 360ml'     ✗
+'Estação de pintura'      → 'Estação Férrea'          ✗
+'July July'               → 'Kit 3 Sutiã'             ✗
+```
+
+Casam por sobreposição de palavras. **O caminho melhor e mais barato que o
+Google:** já temos o frame do vídeo *e* a foto do produto na Shopee — dá pra
+pedir ao Gemini pra COMPARAR as duas e responder "é o mesmo produto?" antes de
+aceitar o link. Compara contra o candidato específico em vez de procurar no
+mundo. **É o próximo item.**
+
+### ⏭️ Pendente
+
+- [ ] **Verificação de match por imagem** (acima) — o maior ganho de qualidade
+      disponível hoje.
+- [ ] **Vigiar o gasto**: a visão na coleta é a linha cara. Antes da próxima
+      rodada grande, medir custo/vídeo de verdade em vez de estimar.
+- [ ] **Produzir.** 2171 pacotes parados não valem nada.
+
+---
+
 ## 🗓️ Dia 2026-09-04 (tarde) — três defeitos que jogavam trabalho fora
 
 ### 😤 O EMOJI ENTRANDO NA FRASE — e não era o Gemini
