@@ -277,6 +277,11 @@ IG_MIN_AMOSTRA = int(os.environ.get("IG_MIN_AMOSTRA", "4"))
 # quanto CADA corte descartaria nesta rodada — impresso no fim, pra decidir o
 # MIN_VIEWS_IG com número em vez de palpite
 _FAIXAS_VIEWS = (1_000, 5_000, 10_000, 25_000, 50_000, 100_000)
+
+# Perfis cuja LISTAGEM falhou nesta rodada (erro de rede/extrator/429), não
+# perfis que listaram e não renderam. A poda tem de tratar os dois casos de
+# formas opostas — ver `_atualizar_saude_e_podar`.
+_falhou_listar: set = set()
 _cortaria = defaultdict(int)
 _sem_views = defaultdict(int)
 
@@ -576,6 +581,12 @@ def _listar_videos(perfil: str, limite: int, fonte: str = "tiktok") -> list:
                 out.append((f"https://www.tiktok.com/@x/video/{e.get('id')}", vw))
         return out
     except Exception:
+        # ⚠️ REGISTRA A FALHA DE LISTAGEM (04/09/2026). Sem isto a poda não
+        # distingue "listei e não rendeu nada" de "nem consegui perguntar", e
+        # trata as duas como rodada 0-keeper. Foi o que comentou o
+        # @airlandolists — a MELHOR fonte da rodada anterior, ~50 vídeos —
+        # depois de um erro de JSON do TikTok. Ver `_atualizar_saude_e_podar`.
+        _falhou_listar.add(_norm_perfil(perfil))
         _log(f"   não consegui listar {perfil} [{fonte}]: {(r.stderr or '')[:120]}")
         return []
 
@@ -960,6 +971,26 @@ def _atualizar_saude_e_podar(perfis: list, keepers: dict, dry: bool):
             # ela continua de onde parou. Zerar aqui daria imunidade eterna a
             # quem sempre falha junto com o canal.
             continue
+        if k in _falhou_listar:
+            # ⚠️ O BURACO QUE A TRAVA POR CANAL NÃO FECHAVA (04/09/2026).
+            #
+            # A trava por canal só protege quando o canal INTEIRO deu zero. Mas
+            # o TikTok bloqueia INTERMITENTEMENTE: nesta rodada 5 perfis
+            # renderam 157 produtos e ~25 levaram `Failed to parse JSON`. Como
+            # o canal rendeu, a trava não disparou, e os que foram BLOQUEADOS
+            # contaram rodada 0-keeper. Resultado: 12 fontes comentadas,
+            # incluindo o @airlandolists — que na rodada anterior tinha sido a
+            # MELHOR de todas, com ~50 vídeos.
+            #
+            # A distinção que faltava: "listei e não rendeu" é informação sobre
+            # a FONTE; "não consegui listar" é informação sobre a REDE. Só a
+            # primeira pode podar. Uma fonte que nem chegou a ser perguntada
+            # não foi avaliada — penalizá-la é medir o meu proxy, não ela.
+            #
+            # Como na trava por canal, o contador NÃO zera: quem falha sempre
+            # não ganha imunidade eterna, só não é punido por rodada em que o
+            # TikTok não respondeu.
+            continue
         s = saude.get(k) or {"zero_seguidas": 0, "fonte": fonte}
         s["fonte"] = fonte
         s["checado"] = hoje
@@ -975,6 +1006,10 @@ def _atualizar_saude_e_podar(perfis: list, keepers: dict, dry: bool):
                     podados.append(k)
         saude[k] = s
     _salvar_saude(saude)
+    if _falhou_listar:
+        _log(f"saúde das fontes: {len(_falhou_listar)} fonte(s) NÃO PUDERAM SER "
+             f"LISTADAS (erro de rede/extrator) — não avaliadas, não penalizadas: "
+             f"{', '.join('@' + p for p in sorted(_falhou_listar))}")
     if podados:
         _log(f"🧹 poda por coleta: {len(podados)} fonte(s) zumbi comentada(s) "
              f"(reversível): {', '.join('@' + p for p in podados)}")
