@@ -680,6 +680,45 @@ Perfumes Skincare` sai **beleza**. Cabe em casa (organização) ou beleza
 (acessório) — é curadoria do Dre, não defeito. Anotado no teste pra não virar
 "bug" numa próxima leitura.
 
+### E o SEGUNDO diff pegou o defeito maior: eu quebrei um projeto que já existia
+
+O diff caiu de 127 pra 80 mudanças, mas sobrou a pilha `beleza → (IA) (11)`:
+`Removedor de maquiagem em spray`, `Protetor de gola para maquiagem`,
+`Mini Fixador Bruma Maquiagem`… produtos de beleza óbvios perdendo classificação.
+
+A causa estava escrita **na linha 60 do próprio arquivo, desde sempre**:
+
+```python
+# Casam no INÍCIO da palavra, então "maquiag" pega "maquiagem"/"maquiador" mas
+# "pele" não pega "impeler". Prefixo é proposital em vários termos.
+_BELEZA = ("beleza", "beauty", "skincare", "maquiag", ...)
+```
+
+**A lista é cheia de RADICAIS TRUNCADOS de propósito**: `maquiag`, `depila`,
+`cosmetic`, `hialuron`, `bronzead`, `micropigmenta`. O sufixo livre não era
+acidente — era o projeto. Eu li o comentário do `_compilar` e **não li o da
+lista, três linhas acima**, e quebrei todos de uma vez.
+
+### O conserto: risco invertido
+
+O padrão **voltou a ser livre** (o que funcionava). O fecho agora só entra onde
+há evidência, por **dois critérios mecânicos** — nenhum depende de eu julgar
+entrada por entrada:
+
+| critério | por quê | caso real |
+|---|---|---|
+| é prefixo de entrada de **outra** lista | senão come a palavra dela | `sabonete`(beleza) comia `saboneteira`(casa) |
+| tem **≤4 letras** | radical curto é palavra inteira | `pet` casava em **PETG** e **Petroplus** |
+
+Prefixo dentro da **mesma** lista não conta: `sabonete` e `sabonete facial` dão
+beleza dos dois jeitos. O estrago só existe entre listas concorrentes.
+
+`teste_roteador.py`: **39/39**, com os radicais travados pra eu não repetir.
+
+> **Regra que fica:** antes de trocar o comportamento de uma função, ler os
+> comentários da ESTRUTURA DE DADOS que ela consome, não só os dela. O projeto
+> estava documentado; eu li o lugar errado.
+
 ### O juiz: fechado com n=92
 
 | n | embaralhado | real | distância |
@@ -696,6 +735,22 @@ reais, a taxa verdadeira de link errado na fila é **~55-61%**.
 engano). Precisaria de pares com rótulo humano. Bloquear é reversível e sobram
 ~700 conferidos + 657 da Amazon, então o risco é aceitável — mas está aqui
 escrito que é risco não medido, não certeza.
+
+### A rodada cheia: a amostra não estava mentindo
+
+```
+✅ 585 confere · ❌ 827 ERRADO · 🤔 69 incerto · ⚠️ 4 falhou
+🪙 1.956.441 tokens · R$ 3,17 · 145 min
+```
+
+**827 de 1485 = 55,7%**, contra os **53%** que as amostras previram, e R$3,17
+contra R$3,07 projetados. A projeção era conta, não palpite, e a conta fechou.
+
+Fila livre depois do bloqueio: **585 ✅ + 69 🤔 + 657 sem foto ≈ 1.311 pacotes**
+— mais de 7 meses a 6 posts/dia. O bloqueio não secou a esteira.
+
+⚠️ Só o veredito `nao` bloqueia. `talvez` e `erro` ficam com `match_conferido`
+gravado mas seguem produzíveis — na dúvida, o pacote continua na fila.
 
 ---
 

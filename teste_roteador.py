@@ -104,6 +104,30 @@ checa("moda", "Cinta Modeladora Abdominal Modelform Esbelt Pós Parto")
 # cosmético) — é decisão de curadoria do Dre, não defeito de código. Fica
 # registrado aqui pra não virar "bug" numa próxima leitura do diff.
 
+print("\n── RADICAIS TRUNCADOS: o sufixo livre é projeto, não acidente ──")
+# ⚠️ A linha 60 do roteador_contas.py diz isto desde sempre:
+#   "Casam no INÍCIO da palavra, então 'maquiag' pega 'maquiagem'/'maquiador'"
+# Em 05/09 eu troquei o fim livre por uma regra de gênero/plural minha e
+# quebrei TODOS os radicais de uma vez (11 produtos de beleza foram pra IA).
+# Li o comentário do _compilar e não li o da lista, três linhas acima.
+checa("beleza", "Removedor de maquiagem em spray")          # maquiag
+checa("beleza", "Protetor de gola para maquiagem")          # maquiag
+checa("beleza", "Sérum com ácido hialurônico 30ml")         # hialuron
+checa("beleza", "Autobronzeador bronzeador corporal")       # bronzead
+checa("beleza", "Depilador elétrico feminino")              # depila
+checa("beleza", "Kit cosméticos importados")                # cosmetic
+
+print("\n── ...e o fecho só onde há evidência, por regra mecânica ──")
+# critério 1: é prefixo de entrada de OUTRA lista → fecha
+checa("casa", "Saboneteira Dispenser Automático Para Sabonete Líquido")
+checa("beleza", "Sabonete facial esfoliante em barra")
+# critério 2: 4 letras ou menos → fecha ('pet' dentro de PETG/Petroplus)
+checa("", "Filamento Impressora Creality CR-PETG")
+checa("moda", "2 Limpa Tênis Petroplus Spray")
+# ...sem estragar o plural das curtas
+checa("pet", "Kit 3 pets brinquedo mordedor")
+checa("beleza", "Máscara para peles oleosas")
+
 print("\n── produtos dos vídeos que saíram certos (não pode regredir) ──")
 checa("moda", "botas pantufa Dragon Ball Z")
 checa("casa", "Kit 2 Travesseiro De Corpo Xuxão")

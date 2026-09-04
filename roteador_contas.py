@@ -231,36 +231,53 @@ def _sem_acento(s: str) -> str:
         "áàâãäéèêëíìîïóòôõöúùûüç", "aaaaaeeeeiiiiooooouuuuc"))
 
 
-def _compilar(palavras) -> re.Pattern:
-    """Casa no início da palavra e deixa passar só gênero/plural: 'pele' pega
-    'pele/peles', mas não 'impeler' nem 'peleteria'.
+def _precisa_fechar(termo: str, de_outras_listas: frozenset) -> bool:
+    """Esta entrada tem que parar no fim da palavra, ou pode correr solta?
 
-    ⚠️ ANTES O FIM ERA LIVRE, e isso fazia uma lista COMER PALAVRA DE OUTRA
-    (achado em 05/09/2026): 'sabonete' (beleza) casava com o começo de
-    'saboneteira' — que está na lista de CASA logo ali embaixo. Como beleza é
-    testada antes de casa, toda saboneteira virava beleza, e a palavra na lista
-    certa nunca teve chance. Um Dispenser de sabonete foi parar no
-    @topshopbeauty._ por causa disto.
+    ⚠️ O SUFIXO LIVRE É PROJETO, NÃO ACIDENTE — está escrito na linha 60 deste
+    arquivo desde sempre: "maquiag" pega "maquiagem"/"maquiador". A lista está
+    cheia de RADICAIS TRUNCADOS de propósito: maquiag, depila, cosmetic,
+    hialuron, bronzead, micropigmenta. Em 05/09/2026 eu troquei o fim livre por
+    uma regra de gênero/plural minha e quebrei todos eles de uma vez — li o
+    comentário do _compilar e não li o da lista, três linhas acima.
 
-    Uso `(?![a-z0-9])` em vez de `\\b` no fim porque várias entradas são frases
-    ('escova para pet') e algumas terminam em espaço ('cao ') — `\\b` depois de
-    espaço tem sentido invertido e quebraria justamente essas.
+    Então o padrão VOLTOU a ser livre, e só fecho onde existe EVIDÊNCIA, por
+    dois critérios mecânicos (nenhum depende de eu julgar entrada por entrada):
 
-    ⚠️ O FECHO PRECISA DE GÊNERO, NÃO SÓ PLURAL. A primeira versão aceitava só
-    `(?:es|s)?` e isso quebrou 12 produtos de casa no inbox real: a lista tem
-    'organizador' e o produto diz 'organizadorA' ('caixas organizadoras',
-    'Sapateira Organizadora'). Português tem gênero, e o fim livre antigo cobria
-    isso por acidente. Achado pelo `diff_roteador.py` — nos MEUS 18 testes não
-    aparecia, porque fui eu que escolhi os 18.
+    1. É prefixo de uma entrada de OUTRA lista → fechar, senão come a palavra
+       dela. É o caso real: 'sabonete'(beleza) comia 'saboneteira'(casa), e
+       como beleza roda antes, toda saboneteira virava beleza.
+
+    2. Tem 4 letras ou menos → fechar. Radical curto quase sempre é palavra
+       inteira, e sufixo livre em 3 letras explode: 'pet' casava dentro de
+       'PETG' e 'Petroplus', mandando filamento de impressora 3D pro
+       @topshoppet_. Gênero/plural continuam passando, então 'pele'→'peles' e
+       'unha'→'unhas' seguem funcionando.
+    """
+    if len(termo) <= 4:
+        return True
+    return any(o.startswith(termo) for o in de_outras_listas)
+
+
+def _compilar(palavras, de_outras_listas=frozenset()) -> re.Pattern:
+    """Casa no INÍCIO da palavra. O fim depende do `_precisa_fechar`.
+
+    Uso `(?![a-z0-9])` em vez de `\\b` pra fechar, porque várias entradas são
+    frases ('escova para pet') e algumas terminam em espaço ('cao ') — `\\b`
+    depois de espaço tem sentido invertido e quebraria justamente essas.
     """
     partes = []
     for p in sorted((_sem_acento(x.lower()) for x in palavras), key=len, reverse=True):
-        if p and p[-1].isalnum():
-            # as|os|es antes de a|o|s: alternância casa a primeira que serve.
+        if p and p[-1].isalnum() and _precisa_fechar(p, de_outras_listas):
+            # as|os|es antes de a|o|s: a alternância casa a primeira que serve
             partes.append(re.escape(p) + r"(?:as|os|es|a|o|s)?(?![a-z0-9])")
         else:
-            partes.append(re.escape(p))     # termina em espaço/pontuação
+            partes.append(re.escape(p))
     return re.compile(r"\b(?:" + "|".join(partes) + r")")
+
+
+def _normaliza(lista) -> frozenset:
+    return frozenset(_sem_acento(x.lower()) for x in lista)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -295,13 +312,25 @@ _PET_CERTO = (
 )
 
 
-_RX_PET = _compilar(_PET)
-_RX_BELEZA = _compilar(_BELEZA)
-_RX_TECH = _compilar(_TECH)
-_RX_CASA = _compilar(_CASA)
-_RX_MODA = _compilar(_MODA)
-_RX_VETO_PET = _compilar(_VETO_PET)
-_RX_PET_CERTO = _compilar(_PET_CERTO)
+_LISTAS = {"pet": _PET, "beleza": _BELEZA, "tech": _TECH, "casa": _CASA, "moda": _MODA}
+_NORM = {k: _normaliza(v) for k, v in _LISTAS.items()}
+_TODAS = frozenset().union(*_NORM.values())
+
+
+def _outras(nome: str) -> frozenset:
+    """Entradas de todas as listas MENOS a própria. Prefixo dentro da mesma
+    lista não é problema ('sabonete' e 'sabonete facial' dão beleza dos dois
+    jeitos); o estrago é só entre listas concorrentes."""
+    return frozenset().union(*(v for k, v in _NORM.items() if k != nome))
+
+
+_RX_PET = _compilar(_PET, _outras("pet"))
+_RX_BELEZA = _compilar(_BELEZA, _outras("beleza"))
+_RX_TECH = _compilar(_TECH, _outras("tech"))
+_RX_CASA = _compilar(_CASA, _outras("casa"))
+_RX_MODA = _compilar(_MODA, _outras("moda"))
+_RX_VETO_PET = _compilar(_VETO_PET, _TODAS)
+_RX_PET_CERTO = _compilar(_PET_CERTO, _TODAS)
 
 
 def _por_palavra_chave(texto: str) -> str:
