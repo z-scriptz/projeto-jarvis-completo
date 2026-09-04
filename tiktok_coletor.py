@@ -99,6 +99,26 @@ def _amazon_ativo() -> bool:
             and bool(os.getenv("AMAZON_TAG", "").strip()))
 
 
+def _termo_gringo(termo: str) -> bool:
+    """O termo é legenda em inglês/espanhol em vez de nome de produto?
+
+    ⚠️ ISTO DECIDE SE A VISÃO RODA (04/09/2026). Era usado só pra barrar link
+    da Amazon; agora também abre o portão do Gemini Vision, e essa é a diferença
+    entre perder o vídeo e produzir com ele.
+
+    O que acontecia: no TikTok a visão só rodava se o termo fosse INVÁLIDO, e
+    `'You can find this bye'` é válido — 5 palavras, só letras. A visão nunca
+    rodava, o inglês virava "produto", não casava em marketplace nenhum e o
+    vídeo morria. Numa rodada isso descartou centenas: 'smart gadgets unique
+    accessories and', 'The Most Viral Gadget Must', 'Buy The Most Viral Gadget'.
+
+    📌 E adicionar marketplace NÃO resolveria: não existe o que procurar. O
+    defeito é de identificação, não de cobertura de loja.
+    """
+    palavras = re.findall(r"[a-zA-ZÀ-ÿ]+", (termo or "").lower())
+    return any(p in _EN_WORDS or p in _ES_WORDS for p in palavras)
+
+
 def _produto_pra_amazon(termo: str) -> bool:
     """Só monta link Amazon pra termo que PARECE produto pt-BR de verdade —
     rejeita se tiver qualquer palavra funcional/comida do inglês (o Gemini às
@@ -108,7 +128,7 @@ def _produto_pra_amazon(termo: str) -> bool:
     palavras = re.findall(r"[a-zA-ZÀ-ÿ]+", termo.lower())
     if not (2 <= len(palavras) <= 8):
         return False
-    return not any(p in _EN_WORDS or p in _ES_WORDS for p in palavras)
+    return not _termo_gringo(termo)
 
 
 def _amazon_link(termo: str) -> str:
@@ -1462,8 +1482,39 @@ def main():
             # IG: a legenda é quase sempre um HOOK (curiosity-gap: "pouca gente imagina…"),
             # NÃO o produto — então a VISÃO (Gemini) é a autoridade. TikTok: a legenda
             # costuma nomear o produto, então a visão só entra se o texto falhar.
+            # ⚠️ O 4º CASO ENTROU EM 04/09 E É O QUE SALVA AS FONTES GRINGAS.
+            #
+            # Antes: `instagram OR termo vazio OR termo inválido`. Faltava o
+            # caso MAIS COMUM do TikTok gringo — termo VÁLIDO que é legenda em
+            # inglês: 'You can find this bye', 'smart gadgets unique accessories
+            # and', 'The Most Viral Gadget Must'. Válido passava, a visão não
+            # rodava, e o vídeo morria sem NUNCA ter sido olhado. Numa só rodada
+            # foram centenas — de fontes que o Dre classificou como as melhores.
+            #
+            # 📌 O SINAL CERTO É `termo_com_juizo`, NÃO UMA LISTA DE PALAVRAS.
+            # Tentei primeiro casar inglês por vocabulário (`_termo_gringo`) e
+            # medi: pegou 10 de 17 casos reais ('Fall centerpiece idea' e
+            # 'Genius unnecessary' escaparam) e ainda deu falso positivo em
+            # 'Mop de limpeza' — porque "mop" está na lista de inglês. Lista de
+            # palavras nunca vai cobrir legenda livre.
+            #
+            # `termo_com_juizo=False` significa que o termo veio da HEURÍSTICA
+            # (regex na legenda) e ninguém checou que é produto — é exatamente
+            # a frase que o log imprimia em cada descarte. Cobre 100% dos casos,
+            # sem vocabulário pra manter.
+            #
+            # CUSTO: mais download + chamada de visão. É o troco certo — supply
+            # é o gargalo, e a alternativa era jogar o vídeo fora. Desligue com
+            # VISAO_SEM_JUIZO=0 se a fatura do Gemini pesar.
+            _visao_sem_juizo = (os.getenv("VISAO_SEM_JUIZO", "1").strip().lower()
+                                in ("1", "true", "sim"))
+            _duvidoso = bool(termo) and not termo_com_juizo and _visao_sem_juizo
             usar_visao = _visao_ativa() and not dry and (
-                fonte == "instagram" or not termo or not _termo_valido(termo))
+                fonte == "instagram" or not termo or not _termo_valido(termo)
+                or _duvidoso)
+            if usar_visao and _duvidoso:
+                _log(f"   🔍 '{termo[:40]}' saiu da heurística (não checado) — "
+                     f"chamo a visão em vez de arriscar")
             if usar_visao:
                 arq_pre = _baixar(url, pasta)
                 tv = (_termo_por_visao(arq_pre, meta.get("duracao") or 0,
@@ -1472,8 +1523,13 @@ def main():
                     # a visão vence a legenda-hook — e ela é o Gemini olhando o
                     # frame, então tem o mesmo juízo que o extrator de legenda
                     termo, termo_com_juizo = tv, True
-                elif fonte == "instagram":
-                    termo = ""                        # IG sem visão: não confia no hook
+                elif fonte == "instagram" or _duvidoso:
+                    # a visão OLHOU e não achou produto. O termo da heurística
+                    # já era suspeito (foi ele que chamou a visão), então
+                    # mantê-lo só produziria busca de marketplace com legenda
+                    # em inglês — e um log que culpa a loja por um defeito de
+                    # identificação. Zera: o descarte sai como "legenda+visão".
+                    termo = ""
             if not termo or not _termo_valido(termo):
                 _log(f"   • {vid}: sem produto claro (legenda+visão) — pulo")
                 if arq_pre:
