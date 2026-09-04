@@ -83,8 +83,25 @@ def parece_ingles(termo: str) -> bool:
     return bool(t) and not _PT_MARCAS.search(t)
 
 
-def traduzir(termo: str) -> str:
-    """Gemini traduz o NOME DO PRODUTO. Devolve '' quando NÃO se deve mexer.
+def traduzir(termo: str):
+    """(veredito, termo_novo). Veredito: traduzido / ja_pt / nao_produto / erro.
+
+    ⚠️ OS TRÊS "NÃO MEXO" NÃO SÃO A MESMA COISA — e eu tinha colapsado eles
+    (04/09/2026). O resultado da 1ª rodada mostrou o custo:
+
+        ⏭️ 'Nunca respondas esta llamada pueden'
+        ⏭️ 'Debes tener activadas estas funciones'
+        ⏭️ 'Limited time special offer'
+        ⏭️ 'Coisas Devia Ter Comprado Antes'
+
+    Isso não é produto, é LEGENDA. O Gemini respondeu NAO, meu código leu como
+    "não mexo" igual ao JA_PT, e eles seguem no inbox com busca da Amazon pra
+    uma frase em espanhol. Cada um vira um post com link morto — exatamente o
+    que este script existe pra impedir.
+
+    `ja_pt`       → certo, não toca.
+    `nao_produto` → NÃO É PRODUTO: marca o pacote pra não virar post.
+    `erro`        → não sei, não toca (falha de API não pode apagar fila).
 
     ⚠️ O MODELO RESPONDE `JA_PT`, NÃO "repita igual". Parece a mesma coisa e
     não é: mandado repetir, o modelo tende a MELHORAR o termo — 'Escada
@@ -116,12 +133,16 @@ def traduzir(termo: str) -> str:
                       "de chuveiro; 'Salva alimentos' → JA_PT\n\n"
                       "Produto: " + termo))
         t = (r.text or "").strip().strip('"').split("\n")[0].strip()
-        if not t or t.upper().startswith(("NAO", "JA_PT")):
-            return ""
-        return t[:80]
+        if not t:
+            return "erro", ""
+        if t.upper().startswith("JA_PT"):
+            return "ja_pt", ""
+        if t.upper().startswith("NAO"):
+            return "nao_produto", ""
+        return "traduzido", t[:80]
     except Exception as e:
         print(f"   ⚠️  tradução falhou ({str(e)[:60]})")
-        return ""
+        return "erro", ""
 
 
 def main() -> int:
@@ -184,15 +205,30 @@ def main() -> int:
         print("❌ AMAZON_TAG vazio no .env — não sei montar o link. Abortando.")
         return 1
 
-    ok = ja_pt = 0
+    ok = ja_pt = lixo = erro = 0
     print()
     for pj, info, nome in amazon:
-        novo = traduzir(nome)
+        veredito, novo = traduzir(nome)
+
+        if veredito == "nao_produto":
+            # ⚠️ NÃO APAGO O PACOTE. Marco. Apagar por decisão de um modelo é
+            # irreversível e eu já errei a régua uma vez hoje; marcar deixa o
+            # `produzir_tiktok` pular e deixa o Dre conferir a lista depois.
+            info["nao_e_produto"] = True
+            info["motivo_bloqueio"] = f"Gemini: '{nome}' é legenda, não produto"
+            pj.write_text(json.dumps(info, ensure_ascii=False, indent=2),
+                          encoding="utf-8")
+            print(f"   🚫 '{nome[:44]}' — NÃO É PRODUTO · marcado, não posta")
+            lixo += 1
+            continue
+
+        if veredito == "erro":
+            print(f"   ⚠️  '{nome[:44]}' — não consegui decidir · intocado")
+            erro += 1
+            continue
+
         if not novo or novo.lower() == nome.lower():
-            # JA_PT, NAO, ou falha de API — os três significam "não mexo".
-            # Distinguir não mudaria o que o script faz, e um contador a mais
-            # daria a impressão de que dá pra agir sobre a diferença.
-            print(f"   ⏭️  '{nome[:44]}' — já está em pt (ou não deu) · intocado")
+            print(f"   ⏭️  '{nome[:44]}' — já está em português · intocado")
             ja_pt += 1
             continue
         info["produto"] = novo
@@ -204,12 +240,19 @@ def main() -> int:
         print(f"   ✅ '{nome[:34]}' → '{novo[:34]}'")
         ok += 1
 
-    print(f"\n✅ {ok} link(s) reescrito(s) · ⏭️  {ja_pt} intocado(s) "
-          f"(já em português ou sem tradução)")
+    print(f"\n✅ {ok} link(s) reescrito(s)")
+    print(f"🚫 {lixo} marcado(s) como NÃO-PRODUTO (não vão virar post)")
+    print(f"⏭️  {ja_pt} já em português · intocado(s)")
+    if erro:
+        print(f"⚠️  {erro} sem veredito (falha de API) · intocado(s)")
     if ja_pt:
-        print(f"   📌 os {ja_pt} intocados são a peneira errando — custaram uma "
-              f"chamada cada e nenhum link mudou. É o preço de não perder os "
-              f"{ok} que estavam quebrados.")
+        print(f"\n   📌 os {ja_pt} em português são a peneira errando — custaram "
+              f"uma chamada cada e nenhum link mudou. É o preço de achar os "
+              f"{ok + lixo} que estavam quebrados.")
+    if lixo:
+        print(f"   📌 os {lixo} marcados NÃO foram apagados: têm "
+              f"`nao_e_produto: true` no plano.json. Pra revisar:")
+        print(f"      grep -l nao_e_produto inbox_tiktok/*/plano.json")
     return 0
 
 

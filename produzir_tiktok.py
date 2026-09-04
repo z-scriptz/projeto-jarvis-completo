@@ -416,8 +416,22 @@ def _pendentes() -> list:
             continue
         pj = pasta / "plano.json"
         vids = list(pasta.glob("video.*"))
-        if pj.exists() and vids:
-            out.append((pasta, pj, vids[0]))
+        if not (pj.exists() and vids):
+            continue
+        # ⚠️ PULA O QUE O `limpar_inbox.py` MARCOU COMO NÃO-PRODUTO (04/09/2026).
+        # São pacotes cujo "produto" é legenda, não item: 'Nunca respondas esta
+        # llamada pueden', 'Limited time special offer', 'Coisas Devia Ter
+        # Comprado Antes'. Postar isso é link morto — pior que não postar,
+        # porque queima o clique de quem confiou.
+        #
+        # Marcado, não apagado: um erro do modelo aqui é reversível tirando a
+        # chave do plano.json.
+        try:
+            if json.loads(pj.read_text(encoding="utf-8")).get("nao_e_produto"):
+                continue
+        except Exception:
+            pass          # plano ilegível é problema do _produzir, não daqui
+        out.append((pasta, pj, vids[0]))
     return out
 
 
