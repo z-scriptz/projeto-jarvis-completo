@@ -82,6 +82,39 @@ def _frame(video: Path, dur: float = 0) -> bytes:
             pass
 
 
+def _contato(pares, destino: Path) -> Path:
+    """Uma folha com os pares lado a lado: vídeo à esquerda, loja à direita.
+
+    ⚠️ ISTO EXISTE PORQUE O JUIZ PRECISA SER JULGADO (05/09/2026). A primeira
+    amostra reprovou 12 de 20 (60%) e deu ZERO "talvez" — num julgamento de
+    imagem ambígua, zero incerteza é sinal de modelo defaultando pro NAO, não
+    de modelo criterioso. Bloquear 900 pacotes com base num juiz não validado
+    seria o mesmo erro de confiar numa medição que eu não conferi.
+    O olho do Dre em 10 pares resolve o que nenhuma métrica minha resolve."""
+    from PIL import Image, ImageDraw
+    import io
+    LADO, PAD, ROT = 320, 8, 22
+    linhas = len(pares)
+    folha = Image.new("RGB", (LADO * 2 + PAD * 3, (LADO + ROT + PAD) * linhas + PAD),
+                      (250, 250, 250))
+    d = ImageDraw.Draw(folha)
+    for i, (nome, veredito, fr, ft) in enumerate(pares):
+        y = PAD + i * (LADO + ROT + PAD)
+        d.text((PAD, y), f"[{veredito.upper()}] {nome[:70]}", fill=(20, 20, 20))
+        for j, raw in enumerate((fr, ft)):
+            x = PAD + j * (LADO + PAD)
+            try:
+                im = Image.open(io.BytesIO(raw)).convert("RGB")
+                im.thumbnail((LADO, LADO))
+                folha.paste(im, (x, y + ROT))
+            except Exception:
+                d.rectangle([x, y + ROT, x + LADO, y + ROT + LADO],
+                            outline=(200, 60, 60))
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    folha.save(str(destino), quality=88)
+    return destino
+
+
 def _baixar_imagem(url: str) -> bytes:
     if not url or not url.startswith("http"):
         return b""
@@ -145,6 +178,10 @@ def main() -> int:
                     help="confere só N pacotes sorteados e MEDE custo/acerto")
     ap.add_argument("--marcar", action="store_true",
                     help="bloqueia os reprovados (sem isto, só lista)")
+    ap.add_argument("--provas", metavar="DIR", default="",
+                    help="salva os pares (frame do vídeo | foto da loja) num "
+                         "contato pra CONFERIR O JUIZ com o olho, antes de "
+                         "confiar no veredito. NÃO gasta API a mais.")
     a = ap.parse_args()
 
     arq = _carregar_env()
@@ -193,6 +230,7 @@ def main() -> int:
     tot = {"sim": 0, "nao": 0, "talvez": 0, "erro": 0}
     tokens = 0
     reprovados = []
+    provas = []
 
     for pj, info, vid in alvos:
         nome = (info.get("produto") or "?")[:38]
@@ -210,6 +248,8 @@ def main() -> int:
         print(f"   {marca} {nome:40} · {pj.parent.name[:30]}")
         if veredito == "nao":
             reprovados.append((pj, info, nome))
+        if a.provas and frame and foto:
+            provas.append((nome, veredito, frame, foto))
 
         if a.marcar and veredito == "nao":
             # ⚠️ MARCA, NÃO APAGA — mesma regra do limpar_inbox. Um veredito de
@@ -243,6 +283,19 @@ def main() -> int:
                   f"R$ {proj:.2f}  ({seg/max(1,n)*total_conferivel/60:.0f} min)")
             print(f"      ⚠️ projeção, não medição — o número real sai da rodada "
                   f"cheia. Mas é conta, não palpite.")
+
+    if provas:
+        try:
+            alvo = Path(a.provas)
+            if alvo.is_dir() or not alvo.suffix:
+                alvo = alvo / "provas_match.jpg"
+            _contato(provas, alvo)
+            print(f"\n   🖼️  provas em {alvo}  ({len(provas)} pares)")
+            print(f"      esquerda = frame do vídeo · direita = foto da loja")
+            print(f"      ⚠️ OLHE ANTES DE MARCAR. Se os ❌ parecerem certos pra")
+            print(f"         você, o juiz presta. Se não, o defeito é meu.")
+        except Exception as e:
+            print(f"\n   ⚠️ não consegui montar as provas: {str(e)[:70]}")
 
     if reprovados and not a.marcar:
         print(f"\n❌ {len(reprovados)} com link de produto ERRADO:")
