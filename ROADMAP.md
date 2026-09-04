@@ -578,6 +578,76 @@ e nesse caso não estão. "Não está julgando" engole "é frouxo".
 
 ---
 
+## 🗓️ Dia 2026-09-05 (c) — o juiz passou, e o roteador reprovou
+
+### O controle negativo: o juiz PRESTA
+
+```
+reprova nos pares EMBARALHADOS: 11/12 (92%)
+reprova nos pares REAIS:         7/12 (58%)
+✅ JUIZ DISCRIMINA: separa por 33 pontos
+```
+
+⚠️ **Mas n=12 é pouco.** Fisher exato em 11/12 vs 7/12 dá **p ≈ 0,08** —
+sinal, não prova. Bloquear ~860 pacotes com p=0,08 é apostar numa diferença que
+ainda pode ser sorte de amostra. Repetir com n=40 custa **R$ 0,18 e 8 min**.
+
+> **Regra:** medição barata que decide ação cara se repete até parar de ser
+> discutível. R$0,18 pra proteger uma decisão sobre 860 pacotes não é despesa.
+
+### O rodízio funcionou — e mostrou 3 produtos na conta errada
+
+| produto | foi pra | devia | causa |
+|---|---|---|---|
+| `KIT Sutiã ... tipo Orelha De Coelho` | 🐾 pet | moda | `coelho` = formato |
+| `Naninha Para Bebê ... Coelho ou Cachorro` | 🐾 pet | (IA) | é pra bebê |
+| `Saboneteira ... Para Sabonete Líquido` | 💄 beleza | casa | `sabonete` venceu `saboneteira` |
+
+### Três defeitos, três consertos
+
+**1. `_compilar` não fechava o fim da palavra.** `\b(?:sabonete)` casava com o
+começo de `saboneteira` — que está na lista de CASA. Como beleza roda antes,
+toda saboneteira virava beleza, e a palavra na lista certa nunca teve chance.
+Agora só o plural passa: `(?:es|s)?(?![a-z0-9])`.
+⚠️ `(?![a-z0-9])` e não `\b` porque várias entradas são frases e uma termina em
+espaço (`"cao "`), onde `\b` teria sentido invertido.
+
+**2. O desempate virou ESPECIFICIDADE.** Consertar o prefixo não bastava: o
+nome tinha `sabonete` solto também. O termo mais longo vence; a ordem antiga só
+desempata empate. **A ordem sempre foi um substituto tosco de especificidade** —
+todas as regras que os comentários documentavam continuam valendo:
+`'cachorro'(8) > 'shampoo'(7)`, `'roupa de cama'(13) > 'roupa'(5)`.
+
+**3. `_VETO_PET` — o bicho como enfeite.** Frases **literais**, não heurística:
+`orelha de coelho`, `formato de gato`, `para bebe`… Quando batem, pet não
+responde e as outras listas (ou a IA) decidem. `_PET_CERTO` (`racao`,
+`coleira`, `para cachorro`…) vence o veto, senão `caminha para pet do bebê`
+sairia de pet.
+
+⚠️ **Não inventei wordlist semântica.** Cobre o que a gente VIU; o resto cai na
+camada 2 (IA), que é onde palpite deve morar. Já apanhei de escrever heurística
+sem medir (a wordlist que deu 10/17 e foi jogada fora).
+
+De tabela: `travesseiro` e `fronha` faltavam em CASA — a lista tinha almofada,
+edredom e lençol. `Kit 2 Travesseiro De Corpo Xuxão` gastava chamada de IA pra
+descobrir que travesseiro é coisa de casa. **Confirmei que já era assim ANTES
+da minha mudança** (`git stash` + rodar) — buraco antigo, não regressão.
+
+### `diff_roteador.py` — porque 18 testes meus não medem nada
+
+Mudei a regra de desempate global. Os 18 casos do `teste_roteador.py` passam,
+mas **fui eu que escolhi os 18**. O `limpar_inbox` tinha "21% de falso positivo"
+nos meus exemplos e **41%** nos dados reais do Dre.
+
+`diff_roteador.py` roda a regra velha e a nova nos ~2149 nomes do inbox e
+imprime **só o que muda de conta**, agrupado por transição. Sem API, sem
+escrita, sem tocar na fila.
+
+> **Regra que fica:** mudança em regra de classificação global se mede no
+> corpus real ANTES de rodar em produção, não na amostra que o autor escolheu.
+
+---
+
 ## 🗓️ Dia 2026-09-05 (b) — a ordem alfabética era um sorteio viciado
 
 ### O que apareceu

@@ -153,7 +153,11 @@ _CASA = (
     "secadora de roupa", "guarda-roupa", "guarda roupa", "arara de roupa",
     "amaciante", "sabao em po", "sabao liquido", "tira mancha",
     "porta-cabide", "organizador de roupa",
-    "almofada", "luminaria de mesa", "luminária de mesa", "abajur",
+    # 'travesseiro' faltava (05/09/2026): a lista tinha almofada, edredom e
+    # lençol, mas 'Kit 2 Travesseiro De Corpo Xuxão' saía sem nicho e ia gastar
+    # chamada de IA pra descobrir que travesseiro é coisa de casa.
+    "almofada", "travesseiro", "fronha", "luminaria de mesa",
+    "luminária de mesa", "abajur",
     "descascador", "ralador", "abridor", "dispenser", "saboneteira",
     "porta-escova", "chuveiro", "ducha", "tapete de banheiro",
     "umidificador", "difusor de aroma", "aromatizador", "vela aromatica",
@@ -228,9 +232,59 @@ def _sem_acento(s: str) -> str:
 
 
 def _compilar(palavras) -> re.Pattern:
-    """Casa no início da palavra: 'pele' pega 'pele/peles', não 'impeler'."""
-    alternativas = sorted((_sem_acento(p.lower()) for p in palavras), key=len, reverse=True)
-    return re.compile(r"\b(?:" + "|".join(re.escape(p) for p in alternativas) + r")")
+    """Casa no início da palavra e deixa passar SÓ o plural: 'pele' pega
+    'pele/peles', mas não 'impeler' nem 'peleteria'.
+
+    ⚠️ ANTES O FIM ERA LIVRE, e isso fazia uma lista COMER PALAVRA DE OUTRA
+    (achado em 05/09/2026): 'sabonete' (beleza) casava com o começo de
+    'saboneteira' — que está na lista de CASA logo ali embaixo. Como beleza é
+    testada antes de casa, toda saboneteira virava beleza, e a palavra na lista
+    certa nunca teve chance. Um Dispenser de sabonete foi parar no
+    @topshopbeauty._ por causa disto.
+
+    Uso `(?![a-z0-9])` em vez de `\\b` no fim porque várias entradas são frases
+    ('escova para pet') e algumas terminam em espaço ('cao ') — `\\b` depois de
+    espaço tem sentido invertido e quebraria justamente essas.
+    """
+    partes = []
+    for p in sorted((_sem_acento(x.lower()) for x in palavras), key=len, reverse=True):
+        if p and p[-1].isalnum():
+            partes.append(re.escape(p) + r"(?:es|s)?(?![a-z0-9])")
+        else:
+            partes.append(re.escape(p))     # termina em espaço/pontuação
+    return re.compile(r"\b(?:" + "|".join(partes) + r")")
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# O BICHO COMO ENFEITE (05/09/2026)
+# ─────────────────────────────────────────────────────────────────────────────
+# PET roda primeiro de propósito ('shampoo para cachorro' tem que vencer
+# 'shampoo'). O efeito colateral é que qualquer produto que MENCIONE um bicho
+# vira pet, mesmo quando o bicho é o FORMATO e não o destinatário:
+#
+#   'Sutiã Adesivo ... tipo Orelha De Coelho'          → foi pro @topshoppet_
+#   'Naninha Para Bebê ... Coelho ou Cachorro Pelúcia' → foi pro @topshoppet_
+#
+# Um sutiã no perfil de pet não flopa só aquele post: desalinha a conta, que é
+# exatamente o que precisa de 1.000 seguidores coerentes.
+#
+# ⚠️ SÃO FRASES LITERAIS, NÃO HEURÍSTICA. Cobrem os casos que a gente VIU. O que
+# escapar cai na camada 2 (IA), que é onde palpite deve morar — já apanhei aqui
+# de inventar wordlist sem medir.
+_VETO_PET = (
+    "orelha de coelho", "orelhas de coelho", "orelha de gato", "orelhas de gato",
+    "formato de gato", "formato de cachorro", "formato de coelho",
+    "estampa de gato", "estampa de cachorro", "estampa de coelho",
+    "para bebe", "para bebes", "para recem nascido", "para recem-nascido",
+)
+
+# ...mas estes são pet sem discussão e VENCEM o veto acima. Sem isto, uma
+# 'caminha para pet do bebê' sairia de pet por causa de um 'para bebe'.
+_PET_CERTO = (
+    "racao", "coleira", "petshop", "pet shop", "tapete higienico", "arranhador",
+    "caixa de areia", "antipulga", "veterinario", "para pet", "para cachorro",
+    "para gato", "para caes", "para cao", "para gatos", "para cachorros",
+)
 
 
 _RX_PET = _compilar(_PET)
@@ -238,25 +292,43 @@ _RX_BELEZA = _compilar(_BELEZA)
 _RX_TECH = _compilar(_TECH)
 _RX_CASA = _compilar(_CASA)
 _RX_MODA = _compilar(_MODA)
+_RX_VETO_PET = _compilar(_VETO_PET)
+_RX_PET_CERTO = _compilar(_PET_CERTO)
 
 
 def _por_palavra_chave(texto: str) -> str:
     """Nicho pela lista, ou "" quando nenhuma bate.
 
-    ⚠️ A ORDEM É A REGRA DE DESEMPATE, e está justificada lá em cima, junto das
-    listas. Mexer na sequência muda classificação de produto que hoje acerta —
-    'roupa de cama' vira moda se MODA subir acima de CASA."""
+    ⚠️ O DESEMPATE AGORA É ESPECIFICIDADE (o termo mais longo vence), com a
+    ORDEM ANTIGA valendo só quando dá empate. Mudou em 05/09/2026 e o motivo
+    é este:
+
+        'Saboneteira Dispenser ... Para Sabonete Líquido' → ia pra BELEZA
+
+    'saboneteira' está na lista de CASA e 'sabonete' na de BELEZA. As duas
+    casam de verdade (o nome tem as duas palavras), e a ordem dava a vitória
+    pra beleza — sempre, pra toda saboneteira que existe.
+
+    Olhando as regras que os comentários das listas já documentavam, TODAS
+    continuam valendo com especificidade, porque a ordem sempre foi um
+    substituto tosco disto:
+      'shampoo para cachorro' → 'cachorro'(8) vence 'shampoo'(7)   = pet ✔
+      'roupa de cama'         → 'roupa de cama'(13) vence 'roupa'  = casa ✔
+      'escova para pet'       → frase inteira vence 'escova'       = pet ✔
+    """
     if _RX_PET.search(texto):
-        return "pet"
-    if _RX_BELEZA.search(texto):
-        return "beleza"
-    if _RX_TECH.search(texto):
-        return "tech"
-    if _RX_CASA.search(texto):
-        return "casa"
-    if _RX_MODA.search(texto):
-        return "moda"
-    return ""
+        # o bicho era enfeite? então NÃO devolve pet — deixa as outras listas
+        # (e, se nenhuma bater, a IA) decidirem. Ver _VETO_PET lá em cima.
+        if _RX_PET_CERTO.search(texto) or not _RX_VETO_PET.search(texto):
+            return "pet"
+
+    melhor, tamanho = "", 0
+    for nicho, rx in (("beleza", _RX_BELEZA), ("tech", _RX_TECH),
+                      ("casa", _RX_CASA), ("moda", _RX_MODA)):
+        m = rx.search(texto)
+        if m and len(m.group(0)) > tamanho:      # empate mantém a ordem antiga
+            melhor, tamanho = nicho, len(m.group(0))
+    return melhor
 
 
 # ═════════════════════════════════════════════════════════════════════════════
