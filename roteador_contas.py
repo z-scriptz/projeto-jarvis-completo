@@ -232,7 +232,7 @@ def _sem_acento(s: str) -> str:
 
 
 def _compilar(palavras) -> re.Pattern:
-    """Casa no início da palavra e deixa passar SÓ o plural: 'pele' pega
+    """Casa no início da palavra e deixa passar só gênero/plural: 'pele' pega
     'pele/peles', mas não 'impeler' nem 'peleteria'.
 
     ⚠️ ANTES O FIM ERA LIVRE, e isso fazia uma lista COMER PALAVRA DE OUTRA
@@ -245,11 +245,19 @@ def _compilar(palavras) -> re.Pattern:
     Uso `(?![a-z0-9])` em vez de `\\b` no fim porque várias entradas são frases
     ('escova para pet') e algumas terminam em espaço ('cao ') — `\\b` depois de
     espaço tem sentido invertido e quebraria justamente essas.
+
+    ⚠️ O FECHO PRECISA DE GÊNERO, NÃO SÓ PLURAL. A primeira versão aceitava só
+    `(?:es|s)?` e isso quebrou 12 produtos de casa no inbox real: a lista tem
+    'organizador' e o produto diz 'organizadorA' ('caixas organizadoras',
+    'Sapateira Organizadora'). Português tem gênero, e o fim livre antigo cobria
+    isso por acidente. Achado pelo `diff_roteador.py` — nos MEUS 18 testes não
+    aparecia, porque fui eu que escolhi os 18.
     """
     partes = []
     for p in sorted((_sem_acento(x.lower()) for x in palavras), key=len, reverse=True):
         if p and p[-1].isalnum():
-            partes.append(re.escape(p) + r"(?:es|s)?(?![a-z0-9])")
+            # as|os|es antes de a|o|s: alternância casa a primeira que serve.
+            partes.append(re.escape(p) + r"(?:as|os|es|a|o|s)?(?![a-z0-9])")
         else:
             partes.append(re.escape(p))     # termina em espaço/pontuação
     return re.compile(r"\b(?:" + "|".join(partes) + r")")
@@ -322,13 +330,33 @@ def _por_palavra_chave(texto: str) -> str:
         if _RX_PET_CERTO.search(texto) or not _RX_VETO_PET.search(texto):
             return "pet"
 
-    melhor, tamanho = "", 0
+    # ⚠️ COMPRIMENTO NÃO É ESPECIFICIDADE, é só um proxy — e um proxy que erra
+    # por pouco. No inbox real, 'Varal de Parede ... Roupas Pesadas' foi pra
+    # MODA porque 'roupas'(6) ganhou de 'varal'(5) POR UMA LETRA. 'varal' é
+    # específico, 'roupa' é genérico; o comprimento disse o contrário.
+    #
+    # Então o comprimento só derruba a ordem curada quando é DECISIVAMENTE
+    # maior. Abaixo da margem, vale a ordem — que é curadoria humana e já foi
+    # justificada nos comentários das listas.
+    #
+    # MARGEM=3 sai dos casos reais, não de teoria:
+    #   saboneteira(11) x sabonete(8)  → 3, precisa virar  → casa ✔
+    #   roupa de cama(13) x roupa(5)   → 8, vira folgado   → casa ✔
+    #   varal(5) x roupas(6)           → 1, NÃO vira       → casa ✔
+    MARGEM = 3
+    achados = []
     for nicho, rx in (("beleza", _RX_BELEZA), ("tech", _RX_TECH),
                       ("casa", _RX_CASA), ("moda", _RX_MODA)):
         m = rx.search(texto)
-        if m and len(m.group(0)) > tamanho:      # empate mantém a ordem antiga
-            melhor, tamanho = nicho, len(m.group(0))
-    return melhor
+        if m:
+            achados.append((nicho, len(m.group(0))))
+    if not achados:
+        return ""
+    primeiro, tam_primeiro = achados[0]          # o que a ordem antiga daria
+    for nicho, tam in achados[1:]:
+        if tam >= tam_primeiro + MARGEM:
+            primeiro, tam_primeiro = nicho, tam
+    return primeiro
 
 
 # ═════════════════════════════════════════════════════════════════════════════

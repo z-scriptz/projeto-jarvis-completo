@@ -78,6 +78,32 @@ checa("beleza", "Creme hidratante para pele seca")
 # ...e 'pele' continua pegando o plural, que era o motivo do prefixo existir
 checa("beleza", "Máscara para peles oleosas")
 
+print("\n── gênero: a lista tem o masculino, o produto vem no feminino ──")
+# ⚠️ ACHADOS PELO diff_roteador NO INBOX REAL, não por mim. Meu primeiro fecho
+# aceitava só plural `(?:es|s)?` e derrubou 12 produtos de casa que os meus 18
+# testes escolhidos a dedo não pegavam.
+checa("casa", "caixas organizadoras")
+checa("casa", "Cestinha Organizadora Empilháveis Multiuso 19x14x6,5cm")
+checa("casa", "Sapateira Organizadora Dobrável Transparente Kit 5 Unidades")
+
+print("\n── 'pet' escondido DENTRO de outra palavra ──")
+# estes dois iam pro @topshoppet_ e ninguém tinha percebido
+checa("", "Filamento Impressora Creality CR-PETG Oficial Premium 3d-1kg 1.75mm")
+checa("moda", "2 Limpa Tênis Branco e Colorido Espuma Limpa Tenis Petroplus Spray")
+
+print("\n── comprimento não é especificidade ──")
+# 'roupas'(6) ganhava de 'varal'(5) POR UMA LETRA e mandava varal pra moda
+checa("casa", "Varal de Parede Alumínio Retrátil Reforçado Roupas Pesadas 80kg")
+checa("casa", "KIT PLASÚTIL LUXO CESTO ROUPAS INFANTIL BACIA BALDE LIXEIRA")
+# ...mas quando é decisivamente mais específico, tem que virar mesmo
+checa("casa", "Saboneteira Dispenser Automático Para Sabonete Líquido")
+checa("moda", "Cinta Modeladora Abdominal Modelform Esbelt Pós Parto")
+
+# ⚠️ NÃO AFIRMO ESTE: 'Organizador Acrílico Para Cosméticos Perfumes Skincare'
+# hoje sai BELEZA. Cabe em casa (organização) ou beleza (acessório de
+# cosmético) — é decisão de curadoria do Dre, não defeito de código. Fica
+# registrado aqui pra não virar "bug" numa próxima leitura do diff.
+
 print("\n── produtos dos vídeos que saíram certos (não pode regredir) ──")
 checa("moda", "botas pantufa Dragon Ball Z")
 checa("casa", "Kit 2 Travesseiro De Corpo Xuxão")

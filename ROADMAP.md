@@ -646,6 +646,57 @@ escrita, sem tocar na fila.
 > **Regra que fica:** mudança em regra de classificação global se mede no
 > corpus real ANTES de rodar em produção, não na amostra que o autor escolheu.
 
+### E o diff pegou DOIS defeitos meus na hora (2693 nomes, 127 mudanças)
+
+**Presentes** — o fecho de palavra pegou coisa que ninguém sabia que existia:
+
+| produto | ia pra | por quê |
+|---|---|---|
+| `Filamento Creality CR-PETG` | 🐾 pet | `pet` dentro de **PETG** |
+| `Limpa Tênis Petroplus` | 🐾 pet | `pet` dentro de **Petroplus** |
+
+**Estrago (a): fecho só com plural quebrou o feminino.** Escrevi `(?:es|s)?`,
+mas a lista tem `organizador` e o produto diz `organizadorA`. 12 produtos de
+casa (`caixas organizadoras`, `Sapateira Organizadora`) perderam classificação.
+O fim livre antigo cobria gênero **por acidente**. Agora: `(?:as|os|es|a|o|s)?`.
+
+**Estrago (b): comprimento não é especificidade.**
+`Varal de Parede ... Roupas Pesadas` foi pra MODA porque **`roupas`(6) ganhou
+de `varal`(5) por UMA LETRA**. `varal` é específico, `roupa` é genérico — o
+comprimento disse o contrário. Agora o comprimento só derruba a ordem curada
+com **margem de 3**, e a margem sai dos casos reais:
+
+```
+saboneteira(11) x sabonete(8) → 3, precisa virar → casa ✔
+roupa de cama(13) x roupa(5)  → 8, vira folgado  → casa ✔
+varal(5) x roupas(6)          → 1, NÃO vira      → casa ✔
+```
+
+`teste_roteador.py`: **27/27**, agora com os casos que vieram do inbox real e
+não da minha cabeça.
+
+⚠️ **Deixado explicitamente EM ABERTO:** `Organizador Acrílico Para Cosméticos
+Perfumes Skincare` sai **beleza**. Cabe em casa (organização) ou beleza
+(acessório) — é curadoria do Dre, não defeito. Anotado no teste pra não virar
+"bug" numa próxima leitura.
+
+### O juiz: fechado com n=92
+
+| n | embaralhado | real | distância |
+|---|---|---|---|
+| 12 | 92% | 58% | 33 |
+| 40 | 85% | 55% | 30 |
+| 40 | 88% | 50% | 38 |
+| **92** | **87%** | **53%** | **34** |
+
+z ≈ 5,4 · **p < 1e-7**. O p≈0,08 virou certeza. Se ele pega 87% dos erros
+reais, a taxa verdadeira de link errado na fila é **~55-61%**.
+
+⚠️ **O que NÃO foi medido: a especificidade** (quantos bons ele reprova por
+engano). Precisaria de pares com rótulo humano. Bloquear é reversível e sobram
+~700 conferidos + 657 da Amazon, então o risco é aceitável — mas está aqui
+escrito que é risco não medido, não certeza.
+
 ---
 
 ## 🗓️ Dia 2026-09-05 (b) — a ordem alfabética era um sorteio viciado
