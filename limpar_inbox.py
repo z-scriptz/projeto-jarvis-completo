@@ -66,19 +66,34 @@ _PT_MARCAS = re.compile(
 
 
 def parece_ingles(termo: str) -> bool:
-    """Nenhuma marca de português no termo inteiro → tratamos como estrangeiro.
+    """Nenhuma marca de português no termo inteiro → SUSPEITO (não "é inglês").
 
-    ⚠️ Isto dispara em produto pt-BR curto e sem acento ('Blush compacto',
-    'Perfume'). É aceitável AQUI porque o preço do falso positivo é uma
-    chamada de tradução que devolve o mesmo termo. No coletor a mesma régua
-    seria cara — lá cada disparo é um download."""
+    ⚠️ ERREI A MEDIÇÃO DISTO, E O NÚMERO REAL É OUTRO (04/09/2026).
+    Eu testei com 14 produtos pt-BR e anunciei "3 falsos positivos". Só que
+    escolhi a amostra enviesada — quase todos tinham "de" ou acento. No inbox
+    de verdade, dos 40 primeiros marcados uns 16 eram português puro:
+    'Escada rolante', 'Salva alimentos', 'Zumbi rastejante animado', 'botas
+    pantufa Dragon Ball Z', 'dispositivo anti-engasgo'. ~40%, não 21%.
+
+    Por isso esta função virou um PENEIRA, não um juiz: ela só decide quem vai
+    ser PERGUNTADO. Quem decide de fato é o Gemini, que responde JA_PT quando o
+    termo já está em português — e aí nada é reescrito. É o desenho que
+    sustenta o erro da régua, não a régua."""
     t = (termo or "").strip()
     return bool(t) and not _PT_MARCAS.search(t)
 
 
 def traduzir(termo: str) -> str:
-    """Gemini traduz o NOME DO PRODUTO. Devolve '' se não souber — e '' aqui
-    significa 'não mexo', nunca 'apaga'."""
+    """Gemini traduz o NOME DO PRODUTO. Devolve '' quando NÃO se deve mexer.
+
+    ⚠️ O MODELO RESPONDE `JA_PT`, NÃO "repita igual". Parece a mesma coisa e
+    não é: mandado repetir, o modelo tende a MELHORAR o termo — 'Escada
+    rolante' volta 'Esteira rolante', 'Salva alimentos' volta 'Conservador de
+    alimentos'. Como ~40% dos marcados são português (a peneira erra muito),
+    "melhorar" significaria reescrever dezenas de links que já estavam certos.
+
+    Com JA_PT o modelo tem uma saída explícita pra "não é o meu caso", e
+    qualquer resposta diferente disso é tradução de verdade."""
     key = os.getenv("GEMINI_API_KEY", "")
     if not key:
         return ""
@@ -87,13 +102,23 @@ def traduzir(termo: str) -> str:
         cli = genai.Client(api_key=key)
         r = cli.models.generate_content(
             model="gemini-2.5-flash",
-            contents=("Traduza este nome de produto para português do Brasil, "
-                      "como alguém buscaria numa loja online. Responda SÓ com o "
-                      "nome traduzido, 2 a 6 palavras, sem aspas e sem explicar. "
-                      "Se já estiver em português, repita igual. Se não for um "
-                      "produto, responda NAO.\n\nProduto: " + termo))
+            contents=("Você recebe o nome de um produto. DECIDA:\n"
+                      "- Se ele JÁ está em português do Brasil, responda "
+                      "exatamente JA_PT. Não melhore, não reescreva, não "
+                      "corrija — mesmo que você ache o nome estranho ou "
+                      "incompleto.\n"
+                      "- Se estiver em outro idioma, responda SÓ com a tradução "
+                      "para português do Brasil, como alguém buscaria numa loja "
+                      "online (2 a 6 palavras, sem aspas, sem explicar).\n"
+                      "- Se não for um produto, responda NAO.\n\n"
+                      "Exemplos: 'Meat Tenderizer' → amaciante de carne; "
+                      "'Escada rolante' → JA_PT; 'Shower Caddy' → organizador "
+                      "de chuveiro; 'Salva alimentos' → JA_PT\n\n"
+                      "Produto: " + termo))
         t = (r.text or "").strip().strip('"').split("\n")[0].strip()
-        return "" if (not t or t.upper().startswith("NAO")) else t[:80]
+        if not t or t.upper().startswith(("NAO", "JA_PT")):
+            return ""
+        return t[:80]
     except Exception as e:
         print(f"   ⚠️  tradução falhou ({str(e)[:60]})")
         return ""
@@ -135,10 +160,13 @@ def main() -> int:
     amazon = [s for s in suspeitos if "amazon." in (s[1].get("link_afiliado") or "")]
     outros = [s for s in suspeitos if s not in amazon]
 
-    print(f"⚠️  {len(suspeitos)} com nome estrangeiro:")
+    print(f"⚠️  {len(suspeitos)} SUSPEITOS (a peneira erra ~40% pra mais — "
+          f"quem decide é o Gemini):")
     print(f"   🔴 {len(amazon)} com BUSCA AMAZON (o termo vai cru na URL — link morto)")
     print(f"   🟡 {len(outros)} com link de loja já casado (o link funciona, "
-          f"só o nome fica feio na legenda)\n")
+          f"só o nome fica feio na legenda)")
+    print(f"   ℹ️  nome em português nesta lista é NORMAL — no --corrigir o "
+          f"Gemini responde JA_PT e o link não é tocado.\n")
 
     for pj, info, nome in amazon[:40]:
         print(f"   🔴 {nome[:44]:46} {pj.parent.name[:34]}")
@@ -156,13 +184,16 @@ def main() -> int:
         print("❌ AMAZON_TAG vazio no .env — não sei montar o link. Abortando.")
         return 1
 
-    ok = falhou = 0
+    ok = ja_pt = 0
     print()
     for pj, info, nome in amazon:
         novo = traduzir(nome)
         if not novo or novo.lower() == nome.lower():
-            print(f"   ⏭️  '{nome[:40]}' — sem tradução, deixo como está")
-            falhou += 1
+            # JA_PT, NAO, ou falha de API — os três significam "não mexo".
+            # Distinguir não mudaria o que o script faz, e um contador a mais
+            # daria a impressão de que dá pra agir sobre a diferença.
+            print(f"   ⏭️  '{nome[:44]}' — já está em pt (ou não deu) · intocado")
+            ja_pt += 1
             continue
         info["produto"] = novo
         info["produto_original"] = nome        # rastro: dá pra auditar depois
@@ -173,7 +204,12 @@ def main() -> int:
         print(f"   ✅ '{nome[:34]}' → '{novo[:34]}'")
         ok += 1
 
-    print(f"\n✅ {ok} corrigido(s) · ⏭️  {falhou} intocado(s)")
+    print(f"\n✅ {ok} link(s) reescrito(s) · ⏭️  {ja_pt} intocado(s) "
+          f"(já em português ou sem tradução)")
+    if ja_pt:
+        print(f"   📌 os {ja_pt} intocados são a peneira errando — custaram uma "
+              f"chamada cada e nenhum link mudou. É o preço de não perder os "
+              f"{ok} que estavam quebrados.")
     return 0
 
 
