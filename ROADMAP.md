@@ -527,6 +527,130 @@ Ex.: "O segredo pra ter um iPhone 17 sem gastar / uma fortuna ✨".
 
 ---
 
+## 🗓️ Dia 2026-09-04 (tarde) — três defeitos que jogavam trabalho fora
+
+### 😤 O EMOJI ENTRANDO NA FRASE — e não era o Gemini
+
+O Dre: *"olha o emoji entrando dentro da frase kk... gemini já postou uns 500
+vídeos com o jarvis e ainda continua burro? é por isso que os vídeo fica
+flopado, parece iniciante"*.
+
+**Não era o Gemini.** O emoji não é texto — é um PNG colado num x calculado, e o
+hook que o modelo escreveu estava correto. As contas:
+
+```
+a linha de texto podia ir até   x = 1026   (margem 54 + HK_MAX_LARG 972)
+o emoji tinha teto de           x = 1030   (LARGURA - HK_EMOJI_TAM - 10)
+```
+
+A quebra enchia a linha inteira **sem reservar espaço pro emoji**, e o `min()`
+puxava ele de volta pra cima da última palavra. Linha curta sobrava espaço e
+ficava bonito; linha cheia o emoji colava — por isso parecia aleatório. E o
+encolhimento até caber em 2 linhas é justamente o que **enche** a linha, então o
+defeito batia nos ganchos longos.
+
+Reproduzido com a frase real dele:
+
+```
+ANTES  (60px): "…precisava ser sem graça e sem bolso"  → emoji a 2px  ← colado
+DEPOIS (56px): "…ser sem graça e sem bolso"            → emoji a 18px
+```
+
+📌 Empurrar o emoji não resolve: não há pra onde. O espaço tem de sair do
+orçamento da linha **antes** de decidir onde ela quebra.
+
+**Segundo caminho da mesma falha, fechado:** o fallback era
+`_lw or int(LARGURA * 0.5)` — quando a medição da largura falhava, o emoji era
+plantado **no meio da frase**. Agora omite e loga. Vídeo sem emoji é publicável;
+com emoji no meio da frase não é.
+
+⚠️ **DOIS DEFEITOS NO MEU PRÓPRIO TESTE**, os dois pegos rodando:
+1. Faltava modelar o encolhimento até 2 linhas. Sem ele o texto quebrava em 3
+   linhas curtas, o emoji nunca encostava, e o teste **passava nos dois lados**
+   — não provava nada.
+2. O critério não é "sobrepôs": no caso real o emoji ficava **2px** depois do
+   texto (pedia 18) — tecnicamente sem sobrepor, visualmente colado. Testar
+   sobreposição aprovava o caso defeituoso.
+
+### 🩹 A PODA COMEU AS MELHORES FONTES
+
+A rodada rendeu **157 produtos** e mesmo assim comentou 12 fontes — incluindo o
+`@airlandolists`, que na rodada anterior tinha sido a melhor de todas (~50
+vídeos). Elas não morreram: levaram `Failed to parse JSON` do TikTok.
+
+A trava por canal de 18/08 não pegou porque **só dispara quando o canal INTEIRO
+dá zero**, e o TikTok bloqueia **intermitentemente**: 5 perfis renderam e ~25
+foram bloqueados no mesmo minuto. Canal rendeu → trava não disparou → os
+bloqueados contaram rodada 0-keeper.
+
+A distinção que faltava:
+
+| o log diz | é informação sobre | pode podar? |
+|---|---|---|
+| "listei e não rendeu" | a **fonte** | ✅ |
+| "não consegui listar" | a **rede** | ❌ |
+
+Fonte que nem chegou a ser perguntada **não foi avaliada** — penalizá-la é medir
+o proxy, não ela. Novo `_falhou_listar`; a poda pula essas **sem zerar o
+contador** (quem falha sempre não ganha imunidade eterna — mesma regra da trava
+por canal).
+
+`teste_poda_fontes.py` prova **os dois lados**: a bloqueada é poupada **e** a
+fonte que listou sem render continua sendo punida. Uma correção que só para de
+punir viraria "nunca poda nada", e a lista encheria de fonte morta pra sempre.
+
+Recuperação das 12 já comentadas:
+```bash
+sed -i 's/^# \(.*\)   # ZUMBI-COLETA.*/\1/' tiktok_perfis.txt
+```
+
+### 🔍 A VISÃO NÃO RODAVA JUSTO ONDE MAIS PRECISAVA
+
+O Dre: *"não perde essas fontes... se pra encontrar os produtos for preciso
+adicionar mercado livre, shein, magalu, então vamos adicionar"*.
+
+**Mas o gargalo não era cobertura de loja.** Os descartes em massa foram:
+
+```
+produto: 'You can find this bye'                  → descarto
+produto: 'smart gadgets unique accessories and'   → descarto
+produto: 'The Most Viral Gadget Must'             → descarto
+```
+
+Legenda em inglês virando "produto". **Não existe o que procurar em loja
+nenhuma** — adicionar marketplace não salvaria um único desses.
+
+A causa, `tiktok_coletor.py:1465`: no TikTok a visão só rodava com termo
+**inválido**, e `'You can find this bye'` é válido (5 palavras, só letras). A
+visão nunca rodava e o vídeo morria **sem nunca ter sido olhado**.
+
+📌 **O SINAL CERTO É `termo_com_juizo`, NÃO UMA LISTA DE PALAVRAS.** Tentei
+primeiro casar inglês por vocabulário e **medi antes de confiar**: pegou 10 de
+17 casos reais (`'Fall centerpiece idea'` e `'Genius unnecessary'` escaparam) e
+deu falso positivo em `'Mop de limpeza'` — porque "mop" está na lista de inglês.
+Lista de vocabulário não cobre legenda livre.
+
+`termo_com_juizo=False` = veio da heurística, ninguém checou que é produto — é
+exatamente a frase que o log já imprimia em cada descarte. **Cobre 100%, sem
+vocabulário pra manter.**
+
+O `_termo_gringo` fica como guarda do link da Amazon, e a assimetria está
+documentada nos dois: no portão da visão o falso positivo custa **uma chamada de
+Gemini**; no link da Amazon custa **um produto bom rejeitado**.
+
+Gated por `VISAO_SEM_JUIZO=1`. O Dre sobre o custo: *"temos dinheiro suficiente
+para colocar no gemini, então pode ficar tranquilo com a fatura"* — fica ligado.
+
+### ⏭️ A DECIDIR COM NÚMERO, não com palpite
+
+Depois da próxima coleta, contar quantos `✗ sem match na Shopee` sobram **com
+nome de produto de verdade** (não legenda). Esses sim são falta de cobertura, e
+aí Mercado Livre / Magalu / Shein passam a valer o trabalho — cada um precisa de
+programa de afiliado próprio + formato de link. A Amazon já é fallback e
+disparou bastante.
+
+---
+
 ## 🗓️ Dia 2026-09-04 — o TikTok voltou com um `pip install -U`
 
 ### ✅ ERA O `yt-dlp`, E SÓ
