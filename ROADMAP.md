@@ -578,6 +578,64 @@ e nesse caso não estão. "Não está julgando" engole "é frouxo".
 
 ---
 
+## 🗓️ Dia 2026-09-05 (d) — o veneno voltou, e o rodízio secou uma conta
+
+### ✅ O LAYOUT DE TECH E MODA ESTÁ CONFIRMADO NO LOG
+
+```
+🎨 tech: fundo #0E0E10 (grafite) · tinta #FFFFFF
+✔️  Selo em x=478 dy=7 · clip=284×96 margem=20 contorno=3
+📌 Hook (2L, ESCURO)
+🎨 moda: fundo #DDD2BE (areia)
+```
+
+Tech entra no caminho **escuro** (tinta branca, contorno=3, dy=7), distinto das
+claras (tinta #171512, contorno=0, dy=4). Moda na paleta areia. O bug das duas
+contas está fechado no código.
+
+### Defeito 1: o pacote-veneno voltou (já tinha acontecido em 17/08)
+
+```
+OSError: failed to read the first frame of video file
+         .../amaziiiigfinds_7632098200769367310/video.mp4
+```
+
+A rodada saiu **5/6**. Sem contador, esse pacote fica na fila **para sempre**:
+é escolhido, falha, continua lá, e amanhã queima outro slot. A 6 posts/dia, um
+veneno na frente custa **1/6 da produção diária, todo dia**, em silêncio.
+
+**Conserto: `_contar_falha`** grava `falhas_render` no plano.json e bloqueia no
+**3º**, não no 1º — falha de render também vem de rede, disco cheio ou ffmpeg
+ocupado, e desistir na primeira jogaria fora pacote bom. **Conta, não apaga**:
+mesma regra do `limpar_inbox` e do `conferir_match`.
+
+⚠️ **Os downloads estão truncados em geral.** Vários vídeos logam
+`0 bytes read at frame index 954 (out of 958)` — ali falta o FIM e o moviepy
+repete o último frame válido, então passa. Esse perdeu o frame 0, e aí não tem
+como. Vale investigar o downloader depois.
+
+### Defeito 2: o rodízio "funcionou" e ainda assim zerou uma conta
+
+```
+🔀 rodízio em 120 da frente da fila: beleza=9 · casa=78 · moda=17 · pet=8 · tech=8
+```
+
+**`geral=0`.** Não havia nenhum produto de geral nos 120 primeiros da fila
+alfabética, então o **@topshop.__ ficou sem post** — e o log não avisava.
+
+**Conserto:** a janela cresce de 120 em 120 (teto `RODIZIO_JANELA_MAX=800`) e
+para assim que as 6 contas aparecem. Continua sem classificar a fila inteira.
+E quando um nicho não existe mesmo na fila, agora **aparece no log**:
+`⚠️ sem produto pra: geral` — não é erro, mas não pode secar em silêncio.
+
+`teste_veneno.py` **11/11** · `teste_rodizio.py` **11/11**.
+
+> **Regra que fica:** toda escolha automática que pode zerar uma conta tem de
+> dizer no log o que deixou de fora. "Funcionou" com uma conta em zero é o
+> mesmo que falhar — só que sem ninguém ver.
+
+---
+
 ## 🗓️ Dia 2026-09-05 (c) — o juiz passou, e o roteador reprovou
 
 ### O controle negativo: o juiz PRESTA

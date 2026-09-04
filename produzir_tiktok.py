@@ -688,6 +688,46 @@ def _produzir(pasta: Path, pj: Path, video_src: Path) -> bool:
     return True
 
 
+MAX_FALHAS_RENDER = int(os.environ.get("MAX_FALHAS_RENDER", "3"))
+
+# As 6 contas. O rodízio varre a fila até achar produto pra todas elas.
+_CONTAS = frozenset(("geral", "beleza", "tech", "casa", "moda", "pet"))
+
+
+def _contar_falha(pj: Path) -> int:
+    """Marca mais uma falha de render neste pacote. Devolve o total.
+
+    ⚠️ O PACOTE-VENENO (05/09/2026, e já tinha acontecido em 17/08). Um vídeo
+    do inbox baixou truncado SEM O FRAME 0:
+
+        OSError: failed to read the first frame of video file
+
+    Sem contador, ele fica na fila pra sempre: é escolhido, falha, continua lá,
+    e amanhã queima outro slot. Com 6 posts/dia, um veneno na frente da fila
+    custa 1/6 da produção diária, todo dia, sem ninguém perceber.
+
+    ⚠️ CONTA, NÃO APAGA — e só desiste no 3º. Falha de render também acontece
+    por motivo passageiro (rede, disco cheio, ffmpeg ocupado); desistir na
+    primeira jogaria fora pacote bom.
+    """
+    try:
+        info = json.loads(pj.read_text(encoding="utf-8"))
+        n = int(info.get("falhas_render", 0)) + 1
+        info["falhas_render"] = n
+        if n >= MAX_FALHAS_RENDER:
+            info["nao_e_produto"] = True
+            info["motivo_bloqueio"] = f"produzir_tiktok: falhou no render {n}x"
+        pj.write_text(json.dumps(info, ensure_ascii=False, indent=2),
+                      encoding="utf-8")
+        if n >= MAX_FALHAS_RENDER:
+            _log(f"      ☠️  {n}ª falha — pacote saiu da fila (vídeo corrompido?)")
+        else:
+            _log(f"      ↻ {n}ª falha de {MAX_FALHAS_RENDER} — fica na fila")
+        return n
+    except Exception:
+        return 0        # plano ilegível: o _produzir já reclamou, não insisto
+
+
 def rodizio(itens: list, quantos: int) -> list:
     """Intercala nichos: uma rodada não pode ser toda da mesma conta.
 
@@ -785,17 +825,40 @@ def main():
     # quando já existe --nicho (aí a conta foi escolhida de propósito).
     lote = fila[:quantos]
     if not sem_rodizio and not nicho_alvo and len(fila) > quantos:
-        # ⚠️ só olha a FRENTE da fila: `_nicho_da_pasta` lê JSON e importa o
-        # roteador. Com 2154 pacotes, classificar tudo pra escolher 5 seria
-        # gastar minutos pra economizar segundos.
-        _janela = fila[:max(quantos * 20, 120)]
-        _pares = [(_nicho_da_pasta(t[1]), t) for t in _janela]
+        # ⚠️ A JANELA CRESCE ATÉ ACHAR TODAS AS CONTAS (05/09/2026). Na primeira
+        # versão ela era fixa em 120, e numa rodada real saiu `geral=0`: não
+        # havia nenhum produto de 'geral' nos 120 primeiros da fila alfabética,
+        # então o @topshop.__ ficou sem post — o rodízio "funcionou" e ainda
+        # assim zerou uma conta.
+        #
+        # Continua sem classificar a fila inteira: `_nicho_da_pasta` lê JSON e
+        # importa o roteador, e são ~1300 pacotes. Varre de 120 em 120 e PARA
+        # assim que as 6 contas apareceram.
+        _passo = max(quantos * 20, 120)
+        _teto = min(len(fila), int(os.environ.get("RODIZIO_JANELA_MAX", "800")))
+        _pares, _vistos, _i = [], set(), 0
+        while _i < _teto:
+            _fim = min(_i + _passo, _teto)
+            for _t in fila[_i:_fim]:
+                _n = _nicho_da_pasta(_t[1])
+                _pares.append((_n, _t))
+                _vistos.add(_n)
+            _i = _fim
+            if _CONTAS.issubset(_vistos):
+                break
+
         lote = rodizio(_pares, quantos)
         _contagem = {}
         for _n, _ in _pares:
             _contagem[_n] = _contagem.get(_n, 0) + 1
-        _log(f"   🔀 rodízio em {len(_janela)} da frente da fila: "
-             + " · ".join(f"{k}={v}" for k, v in sorted(_contagem.items())))
+        _log(f"   🔀 rodízio em {len(_pares)} da frente da fila: "
+             + " · ".join(f"{k or '(IA)'}={v}" for k, v in sorted(_contagem.items())))
+        _faltando = _CONTAS - _vistos
+        if _faltando:
+            # não é erro: pode não existir produto daquele nicho na fila. Mas
+            # tem que APARECER, senão uma conta seca em silêncio.
+            _log(f"   ⚠️ sem produto pra: {', '.join(sorted(_faltando))} "
+                 f"(varri {len(_pares)} de {len(fila)})")
 
     ok = 0
     for pasta, pj, vid in lote:
@@ -812,6 +875,8 @@ def main():
                 shutil.move(str(pasta), str(FEITOS / pasta.name))
             except Exception:
                 pass
+        else:
+            _contar_falha(pj)
 
     _log(f"fim: {ok}/{len(lote)} produzidos. O daemon posta nos horários. 🚚")
     return 0
