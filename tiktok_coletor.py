@@ -664,13 +664,27 @@ def _termo_heuristico(desc: str) -> str:
     return " ".join(palavras[:5]).strip()
 
 
+# ⚠️ "português" NÃO BASTOU (04/09/2026). O prompt já pedia português e o
+# Gemini devolveu `Ice Bucket` de uma legenda em inglês — nome de produto certo,
+# idioma errado. E "Ice Bucket" não acha NADA na Shopee nem na Amazon BR: o
+# vídeo morria como se a loja não tivesse o produto, quando o produto é balde
+# de gelo e existe às centenas.
+#
+# Desde que as fontes viraram 100% gringas isso deixou de ser exceção. Agora a
+# tradução é INSTRUÇÃO EXPLÍCITA e com exemplo, porque "responda em português"
+# um modelo lê como "não precisa traduzir nome próprio".
 _PROMPT_GEMINI = (
     "Você é um extrator de produtos. Da legenda de um vídeo, devolva APENAS o "
-    "nome curto do PRODUTO FÍSICO à venda (2 a 6 palavras, português, sem "
-    "hashtag, emoji, marca ou aspas). REGRAS: se for receita, dica, frase "
-    "motivacional, bastidores, ou se você não tiver CERTEZA do produto, responda "
-    "exatamente NAO. Nunca invente, nunca explique, nunca escreva raciocínio nem "
-    "a palavra THOUGHT — só o nome do produto ou NAO.\n\nLegenda: {desc}")
+    "nome curto do PRODUTO FÍSICO à venda (2 a 6 palavras, sem hashtag, emoji, "
+    "marca ou aspas).\n"
+    "IDIOMA: responda SEMPRE em português do Brasil. Se a legenda estiver em "
+    "inglês ou espanhol, TRADUZA o nome do produto — não repita o termo "
+    "estrangeiro. Ex.: 'ice bucket' → 'balde de gelo'; 'sticky lint roller' → "
+    "'rolo tira-pelos'; 'cordless vacuum' → 'aspirador sem fio'.\n"
+    "REGRAS: se for receita, dica, frase motivacional, bastidores, ou se você "
+    "não tiver CERTEZA do produto, responda exatamente NAO. Nunca invente, "
+    "nunca explique, nunca escreva raciocínio nem a palavra THOUGHT — só o nome "
+    "do produto ou NAO.\n\nLegenda: {desc}")
 
 # termos que NÃO são produto (vazamento do Gemini, hooks gringos, genéricos)
 _LIXO_TERMO = ("thought", "user wants", "product name", "aproveite", "promoç",
@@ -1508,13 +1522,41 @@ def main():
             # VISAO_SEM_JUIZO=0 se a fatura do Gemini pesar.
             _visao_sem_juizo = (os.getenv("VISAO_SEM_JUIZO", "1").strip().lower()
                                 in ("1", "true", "sim"))
-            _duvidoso = bool(termo) and not termo_com_juizo and _visao_sem_juizo
+            # ⚠️ E O `_termo_gringo` VOLTOU — aqui ele serve (04/09).
+            # Eu tinha descartado ele como portão por ter pegado só 10 de 17 e
+            # dado falso positivo em 'Mop de limpeza'. Mas ele cobre um caso que
+            # o `termo_com_juizo` NÃO cobre: o Gemini APROVAR um termo e ainda
+            # assim devolver inglês ('Ice Bucket'). Aí `com_juizo=True` e o
+            # termo não é duvidoso pela regra nova — mas nenhuma loja brasileira
+            # vai achar.
+            #
+            # A assimetria de custo é o que autoriza usá-lo aqui e não no link
+            # da Amazon: falso positivo aqui = UMA chamada de visão a mais
+            # (o Dre: "temos dinheiro suficiente para colocar no gemini"); lá
+            # = um produto bom rejeitado pra sempre.
+            #
+            # ⚠️ ESTA REDE TEM BURACO CONHECIDO, e é de propósito. `_EN_WORDS` é
+            # lista de palavras FUNCIONAIS, não dicionário: 'Ice Bucket' cai
+            # (por "ice"), mas 'Sticky Lint Roller' PASSA — nenhuma das três
+            # está lá. Medido, não suposto.
+            #
+            # Não fechei o buraco com "termo sem acento e sem 'de' é gringo"
+            # porque isso dispararia em 'Lixeira inteligente', 'Perfume',
+            # 'Blush compacto' — metade dos produtos pt-BR curtos — e cada
+            # disparo é um DOWNLOAD a mais, não só uma chamada de API.
+            # A defesa principal é o prompt (que agora manda TRADUZIR); esta
+            # aqui é a segunda linha, e segunda linha com buraco conhecido é
+            # melhor que primeira linha cara.
+            _duvidoso = bool(termo) and _visao_sem_juizo and (
+                not termo_com_juizo or _termo_gringo(termo))
             usar_visao = _visao_ativa() and not dry and (
                 fonte == "instagram" or not termo or not _termo_valido(termo)
                 or _duvidoso)
             if usar_visao and _duvidoso:
-                _log(f"   🔍 '{termo[:40]}' saiu da heurística (não checado) — "
-                     f"chamo a visão em vez de arriscar")
+                _pq = ("veio em inglês/espanhol" if termo_com_juizo
+                       else "saiu da heurística, ninguém checou")
+                _log(f"   🔍 '{termo[:40]}' {_pq} — chamo a visão "
+                     f"em vez de arriscar")
             if usar_visao:
                 arq_pre = _baixar(url, pasta)
                 tv = (_termo_por_visao(arq_pre, meta.get("duracao") or 0,
