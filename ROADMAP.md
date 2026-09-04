@@ -527,6 +527,67 @@ Ex.: "O segredo pra ter um iPhone 17 sem gastar / uma fortuna ✨".
 
 ---
 
+## 🗓️ Dia 2026-09-05 — o juiz não pode ser o próprio jurado
+
+### O problema
+
+`conferir_match.py` compara o frame do vídeo com a foto do produto da loja e
+responde *"é o mesmo produto?"*. Duas amostras rodadas de verdade:
+
+| amostra | ✅ | ❌ | 🤔 talvez |
+|---|---|---|---|
+| 20 pacotes | 8 | 12 (60%) | **0** |
+| 12 pacotes | 4 | 8 (67%) | **0** |
+
+32 julgamentos de imagem ambígua e **zero incerteza**. Isso não parece critério,
+parece modelo respondendo NAO por padrão. E o veredito ia bloquear ~900 pacotes.
+
+### O erro que eu ia cometer de novo
+
+Eu pedi pro Dre olhar o `/tmp/provas.jpg` e me dizer se os ❌ estavam certos.
+Isso é **trocar a medição por opinião** — exatamente o que já deu errado neste
+projeto três vezes (o "são centavos" que virou R$50, o "21% de falso positivo"
+que era 41%, a heurística de wordlist que eu não medi).
+
+### O conserto: CONTROLE NEGATIVO (`--controle N`)
+
+Pega os mesmos N pacotes e roda **de novo com os pares embaralhados**: frame do
+vídeo do pacote A contra a foto do produto do pacote B. São pares errados de
+fábrica. Se o juiz presta, ele reprova quase todos.
+
+```
+.venv/bin/python conferir_match.py --controle 12 --provas /tmp/provas.jpg
+```
+
+Reaproveita frame e foto **já baixados** — o controle não baixa nada de novo.
+
+### A leitura (`ler_controle`, testada em `teste_controle_juiz.py`, 15/15)
+
+| embaralhado | real | veredito | o que significa |
+|---|---|---|---|
+| taxas próximas (≤15 pts) | — | **cego** | não está julgando. O defeito é meu. |
+| < 75% | discrimina | **frouxo** | aprova par errado: os ✅ não valem nada |
+| ≥ 75% e distante | — | **presta** | os ❌ são pra levar a sério |
+
+⚠️ **O piso é 75%, não 100%, de propósito:** dois produtos diferentes podem ser
+do mesmo TIPO (dois suportes de celular), e aí o SIM no embaralhado está certo.
+
+⚠️ **A ORDEM `cego` ANTES de `frouxo` foi um bug que o teste pegou.** Com 65% x
+65% o código dizia "frouxo", cuja mensagem é *"os ❌ podem até estar certos"* —
+e nesse caso não estão. "Não está julgando" engole "é frouxo".
+
+### Regra que fica
+
+> **Antes de um modelo bloquear trabalho em lote, ele passa por controle
+> negativo.** Alimenta o juiz com casos comprovadamente errados e mede se ele
+> reprova. Um juiz que não separa par certo de par errado não é rigoroso — é
+> ruído, e ruído em lote apaga 900 pacotes.
+
+`--controle` **nunca marca nada** (força `--marcar` off): é uma rodada montada
+pra testar, e gravar veredito dela no `plano.json` seria contaminar a fila.
+
+---
+
 ## 🗓️ Dia 2026-09-04 (noite) — a fila encheu, e eu errei a conta do gasto
 
 ### 📈 O NÚMERO DO DIA: 157 → 495 → 2171

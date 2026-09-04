@@ -141,6 +141,28 @@ _PROMPT = (
 )
 
 
+def ler_controle(rep_ctl: float, rep_real: float, piso=0.75, margem=0.15) -> str:
+    """A leitura do controle negativo, separada pra poder ser testada sem API.
+
+    'frouxo'  — deixou passar par errado de fábrica: os ✅ dele não valem nada
+    'cego'    — reprova real e embaralhado quase igual: não está julgando
+    'presta'  — separa os dois: os ❌ dos reais são pra levar a sério
+
+    ⚠️ piso é 0.75 e não 1.0 de propósito: dois produtos diferentes podem ser do
+    MESMO TIPO (dois suportes de celular), e aí o SIM no embaralhado está certo.
+    """
+    # ⚠️ A ORDEM IMPORTA e eu errei ela na primeira versão (o teste pegou).
+    # 'cego' vem PRIMEIRO porque engole 'frouxo': se ele reprova real e
+    # embaralhado na mesma taxa, não adianta dizer "os ✅ é que não prestam" —
+    # os ❌ também não prestam. Só depois de provar que ele DISCRIMINA é que
+    # faz sentido reclamar que ele aprova par errado demais.
+    if rep_real >= rep_ctl - margem:
+        return "cego"
+    if rep_ctl < piso:
+        return "frouxo"
+    return "presta"
+
+
 def conferir(frame: bytes, foto: bytes) -> tuple:
     """(veredito, custo_tokens). Veredito: sim / nao / talvez / erro."""
     key = os.getenv("GEMINI_API_KEY", "")
@@ -178,11 +200,21 @@ def main() -> int:
                     help="confere só N pacotes sorteados e MEDE custo/acerto")
     ap.add_argument("--marcar", action="store_true",
                     help="bloqueia os reprovados (sem isto, só lista)")
+    ap.add_argument("--controle", type=int, default=0, metavar="N",
+                    help="CONTROLE NEGATIVO: confere N pacotes de verdade E os "
+                         "mesmos N com os pares EMBARALHADOS (frame de um, foto "
+                         "de outro). Mede se o juiz sabe julgar, sem depender de "
+                         "ninguém olhar. Gasta 2N chamadas e não marca nada.")
     ap.add_argument("--provas", metavar="DIR", default="",
                     help="salva os pares (frame do vídeo | foto da loja) num "
                          "contato pra CONFERIR O JUIZ com o olho, antes de "
                          "confiar no veredito. NÃO gasta API a mais.")
     a = ap.parse_args()
+    if a.controle:
+        # o controle é uma MEDIÇÃO do juiz. Deixar ele escrever no plano.json
+        # seria gravar veredito de uma rodada montada pra testar, não pra valer.
+        a.amostra = a.controle
+        a.marcar = False
 
     arq = _carregar_env()
     print(f"📄 .env: {arq or '(não achei — vai falhar)'}")
@@ -231,6 +263,7 @@ def main() -> int:
     tokens = 0
     reprovados = []
     provas = []
+    coletados = []          # (nome, frame, foto) — só usado pelo --controle
 
     for pj, info, vid in alvos:
         nome = (info.get("produto") or "?")[:38]
@@ -250,6 +283,9 @@ def main() -> int:
             reprovados.append((pj, info, nome))
         if a.provas and frame and foto:
             provas.append((nome, veredito, frame, foto))
+        if a.controle and frame and foto:
+            # guarda o que JÁ foi baixado — o controle não baixa nada de novo
+            coletados.append((nome, frame, foto))
 
         if a.marcar and veredito == "nao":
             # ⚠️ MARCA, NÃO APAGA — mesma regra do limpar_inbox. Um veredito de
@@ -283,6 +319,65 @@ def main() -> int:
                   f"R$ {proj:.2f}  ({seg/max(1,n)*total_conferivel/60:.0f} min)")
             print(f"      ⚠️ projeção, não medição — o número real sai da rodada "
                   f"cheia. Mas é conta, não palpite.")
+
+    if a.controle:
+        if len(coletados) < 4:
+            print(f"\n⚠️ só {len(coletados)} par(es) completo(s) — poucos pra "
+                  f"controle. Rode com --controle maior.")
+        else:
+            print(f"\n── controle negativo ──")
+            print(f"   mesmos {len(coletados)} frames, mas cada um contra a foto "
+                  f"do produto SEGUINTE.")
+            print(f"   são pares errados de fábrica: o juiz TEM que reprovar.\n")
+            ctl = {"sim": 0, "nao": 0, "talvez": 0, "erro": 0}
+            tk_ctl = 0
+            for i, (nome, frame, _f) in enumerate(coletados):
+                outro_nome, _fr, outra_foto = coletados[(i + 1) % len(coletados)]
+                v, tk = conferir(frame, outra_foto)
+                tk_ctl += tk
+                ctl[v] = ctl.get(v, 0) + 1
+                marca = {"sim": "✅", "nao": "❌", "talvez": "🤔", "erro": "⚠️"}[v]
+                print(f"   {marca} {nome[:30]:32} × foto de {outro_nome[:28]}")
+                if a.provas:
+                    provas.append((f"[EMBARALHADO] {nome} × {outro_nome}",
+                                   v, frame, outra_foto))
+
+            n_ctl = len(coletados)
+            rep_ctl = ctl["nao"] / n_ctl                    # devia ser ~1.0
+            rep_real = tot["nao"] / max(1, n)               # o que medimos antes
+            if tk_ctl:
+                usd_mtok = float(os.getenv("GEMINI_USD_POR_MTOK", "0.30"))
+                brl_usd = float(os.getenv("USD_BRL", "5.40"))
+                print(f"\n   🪙 controle: {tk_ctl:,} tokens · "
+                      f"R$ {tk_ctl/1_000_000*usd_mtok*brl_usd:.2f}")
+            print(f"\n   reprova nos pares EMBARALHADOS: {ctl['nao']}/{n_ctl} "
+                  f"({rep_ctl*100:.0f}%)")
+            print(f"   reprova nos pares REAIS:         {tot['nao']}/{n} "
+                  f"({rep_real*100:.0f}%)")
+
+            # ⚠️ A LEITURA É O PONTO. Sem isto, o número volta a virar palpite.
+            # O juiz só serve se separar par certo de par errado. Se ele reprova
+            # os dois igual, ele não está olhando — está chutando NAO.
+            print()
+            leitura = ler_controle(rep_ctl, rep_real)
+            if leitura == "frouxo":
+                print(f"   ❌ JUIZ QUEBRADO ao contrário: deixou passar "
+                      f"{n_ctl - ctl['nao']} par(es) que são errados de fábrica.")
+                print(f"      Ele diz SIM fácil demais. Os ❌ dos reais podem até "
+                      f"estar certos, mas os ✅ não valem nada.")
+            elif leitura == "cego":
+                print(f"   ❌ JUIZ NÃO ESTÁ JULGANDO: reprova real e embaralhado "
+                      f"quase igual.")
+                print(f"      O defeito é meu (1 frame só / foto de kit vs produto "
+                      f"em uso). Conserto antes de qualquer bloqueio.")
+            else:
+                print(f"   ✅ JUIZ DISCRIMINA: separa par errado de par certo por "
+                      f"{(rep_ctl - rep_real)*100:.0f} pontos.")
+                print(f"      Então os {tot['nao']} ❌ dos reais são pra levar a "
+                      f"sério: {rep_real*100:.0f}% da fila vende outra coisa.")
+            print(f"\n   ⚠️ ressalva honesta: dois produtos DIFERENTES podem ser do "
+                  f"mesmo TIPO\n      (dois suportes de celular), e aí SIM no "
+                  f"embaralhado está certo. Por isso\n      o corte é 75%, não 100%.")
 
     if provas:
         try:
