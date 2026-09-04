@@ -189,8 +189,13 @@ def main() -> int:
         except Exception:
             continue
         nome = (info.get("produto") or "").strip()
-        if info.get("nao_e_produto"):
-            continue                     # já julgado numa rodada anterior
+        if info.get("nao_e_produto") or info.get("limpeza_checada"):
+            # ⚠️ NÃO RE-CHECA O QUE JÁ FOI CHECADO (04/09/2026). Sem isto, um
+            # `--tudo` rodado de novo refaz as 2171 chamadas do zero. A 1ª
+            # rodada custou R$50+ (eu tinha dito "centavos" — errei); a 2ª
+            # custaria igual sem achar nada de novo. Retomar de onde parou é o
+            # que torna seguro interromper com Ctrl-C.
+            continue
         # ⚠️ A PENEIRA SÓ VÊ IDIOMA, NÃO VÊ "É PRODUTO?" — e legenda em
         # PORTUGUÊS passa direto por ela: 'Coisas Devia Ter Comprado Antes',
         # 'Produtinhos Shopee Facilitam Faxina'. O --tudo existe pra isso: 1
@@ -279,10 +284,14 @@ def main() -> int:
 
         if _so_marcar or not novo or novo.lower() == nome.lower():
             print(f"   ⏭️  '{nome[:44]}' — produto ok · intocado")
+            info["limpeza_checada"] = True
+            pj.write_text(json.dumps(info, ensure_ascii=False, indent=2),
+                          encoding="utf-8")
             ja_pt += 1
             continue
         info["produto"] = novo
         info["produto_original"] = nome        # rastro: dá pra auditar depois
+        info["limpeza_checada"] = True
         info["link_afiliado"] = (f"https://www.{dom}/s?k={quote_plus(novo)}"
                                  f"&tag={tag}")
         pj.write_text(json.dumps(info, ensure_ascii=False, indent=2),
