@@ -1,0 +1,179 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# diag_download.py -- os vídeos do inbox estão truncados de verdade?
+#
+# A PERGUNTA (05/09/2026)
+# ───────────────────────
+# Quase todo render loga isto:
+#
+#   UserWarning: 1441836 bytes wanted but 0 bytes read at frame index 954
+#                (out of a total 958 frames)
+#
+# E um pacote morreu de vez com "failed to read the first frame".
+#
+# ⚠️ MINHA HIPÓTESE É QUE A MAIORIA DESSES AVISOS É INOFENSIVA, e hipótese minha
+# já errou várias vezes neste projeto. O padrão que me faz suspeitar: a falha é
+# SEMPRE nos últimos 2 a 6 frames (412-414 de 415, 705 de 707, 289-294 de 294).
+# Download truncado de verdade perde pedaço aleatório e grande, não sempre a
+# poeirinha do fim. O moviepy calcula o total como `duração × fps` e pede frame
+# que nunca existiu — isso é arredondamento dele, não arquivo quebrado.
+#
+# Mas suspeita não é medição. Este script MEDE, com ffmpeg/ffprobe:
+#
+#   1. o arquivo decodifica inteiro sem erro?      (ffmpeg -v error -f null)
+#   2. quantos frames existem DE VERDADE?          (ffprobe -count_frames)
+#   3. quantos o moviepy vai pedir?                (int(duração × fps))
+#   4. tem arquivo .part/.ytdl sendo tratado como vídeo?
+#
+# E classifica cada um em: ok · arredondamento · TRUNCADO · ILEGÍVEL
+#
+#   .venv/bin/python diag_download.py            # amostra de 25
+#   .venv/bin/python diag_download.py --tudo     # o inbox inteiro (demora)
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+BASE = Path(__file__).resolve().parent
+PASTAS = [BASE / "inbox_tiktok", BASE / "inbox_tiktok" / "_produzidos"]
+
+# sufixos que o yt-dlp usa pra arquivo INCOMPLETO. Se um destes está sendo
+# tratado como vídeo, o download foi interrompido e ninguém percebeu.
+SUFIXOS_PARCIAIS = (".part", ".ytdl", ".temp", ".tmp", ".download")
+
+
+def _ffprobe(v: Path) -> dict:
+    """duração, fps e nº de frames REALMENTE decodificáveis."""
+    out = {}
+    try:
+        r = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-count_frames", "-show_entries",
+             "stream=nb_read_frames,r_frame_rate,duration",
+             "-show_entries", "format=duration", "-of", "json", str(v)],
+            capture_output=True, text=True, timeout=180)
+        d = json.loads(r.stdout or "{}")
+        st = (d.get("streams") or [{}])[0]
+        out["frames_reais"] = int(st.get("nb_read_frames") or 0)
+        fr = st.get("r_frame_rate") or "0/1"
+        num, _, den = fr.partition("/")
+        out["fps"] = (float(num) / float(den)) if float(den or 0) else 0.0
+        out["dur"] = float((d.get("format") or {}).get("duration")
+                           or st.get("duration") or 0)
+    except Exception as e:
+        out["erro_probe"] = str(e)[:60]
+    return out
+
+
+def _decodifica_limpo(v: Path) -> str:
+    """Passa o arquivo inteiro pelo decoder. Silêncio = arquivo íntegro.
+
+    ⚠️ ESTE É O TESTE QUE VALE. O aviso do moviepy diz o que o MOVIEPY pediu;
+    isto diz o que o ARQUIVO tem. Se aqui sai vazio, o arquivo está bom e o
+    aviso é do moviepy pedindo frame que não existe.
+    """
+    try:
+        r = subprocess.run(["ffmpeg", "-v", "error", "-i", str(v), "-f", "null", "-"],
+                           capture_output=True, text=True, timeout=300)
+        return (r.stderr or "").strip()
+    except Exception as e:
+        return f"(não rodou: {str(e)[:50]})"
+
+
+def classificar(erros: str, frames_reais: int, frames_pedidos: int) -> str:
+    """O veredito, separado pra ser testável sem ffmpeg.
+
+    'ilegivel'       — nem decodifica: pacote-veneno
+    'truncado'       — decodifica mas o decoder reclama, ou falta pedaço grande
+    'arredondamento' — arquivo íntegro; o moviepy é que pede 1-6 frames a mais
+    'ok'             — íntegro e as contas batem
+    """
+    if frames_reais <= 0:
+        return "ilegivel"
+    if erros:
+        return "truncado"
+    faltando = frames_pedidos - frames_reais
+    if faltando <= 0:
+        return "ok"
+    # ⚠️ o corte de 8 não é teoria: os casos reais do log perderam de 2 a 6
+    # frames. Acima disso não dá mais pra chamar de arredondamento.
+    return "arredondamento" if faltando <= 8 else "truncado"
+
+
+def main() -> int:
+    tudo = "--tudo" in sys.argv[1:]
+    limite = 10_000 if tudo else 25
+
+    videos, parciais = [], []
+    for pasta in PASTAS:
+        if not pasta.exists():
+            continue
+        for p in sorted(pasta.glob("*/video.*")):
+            if p.name.endswith(SUFIXOS_PARCIAIS):
+                parciais.append(p)
+            else:
+                videos.append(p)
+
+    if not videos and not parciais:
+        print("❌ nenhum vídeo encontrado — rode na VPS, dentro de ~/jarvis")
+        return 1
+
+    print(f"📦 {len(videos)} vídeo(s) · {len(parciais)} arquivo(s) PARCIAL\n")
+
+    if parciais:
+        # ⚠️ ISTO É DEFEITO CERTO, sem precisar de medição. O `_baixar` faz
+        # `destino.glob("video.*")` e 'video.mp4.part' CASA com esse padrão —
+        # o mesmo glob está no `_pendentes()` do produtor. Download
+        # interrompido vira "vídeo" pronto pra produzir.
+        print(f"🚨 {len(parciais)} DOWNLOAD(S) INTERROMPIDO(S) sendo tratados como vídeo:")
+        for p in parciais[:15]:
+            print(f"   • {p.parent.name}/{p.name}  ({p.stat().st_size:,} bytes)")
+        if len(parciais) > 15:
+            print(f"   … +{len(parciais) - 15}")
+        print()
+
+    amostra = videos[:limite]
+    if len(videos) > limite:
+        import random
+        random.shuffle(videos)
+        amostra = videos[:limite]
+        print(f"🔬 amostra de {limite} sorteados (use --tudo pro inbox inteiro)\n")
+
+    tot = {"ok": 0, "arredondamento": 0, "truncado": 0, "ilegivel": 0}
+    ruins = []
+    for v in amostra:
+        info = _ffprobe(v)
+        reais = info.get("frames_reais", 0)
+        pedidos = int(info.get("dur", 0) * info.get("fps", 0))
+        erros = _decodifica_limpo(v)
+        cls = classificar(erros, reais, pedidos)
+        tot[cls] += 1
+        marca = {"ok": "✅", "arredondamento": "🟡",
+                 "truncado": "❌", "ilegivel": "☠️"}[cls]
+        print(f"   {marca} {cls:15} reais={reais:5} pedidos={pedidos:5} "
+              f"({pedidos - reais:+3}) · {v.parent.name[:34]}")
+        if cls in ("truncado", "ilegivel"):
+            ruins.append((v, erros[:150]))
+
+    n = len(amostra)
+    print(f"\n── resultado de {n} vídeo(s) ──")
+    for k in ("ok", "arredondamento", "truncado", "ilegivel"):
+        pct = tot[k] / max(1, n) * 100
+        print(f"   {k:15} {tot[k]:4}  ({pct:.0f}%)")
+
+    print()
+    quebrados = tot["truncado"] + tot["ilegivel"]
+    if quebrados == 0:
+        print("✅ NENHUM ARQUIVO QUEBRADO. Os avisos do moviepy são dele: ele pede")
+        print("   `duração × fps` frames e o arquivo tem 1-6 a menos. O download")
+        print("   está íntegro — o barulho no log é ruído, não perda.")
+    else:
+        print(f"⚠️ {quebrados} de {n} realmente quebrados ({quebrados/n*100:.0f}%).")
+        print("   Aí o problema É o download, e o conserto é no _baixar.")
+        for v, e in ruins[:5]:
+            print(f"   • {v.parent.name}: {e or '(sem erro do decoder)'}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

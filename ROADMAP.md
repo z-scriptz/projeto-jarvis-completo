@@ -578,6 +578,83 @@ e nesse caso não estão. "Não está julgando" engole "é frouxo".
 
 ---
 
+## 🗓️ Dia 2026-09-05 (e) — o truncamento, e a produção pra 12/dia
+
+### A suspeita: `video.*` casa com `video.mp4.part`
+
+```python
+vids = list(destino.glob("video.*"))     # 'video.mp4.part' CASA
+```
+
+E `_ytdlp` roda `subprocess.run(timeout=300)`, que **levanta `TimeoutExpired`**
+— o `_baixar` não tratava. O yt-dlp morre no meio, deixa o parcial em disco, e
+o glob o adota como vídeo pronto. **O mesmo glob estava no `_pendentes()` do
+produtor**, então o parcial chegava até o render.
+
+**Consertado nos dois lados**, mais três coisas no `_baixar`:
+- `TimeoutExpired` tratado, com limpeza do parcial
+- `_limpar_parciais()` depois de qualquer falha
+- **`_abre_o_primeiro_frame()`**: um `ffmpeg -vframes 1` antes de aceitar o
+  arquivo. Pega exatamente o que matou o pacote de hoje. Só o frame 0 de
+  propósito — decodificar o vídeo inteiro por download custaria minutos por
+  rodada, e vídeo que perde o FIM o moviepy contorna sozinho.
+
+### Mas o defeito certo não prova a causa
+
+O arquivo que quebrou hoje se chama `video.mp4`, **não** `.part`. Então o
+`.part` é defeito real e independente, mas pode não ser a causa do barulho.
+
+**O padrão dos avisos me faz suspeitar do contrário do que parece:**
+
+| vídeo | falhou em | de | perdeu |
+|---|---|---|---|
+| moletom | 412–414 | 415 | 3 |
+| aquário | 515–517 | 519 | 4 |
+| umidificador | 705 | 707 | 2 |
+| para-brisa | 289–294 | 294 | 6 |
+
+**Sempre os últimos 2 a 6 frames.** Download truncado de verdade perde pedaço
+aleatório e grande. O moviepy pede `int(duração × fps)` frames e o arquivo tem
+alguns a menos por arredondamento — isso é ruído dele, não perda de arquivo.
+
+⚠️ **Mas isso é hipótese minha, e hipótese minha já errou muito aqui.**
+
+### `diag_download.py` — mede em vez de deduzir
+
+Roda `ffmpeg -v error -f null` (o arquivo decodifica inteiro?) e
+`ffprobe -count_frames` (quantos frames existem DE VERDADE?), compara com o que
+o moviepy vai pedir, e classifica: **ok · arredondamento · TRUNCADO · ILEGÍVEL**.
+Também conta quantos `.part` estão sendo tratados como vídeo.
+
+`teste_download.py` **16/16** — e ele foi escrito **contra** a minha hipótese:
+tem uma seção inteira de casos que, se a medição vier assim, obrigam o veredito
+"quebrado" (decoder reclamando com só 1 frame faltando, perda de 9+, metade do
+vídeo). Classificador escrito por quem já tem resposta favorita tende a
+confirmá-la.
+
+### Produção: 6 → 12/dia
+
+Não é ousadia, é conta. A pirâmide do `daemon_maestro`
+(`posts_por_dia_semana = [3,2,1,3,2,1,0]`) vale **POR CONTA**, e são 6 contas:
+
+| dia | por conta | × 6 contas |
+|---|---|---|
+| segunda | 3 | **18** |
+| terça | 2 | 12 |
+| quarta | 1 | 6 |
+| **semana** | 12 | **72 (~10/dia)** |
+
+**Produzindo 6, a esteira alimentava menos da metade do que o daemon posta num
+dia de pico.** O estoque comporta: ~1.300 pacotes conferidos = 108 dias a
+12/dia, com o coletor ainda somando. E como o Dre resumiu: a fonte é gringa,
+única e reutilizável — o vídeo não "vence" como oferta de marketplace vence.
+
+⚠️ **O custo aqui é TEMPO DE VPS, não dinheiro:** cada render leva de 5 a 19
+min; 12 vídeos ≈ 2h de máquina. `PRODUZIR_POR_RODADA` no `.env` ajusta sem
+mexer no código.
+
+---
+
 ## 🗓️ Dia 2026-09-05 (d) — o veneno voltou, e o rodízio secou uma conta
 
 ### ✅ O LAYOUT DE TECH E MODA ESTÁ CONFIRMADO NO LOG

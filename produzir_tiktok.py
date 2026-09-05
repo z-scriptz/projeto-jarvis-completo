@@ -21,7 +21,22 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent
 INBOX = BASE_DIR / "inbox_tiktok"
 FEITOS = INBOX / "_produzidos"       # pra onde a pasta vai depois de produzir
-MAX_PADRAO = 2
+# QUANTOS POR RODADA quando ninguém passa número na linha de comando.
+#
+# 2 → 12 em 05/09/2026. O motivo não é ousadia, é conta: a pirâmide do
+# `daemon_maestro` (`posts_por_dia_semana = [3,2,1,3,2,1,0]`) vale POR CONTA, e
+# são 6 contas. Isso é 18 posts na segunda, 12 na terça, 6 na quarta — média de
+# ~10/dia, 72 na semana. Produzindo 6, a esteira alimentava menos da METADE do
+# que o daemon posta num dia de pico.
+#
+# E o estoque comporta: ~1.300 pacotes conferidos na fila (108 dias a 12/dia),
+# com o coletor ainda somando. Como o Dre resumiu: a fonte é gringa, é única e
+# é reutilizável — o vídeo não "vence" como oferta de marketplace vence.
+#
+# ⚠️ O CUSTO REAL AQUI É TEMPO DE VPS, não dinheiro: cada render leva de 5 a 19
+# minutos. 12 vídeos ≈ 2h de máquina. Rodada noturna aguenta; se apertar,
+# PRODUZIR_POR_RODADA no .env resolve sem mexer no código.
+MAX_PADRAO = int(os.environ.get("PRODUZIR_POR_RODADA", "12"))
 
 # Trilha de fundo baixinha (pra nunca ficar silêncio quando a narração acaba).
 # Coloque áudios sutis e "virais" nessa pasta — uma é sorteada por vídeo.
@@ -415,7 +430,12 @@ def _pendentes() -> list:
         if not pasta.is_dir() or pasta.name.startswith("_"):
             continue
         pj = pasta / "plano.json"
-        vids = list(pasta.glob("video.*"))
+        # ⚠️ 'video.*' CASA COM 'video.mp4.part' (05/09/2026). Um download
+        # interrompido deixa o parcial em disco e este glob o adotava como
+        # vídeo pronto — daí saía render de arquivo pela metade. Mesmo defeito
+        # estava no `_baixar` do coletor.
+        vids = [v for v in pasta.glob("video.*")
+                if not v.name.endswith(PARCIAIS)]
         if not (pj.exists() and vids):
             continue
         # ⚠️ PULA O QUE O `limpar_inbox.py` MARCOU COMO NÃO-PRODUTO (04/09/2026).
@@ -692,6 +712,10 @@ MAX_FALHAS_RENDER = int(os.environ.get("MAX_FALHAS_RENDER", "3"))
 
 # As 6 contas. O rodízio varre a fila até achar produto pra todas elas.
 _CONTAS = frozenset(("geral", "beleza", "tech", "casa", "moda", "pet"))
+
+# Sufixos de download INCOMPLETO do yt-dlp. Precisam estar aqui porque
+# `glob("video.*")` casa com 'video.mp4.part'.
+PARCIAIS = (".part", ".ytdl", ".temp", ".tmp", ".download")
 
 
 def _contar_falha(pj: Path) -> int:

@@ -844,16 +844,77 @@ def _ponte_do_match(termo: str, nome_produto: str) -> str:
     return ", ".join(sorted(comuns)[:4])
 
 
+# sufixos que o yt-dlp usa pra arquivo INCOMPLETO
+_PARCIAIS = (".part", ".ytdl", ".temp", ".tmp", ".download")
+
+
+def _abre_o_primeiro_frame(v: Path) -> bool:
+    """O arquivo decodifica o frame 0? É o teste mais barato que existe e pega
+    exatamente o que matou um pacote em 05/09:
+
+        OSError: failed to read the first frame of video file
+
+    ⚠️ NÃO checo o arquivo inteiro de propósito: decodificar 30s de vídeo por
+    download custaria minutos por rodada, e o defeito que a gente viu mata no
+    frame 0. Vídeo que perde os últimos frames o moviepy contorna sozinho.
+    """
+    try:
+        r = subprocess.run(["ffmpeg", "-v", "error", "-i", str(v),
+                            "-vframes", "1", "-f", "null", "-"],
+                           capture_output=True, text=True, timeout=60)
+        return r.returncode == 0 and not (r.stderr or "").strip()
+    except Exception:
+        return True     # sem ffmpeg aqui? não é motivo pra jogar vídeo fora
+
+
 def _baixar(url: str, destino: Path) -> Path | None:
     destino.mkdir(parents=True, exist_ok=True)
     saida = destino / "video.%(ext)s"
-    r = _ytdlp(["-o", str(saida), "--no-playlist", "--no-warnings",
-                "-f", "mp4/bv*+ba/b", url], timeout=300)
+    try:
+        r = _ytdlp(["-o", str(saida), "--no-playlist", "--no-warnings",
+                    "-f", "mp4/bv*+ba/b", url], timeout=300)
+    except subprocess.TimeoutExpired:
+        # ⚠️ ANTES ISTO SUBIA COMO EXCEÇÃO e o yt-dlp morria deixando
+        # 'video.mp4.part' em disco (05/09/2026).
+        _log("   download estourou o tempo (300s) — limpando o parcial")
+        _limpar_parciais(destino)
+        return None
     if r.returncode != 0:
         _log(f"   download falhou: {(r.stderr or '')[:120]}")
+        _limpar_parciais(destino)
         return None
-    vids = list(destino.glob("video.*"))
-    return vids[0] if vids else None
+
+    # ⚠️ 'video.*' CASA COM 'video.mp4.part'. O glob antigo adotava o arquivo
+    # incompleto como se fosse o vídeo pronto, e ele seguia pra produção — o
+    # mesmo padrão está no `_pendentes()` do produzir_tiktok.
+    vids = [v for v in destino.glob("video.*")
+            if not v.name.endswith(_PARCIAIS)]
+    if not vids:
+        _log("   download não deixou arquivo utilizável")
+        _limpar_parciais(destino)
+        return None
+
+    v = vids[0]
+    if not _abre_o_primeiro_frame(v):
+        _log(f"   ⚠️ baixou mas não abre o 1º frame — descartando ({v.name})")
+        try:
+            v.unlink()
+        except Exception:
+            pass
+        _limpar_parciais(destino)
+        return None
+    return v
+
+
+def _limpar_parciais(destino: Path):
+    """Tira os .part/.ytdl do caminho. Sem isto eles ficam na pasta e o glob
+    do produtor os adota como vídeo."""
+    for p in destino.glob("video.*"):
+        if p.name.endswith(_PARCIAIS):
+            try:
+                p.unlink()
+            except Exception:
+                pass
 
 
 def _carregar_vistos() -> set:
