@@ -418,6 +418,61 @@ def _conflita(frase: str, produto: str, nicho: str = "", extra: str = "",
     return False
 
 
+def _abertura(hook: str, palavras: int = 3) -> str:
+    """As primeiras `palavras` palavras, normalizadas. É a assinatura do molde."""
+    txt = (hook or "").split("\n")[0].lower()
+    limpo = "".join(c if (c.isalnum() or c.isspace()) else " " for c in txt)
+    return " ".join(limpo.split()[:palavras])
+
+
+def aberturas_gastas(hooks: list, palavras: int = 3, minimo: int = 3) -> list:
+    """Aberturas que já saíram vezes demais. Devolve [(abertura, vezes)] desc.
+
+    ⚠️ POR QUE ISTO EXISTE (06/09/2026, o Dre: "os hooks estão horrorosos").
+    Numa rodada real, 8 de 14 hooks começaram com "Eu achava que":
+
+        "Eu achava que era impossível ter um esconderijo confortável..."
+        "Eu achava que peixe esquecia tudo em três segundos"
+        "Eu achava que só cirurgia resolvia a gravidade no espelho"
+
+    O `_bloco_nao_repita` já mostrava os hooks anteriores pedindo "não repita",
+    e o modelo OBEDECEU: cada FRASE é diferente. O que se repete é a ABERTURA,
+    e ninguém media isso — então, pro modelo, não existia.
+
+    Frase inteira é a unidade errada de medida. O leitor não reconhece a frase
+    repetida; reconhece o molde, e três posts seguidos com o mesmo começo já
+    cheiram a robô.
+    """
+    conta = {}
+    for h in hooks:
+        a = _abertura(h, palavras)
+        if len(a.split()) >= palavras:      # hook curto demais não vira molde
+            conta[a] = conta.get(a, 0) + 1
+    return sorted([(a, n) for a, n in conta.items() if n >= minimo],
+                  key=lambda kv: -kv[1])
+
+
+def _bloco_aberturas() -> str:
+    """Diz ao modelo QUAIS COMEÇOS estão gastos, não só quais frases já saíram.
+
+    Junta o histórico do `_registrar` (que atualiza a CADA geração) com o que
+    já foi ao ar. O ledger sozinho não bastava: numa rodada de 12 vídeos, os 11
+    hooks anteriores ainda não foram postados, então o modelo repetia à vontade
+    dentro da própria rodada.
+    """
+    try:
+        recentes = _ler_recentes()
+    except Exception:
+        recentes = []
+    gastas = aberturas_gastas(recentes)
+    if not gastas:
+        return ""
+    lista = "\n".join(f'  - "{a}..." (usou {n}x)' for a, n in gastas[:5])
+    return ("ABERTURAS JA GASTAS — comece de um jeito DIFERENTE destes:\n"
+            + lista + "\n"
+            "Nao basta trocar o resto da frase: troque o COMECO.\n\n")
+
+
 def _bloco_nao_repita(quantos: int = 12) -> str:
     """Os últimos hooks que já foram ao ar, pro modelo não repetir.
 
@@ -827,6 +882,7 @@ def _via_gemini(produto: str, descricao: str, nicho: str) -> Optional[str]:
             "  'Passei anos achando que casa arrumada dava trabalho'\n\n"
             "PROIBIDO LITERAL: 'pra quem', 'para quem', 'quem tem', 'quem ama',\n"
             "'se voce tem', 'se voce e', 'toda pessoa que', 'todo mundo que'.\n\n"
+            f"{_bloco_aberturas()}"
             f"{_bloco_nao_repita()}")
         prompt = (
             "Voce e copywriter de videos virais de afiliado (Shopee), estilo das "
@@ -954,6 +1010,21 @@ def gerar_hook_alana(produto: str, descricao: str = "", nicho: str = "") -> str:
             # é legítimo — a regra barra invenção, não assunto.
             if not motivo and _conflita(via, produto, nicho, descricao, estrito=True):
                 motivo = "fala de uma coisa que o produto não é"
+            # ⚠️ VERIFICAR, NÃO CONFIAR NO PROMPT — mesma lição do 'pra quem'
+            # logo abaixo. Mandar "comece diferente" não garante começo
+            # diferente.
+            #
+            # ⚠️ SÓ NA 1ª TENTATIVA, de propósito. Se eu recusar nas duas, um
+            # hook bom com abertura repetida vira a reserva genérica
+            # ('Comprei sem esperar nada e me surpreendeu demais'), que é PIOR
+            # que um "Eu achava que" bem escrito. Abertura repetida é chateação;
+            # frase genérica é post morto.
+            if not motivo and tentativa == 0:
+                _gastas = dict(aberturas_gastas(_ler_recentes()))
+                _ab = _abertura(via)
+                if _ab in _gastas:
+                    motivo = (f'abertura "{_ab}..." já saiu '
+                              f'{_gastas[_ab]}x nos últimos hooks')
             if not motivo:
                 _registrar(via)
                 return via
