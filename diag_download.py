@@ -110,14 +110,48 @@ def classificar(erros: str, frames_reais: int, frames_pedidos: int) -> str:
 
 
 def _abre_frame0(v: Path) -> bool:
-    """Só o frame 0. É o teste que separa 'produz' de 'não produz'."""
+    """Só o frame 0 — mas pelo MOVIEPY, que é quem de fato renderiza.
+
+    ⚠️ MEU PRIMEIRO TESTE AQUI ERA O ERRADO (05/09/2026, achado pelo próprio
+    resultado). Eu usava `ffmpeg -vframes 1`, varri os 2693 e deu 0 quebrados —
+    incluindo o `amaziiiigfinds`, que tinha derrubado DUAS rodadas com
+    "failed to read the first frame". Os dois não podem estar certos.
+
+    A diferença está no aviso original:
+
+        1769472 bytes wanted but 0 bytes read at frame index 0
+
+    1769472 = 1024 × 576 × 3. O moviepy abre um cano de rawvideo esperando
+    exatamente um frame nessas dimensões e recebe ZERO bytes. O
+    `ffmpeg -vframes 1` só pede "um frame decodificável qualquer" e consegue.
+    **Eu testava uma coisa parecida, não a mesma coisa** — o guarda não pegaria
+    o pacote que motivou a existência dele.
+
+    Agora o teste é o próprio moviepy. Só cai no ffmpeg quando não há moviepy
+    (dev local), e aí é declaradamente um teste mais fraco.
+    """
     try:
-        r = subprocess.run(["ffmpeg", "-v", "error", "-i", str(v),
-                            "-vframes", "1", "-f", "null", "-"],
-                           capture_output=True, text=True, timeout=60)
-        return r.returncode == 0 and not (r.stderr or "").strip()
+        from moviepy.video.io.VideoFileClip import VideoFileClip
     except Exception:
-        return True         # não deu pra testar: não condeno o arquivo
+        try:
+            r = subprocess.run(["ffmpeg", "-v", "error", "-i", str(v),
+                                "-vframes", "1", "-f", "null", "-"],
+                               capture_output=True, text=True, timeout=60)
+            return r.returncode == 0 and not (r.stderr or "").strip()
+        except Exception:
+            return True     # não deu pra testar: não condeno o arquivo
+    try:
+        c = VideoFileClip(str(v))
+        try:
+            c.get_frame(0)
+            return True
+        finally:
+            try:
+                c.close()
+            except Exception:
+                pass
+    except Exception:
+        return False
 
 
 def varrer_frame0(videos: list, marcar: bool) -> int:

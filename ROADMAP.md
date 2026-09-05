@@ -665,6 +665,44 @@ contador de falhas.
 > cobre 100% do que importa. Aqui: frame 0 em vez do vídeo inteiro, 15 min em
 > vez de 3h30.
 
+### ⚠️ E O RESULTADO DO `--frame0` ME DENUNCIOU
+
+```
+── 0 de 2693 não abrem o 1º frame (0.00%) ──
+   ✅ nenhum veneno na fila.
+```
+
+**Isso é bom e é impossível ao mesmo tempo.** O `amaziiiigfinds` derrubou DUAS
+rodadas com `failed to read the first frame`, e a varredura aprovou ele.
+
+A resposta está no aviso original:
+
+```
+1769472 bytes wanted but 0 bytes read at frame index 0     (= 1024 × 576 × 3)
+```
+
+O **moviepy** abre um cano de rawvideo esperando um frame inteiro nessas
+dimensões e recebe **zero bytes**. O `ffmpeg -vframes 1` que eu usei só pede
+"um frame decodificável qualquer" — e consegue.
+
+**Eu escrevi um guarda que testa uma coisa PARECIDA, não a mesma coisa.** Ele
+aprovaria justamente o pacote que motivou a existência dele. E o mesmo erro
+estava no `_abre_o_primeiro_frame` do coletor, que ia rodar em todo download.
+
+**Consertado nos dois:** o teste agora abre com `VideoFileClip` e chama
+`get_frame(0)` — exatamente o que a produção faz. Cai no ffmpeg só quando não
+há moviepy (dev local), e aí está declarado que é um teste mais fraco.
+
+**Conclusão sobre o truncamento:** os 2693 arquivos estão íntegros (0
+truncados, 0 ilegíveis, 0 parciais, 0 reprovados pelo ffmpeg). O
+`amaziiiigfinds` não é download quebrado — é algo em como o moviepy lê **aquele**
+arquivo. O `_contar_falha` já resolve na prática, independente da causa.
+
+> **Regra que fica:** um guarda tem que exercitar o MESMO caminho de código que
+> falha em produção. "Testei com uma ferramenta equivalente" não é equivalente —
+> e o jeito de descobrir isso é rodar o guarda contra o caso que já quebrou.
+> Se ele aprovar, o guarda é que está errado.
+
 ### Produção: 6 → 12/dia
 
 Não é ousadia, é conta. A pirâmide do `daemon_maestro`

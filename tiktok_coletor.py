@@ -849,22 +849,40 @@ _PARCIAIS = (".part", ".ytdl", ".temp", ".tmp", ".download")
 
 
 def _abre_o_primeiro_frame(v: Path) -> bool:
-    """O arquivo decodifica o frame 0? É o teste mais barato que existe e pega
-    exatamente o que matou um pacote em 05/09:
+    """O frame 0 abre PELO MOVIEPY? Pega o que matou um pacote em 05/09:
 
         OSError: failed to read the first frame of video file
 
-    ⚠️ NÃO checo o arquivo inteiro de propósito: decodificar 30s de vídeo por
-    download custaria minutos por rodada, e o defeito que a gente viu mata no
-    frame 0. Vídeo que perde os últimos frames o moviepy contorna sozinho.
+    ⚠️ TEM QUE SER O MOVIEPY, NÃO O FFMPEG. Minha primeira versão usava
+    `ffmpeg -vframes 1` e ela aprovaria o pacote quebrado: uma varredura nos
+    2693 vídeos do inbox deu 0 reprovados, incluindo o que tinha derrubado duas
+    rodadas. O aviso original explica —
+
+        1769472 bytes wanted but 0 bytes read at frame index 0   (=1024×576×3)
+
+    o moviepy quer um frame inteiro de rawvideo pelo cano e recebe zero; o
+    ffmpeg só quer "um frame decodificável" e consegue. Testar com ffmpeg era
+    testar OUTRA COISA, parecida o bastante pra me enganar.
+
+    ⚠️ NÃO checo o vídeo inteiro de propósito: custaria minutos por rodada, e o
+    defeito visto mata no frame 0. Perder os últimos frames o moviepy contorna.
     """
     try:
-        r = subprocess.run(["ffmpeg", "-v", "error", "-i", str(v),
-                            "-vframes", "1", "-f", "null", "-"],
-                           capture_output=True, text=True, timeout=60)
-        return r.returncode == 0 and not (r.stderr or "").strip()
+        from moviepy.video.io.VideoFileClip import VideoFileClip
     except Exception:
-        return True     # sem ffmpeg aqui? não é motivo pra jogar vídeo fora
+        return True     # sem moviepy aqui? não é motivo pra jogar vídeo fora
+    try:
+        c = VideoFileClip(str(v))
+        try:
+            c.get_frame(0)
+            return True
+        finally:
+            try:
+                c.close()
+            except Exception:
+                pass
+    except Exception:
+        return False
 
 
 def _baixar(url: str, destino: Path) -> Path | None:
