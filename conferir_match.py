@@ -30,6 +30,15 @@
 #   .venv/bin/python conferir_match.py --amostra 20     # MEDE custo e acerto
 #   .venv/bin/python conferir_match.py                  # confere tudo (só lista)
 #   .venv/bin/python conferir_match.py --marcar         # bloqueia os errados
+#
+# ── SEGUNDA VIA: os que não têm foto de loja (06/09/2026) ───────────────────
+# 657 pacotes têm link de BUSCA da Amazon, sem foto de produto. O juiz de
+# imagem×imagem não tinha o que comparar e pulava todos — e são justamente
+# esses que estão produzindo agora. `--sem-foto` compara o frame com o NOME do
+# produto. Juiz mais fraco (texto descreve menos que foto), então passa pelo
+# MESMO controle negativo antes de bloquear:
+#   .venv/bin/python conferir_match.py --sem-foto --controle 40
+#   .venv/bin/python conferir_match.py --sem-foto --marcar
 import argparse
 import json
 import os
@@ -163,6 +172,60 @@ def ler_controle(rep_ctl: float, rep_real: float, piso=0.75, margem=0.15) -> str
     return "presta"
 
 
+_PROMPT_NOME = (
+    "Um quadro de um vídeo curto que mostra alguém usando ou exibindo um "
+    "produto.\n\n"
+    "PERGUNTA: o produto que aparece neste quadro é «{nome}», ou pelo menos "
+    "algo do MESMO TIPO, que serve pra mesma coisa?\n\n"
+    "Responda SÓ uma palavra:\n"
+    "SIM  — é esse produto ou um do mesmo tipo (marca/cor/modelo diferentes "
+    "tudo bem)\n"
+    "NAO  — o vídeo mostra outra coisa; quem clicasse receberia outro produto\n"
+    "TALVEZ — o quadro não deixa ver o produto direito\n\n"
+    "⚠️ Na dúvida entre SIM e NAO, responda TALVEZ. Só diga NAO quando o que "
+    "aparece claramente não é isso."
+)
+
+
+def conferir_nome(frame: bytes, nome: str) -> tuple:
+    """(veredito, tokens) — o vídeo mostra o produto que o LINK diz vender?
+
+    ⚠️ POR QUE ESTA SEGUNDA VIA EXISTE (06/09/2026). 657 pacotes do inbox têm
+    link de BUSCA da Amazon, sem foto de produto — o `conferir()` não tinha o
+    que comparar e pulava todos. São justamente esses que estão produzindo
+    agora, e é deles que vem boa parte do "o hook diz uma coisa e o vídeo é
+    outra" que o Dre viu.
+
+    Sem foto, o único lado confiável é o NOME. É um juiz mais fraco que o de
+    imagem×imagem (texto descreve menos que uma foto), e por isso ele passa
+    pelo MESMO controle negativo antes de bloquear qualquer coisa.
+    """
+    key = os.getenv("GEMINI_API_KEY", "")
+    if not key or not frame or not (nome or "").strip():
+        return "erro", 0
+    try:
+        from google import genai
+        from google.genai import types
+        cli = genai.Client(api_key=key)
+        r = cli.models.generate_content(
+            model=MODELO,
+            contents=[types.Part.from_bytes(data=frame, mime_type="image/jpeg"),
+                      _PROMPT_NOME.format(nome=nome.strip()[:120])])
+        t = (r.text or "").strip().upper()
+        u = getattr(r, "usage_metadata", None)
+        toks = int(getattr(u, "total_token_count", 0) or 0) if u else 0
+        if t.startswith("SIM"):
+            return "sim", toks
+        if t.startswith("NAO") or t.startswith("NÃO"):
+            return "nao", toks
+        if t.startswith("TALVEZ"):
+            return "talvez", toks
+        return "erro", toks
+    except Exception as e:
+        print(f"      ⚠️ {str(e)[:70]}")
+        return "erro", 0
+
+
 def conferir(frame: bytes, foto: bytes) -> tuple:
     """(veredito, custo_tokens). Veredito: sim / nao / talvez / erro."""
     key = os.getenv("GEMINI_API_KEY", "")
@@ -200,6 +263,10 @@ def main() -> int:
                     help="confere só N pacotes sorteados e MEDE custo/acerto")
     ap.add_argument("--marcar", action="store_true",
                     help="bloqueia os reprovados (sem isto, só lista)")
+    ap.add_argument("--sem-foto", action="store_true", dest="sem_foto",
+                    help="confere os pacotes SEM foto de loja (link de busca "
+                         "da Amazon, 657 deles) comparando o vídeo com o NOME "
+                         "do produto em vez da foto")
     ap.add_argument("--controle", type=int, default=0, metavar="N",
                     help="CONTROLE NEGATIVO: confere N pacotes de verdade E os "
                          "mesmos N com os pares EMBARALHADOS (frame de um, foto "
@@ -240,13 +307,21 @@ def main() -> int:
         vids = list(pj.parent.glob("video.*"))
         if not vids:
             continue
-        if not (info.get("imagem") or "").startswith("http"):
+        tem_foto = (info.get("imagem") or "").startswith("http")
+        if tem_foto == a.sem_foto:      # cada modo pega o conjunto que é seu
             sem_foto += 1
+            continue
+        if a.sem_foto and not (info.get("produto") or "").strip():
+            sem_foto += 1               # sem foto E sem nome: não há o que conferir
             continue
         alvos.append((pj, info, vids[0]))
 
-    print(f"📦 {len(alvos)} pacote(s) conferíveis "
-          f"(vídeo + foto da loja) · {sem_foto} sem foto (Amazon/busca)\n")
+    if a.sem_foto:
+        print(f"📦 {len(alvos)} pacote(s) SEM foto de loja (confere pelo NOME) "
+              f"· {sem_foto} fora deste modo\n")
+    else:
+        print(f"📦 {len(alvos)} pacote(s) conferíveis "
+              f"(vídeo + foto da loja) · {sem_foto} sem foto (Amazon/busca)\n")
     if not alvos:
         print("✅ nada a conferir")
         return 0
@@ -272,8 +347,12 @@ def main() -> int:
         # existe e achar que estou usando a duração real — o `_frame` cai no
         # padrão de 6s e tira o quadro aos 3s, que é o que de fato acontece.
         frame = _frame(vid)
-        foto = _baixar_imagem(info.get("imagem", ""))
-        veredito, tk = conferir(frame, foto)
+        if a.sem_foto:
+            foto = b""                      # não há foto: o outro lado é o nome
+            veredito, tk = conferir_nome(frame, info.get("produto") or "")
+        else:
+            foto = _baixar_imagem(info.get("imagem", ""))
+            veredito, tk = conferir(frame, foto)
         tokens += tk
         tot[veredito] = tot.get(veredito, 0) + 1
 
@@ -283,15 +362,24 @@ def main() -> int:
             reprovados.append((pj, info, nome))
         if a.provas and frame and foto:
             provas.append((nome, veredito, frame, foto))
-        if a.controle and frame and foto:
-            # guarda o que JÁ foi baixado — o controle não baixa nada de novo
-            coletados.append((nome, frame, foto))
+        if a.controle and frame and (foto or a.sem_foto):
+            # guarda o que JÁ foi baixado — o controle não baixa nada de novo.
+            # No modo --sem-foto o 3º item é o NOME COMPLETO, que é contra o
+            # que o juiz compara ali.
+            coletados.append((nome, frame,
+                              (info.get("produto") or "") if a.sem_foto else foto))
 
         if a.marcar and veredito == "nao":
             # ⚠️ MARCA, NÃO APAGA — mesma regra do limpar_inbox. Um veredito de
             # modelo errado tem de ser reversível tirando uma chave do JSON.
             info["nao_e_produto"] = True
-            info["motivo_bloqueio"] = "conferir_match: vídeo não mostra o produto do link"
+            # ⚠️ o motivo diz QUAL juiz bloqueou. O do nome é mais fraco que o
+            # de imagem×imagem, e se um dia a gente quiser revisar só o que ele
+            # barrou, tem que dar pra separar.
+            info["motivo_bloqueio"] = (
+                "conferir_match(nome): vídeo não mostra o produto do link"
+                if a.sem_foto else
+                "conferir_match: vídeo não mostra o produto do link")
         if a.marcar:
             info["match_conferido"] = veredito
             pj.write_text(json.dumps(info, ensure_ascii=False, indent=2),
@@ -332,15 +420,16 @@ def main() -> int:
             ctl = {"sim": 0, "nao": 0, "talvez": 0, "erro": 0}
             tk_ctl = 0
             for i, (nome, frame, _f) in enumerate(coletados):
-                outro_nome, _fr, outra_foto = coletados[(i + 1) % len(coletados)]
-                v, tk = conferir(frame, outra_foto)
+                outro_nome, _fr, outro_lado = coletados[(i + 1) % len(coletados)]
+                v, tk = (conferir_nome(frame, outro_lado) if a.sem_foto
+                         else conferir(frame, outro_lado))
                 tk_ctl += tk
                 ctl[v] = ctl.get(v, 0) + 1
                 marca = {"sim": "✅", "nao": "❌", "talvez": "🤔", "erro": "⚠️"}[v]
                 print(f"   {marca} {nome[:30]:32} × foto de {outro_nome[:28]}")
-                if a.provas:
+                if a.provas and not a.sem_foto:
                     provas.append((f"[EMBARALHADO] {nome} × {outro_nome}",
-                                   v, frame, outra_foto))
+                                   v, frame, outro_lado))
 
             n_ctl = len(coletados)
             rep_ctl = ctl["nao"] / n_ctl                    # devia ser ~1.0
@@ -378,6 +467,11 @@ def main() -> int:
             print(f"\n   ⚠️ ressalva honesta: dois produtos DIFERENTES podem ser do "
                   f"mesmo TIPO\n      (dois suportes de celular), e aí SIM no "
                   f"embaralhado está certo. Por isso\n      o corte é 75%, não 100%.")
+
+    if a.provas and a.sem_foto:
+        print("\n   ⚠️ --provas não vale no modo --sem-foto: o outro lado da "
+              "comparação é\n      TEXTO, não imagem. Não há par pra olhar. "
+              "Quem julga o juiz aqui\n      é o --controle.")
 
     if provas:
         try:

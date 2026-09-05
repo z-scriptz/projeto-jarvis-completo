@@ -578,6 +578,86 @@ e nesse caso não estão. "Não está julgando" engole "é frouxo".
 
 ---
 
+## 🗓️ Dia 2026-09-06 — "os hooks estão horrorosos" (e ele estava certo duas vezes)
+
+O Dre: *"os hooks estão horrorosos kkkkk e tem coisa que o hook diz uma coisa, e
+o vídeo é algo totalmente diferente"*. **São dois defeitos diferentes**, e um
+deles não é do gerador de hook.
+
+### Defeito 1: repetição de MOLDE, que ninguém media
+
+Numa rodada real, **8 de 14 hooks começaram com "Eu achava que"**:
+
+```
+"Eu achava que era impossível ter um esconderijo confortável..."
+"Eu achava que peixe esquecia tudo em três segundos"
+"Eu achava que só cirurgia resolvia a gravidade no espelho"
+```
+
+⚠️ **"Eu achava que" não está em lugar nenhum do código.** As fórmulas são
+`desabafo_shopee`, `eu_vs_shopee`, `virei_fa`, `comprei_testei`. O prompt
+garante 3 de 1ª pessoa em 5 exemplos e o modelo **convergiu sozinho**.
+
+E o `_bloco_nao_repita` já mostrava os hooks anteriores pedindo "não repita" —
+**o modelo obedeceu**: nenhuma frase se repete. O que se repete é a ABERTURA.
+
+> **Frase inteira era a unidade errada de medida.** O leitor não reconhece a
+> frase repetida; reconhece o molde. Três posts com o mesmo começo já cheiram
+> a robô, mesmo sem uma palavra igual depois.
+
+**Dois furos consertados:**
+
+1. `_bloco_nao_repita` lia só o `posts_ledger.jsonl` — hooks **já postados**.
+   Numa rodada de 12, o modelo não via os 11 que acabara de escrever. O
+   `_bloco_aberturas` lê o `hooks_alana_recentes.json`, que atualiza a cada
+   geração.
+2. O prompt agora **nomeia as aberturas gastas** (`"eu achava que..." usou 6x`)
+   em vez de listar frases — e a saída é **verificada**, porque mandar "comece
+   diferente" não garante começo diferente (mesma lição do `'pra quem'`).
+
+⚠️ **A recusa por abertura vale SÓ na 1ª tentativa, de propósito.** Recusar nas
+duas trocaria um hook bom de abertura repetida pela reserva genérica
+(*"Comprei sem esperar nada e me surpreendeu demais"*). Abertura repetida é
+chateação; frase genérica é post morto.
+
+`teste_abertura.py` **13/13**, com a rodada real de 10 hooks como caso.
+
+### Defeito 2: o hook não é do gerador — é do PACOTE
+
+```python
+gerar_hook_alana(produto, descricao, nicho)     # o VÍDEO não entra aqui
+```
+
+O hook é escrito a partir do **nome do produto na loja**. O vídeo é conteúdo
+gringo raspado. E o `conferir_match` mediu que **55,7% dos pacotes conferíveis
+mostram produto diferente do que o link vende**.
+
+**Quando o hook "não bate com o vídeo", quase sempre o hook está certo pro
+produto e errado pro vídeo** — os dois já não combinavam antes do hook existir.
+
+### `--sem-foto`: fechar o buraco que está produzindo agora
+
+**657 pacotes têm link de BUSCA da Amazon, sem foto de produto.** O juiz de
+imagem×imagem não tinha o que comparar e **pulava todos** — e são justamente
+esses que estão na esteira hoje.
+
+`--sem-foto` compara o frame com o **NOME** do produto (*"o que aparece aqui é
+um «X»?"*). É um **juiz mais fraco** — texto descreve menos que uma foto — então
+ele passa pelo **mesmo controle negativo** antes de bloquear qualquer coisa:
+
+```
+.venv/bin/python conferir_match.py --sem-foto --controle 40
+.venv/bin/python conferir_match.py --sem-foto --marcar
+```
+
+⚠️ `--provas` não vale aqui: o outro lado é texto, não há par pra olhar. **Quem
+julga este juiz é só o `--controle`.**
+
+⚠️ O `motivo_bloqueio` grava `conferir_match(nome)` — dá pra separar depois o
+que o juiz fraco barrou, se um dia a gente quiser revisar só isso.
+
+---
+
 ## 🗓️ Dia 2026-09-05 (e) — o truncamento, e a produção pra 12/dia
 
 ### A suspeita: `video.*` casa com `video.mp4.part`
