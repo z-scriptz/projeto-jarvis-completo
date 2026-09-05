@@ -632,6 +632,39 @@ tem uma seção inteira de casos que, se a medição vier assim, obrigam o vered
 vídeo). Classificador escrito por quem já tem resposta favorita tende a
 confirmá-la.
 
+### ✅ O VEREDITO (medido no inbox real, amostra de 25)
+
+```
+📦 2693 vídeo(s) · 0 arquivo(s) PARCIAL
+   ok                 8  (32%)
+   arredondamento    17  (68%)
+   truncado           0  (0%)
+   ilegivel           0  (0%)
+```
+
+**Os downloads estão íntegros.** Os 68% perderam de 2 a 8 frames com o decoder
+**completamente calado** — o `ffmpeg` leu os arquivos inteiros sem uma
+reclamação. O barulho no log é o moviepy pedindo frames que nunca existiram.
+
+⚠️ **O que a medição NÃO prova.** Com n=25 e zero defeitos, a regra de três dá
+teto de **~12%** pra taxa real — não zero. E há evidência direta de **1**
+quebrado em 2693 (o `amaziiiigfinds`). A taxa é baixíssima, mas existe.
+
+### `--frame0`: caçar os venenos antes que eles queimem slot
+
+Decodificar os 2693 inteiros custa ~3h30 de VPS. Mas o que **para a produção**
+é só o frame 0, e testar isso custa ~0,3s por arquivo — **~15 min no inbox
+todo**. `--frame0 --marcar` tira os quebrados da fila de uma vez, em vez de
+descobri-los um por dia, cada um queimando um slot.
+
+**Marca, não apaga** — mesma regra do `limpar_inbox`, do `conferir_match` e do
+contador de falhas.
+
+> **Regra que fica:** quando a amostra sai limpa mas o defeito comprovadamente
+> existe, a resposta não é ampliar a amostra cara — é achar o teste barato que
+> cobre 100% do que importa. Aqui: frame 0 em vez do vídeo inteiro, 15 min em
+> vez de 3h30.
+
 ### Produção: 6 → 12/dia
 
 Não é ousadia, é conta. A pirâmide do `daemon_maestro`

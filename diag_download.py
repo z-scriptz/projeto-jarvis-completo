@@ -27,8 +27,17 @@
 #
 # E classifica cada um em: ok · arredondamento · TRUNCADO · ILEGÍVEL
 #
-#   .venv/bin/python diag_download.py            # amostra de 25
-#   .venv/bin/python diag_download.py --tudo     # o inbox inteiro (demora)
+#   .venv/bin/python diag_download.py                    # amostra de 25
+#   .venv/bin/python diag_download.py --tudo             # inteiro (~3h30)
+#   .venv/bin/python diag_download.py --frame0           # caça os venenos (~15min)
+#   .venv/bin/python diag_download.py --frame0 --marcar  # ...e tira da fila
+#
+# ✅ MEDIDO EM 05/09/2026 (amostra de 25 no inbox real): 0 truncados, 0
+# ilegíveis, 0 arquivos parciais em 2693. 68% deram 'arredondamento' (2 a 8
+# frames a menos) com o decoder COMPLETAMENTE CALADO. A hipótese estava certa:
+# o barulho no log é do moviepy, os downloads estão íntegros.
+# ⚠️ Com n=25 e zero defeitos, a regra de três dá teto de ~12% — e sabe-se de
+# 1 quebrado em 2693. Por isso existe o --frame0: baixo, mas não é zero.
 import json
 import subprocess
 import sys
@@ -100,8 +109,71 @@ def classificar(erros: str, frames_reais: int, frames_pedidos: int) -> str:
     return "arredondamento" if faltando <= 8 else "truncado"
 
 
+def _abre_frame0(v: Path) -> bool:
+    """Só o frame 0. É o teste que separa 'produz' de 'não produz'."""
+    try:
+        r = subprocess.run(["ffmpeg", "-v", "error", "-i", str(v),
+                            "-vframes", "1", "-f", "null", "-"],
+                           capture_output=True, text=True, timeout=60)
+        return r.returncode == 0 and not (r.stderr or "").strip()
+    except Exception:
+        return True         # não deu pra testar: não condeno o arquivo
+
+
+def varrer_frame0(videos: list, marcar: bool) -> int:
+    """Caça TODOS os pacotes-veneno de uma vez, em vez de descobrir um por dia.
+
+    ⚠️ POR QUE ESTE MODO EXISTE (05/09/2026). A amostra de 25 deu 0 quebrados,
+    mas a gente SABE que existe pelo menos um (o amaziiiigfinds) — a regra de
+    três com n=25 só garante teto de ~12%, não zero. E cada veneno que sobra
+    queima um slot de produção quando é sorteado, silenciosamente.
+
+    Decodificar os 2693 inteiros custaria ~3h30 de VPS. Só o frame 0 custa
+    ~0,3s por arquivo (~15 min no inbox todo) e pega exatamente o defeito que
+    para a produção — vídeo que perde o FIM o moviepy contorna sozinho.
+    """
+    ruins = []
+    for i, v in enumerate(videos, 1):
+        if i % 250 == 0:
+            print(f"   … {i}/{len(videos)} · {len(ruins)} quebrado(s) até aqui")
+        if not _abre_frame0(v):
+            ruins.append(v)
+            print(f"   ☠️  {v.parent.name}")
+
+    print(f"\n── {len(ruins)} de {len(videos)} não abrem o 1º frame "
+          f"({len(ruins)/max(1,len(videos))*100:.2f}%) ──")
+    if not ruins:
+        print("   ✅ nenhum veneno na fila.")
+        return 0
+    if not marcar:
+        print("\n📋 pra tirar da fila: .venv/bin/python diag_download.py "
+              "--frame0 --marcar")
+        return 0
+
+    marcados = 0
+    for v in ruins:
+        pj = v.parent / "plano.json"
+        try:
+            info = json.loads(pj.read_text(encoding="utf-8"))
+            # ⚠️ MARCA, NÃO APAGA — mesma regra do limpar_inbox, do
+            # conferir_match e do contador de falhas. Reversível tirando a
+            # chave do JSON.
+            info["nao_e_produto"] = True
+            info["motivo_bloqueio"] = "diag_download: vídeo não abre o 1º frame"
+            pj.write_text(json.dumps(info, ensure_ascii=False, indent=2),
+                          encoding="utf-8")
+            marcados += 1
+        except Exception as e:
+            print(f"   ⚠️ não marquei {v.parent.name}: {str(e)[:50]}")
+    print(f"   🚫 {marcados} pacote(s) fora da fila (reversível: tire "
+          f"'nao_e_produto' do plano.json)")
+    return 0
+
+
 def main() -> int:
     tudo = "--tudo" in sys.argv[1:]
+    so_frame0 = "--frame0" in sys.argv[1:]
+    marcar = "--marcar" in sys.argv[1:]
     limite = 10_000 if tudo else 25
 
     videos, parciais = [], []
@@ -131,6 +203,9 @@ def main() -> int:
         if len(parciais) > 15:
             print(f"   … +{len(parciais) - 15}")
         print()
+
+    if so_frame0:
+        return varrer_frame0(videos, marcar)
 
     amostra = videos[:limite]
     if len(videos) > limite:
