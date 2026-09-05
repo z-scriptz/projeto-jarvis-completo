@@ -692,6 +692,55 @@ julga este juiz é só o `--controle`.**
 ⚠️ O `motivo_bloqueio` grava `conferir_match(nome)` — dá pra separar depois o
 que o juiz fraco barrou, se um dia a gente quiser revisar só isso.
 
+### ✅ O CONTROLE PASSOU — e com a maior folga até agora
+
+| juiz | embaralhado | real | separação |
+|---|---|---|---|
+| imagem × imagem | 87% | 53% | 34 pts |
+| **nome × vídeo** | **92%** | **15%** | **78 pts** |
+
+⚠️ **Mas os 15% precisam de contexto, senão viram uma boa notícia falsa.** Esses
+642 são pacotes em que o **Gemini Vision olhou o vídeo e nomeou o produto** (não
+houve match na Shopee → virou link de busca da Amazon com aquele nome). **O nome
+saiu do próprio vídeo**, então *"este vídeo mostra um X?"* é quase tautológico.
+
+O controle negativo é o que salva a conclusão: 92% de reprova no embaralhado
+prova que ele não está só dizendo SIM. Mas a taxa baixa **não é sorte, é a
+natureza do conjunto** — não dá pra comparar 15% com os 55,7% do outro juiz
+como se fossem a mesma medida.
+
+Custo medido: **R$0,81 e 39 min** pros 642.
+
+### 🚨 O achado de tabela: PROMPT VAZANDO PRA DENTRO DO NOME DO PRODUTO
+
+```
+✅ 1) É O NOME DE UM PRODUTO FÍSICO À VEN   · u9_tech_DcQ6T3KKJoT
+```
+
+**Isso é um pedaço do meu prompt.** O Gemini devolveu as instruções em vez da
+resposta e o coletor gravou como nome do produto. Esse pacote produziria um
+vídeo vendendo *"1) É O NOME DE UM PRODUTO FÍSICO À VENDA"*.
+
+⚠️ **E o juiz aprovou com ✅.** Perguntado *"este vídeo mostra um `1) É O NOME
+DE UM PRODUTO FÍSICO À VENDA`?"*, ele disse SIM. Nome sem sentido devia dar
+TALVEZ. **Fraqueza real do juiz, registrada aqui** — ele confere semelhança,
+não sanidade.
+
+**`caca_prompt_vazado.py`** varre a fila atrás de marcas de instrução —
+`^\d+\)`, "responda apenas", "sem markdown", "{placeholder}", "produto físico
+à venda". **Não gasta API**: ou o nome tem marca de prompt ou não tem; pagar
+modelo pra decidir isso seria comprar incerteza.
+
+⚠️ **Conservador de propósito.** Nome de produto real é caótico —
+`KIT PLASÚTIL LUXO CESTO`, `2.5L Pote Hermético`, `1 pa ck/30p cs`,
+`【SHANYIN】Panela`. Marcar por "parece estranho" levaria produto bom junto, e
+**a fila é o ativo**. `teste_prompt_vazado.py`: **27/27**, sendo **15 nomes
+reais de produção que não podem ser marcados**.
+
+> **Regra que fica:** num detector que bloqueia estoque, a metade importante do
+> teste são os casos que ele NÃO pode pegar. Falso positivo aqui custa mais que
+> falso negativo.
+
 ---
 
 ## 🗓️ Dia 2026-09-05 (e) — o truncamento, e a produção pra 12/dia
