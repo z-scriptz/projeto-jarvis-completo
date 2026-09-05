@@ -884,6 +884,15 @@ def _via_gemini(produto: str, descricao: str, nicho: str) -> Optional[str]:
             "'se voce tem', 'se voce e', 'toda pessoa que', 'todo mundo que'.\n\n"
             f"{_bloco_aberturas()}"
             f"{_bloco_nao_repita()}")
+        # os mesmos números que o validador usa lá embaixo — lidos aqui pra não
+        # virarem duas verdades diferentes sobre o mesmo limite
+        _teto1 = _teto_l1()
+        _min_chars = int(os.environ.get("HOOK_MIN_CHARS", 44))
+        # Alvo pra frase ÚNICA: ela quebra sozinha em 2 linhas, então o teto
+        # duro seria 2×_teto1 (~104). Peço bem menos — cerca de linha e meia —
+        # porque frase que ocupa as 2 linhas até a borda fica apertada na tela
+        # e o render precisa encolher a fonte até o mínimo pra caber.
+        _alvo_max = int(_teto1 * 1.35)
         prompt = (
             "Voce e copywriter de videos virais de afiliado (Shopee), estilo das "
             "criadoras que mais vendem no Reels/TikTok. Crie UM gancho (hook) "
@@ -900,10 +909,23 @@ def _via_gemini(produto: str, descricao: str, nicho: str) -> Optional[str]:
             + "REGRAS:\n"
             "- Responda APENAS o hook, nada mais (sem explicar, sem aspas em volta "
             "de tudo, sem hashtag, sem markdown).\n"
-            "- O hook DEVE ocupar 2 LINHAS no video: OU uma frase relatable/curiosidade "
-            "com CORPO (~8 a 12 palavras, que encha 2 linhas), OU frase + tag curta na "
-            "2a linha (ex.: a frase com emoji na 1a linha e '" + TAG_PADRAO + "' na 2a).\n"
-            "- NAO faca hook curto que caiba em 1 linha so (fica pequeno no nosso formato).\n"
+            # ⚠️ O ORCAMENTO EM CARACTERES ENTRA AQUI, NA 1a TENTATIVA (06/09/2026).
+            # Antes o prompt so dizia "~8 a 12 palavras" e o teto de 52 aparecia
+            # SO na queixa da 2a tentativa. Doze palavras em portugues da 60-70
+            # caracteres: o modelo era julgado por uma regua que ninguem mostrou.
+            # Numa rodada de 12 isso reprovou 4 hooks (57, 54, 56, 55 chars) e um
+            # deles queimou as DUAS tentativas e virou a reserva generica
+            # "Comprei sem esperar nada e me surpreendeu demais" -- post morto por
+            # 4 caracteres, nao por qualidade.
+            # Os numeros sao DERIVADOS (_teto_l1 e HOOK_MIN_CHARS), nao cravados:
+            # se o render mudar de fonte ou de margem, o pedido muda junto.
+            f"- ORCAMENTO DE TEXTO (conte os caracteres, emoji nao conta):\n"
+            f"  · UMA frase so, de {_min_chars} a {_alvo_max} caracteres "
+            f"(ela quebra sozinha em 2 linhas na tela) -- PREFIRA ESTE FORMATO; ou\n"
+            f"  · DUAS linhas, e ai a 1a linha tem no MAXIMO {_teto1} caracteres, "
+            f"com a 2a curtinha (ex.: '{TAG_PADRAO}').\n"
+            f"- NAO faca hook curto que caiba em 1 linha so (menos de {_min_chars} "
+            f"caracteres fica pequeno no nosso formato).\n"
             "- Se a formula tiver 2 partes, use 2 linhas (a 2a linha curtinha).\n"
             "- 1a pessoa, tom de desabafo/humor/curiosidade. Portugues BR.\n"
             "- NAO cite o nome do produto. Termine a frase principal com 1 emoji "

@@ -622,6 +622,42 @@ chateação; frase genérica é post morto.
 
 `teste_abertura.py` **13/13**, com a rodada real de 10 hooks como caso.
 
+### Defeito 1b: reprovado por uma régua que ninguém mostrou
+
+A rodada de 12 mostrou o pior desfecho possível:
+
+```
+hook reprovado: a 1a linha tinha 57 caracteres e o teto e 52
+hook seguiu reprovado apos 2 tentativas (56 caracteres) — vai pra reserva
+reserva também recusada — usando 1ª pessoa genérica
+✍️ "Comprei sem esperar nada e me surpreendeu demais 😅"
+```
+
+**Post morto por 4 caracteres, não por qualidade.** Aconteceu 4 vezes na
+rodada (57, 54, 56, 55).
+
+⚠️ **O prompt inicial nunca mencionava o limite.** Dizia *"~8 a 12 palavras"* —
+e 12 palavras em português dá 60-70 caracteres. O teto de 52 só aparecia na
+**queixa da 2ª tentativa**, via `motivos`. O modelo queimava uma das duas
+tentativas descobrindo uma regra que dava pra ter contado antes.
+
+**Conserto:** o orçamento em caracteres entra na 1ª tentativa, com números
+**derivados** (`_teto_l1()` e `HOOK_MIN_CHARS`), não cravados — se o render
+mudar de fonte ou margem, o pedido muda junto:
+
+```
+· UMA frase só, de 44 a 70 caracteres (quebra sozinha em 2 linhas) — PREFIRA; ou
+· DUAS linhas, e aí a 1ª tem no MÁXIMO 52, com a 2ª curtinha
+```
+
+`_alvo_max = _teto1 × 1,35` (≈70): o teto duro seria 2×52=104, mas frase que
+enche as duas linhas até a borda força o render a encolher a fonte até o mínimo.
+
+**As três frases reprovadas hoje (59, 59 e 65 chars) cabem nesse pedido** — elas
+só quebravam a regra por virem em DUAS linhas. E isso conserta de tabela o
+`"Levar água pro pet na rua Era a parte mais chata"`: o "rua Era" com maiúscula
+no meio é o hook de 2 linhas colado sem pontuação.
+
 ### Defeito 2: o hook não é do gerador — é do PACOTE
 
 ```python
