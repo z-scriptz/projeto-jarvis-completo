@@ -332,6 +332,20 @@ def _narrar_e_trocar_audio(video: Path, nome: str, contexto: str, nicho: str = "
     Se a narração não sair, cai no `_so_musica` (plano B) — o áudio original só
     fica se AS DUAS coisas falharem, e aí o alerta do Telegram diz isso."""
     if os.getenv("NARRAR_TIKTOK", "1").strip().lower() not in ("1", "true", "sim"):
+        # ⚠️ ANTES ISTO SAÍA MUDO E O ÁUDIO GRINGO IA PRO AR (06/09/2026).
+        # "Narração desligada" nunca quis dizer "mantém o áudio original" — o
+        # pedido do Dre no pivô foi: "se tiver narração por cima, ao invés de
+        # música, pode raspar e colocar música viral".
+        #
+        # E era INVISÍVEL: sem narração e sem falha, não saía linha nenhuma de
+        # áudio no log. Doze vídeos podiam sair com voz em inglês por cima sem
+        # nada acusar.
+        if os.getenv("MUSICA_SEM_NARRACAO", "1").strip().lower() in (
+                "1", "true", "sim"):
+            _log("   🎙️ narração desligada (NARRAR_TIKTOK) — vou de trilha")
+            return _so_musica(video, nome)
+        _log("   ⚠️ narração desligada E MUSICA_SEM_NARRACAO=0 — o vídeo sai "
+             "com o ÁUDIO GRINGO original")
         return False
 
     def _avisa(motivo):
@@ -849,6 +863,24 @@ def main():
             return 0
         _log(f"filtro de nicho '{nicho_alvo}' → {len(fila)} na fila")
     _log(f"{len(fila)} viral(is) no inbox · produzindo até {quantos} nesta rodada")
+
+    # ⚠️ CONFERE A TRILHA ANTES, NÃO NO MEIO DO 7º RENDER (06/09/2026). O aviso
+    # de pasta vazia só existia dentro do `_so_musica`, ou seja, aparecia
+    # quando já era tarde — e a fila inteira já estava saindo com áudio gringo.
+    # Uma rodada de 12 leva 2h; descobrir isso no fim custa as 2h.
+    try:
+        _pasta_mus = _dir_musica()
+        _tem = [x for x in _pasta_mus.glob("*")
+                if x.suffix.lower() in (".mp3", ".m4a", ".aac", ".wav", ".ogg")] \
+            if _pasta_mus.exists() else []
+        if _tem:
+            _log(f"   🎵 trilha: {len(_tem)} faixa(s) em {_pasta_mus}")
+        else:
+            _log(f"   🚨 SEM TRILHA em {_pasta_mus} — os vídeos vão sair com o "
+                 f"ÁUDIO GRINGO.\n      Ponha .mp3 nessa pasta (ou aponte "
+                 f"MUSICA_FUNDO_DIR no .env) antes de produzir.")
+    except Exception as _e:
+        _log(f"   ⚠️ não consegui conferir a trilha: {str(_e)[:60]}")
 
     # RODÍZIO DE CONTA (05/09/2026). Sem isto a rodada inteira cai numa conta só
     # — ver docstring do `rodizio()`. Desligado com --sem-rodizio, e sem efeito

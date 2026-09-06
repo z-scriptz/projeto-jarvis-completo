@@ -943,6 +943,56 @@ conserto.
 > teve problema* de *teve e foi consertado*. Quando o script não tem como
 > saber qual dos dois é, ele diz os dois — não escolhe o que soa melhor.
 
+---
+
+## 🗓️ Dia 2026-09-06 (b) — as pendências, e o áudio gringo que ia ao ar calado
+
+### 🚨 O PIOR ACHADO DO DIA: o áudio original saindo sem ninguém saber
+
+```python
+if os.getenv("NARRAR_TIKTOK", "1") not in ("1","true","sim"):
+    return False        # ← sai SEM chamar o plano B
+```
+
+**Narração desligada = áudio não tocado.** Nem narração, nem trilha: o **áudio
+gringo original ia pro ar**. E era **invisível** — sem narração e sem falha,
+nenhuma linha de áudio saía no log. Doze vídeos podiam sair com voz em inglês
+por cima e nada acusava.
+
+Foi assim que os logs de hoje ficaram sem `🎵` e sem `🚨 alerta`: os dois só
+existem depois desse `return False`.
+
+⚠️ Isso contraria o pedido do pivô, escrito em 03/09: *"se tiver alguma
+narração por cima, ao invés de música, pode raspar e colocar música viral"*.
+**Desligar a narração nunca quis dizer "mantém o áudio gringo".**
+
+**Conserto:** narração desligada agora cai no `_so_musica`. `MUSICA_SEM_NARRACAO=0`
+volta ao comportamento antigo — e aí o log **diz** que o áudio gringo vai sair.
+
+### A trilha é conferida ANTES, não no meio do 7º render
+
+O aviso de pasta vazia só existia dentro do `_so_musica` — aparecia quando já
+era tarde. **Uma rodada de 12 leva 2h; descobrir isso no fim custa as 2h.**
+Agora sai na primeira linha: `🎵 trilha: N faixa(s)` ou `🚨 SEM TRILHA`.
+
+### `diag_corte.py` — decidir o `CORTE_INTRO_AUTO` com 40 vídeos, não com 3
+
+A chave está pronta e desligada desde 03/09 porque a condição era "olhar 2-3
+vídeos com o corte aplicado". Produzir 3 custa 30 min e mostra 3 casos —
+amostra pequena demais pra uma chave que vale pra fila inteira.
+
+O diagnóstico roda o detector nos vídeos **de verdade, sem produzir nada**, e
+devolve a distribuição + uma folha `ANTES (0s) | DEPOIS (corte)`.
+
+⚠️ **Sorteia, não pega os primeiros** — lição do `diag_rodizio` de hoje.
+
+⚠️ **Não mexe no `.env`**: liga o AUTO só dentro do processo. Se o resultado
+for ruim, não ficou nada ligado por engano.
+
+⚠️ **Marca quem bateu no TETO.** Corte encostado no limite (4s ou 25%) significa
+que o detector **não achou a ação** e quem segurou foi a trava — não é o
+detector funcionando, é a trava funcionando. Esses precisam de olho redobrado.
+
 ### ⚠️ E eu quebrei a regra de deploy que eu mesmo escrevi
 
 ```
