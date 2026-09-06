@@ -1160,6 +1160,43 @@ controle não vale mais que o rótulo dele.
 uma reprovação no controle é um número que não conserta nada — foi exatamente a
 situação em que eu fiquei.
 
+### 🎯 E o MOTIVO respondeu: o detector estava certo, eu é que errei
+
+```
+❌ voz  Beautifully Stranded (Reels Sound...)   "voz feminina FALA uma frase"
+```
+
+**Não era canto: era fala.** O detector acertou os 4. Reels Sound do tipo
+"Before and After" abre com uma frase falada — coisa que eu teria descoberto
+ouvindo 20 segundos, em vez de escrever "música pura" e acusar o código.
+
+⚠️ **E o achado prático é maior que o teste: essa faixa está na pasta de
+trilhas.** Toda vez que fosse sorteada, injetaria uma voz estrangeira num Reel
+nosso — exatamente o que a gente está removendo dos vídeos. **Tirar da pasta.**
+
+**O conserto do prompt funcionou**, e dá pra ver nos motivos da fila:
+
+| motivo | veredito |
+|---|---|
+| `Canto com voz masculina em hindi` | 🎧 musica |
+| `Homem canta em português com música` | 🎧 musica |
+| `música pop indiana com canto` | 🎧 musica |
+| `Voz cantada e música dance` | 🎧 musica |
+| `Compra pan, huevos y leche` | 🗣️ voz |
+| `mulher explica como fazer sushi` | 🗣️ voz |
+
+Canto virou música em **todos**; fala virou voz em todos, **inclusive em
+espanhol**.
+
+**E o controle passou a admitir as duas leituras.** A 1ª versão só sabia cravar
+"O DETECTOR ESTÁ QUEBRADO" — as duas causas pedem consertos **opostos** (mexer
+no prompt vs tirar a faixa da pasta), então o script agora mostra as duas e
+deixa o motivo separar.
+
+> **Regra que fica:** quando um teste reprova, a primeira hipótese a checar é a
+> do RÓTULO, não a do código. Eu acusei o detector duas mensagens seguidas antes
+> de perceber que o errado era o que eu tinha escrito sobre o dado.
+
 ### O número que importa: 19 de 25 manteriam o áudio
 
 ```

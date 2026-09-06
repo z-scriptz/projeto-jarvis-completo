@@ -15,17 +15,24 @@
 # ⚠️ CONTROLE DE GRAÇA: as faixas da nossa pasta de trilha não têm NARRAÇÃO —
 # ninguém falando por cima. O detector tem que dizer 'musica' nelas.
 #
-# ⚠️⚠️ MAS O RÓTULO DESTE CONTROLE É SUPOSIÇÃO MINHA, E ELA JÁ FALHOU. Na 1ª
-# rodada escrevi "são MÚSICA PURA, sem voz" e o controle deu 3/4: a faixa
-# 'Beautifully Stranded (Reels Sound - Before and After)' voltou como VOZ.
-# Só que 'Beautifully Stranded' é nome de CANÇÃO — provavelmente tem vocal
-# cantado. Ou seja: pode ser o detector desobedecendo o prompt, ou pode ser eu
-# tendo chamado de "música pura" uma faixa com voz cantando.
+# ⚠️⚠️ E O RÓTULO DESTE CONTROLE ERA SUPOSIÇÃO MINHA — ERRADA. Escrevi "são
+# MÚSICA PURA, sem voz" sem ouvir nenhuma. O controle deu 3/4 e eu cravei
+# "O DETECTOR ESTÁ QUEBRADO". Aí o motivo apareceu:
 #
-# **Controle não vale mais que o rótulo dele.** Por isso o veredito agora vem
-# com o MOTIVO: 'canto em ingles' aponta pro prompt, 'homem narrando' aponta
-# pra mim. Sem o motivo, uma reprovação no controle é só um número que não
-# conserta nada.
+#     ❌ voz  Beautifully Stranded (Reels Sound...)  "voz feminina FALA uma frase"
+#
+# **Não era canto: era fala.** O detector estava certo o tempo todo, e quem
+# errou fui eu. Reels Sound do tipo "Before and After" abre com uma frase
+# falada — coisa que eu teria descoberto ouvindo 20 segundos.
+#
+# E o achado prático é maior que o teste: **essa faixa está na pasta de
+# trilhas.** Toda vez que fosse sorteada, injetaria uma voz estrangeira num
+# Reel nosso — exatamente o que a gente está removendo dos vídeos.
+#
+# **Controle não vale mais que o rótulo dele**, e por isso o veredito vem com o
+# MOTIVO: 'canto' aponta pro prompt, 'fala/narra' aponta pra faixa (ou pra
+# mim). Sem o motivo, uma reprovação é um número que não conserta nada — e pior,
+# me fez acusar o código certo.
 #
 # ⚠️ O QUE ESTE CONTROLE NÃO MEDE: a sensibilidade. Ele prova que o detector não
 # vê narração onde não tem; NÃO prova que ele acha narração onde tem. Pra isso
@@ -83,10 +90,27 @@ def main() -> int:
         # suposição (as 4 faixas são instrumentais) é que estava errada.
         print(f"   {marca} {v:7} {t.name[:44]:46} {pq}")
     if trilhas:
-        print(f"\n   {len(trilhas) - erros_ctl}/{len(trilhas)} certos no controle.")
+        print(f"\n   {len(trilhas) - erros_ctl}/{len(trilhas)} sem narração.")
         if erros_ctl:
-            print("   ❌ O DETECTOR VÊ VOZ ONDE SÓ TEM MÚSICA. Ele vai trocar")
-            print("      trilha boa por trilha nossa. Não use até eu consertar.")
+            # ⚠️ REPROVAR AQUI TEM DUAS LEITURAS, E A 1ª VERSÃO SÓ CONHECIA UMA
+            # (06/09/2026). Ela cravava "O DETECTOR ESTÁ QUEBRADO" — mas quando
+            # o motivo veio, era 'voz feminina fala uma frase': o detector
+            # estava CERTO e a faixa é que tem fala. Reels Sound do tipo
+            # 'Before and After' abre com uma frase falada, e eu tinha chamado
+            # as 4 de "música pura" sem ouvir nenhuma.
+            #
+            # As duas leituras pedem consertos OPOSTOS (mexer no prompt vs tirar
+            # a faixa da pasta), então o script não escolhe: mostra as duas e o
+            # motivo, que é o que separa.
+            print(f"   ⚠️ {erros_ctl} trilha(s) voltaram como VOZ. Leia o MOTIVO:")
+            print("      · fala 'canto/cantada/sings' → o DETECTOR errou "
+                  "(prompt fraco), eu conserto")
+            print("      · fala 'narra/explica/fala'  → A FAIXA tem voz e NÃO "
+                  "SERVE de trilha:")
+            print("        cada vez que for sorteada, injeta uma voz "
+                  "estrangeira no nosso Reel.")
+            print("        Tire ela da pasta — é justamente o que a gente está "
+                  "removendo dos vídeos.")
         else:
             print("   ✅ não inventa voz onde não tem.")
             print("      ⚠️ isto NÃO prova que ele ACHA voz onde tem — pra medir")
