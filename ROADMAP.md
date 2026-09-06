@@ -1131,6 +1131,47 @@ não *inventa* voz onde não tem. **Não prova** que ele *acha* voz onde tem —
 isso eu precisaria de vídeos gringos rotulados à mão, e não tenho. Está escrito
 no próprio script pra ninguém ler "4/4 no controle" e achar que é perfeito.
 
+### 📉 O controle reprovou (3/4) — e mostrou dois defeitos, um deles meu
+
+```
+✅ musica  Light (Reels Sound - Listicle).mp4
+✅ musica  Disco (Reels Sound - Photo Dump).mp4
+❌ voz     Beautifully Stranded (Reels Sound - Before and After).mp4
+✅ musica  HipHop (Reels Sound - Before And After).mp4
+```
+
+**Defeito 1 (prompt):** a regra do canto estava num **rodapé**
+(`⚠️ Cantar NÃO conta como falar`), depois das opções — e o desempate logo
+abaixo (`na dúvida, VOZ`) empurrava pro mesmo lado. Observação no fim perde pra
+definição no meio. Agora **"música COM OU SEM VOCAL CANTADO"** faz parte do que
+`MUSICA` **é**, e o canto está excluído do desempate explicitamente.
+
+**Defeito 2 (meu):** eu escrevi no controle que as 4 faixas são *"música pura,
+sem voz"* — **sem conferir**. `Beautifully Stranded` é nome de canção;
+provavelmente tem vocal. **O rótulo do meu controle era suposição**, e um
+controle não vale mais que o rótulo dele.
+
+> **Regra que fica:** controle com rótulo suposto é um controle que pode
+> reprovar o código certo. Quando o rótulo é meu palpite, ele tem que estar
+> escrito como palpite.
+
+**Conserto dos dois de uma vez: o veredito agora vem com o MOTIVO.**
+`canto em ingles` aponta pro prompt; `homem narrando` aponta pra mim. Sem isso,
+uma reprovação no controle é um número que não conserta nada — foi exatamente a
+situação em que eu fiquei.
+
+### O número que importa: 19 de 25 manteriam o áudio
+
+```
+🗣️  6 com voz (áudio SERÁ trocado)
+🎧 19 só música (áudio MANTIDO)
+🪙 R$ 0,04 na amostra · R$ 0,49/mês a 12 vídeos/dia
+```
+
+**76% dos vídeos da fila têm trilha própria** — a que os fez viralizar. Era esse
+conteúdo que a versão anterior jogava fora sem perguntar, e eu ia ligar isso em
+12 vídeos/dia. R$0,49/mês pra não fazer isso é barato demais pra discutir.
+
 ### `CORTE_INTRO_AUTO=1` — LIGADO
 
 Decisão do Dre depois de ver os números: 10% dos vídeos, ~1s cada, nenhum no

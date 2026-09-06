@@ -12,14 +12,25 @@
 # `conferir_match`, e lá o controle negativo salvou a decisão de bloquear 800
 # pacotes.
 #
-# ⚠️ AQUI EU TENHO UM CONTROLE DE GRAÇA: as 4 faixas da pasta de trilha são
-# MÚSICA PURA, sem voz. O detector TEM que dizer 'musica' nelas. Se disser
-# 'voz', ele está quebrado e nenhum número do inbox importa.
+# ⚠️ CONTROLE DE GRAÇA: as faixas da nossa pasta de trilha não têm NARRAÇÃO —
+# ninguém falando por cima. O detector tem que dizer 'musica' nelas.
+#
+# ⚠️⚠️ MAS O RÓTULO DESTE CONTROLE É SUPOSIÇÃO MINHA, E ELA JÁ FALHOU. Na 1ª
+# rodada escrevi "são MÚSICA PURA, sem voz" e o controle deu 3/4: a faixa
+# 'Beautifully Stranded (Reels Sound - Before and After)' voltou como VOZ.
+# Só que 'Beautifully Stranded' é nome de CANÇÃO — provavelmente tem vocal
+# cantado. Ou seja: pode ser o detector desobedecendo o prompt, ou pode ser eu
+# tendo chamado de "música pura" uma faixa com voz cantando.
+#
+# **Controle não vale mais que o rótulo dele.** Por isso o veredito agora vem
+# com o MOTIVO: 'canto em ingles' aponta pro prompt, 'homem narrando' aponta
+# pra mim. Sem o motivo, uma reprovação no controle é só um número que não
+# conserta nada.
 #
 # ⚠️ O QUE ESTE CONTROLE NÃO MEDE: a sensibilidade. Ele prova que o detector não
-# vê voz onde não tem; NÃO prova que ele acha voz onde tem. Pra isso eu
-# precisaria de vídeos gringos rotulados à mão, e não tenho. Está dito aqui pra
-# ninguém ler 100% no controle e achar que o detector é perfeito.
+# vê narração onde não tem; NÃO prova que ele acha narração onde tem. Pra isso
+# eu precisaria de vídeos gringos rotulados à mão, e não tenho. Está dito aqui
+# pra ninguém ler 4/4 e achar que o detector é perfeito.
 #
 #   .venv/bin/python diag_voz.py --amostra 25
 import json
@@ -57,15 +68,20 @@ def main() -> int:
 
     # ── CONTROLE: as nossas trilhas são música pura ────────────────────────
     trilhas = PT._trilhas()
-    print(f"── controle: {len(trilhas)} trilha(s) nossa(s) (música pura) ──")
+    print(f"── controle: {len(trilhas)} trilha(s) nossa(s) — nenhuma tem "
+          f"NARRAÇÃO ──")
+    print(f"   (canto conta como música; se reprovar, leia o MOTIVO à direita)")
     erros_ctl = 0
     for t in trilhas:
-        v, tk = PT.tem_voz(PT._audio_amostra(t))
+        v, tk, pq = PT.tem_voz(PT._audio_amostra(t))
         tokens += tk
         marca = "✅" if v == "musica" else ("❌" if v == "voz" else "⚠️")
         if v == "voz":
             erros_ctl += 1
-        print(f"   {marca} {v:7} {t.name[:56]}")
+        # ⚠️ O MOTIVO É O QUE TORNA A FALHA CONSERTÁVEL: 'canto em ingles'
+        # significa prompt fraco; 'homem narrando' significa que a MINHA
+        # suposição (as 4 faixas são instrumentais) é que estava errada.
+        print(f"   {marca} {v:7} {t.name[:44]:46} {pq}")
     if trilhas:
         print(f"\n   {len(trilhas) - erros_ctl}/{len(trilhas)} certos no controle.")
         if erros_ctl:
@@ -104,11 +120,11 @@ def main() -> int:
     print(f"\n── {len(vids)} vídeo(s) da fila, sorteados ──")
     tot = {"voz": 0, "musica": 0, "erro": 0}
     for pasta, v in vids:
-        ver, tk = PT.tem_voz(PT._audio_amostra(v))
+        ver, tk, pq = PT.tem_voz(PT._audio_amostra(v))
         tokens += tk
         tot[ver] = tot.get(ver, 0) + 1
         marca = {"voz": "🗣️", "musica": "🎧", "erro": "⚠️"}[ver]
-        print(f"   {marca} {ver:7} {pasta.name[:56]}")
+        print(f"   {marca} {ver:7} {pasta.name[:40]:42} {pq}")
 
     n = len(vids)
     print(f"\n── resultado ──")

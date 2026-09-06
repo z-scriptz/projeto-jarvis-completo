@@ -246,15 +246,27 @@ def _dir_musica() -> Path:
     return p if p.is_absolute() else (BASE_DIR / p)
 
 
+# ⚠️ A REGRA DO CANTO ESTÁ NA DEFINIÇÃO, NÃO NUM RODAPÉ (06/09/2026). A 1ª
+# versão trazia "⚠️ Cantar NÃO conta como falar" como observação depois das
+# opções, e o controle reprovou: a faixa 'Beautifully Stranded (Reels Sound)'
+# — música com vocal — voltou como VOZ. Observação no fim perde pra definição
+# no meio, ainda mais quando o desempate ("na dúvida, VOZ") empurra pro mesmo
+# lado. Agora "com ou sem vocal cantado" faz parte do que MUSICA É, e o canto
+# está excluído do desempate explicitamente.
 _PROMPT_VOZ = (
     "Este é o áudio de um vídeo curto de produto.\n\n"
-    "PERGUNTA: tem alguém FALANDO — voz humana narrando, explicando ou "
-    "comentando o produto?\n\n"
-    "Responda SÓ uma palavra:\n"
-    "VOZ      — tem gente falando (mesmo que baixo, mesmo com música junto)\n"
-    "MUSICA   — só música, som ambiente, barulho do produto, ou silêncio\n\n"
-    "⚠️ Cantar NÃO conta como falar: música cantada é MUSICA.\n"
-    "⚠️ Na dúvida, responda VOZ."
+    "PERGUNTA: alguém FALA palavras neste áudio?\n\n"
+    "VOZ    — alguém FALA: narra, explica, comenta, faz review, dá instrução.\n"
+    "         Fala, não canto. Conta mesmo se estiver baixo ou com música junto.\n"
+    "MUSICA — música COM OU SEM VOCAL CANTADO, som ambiente, barulho do\n"
+    "         produto, ou silêncio. Ninguém FALANDO.\n\n"
+    "⚠️ CANTO É MUSICA, e isso não é caso de dúvida. Uma canção com letra em\n"
+    "   inglês, cantada, é MUSICA — não é alguém falando.\n"
+    "⚠️ Só entre FALA e AUSÊNCIA DE FALA, na dúvida responda VOZ.\n\n"
+    "Responda assim, em uma linha:\n"
+    "VOZ | <3 a 6 palavras dizendo o que você ouviu>\n"
+    "ou\n"
+    "MUSICA | <3 a 6 palavras dizendo o que você ouviu>"
 )
 
 
@@ -276,7 +288,13 @@ def _audio_amostra(video: Path, seg: int = 25) -> bytes:
 
 
 def tem_voz(audio: bytes) -> tuple:
-    """(veredito, tokens). Veredito: 'voz' / 'musica' / 'erro'.
+    """(veredito, tokens, motivo). Veredito: 'voz' / 'musica' / 'erro'.
+
+    ⚠️ O MOTIVO EXISTE PORQUE UM CONTROLE MUDO NÃO CONSERTA NADA (06/09/2026).
+    A 1ª versão devolvia só o veredito, e quando o controle reprovou uma faixa
+    eu fiquei sem saber se o detector tinha ouvido CANTO (defeito de prompt) ou
+    FALA de verdade (rótulo meu errado — assumi que as 4 faixas eram
+    instrumentais sem conferir). Duas causas, consertos opostos, nenhuma pista.
 
     ⚠️ POR QUE ISTO EXISTE (06/09/2026, correção do Dre): *"é pra sair o áudio
     tipo narração; se o vídeo gringo for um áudio de música, não é pra retirar,
@@ -292,7 +310,7 @@ def tem_voz(audio: bytes) -> tuple:
     """
     key = os.getenv("GEMINI_API_KEY", "")
     if not key or not audio:
-        return "erro", 0
+        return "erro", 0, "sem chave ou sem áudio"
     try:
         from google import genai
         from google.genai import types
@@ -301,17 +319,20 @@ def tem_voz(audio: bytes) -> tuple:
             model=os.getenv("GEMINI_MODELO_VOZ", "gemini-2.5-flash"),
             contents=[types.Part.from_bytes(data=audio, mime_type="audio/mpeg"),
                       _PROMPT_VOZ])
-        t = (r.text or "").strip().upper()
+        bruto = (r.text or "").strip()
+        cabeca, _, motivo = bruto.partition("|")
+        t = cabeca.strip().upper()
+        motivo = " ".join(motivo.split())[:60]
         u = getattr(r, "usage_metadata", None)
         toks = int(getattr(u, "total_token_count", 0) or 0) if u else 0
         if t.startswith("VOZ"):
-            return "voz", toks
+            return "voz", toks, motivo
         if t.startswith("MUSICA") or t.startswith("MÚSICA"):
-            return "musica", toks
-        return "erro", toks
+            return "musica", toks, motivo
+        return "erro", toks, f"resposta estranha: {bruto[:40]}"
     except Exception as e:
         _log(f"      ⚠️ detector de voz: {str(e)[:70]}")
-        return "erro", 0
+        return "erro", 0, str(e)[:60]
 
 
 def _trilhas() -> list:
@@ -384,14 +405,18 @@ def _so_musica(video: Path, nome: str) -> bool:
     # igual. Perder uma música boa é queda de qualidade; deixar voz em inglês
     # passar é o defeito que o pivô veio consertar.
     if os.getenv("SO_TROCA_SE_TIVER_VOZ", "1").strip().lower() in ("1", "true", "sim"):
-        _v, _tk = tem_voz(_audio_amostra(video))
+        # ⚠️ 3 valores. Já quebrei exatamente assim no `limpar_inbox`: mudei o
+        # retorno pra tupla e deixei um chamador desempacotando 2, e o
+        # ValueError só apareceu no caminho que ninguém testava.
+        _v, _tk, _pq = tem_voz(_audio_amostra(video))
         if _v == "musica":
-            _log("   🎧 o áudio original é MÚSICA (sem voz) — mantenho, não troco")
+            _log(f"   🎧 áudio original é MÚSICA — mantenho ({_pq or 'sem voz'})")
             return True          # o áudio está certo: nada a fazer aqui
         if _v == "erro":
-            _log("   ⚠️ não consegui ouvir o áudio — troco por trilha (na dúvida, troco)")
+            _log(f"   ⚠️ não consegui ouvir ({_pq}) — troco por trilha "
+                 f"(na dúvida, troco)")
         else:
-            _log("   🗣️ voz detectada no áudio original — vou trocar por trilha")
+            _log(f"   🗣️ voz detectada — vou trocar por trilha ({_pq})")
 
     musica = _escolher_musica()
     if not musica:
