@@ -842,6 +842,33 @@ cache quente e custo ~zero. `--limite 40` confirma isso antes da rodada cheia.
 suspeita estava errada e o desequilíbrio vem de outro lugar — melhor descobrir
 isso do que "consertar" o que já estava certo.
 
+### 📉 E ele me desmentiu DUAS vezes: a suspeita E o método
+
+```
+📦 40 pacote(s) da frente da fila
+   BALDE      casa=35 · moda=5
+   REAL       casa=33 · moda=5 · pet=1 · tech=1
+── discordam: 2 de 40 (5%) ──
+```
+
+5% não explica `moda=5, geral=0`. Mas repara na distribuição: **os 40 da frente
+são 35 de casa** — e aí está o furo, que é meu:
+
+> **O rodízio NÃO produz os 40 da frente.** Ele escolhe 12 **espalhados**, um de
+> cada balde por volta. Casa é justamente o balde que quase não diverge; quem
+> diverge são os itens raros dos baldes pequenos — **exatamente os que o rodízio
+> vai buscar.** Eu medi a população errada.
+
+Fazendo a conta ao contrário: pra `moda` levar 5 de 12 num round-robin de 6
+baldes, uns **3 dos escolhidos** trocaram de conta na hora — **25%**, não 5%.
+
+**`--lote 12`** refaz a MESMA escolha que o `produzir_tiktok` faria (varredura
+da janela + `rodizio()`) e mede só nela. É a única amostra que responde.
+
+> **Regra que fica:** amostra tem que ser da população que o sistema REALMENTE
+> processa, não da que é fácil de pegar. "Os primeiros N" é a amostra mais
+> cômoda e quase sempre a errada — foi o mesmo erro do `fotografia --sortear`.
+
 ### ⚠️ E eu quebrei a regra de deploy que eu mesmo escrevi
 
 ```
