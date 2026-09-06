@@ -1044,6 +1044,41 @@ vazia. O certo é `ls -la ~/jarvis/assets/inbox/audio/`.
 O que dá pra concluir: **`MUSICA_FUNDO_DIR` não está no `.env`** (o grep não
 achou), então vale o padrão.
 
+**A pasta TEM 4 faixas** — e são `.mp4` (`'Disco (Reels Sound - Photo Dump).mp4'`).
+
+⚠️ **E a minha checagem nova ia dizer "SEM TRILHA" com a pasta cheia.** Escrevi
+uma lista de extensões PRÓPRIA (`.mp3/.m4a/.aac/.wav/.ogg`), sem `.mp4` — mas
+`MUSICA_EXTS` existe na linha 44 desde sempre e **sempre aceitou `.mp4`**.
+
+Duas listas de extensões é exatamente o erro que eu passei o dia consertando
+nos outros (o `storyboard.PROIBIDO` importado em vez de copiado, o
+`shared/moldura.py` como fonte única da geometria). Agora `_trilhas()` é a
+única verdade, usada pela checagem **e** pelo `_escolher_musica`.
+
+### 📉 `--por-perfil` (300 vídeos): NENHUM perfil merece `corte=N`
+
+```
+   0 perfil(is) com carimbo em 60%+ dos vídeos.
+   isabella_cabelo        3   1 (33%)   0.8s   ← o mais alto de todos
+   elnazhamai            21   1 ( 5%)   0.6s
+   sarah_colussi         18   0 ( 0%)   0.0s
+   tkjusticebuy          12   0 ( 0%)   0.0s
+```
+
+**A resposta é não cravar nada.** O maior é 33% (1 vídeo de 3), e o piso é 60%.
+
+⚠️ **MAS ISTO NÃO PROVA QUE NÃO EXISTE CARIMBO.** O detector só enxerga
+abertura **ESTÁTICA** — ele mede quanto o frame muda. Um selo "Amazon Gadgets"
+sobreposto a vídeo em movimento **não é estático**, e o detector passa direto.
+
+Então o relatório responde *"quais perfis abrem com a imagem parada"* (≈ nenhum)
+e **não** responde *"quais abrem com selo de marca por cima de movimento"* — que
+é o que o Dre viu com os próprios olhos em 03/09.
+
+> **Regra que fica:** quando a medição vem vazia, dizer o que ela NÃO cobre é
+> parte do resultado. "Não achei" e "não existe" são coisas diferentes, e
+> confundir as duas encerra uma investigação que estava certa.
+
 ### ⚠️ E eu quebrei a regra de deploy que eu mesmo escrevi
 
 ```

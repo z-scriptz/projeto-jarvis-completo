@@ -246,16 +246,29 @@ def _dir_musica() -> Path:
     return p if p.is_absolute() else (BASE_DIR / p)
 
 
+def _trilhas() -> list:
+    """As faixas utilizáveis da pasta de música.
+
+    ⚠️ EXISTE PRA SER A ÚNICA VERDADE (06/09/2026). Eu tinha escrito a checagem
+    de início de rodada com uma lista de extensões PRÓPRIA — sem `.mp4` — e ela
+    ia anunciar 'SEM TRILHA' com a pasta cheia: as 4 faixas do Dre são `.mp4`
+    ('Disco (Reels Sound - Photo Dump).mp4'), e `MUSICA_EXTS` sempre aceitou
+    isso. Duas listas de extensões é o mesmo erro que eu passei o dia
+    consertando nos outros (o `storyboard.PROIBIDO` importado em vez de
+    copiado, o `shared/moldura.py`).
+    """
+    try:
+        return [p for p in _dir_musica().iterdir()
+                if p.is_file() and p.suffix.lower() in MUSICA_EXTS
+                and p.stat().st_size > 5000]
+    except Exception:
+        return []
+
+
 def _escolher_musica() -> Path:
     """Sorteia uma trilha de fundo da pasta de músicas. '' se não houver nenhuma
     (aí o vídeo sai só com a narração, sem música — sem quebrar)."""
-    pasta = _dir_musica()
-    try:
-        cands = [p for p in pasta.iterdir()
-                 if p.is_file() and p.suffix.lower() in MUSICA_EXTS
-                 and p.stat().st_size > 5000]
-    except Exception:
-        cands = []
+    cands = _trilhas()
     return random.choice(cands) if cands else Path()
 
 
@@ -868,19 +881,14 @@ def main():
     # de pasta vazia só existia dentro do `_so_musica`, ou seja, aparecia
     # quando já era tarde — e a fila inteira já estava saindo com áudio gringo.
     # Uma rodada de 12 leva 2h; descobrir isso no fim custa as 2h.
-    try:
-        _pasta_mus = _dir_musica()
-        _tem = [x for x in _pasta_mus.glob("*")
-                if x.suffix.lower() in (".mp3", ".m4a", ".aac", ".wav", ".ogg")] \
-            if _pasta_mus.exists() else []
-        if _tem:
-            _log(f"   🎵 trilha: {len(_tem)} faixa(s) em {_pasta_mus}")
-        else:
-            _log(f"   🚨 SEM TRILHA em {_pasta_mus} — os vídeos vão sair com o "
-                 f"ÁUDIO GRINGO.\n      Ponha .mp3 nessa pasta (ou aponte "
-                 f"MUSICA_FUNDO_DIR no .env) antes de produzir.")
-    except Exception as _e:
-        _log(f"   ⚠️ não consegui conferir a trilha: {str(_e)[:60]}")
+    _tem = _trilhas()          # a MESMA função que o `_escolher_musica` usa
+    if _tem:
+        _log(f"   🎵 trilha: {len(_tem)} faixa(s) em {_dir_musica()}")
+    else:
+        _log(f"   🚨 SEM TRILHA em {_dir_musica()} — os vídeos vão sair com o "
+             f"ÁUDIO GRINGO.\n      Ponha um arquivo de áudio ou vídeo nessa "
+             f"pasta (ou aponte MUSICA_FUNDO_DIR\n      no .env) antes de "
+             f"produzir.")
 
     # RODÍZIO DE CONTA (05/09/2026). Sem isto a rodada inteira cai numa conta só
     # — ver docstring do `rodizio()`. Desligado com --sem-rodizio, e sem efeito
