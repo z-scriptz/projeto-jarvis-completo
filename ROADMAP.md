@@ -1079,6 +1079,32 @@ e **não** responde *"quais abrem com selo de marca por cima de movimento"* — 
 > parte do resultado. "Não achei" e "não existe" são coisas diferentes, e
 > confundir as duas encerra uma investigação que estava certa.
 
+### ⚠️ Correção: as 4 faixas estavam lá e NUNCA TOCARAM
+
+Eu disse *"a trilha existe, então os vídeos não saíram com áudio gringo"*.
+**Errado, e o Dre corrigiu:** *"apesar que não coloquei nenhuma música ainda"*.
+
+As 4 faixas estão na pasta desde 11/07, mas o `_so_musica` **nunca era
+chamado** — o `return False` mudo do `NARRAR_TIKTOK` desligado saía antes.
+Arquivo na pasta não é o mesmo que arquivo em uso, e eu tratei os dois como a
+mesma coisa.
+
+O conserto de hoje faz elas entrarem na próxima rodada. **E aí aparece um
+problema novo, do mesmo tipo silencioso:**
+
+> A trilha é **sorteada por vídeo**. Com **4 faixas e 12 vídeos/dia**, cada uma
+> toca ~3x por dia, espalhada pelas 6 contas. Quem seguir duas contas nossas
+> ouve a mesma música no mesmo dia.
+
+Não é erro — o vídeo sai. Por isso o log agora **avisa** quando há menos faixas
+que vídeos na rodada, com a conta da repetição feita. Quem decide se 4 bastam é
+o Dre; ele só precisa ver o número antes de decidir.
+
+### `CORTE_INTRO_AUTO=1` — LIGADO
+
+Decisão do Dre depois de ver os números: 10% dos vídeos, ~1s cada, nenhum no
+teto. Risco baixo, ganho modesto, mas grátis.
+
 ### ⚠️ E eu quebrei a regra de deploy que eu mesmo escrevi
 
 ```

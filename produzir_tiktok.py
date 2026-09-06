@@ -884,6 +884,18 @@ def main():
     _tem = _trilhas()          # a MESMA função que o `_escolher_musica` usa
     if _tem:
         _log(f"   🎵 trilha: {len(_tem)} faixa(s) em {_dir_musica()}")
+        # ⚠️ POUCAS FAIXAS É UM PROBLEMA DIFERENTE DE NENHUMA, e igualmente
+        # silencioso (06/09/2026). A trilha é SORTEADA por vídeo: com 4 faixas
+        # e 12 vídeos/dia, cada uma toca ~3x por dia, nas 6 contas. Quem seguir
+        # duas contas nossas ouve a mesma música no mesmo dia.
+        #
+        # Não é erro — o vídeo sai. Por isso não é 🚨, é aviso: quem decide se
+        # 4 bastam é o Dre, mas ele precisa VER o número antes de decidir.
+        if len(_tem) < quantos:
+            _log(f"      ⚠️ {len(_tem)} faixa(s) pra {quantos} vídeo(s): cada "
+                 f"uma repete ~{quantos / len(_tem):.0f}x nesta rodada, "
+                 f"espalhada\n         pelas 6 contas. Mais faixas na pasta = "
+                 f"menos repetição.")
     else:
         _log(f"   🚨 SEM TRILHA em {_dir_musica()} — os vídeos vão sair com o "
              f"ÁUDIO GRINGO.\n      Ponha um arquivo de áudio ou vídeo nessa "
