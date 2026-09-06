@@ -918,6 +918,31 @@ fontes é editado à mão: `#cozinha`, `#$%`, `None`, `' CASA '` todos tratados)
 divergência que ele acusou era artefato meu. Agora chama igualzinho ao
 `_produzir`, senão eu meço o meu script em vez da produção.
 
+### ✅ CONSERTADO E MEDIDO
+
+```
+   casa   → casa   Caneca Gato Rosa Carinhas 500ml Porcelana Fofa
+   tech   → tech   relógio de fibra de carbono forjado
+
+reservado (balde)   beleza=2 · casa=2 · geral=2 · moda=2 · pet=2 · tech=2
+real (conta.json)   beleza=2 · casa=2 · geral=2 · moda=2 · pet=2 · tech=2
+── discordam: 0 de 12 (0%) ──
+```
+
+**17% → 0%.** As 6 contas com 2 vagas cada, reservadas e cumpridas. O
+@topshop.__ volta a receber post.
+
+⚠️ **A mensagem de sucesso do próprio script já mentiu.** A 1ª versão dizia
+*"minha suspeita estava errada, o desequilíbrio vem de outro lugar"* — texto
+escrito pro caso de a suspeita NUNCA se confirmar. Só que ela **se confirmou
+(17%) e foi consertada (0%)**, e aí a frase passou a afirmar que o problema
+nunca existiu. Quem rodasse daqui a um mês leria isso e poderia desfazer o
+conserto.
+
+> **Regra que fica:** a mensagem de "está tudo certo" tem que distinguir *nunca
+> teve problema* de *teve e foi consertado*. Quando o script não tem como
+> saber qual dos dois é, ele diz os dois — não escolhe o que soa melhor.
+
 ### ⚠️ E eu quebrei a regra de deploy que eu mesmo escrevi
 
 ```

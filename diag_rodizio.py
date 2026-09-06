@@ -118,9 +118,20 @@ def _medir_lote(PT, RC, quantos: int) -> int:
     n = len(lote)
     print(f"\n── discordam: {len(dif)} de {n} ({len(dif)/max(1,n)*100:.0f}%) ──")
     if not dif:
+        # ⚠️ ESTA MENSAGEM JÁ MENTIU UMA VEZ (06/09/2026). A 1ª versão dizia
+        # "minha suspeita estava errada, o desequilíbrio vem de outro lugar" —
+        # escrita pro caso de a suspeita NUNCA se confirmar. Só que ela se
+        # confirmou (17%) e foi CONSERTADA (0%), e aí o texto passou a afirmar
+        # que o problema nunca existiu. Quem rodasse daqui a um mês leria isso
+        # e desfaria o conserto sem saber.
+        #
+        # Zero aqui significa UMA de duas coisas, e o script não tem como saber
+        # qual — então ele diz as duas em vez de escolher a que soa melhor.
         print("   ✅ o rodízio reserva e posta no mesmo nicho.")
-        print("   A minha suspeita estava errada: o desequilíbrio vem de outro")
-        print("   lugar, e é bom saber disso antes de eu mexer no que funciona.")
+        print("      Isso é o esperado DEPOIS do conserto de 06/09 (o "
+              "`nicho_fonte`\n      passou a entrar no `conta_do_produto`). "
+              "Se você está investigando\n      um desequilíbrio NOVO, ele vem "
+              "de outro lugar — não daqui.")
     else:
         print("   ⚠️ CADA LINHA 'MUDA' É UMA VAGA CONTADA NUMA CONTA E GASTA")
         print("      NOUTRA. Foi assim que o @topshop.__ ficou sem post em duas")
