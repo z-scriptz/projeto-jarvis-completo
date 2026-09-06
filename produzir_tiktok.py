@@ -246,6 +246,74 @@ def _dir_musica() -> Path:
     return p if p.is_absolute() else (BASE_DIR / p)
 
 
+_PROMPT_VOZ = (
+    "Este é o áudio de um vídeo curto de produto.\n\n"
+    "PERGUNTA: tem alguém FALANDO — voz humana narrando, explicando ou "
+    "comentando o produto?\n\n"
+    "Responda SÓ uma palavra:\n"
+    "VOZ      — tem gente falando (mesmo que baixo, mesmo com música junto)\n"
+    "MUSICA   — só música, som ambiente, barulho do produto, ou silêncio\n\n"
+    "⚠️ Cantar NÃO conta como falar: música cantada é MUSICA.\n"
+    "⚠️ Na dúvida, responda VOZ."
+)
+
+
+def _audio_amostra(video: Path, seg: int = 25) -> bytes:
+    """Os primeiros `seg` segundos do áudio, mono e leve, pra mandar pro modelo."""
+    f = video.with_suffix(".voz.mp3")
+    try:
+        subprocess.run(["ffmpeg", "-y", "-i", str(video), "-vn", "-ac", "1",
+                        "-ar", "16000", "-t", str(seg), "-b:a", "32k", str(f)],
+                       capture_output=True, timeout=90)
+        return f.read_bytes() if f.exists() and f.stat().st_size > 500 else b""
+    except Exception:
+        return b""
+    finally:
+        try:
+            f.unlink()
+        except Exception:
+            pass
+
+
+def tem_voz(audio: bytes) -> tuple:
+    """(veredito, tokens). Veredito: 'voz' / 'musica' / 'erro'.
+
+    ⚠️ POR QUE ISTO EXISTE (06/09/2026, correção do Dre): *"é pra sair o áudio
+    tipo narração; se o vídeo gringo for um áudio de música, não é pra retirar,
+    é só se tiver alguma voz gringa narrando"*.
+
+    O `_so_musica` trocava o áudio SEMPRE. Metade dos virais gringos já vem com
+    trilha boa — a que fez o vídeo viralizar — e trocar isso por uma das nossas
+    4 faixas piora o vídeo em vez de melhorar.
+
+    ⚠️ NA DÚVIDA, 'VOZ'. Os dois erros não custam igual: trocar uma música boa
+    pela nossa é uma perda de qualidade; deixar voz em inglês passar é o defeito
+    que o pivô inteiro veio consertar, e ainda é risco de crédito a terceiro.
+    """
+    key = os.getenv("GEMINI_API_KEY", "")
+    if not key or not audio:
+        return "erro", 0
+    try:
+        from google import genai
+        from google.genai import types
+        cli = genai.Client(api_key=key)
+        r = cli.models.generate_content(
+            model=os.getenv("GEMINI_MODELO_VOZ", "gemini-2.5-flash"),
+            contents=[types.Part.from_bytes(data=audio, mime_type="audio/mpeg"),
+                      _PROMPT_VOZ])
+        t = (r.text or "").strip().upper()
+        u = getattr(r, "usage_metadata", None)
+        toks = int(getattr(u, "total_token_count", 0) or 0) if u else 0
+        if t.startswith("VOZ"):
+            return "voz", toks
+        if t.startswith("MUSICA") or t.startswith("MÚSICA"):
+            return "musica", toks
+        return "erro", toks
+    except Exception as e:
+        _log(f"      ⚠️ detector de voz: {str(e)[:70]}")
+        return "erro", 0
+
+
 def _trilhas() -> list:
     """As faixas utilizáveis da pasta de música.
 
@@ -305,6 +373,26 @@ def _so_musica(video: Path, nome: str) -> bool:
     """
     if os.getenv("MUSICA_SE_FALHAR", "1").strip().lower() not in ("1", "true", "sim"):
         return False
+
+    # ⚠️ SÓ TROCA SE TIVER VOZ (06/09/2026, correção do Dre): *"se o vídeo
+    # gringo for um áudio de música, não é pra retirar, é só se tiver alguma voz
+    # gringa narrando"*. Antes trocava sempre — e metade dos virais gringos vem
+    # com a trilha que os fez viralizar. Trocar isso por uma das nossas 4 faixas
+    # PIORA o vídeo.
+    #
+    # 'erro' cai no lado de trocar, de propósito: os dois erros não custam
+    # igual. Perder uma música boa é queda de qualidade; deixar voz em inglês
+    # passar é o defeito que o pivô veio consertar.
+    if os.getenv("SO_TROCA_SE_TIVER_VOZ", "1").strip().lower() in ("1", "true", "sim"):
+        _v, _tk = tem_voz(_audio_amostra(video))
+        if _v == "musica":
+            _log("   🎧 o áudio original é MÚSICA (sem voz) — mantenho, não troco")
+            return True          # o áudio está certo: nada a fazer aqui
+        if _v == "erro":
+            _log("   ⚠️ não consegui ouvir o áudio — troco por trilha (na dúvida, troco)")
+        else:
+            _log("   🗣️ voz detectada no áudio original — vou trocar por trilha")
+
     musica = _escolher_musica()
     if not musica:
         _log(f"   ⚠️ sem trilha em {_dir_musica()} — NÃO consigo tirar o áudio gringo")

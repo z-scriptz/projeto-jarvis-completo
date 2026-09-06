@@ -1100,6 +1100,37 @@ Não é erro — o vídeo sai. Por isso o log agora **avisa** quando há menos f
 que vídeos na rodada, com a conta da repetição feita. Quem decide se 4 bastam é
 o Dre; ele só precisa ver o número antes de decidir.
 
+### 🔁 CORREÇÃO DO DRE: só trocar o áudio se tiver VOZ
+
+> *"é pra sair o áudio tipo narração; se o vídeo gringo for um áudio de música,
+> não é pra retirar, é só se tiver alguma voz gringa narrando!"*
+
+O `_so_musica` trocava o áudio **sempre**. Metade dos virais gringos já vem com
+a trilha **que os fez viralizar** — trocar isso por uma das nossas 4 faixas
+**piora** o vídeo em vez de melhorar. E eu ia ligar isso em 12 vídeos/dia.
+
+**`tem_voz()`** manda os primeiros 25s do áudio (mono, 16 kHz, 32 kbps) pro
+Gemini e pergunta se tem gente falando. `MUSICA` → mantém o original. `VOZ` →
+troca.
+
+⚠️ **Cantar não conta como falar** — está no prompt: música cantada é MUSICA.
+
+⚠️ **`erro` cai no lado de trocar, de propósito.** Os dois erros não custam
+igual: perder uma música boa é queda de qualidade; deixar voz em inglês passar
+é o defeito que o pivô inteiro veio consertar, e ainda é crédito a terceiro.
+
+### `diag_voz.py` — e o controle que veio de graça
+
+Juiz novo não entra em produção sem controle. Aqui ele existe **sem custo de
+montagem**: as 4 faixas da nossa pasta são **música pura**. O detector TEM que
+dizer `musica` nelas; se disser `voz`, está quebrado e nenhum número do inbox
+importa.
+
+⚠️ **O que este controle NÃO mede: a sensibilidade.** Ele prova que o detector
+não *inventa* voz onde não tem. **Não prova** que ele *acha* voz onde tem — pra
+isso eu precisaria de vídeos gringos rotulados à mão, e não tenho. Está escrito
+no próprio script pra ninguém ler "4/4 no controle" e achar que é perfeito.
+
 ### `CORTE_INTRO_AUTO=1` — LIGADO
 
 Decisão do Dre depois de ver os números: 10% dos vídeos, ~1s cada, nenhum no
