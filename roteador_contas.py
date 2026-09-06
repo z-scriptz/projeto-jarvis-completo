@@ -132,7 +132,12 @@ _CASA = (
     "utensilio de cozinha", "utensílio de cozinha", "escorredor", "pote hermetico",
     "pote hermético", "lixeira", "rodo", "vassoura", "esfregao", "esfregão",
     "mop", "aspirador", "varal", "cabideiro", "prateleira", "suporte de parede",
-    "toalha", "jogo de cama", "lencol", "lençol", "edredom", "cortina", "tapete",
+    # 'cobertor' faltava, do lado de edredom e lençol (achado em 06/09/2026 no
+    # 'Cobertor refrescante para noites de calor'). Não pus 'manta' junto: manta
+    # é ambígua de verdade (manta térmica de piscina, manta asfáltica, manta/xale
+    # de vestir) e essa a IA decide melhor que eu.
+    "toalha", "jogo de cama", "lencol", "lençol", "edredom", "cobertor",
+    "cortina", "tapete",
     # ⚠️ TUDO QUE CUIDA DE ROUPA É CASA — A ROUPA EM SI É MODA.
     #
     # Esta é a segunda vez que o "roupa" cru da lista de MODA rouba um produto
@@ -333,6 +338,40 @@ _RX_VETO_PET = _compilar(_VETO_PET, _TODAS)
 _RX_PET_CERTO = _compilar(_PET_CERTO, _TODAS)
 
 
+# Onde acaba o produto e começa o entulho de busca, num título de marketplace.
+CAUDA = int(os.environ.get("ROTEADOR_CAUDA", 60))
+CAUDA_MIN = int(os.environ.get("ROTEADOR_CAUDA_MIN", 80))
+
+
+def _so_no_rabo(texto: str, m) -> bool:
+    """Esta palavra casou tão no fim do título que não dá pra confiar nela?
+
+    ⚠️ O CASO QUE ORIGINOU ISTO (06/09/2026):
+
+        'Caixa de Ferramentas Eletricista Forte Durável Lona Engrossa
+         Portátil Multi-funcional Manutenção Woodworking Tool BOLSA'
+
+        moda   'bolsa' na posição 114   (o nome tem 119 caracteres)
+        casa - · tech - · pet - · beleza -
+
+    Uma caixa de ferramentas foi pro @topshopmoda_ porque a ÚLTIMA palavra do
+    título era 'Bolsa'. Nada mais casou.
+
+    Título de marketplace é `[produto real] + [entulho de palavra-chave]`. O
+    vendedor empilha termo no fim pra aparecer em busca, e esse rabo não
+    descreve o produto — descreve o que ele quer que apareça na pesquisa.
+
+    ⚠️ Devolver True aqui NÃO chuta outro nicho: faz a lista se CALAR e a
+    camada 2 (IA) decidir. A IA existe exatamente pro que as listas não cobrem,
+    e 'ferramenta' não está em lista nenhuma — o buraco de verdade é esse.
+    Preencher a lista no susto seria curadoria minha; calar é honesto.
+
+    ⚠️ Só vale em título LONGO (>80). Nome curto não tem rabo: 'Bolsa térmica'
+    tem a palavra no fim e é bolsa mesmo.
+    """
+    return len(texto) > CAUDA_MIN and m.start() >= CAUDA
+
+
 def _por_palavra_chave(texto: str) -> str:
     """Nicho pela lista, ou "" quando nenhuma bate.
 
@@ -353,7 +392,8 @@ def _por_palavra_chave(texto: str) -> str:
       'roupa de cama'         → 'roupa de cama'(13) vence 'roupa'  = casa ✔
       'escova para pet'       → frase inteira vence 'escova'       = pet ✔
     """
-    if _RX_PET.search(texto):
+    m_pet = _RX_PET.search(texto)
+    if m_pet and not _so_no_rabo(texto, m_pet):
         # o bicho era enfeite? então NÃO devolve pet — deixa as outras listas
         # (e, se nenhuma bater, a IA) decidirem. Ver _VETO_PET lá em cima.
         if _RX_PET_CERTO.search(texto) or not _RX_VETO_PET.search(texto):
@@ -377,7 +417,7 @@ def _por_palavra_chave(texto: str) -> str:
     for nicho, rx in (("beleza", _RX_BELEZA), ("tech", _RX_TECH),
                       ("casa", _RX_CASA), ("moda", _RX_MODA)):
         m = rx.search(texto)
-        if m:
+        if m and not _so_no_rabo(texto, m):
             achados.append((nicho, len(m.group(0))))
     if not achados:
         return ""

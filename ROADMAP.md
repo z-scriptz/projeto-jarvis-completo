@@ -772,6 +772,50 @@ produzir**.
 O `caca_prompt_vazado.py` pega os quatro (ele só pula o que já está
 bloqueado, e estes foram *aprovados*).
 
+### 🚨 O RABO DO TÍTULO decidindo a conta
+
+```
+'Caixa de Ferramentas Eletricista Forte Durável Lona Engrossa Portátil
+ Multi-funcional Manutenção Woodworking Tool BOLSA'   → @topshopmoda_
+
+  moda   'bolsa' na posição 114   (o nome tem 119 caracteres)
+  casa - · tech - · pet - · beleza -
+```
+
+Uma **caixa de ferramentas** foi pro perfil de **moda** porque a ÚLTIMA palavra
+do título era "Bolsa". **Nada mais casou.**
+
+> Título de marketplace é `[produto real] + [entulho de palavra-chave]`. O
+> vendedor empilha termo no fim pra aparecer em busca; esse rabo não descreve o
+> produto, descreve o que ele quer que apareça na pesquisa.
+
+**`_so_no_rabo`:** match a partir da posição 60, em título com mais de 80
+caracteres, não decide sozinho.
+
+⚠️ **Não chuta outro nicho: faz a lista se CALAR e a IA decidir.** "Ferramenta"
+não está em lista nenhuma — o buraco real é esse. Preencher a lista no susto
+seria curadoria minha; calar é honesto, e a camada 2 existe pra isso.
+
+⚠️ **Só em título longo.** `Bolsa térmica` tem a palavra no fim e é bolsa mesmo.
+
+De tabela: `cobertor` faltava em CASA, do lado de `edredom` e `lençol` (mesmo
+buraco do `travesseiro`). **Não pus `manta` junto** — manta é ambígua de
+verdade (térmica de piscina, asfáltica, xale de vestir) e essa a IA decide
+melhor que eu.
+
+`teste_roteador.py`: **44/44**.
+
+### ⏳ Observado, ainda NÃO diagnosticado: o rodízio não bateu
+
+Na rodada de 12, a janela tinha as 6 contas
+(`beleza=29 · casa=173 · geral=1 · moda=21 · pet=7 · tech=9`), então o rodízio
+deveria dar 2 slots pra cada. Saiu **moda=4, casa=3, pet=2, beleza=1, tech=1**.
+
+A suspeita é que `_nicho_da_pasta` (que o rodízio usa pra montar os baldes) e
+`conta_do_produto` (que o `_produzir` usa na hora) discordam — aí o balanço é
+feito com um nicho e a postagem acontece em outro. **Não confirmei**, e não vou
+mexer antes de medir.
+
 ### ⚠️ E eu quebrei a regra de deploy que eu mesmo escrevi
 
 ```

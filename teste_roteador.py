@@ -128,6 +128,21 @@ checa("moda", "2 Limpa Tênis Petroplus Spray")
 checa("pet", "Kit 3 pets brinquedo mordedor")
 checa("beleza", "Máscara para peles oleosas")
 
+print("\n── O RABO DO TÍTULO não pode decidir a conta ──")
+# ⚠️ CASO REAL: uma caixa de ferramentas foi pro @topshopmoda_ porque a ÚLTIMA
+# palavra do título era 'Bolsa' (posição 114 de 119). Nada mais casou.
+# Título de marketplace é [produto real] + [entulho de busca].
+checa("", "Caixa de Ferramentas Eletricista Forte Durável Lona Engrossa "
+          "Portátil Multi-funcional Manutenção Woodworking Tool Bolsa")
+# ...mas nome CURTO não tem rabo: aqui 'bolsa' é o produto mesmo
+checa("moda", "Bolsa térmica")
+checa("moda", "Bolsa Crossbody Multifuncional Masculina")
+# ...e palavra no COMEÇO de título longo continua valendo
+checa("casa", "Cobertor refrescante para noites de calor, absorve o calor "
+              "para manter os adultos frescos em noites quentes, Q-Max 0,5")
+checa("casa", "Super Rodo 2 em 1 vassoura magica, 78-150cm Escalável rodo de "
+              "silicone mágico Cabo Longo Ajustável")
+
 print("\n── produtos dos vídeos que saíram certos (não pode regredir) ──")
 checa("moda", "botas pantufa Dragon Ball Z")
 checa("casa", "Kit 2 Travesseiro De Corpo Xuxão")
