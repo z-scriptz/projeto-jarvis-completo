@@ -1197,6 +1197,67 @@ deixa o motivo separar.
 > do RÓTULO, não a do código. Eu acusei o detector duas mensagens seguidas antes
 > de perceber que o errado era o que eu tinha escrito sobre o dado.
 
+---
+
+## 🗓️ Dia 2026-09-06 (c) — os 376 prontos são do formato ANTIGO
+
+### A correção do Dre que derrubou a minha conclusão
+
+Eu olhei o `jarvis_status` (376 no `pronto_para_postar`, R$1,67 em 413 posts) e
+concluí: *"a gente otimizou o estágio errado, o gargalo é distribuição"*.
+
+**Errado.** O Dre: *"esses posts que estão prontos são das fontes antigas, por
+isso não vendia nada e eu tive que ter outra ideia pra dar certo — mudei
+formato, gancho, hook, tudo"*.
+
+Eu tratei a fila como **estoque bom**. É estoque do formato que ele já
+descartou. Os R$1,67 medem o que veio ANTES do pivô, e os 376 vão continuar
+medindo isso por mais **42 dias** (a 9 posts/dia).
+
+### O agravante que eu não tinha juntado
+
+**O conserto do áudio entrou hoje. Nenhum dos 376 passou por ele.** Todos saíram
+com o áudio ORIGINAL — o `NARRAR_TIKTOK` desligado devolvia `False` sem chamar
+o plano B.
+
+Medido em 30 deles: **27% têm voz falando** → ~100 vídeos com narração em inglês
+na fila, saindo a 9/dia pelo próximo mês e meio.
+
+### `consertar_audio_fila.py` — sem re-renderizar
+
+Re-render custa ~10 min/vídeo = **63 horas** pros 376. Trocar só a faixa de
+áudio de um mp4 pronto é `-c:v copy`: **segundos**, sem tocar na imagem.
+
+⚠️ **Não conserta o hook** — o texto está queimado. Mas os dois defeitos não têm
+o mesmo peso: hook fraco some da tela de quem lê; voz em inglês fica no ouvido
+de quem escuta.
+
+### 📉 E a 1ª rodada de medição pegou um falso positivo meu
+
+```
+🗣️ attracione_men_perfume...   "Rap vocals com música de fundo"
+🗣️ aparelho_de_pressão...      "Voz fala 'Bringing it to the moon'"
+```
+
+**Rap não é narração** — é performance vocal, e um vídeo com faixa de rap é
+vídeo com música. `'Bringing it to the moon'` é frase sampleada dentro da
+trilha, não alguém explicando produto.
+
+**2 falsos positivos em 8.** Em 100 vídeos, seriam ~25 trilhas virais trocadas
+pelas nossas 3 faixas **sem precisar** — o oposto do que a correção do Dre pediu.
+
+⚠️ **A brecha era a minha categoria.** Eu tinha escrito "CANTO é música", e rap
+não é canto. Agora a divisão é **VOCAL DE MÚSICA vs FALA CONVERSACIONAL** —
+canto, rap, refrão, sample e vinheta entram todos em MUSICA — com o critério
+operacional escrito no prompt:
+
+> *"essa voz está dizendo algo A ALGUÉM sobre o que aparece na tela, ou ela é
+> parte da música?"*
+
+> **Regra que fica:** categoria de exemplo ('canto') fecha só o caso que eu
+> imaginei. Categoria de PRINCÍPIO ('vocal que faz parte da faixa') fecha os que
+> eu não imaginei — e é sempre um deles que aparece no dado real.
+
 ### O número que importa: 19 de 25 manteriam o áudio
 
 ```

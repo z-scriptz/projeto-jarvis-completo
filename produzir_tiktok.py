@@ -246,22 +246,41 @@ def _dir_musica() -> Path:
     return p if p.is_absolute() else (BASE_DIR / p)
 
 
-# ⚠️ A REGRA DO CANTO ESTÁ NA DEFINIÇÃO, NÃO NUM RODAPÉ (06/09/2026). A 1ª
+# ⚠️ A REGRA DO VOCAL ESTÁ NA DEFINIÇÃO, NÃO NUM RODAPÉ (06/09/2026). A 1ª
 # versão trazia "⚠️ Cantar NÃO conta como falar" como observação depois das
-# opções, e o controle reprovou: a faixa 'Beautifully Stranded (Reels Sound)'
-# — música com vocal — voltou como VOZ. Observação no fim perde pra definição
-# no meio, ainda mais quando o desempate ("na dúvida, VOZ") empurra pro mesmo
-# lado. Agora "com ou sem vocal cantado" faz parte do que MUSICA É, e o canto
-# está excluído do desempate explicitamente.
+# opções, e o controle reprovou. Observação no fim perde pra definição no meio,
+# ainda mais quando o desempate ("na dúvida, VOZ") empurra pro mesmo lado.
+#
+# ⚠️ E 'CANTO' NÃO ERA CATEGORIA LARGA O BASTANTE. Na 1ª rodada sobre a fila de
+# prontos, um perfume voltou como VOZ com o motivo "Rap vocals com música de
+# fundo" — rap não é canto, e o modelo caiu na brecha. Outro veio com
+# "Voz fala 'Bringing it to the moon'": frase sampleada dentro da trilha, não
+# alguém explicando produto. Dois falsos positivos em 8; em 100 vídeos seriam
+# ~25 trilhas virais trocadas pelas nossas 3 faixas sem precisar.
+#
+# Agora a divisão não é canto-vs-fala, é **VOCAL DE MÚSICA vs FALA
+# CONVERSACIONAL** — rap, refrão, sample e vinheta entram todos em MUSICA, e o
+# critério operacional está escrito: "essa voz está dizendo algo A ALGUÉM sobre
+# o que aparece na tela, ou é parte da música?".
 _PROMPT_VOZ = (
     "Este é o áudio de um vídeo curto de produto.\n\n"
     "PERGUNTA: alguém FALA palavras neste áudio?\n\n"
-    "VOZ    — alguém FALA: narra, explica, comenta, faz review, dá instrução.\n"
-    "         Fala, não canto. Conta mesmo se estiver baixo ou com música junto.\n"
-    "MUSICA — música COM OU SEM VOCAL CANTADO, som ambiente, barulho do\n"
-    "         produto, ou silêncio. Ninguém FALANDO.\n\n"
-    "⚠️ CANTO É MUSICA, e isso não é caso de dúvida. Uma canção com letra em\n"
-    "   inglês, cantada, é MUSICA — não é alguém falando.\n"
+    "A diferença é entre FALA CONVERSACIONAL e VOCAL DE MÚSICA:\n\n"
+    "VOZ    — alguém CONVERSA/EXPLICA: narra o que está fazendo, comenta o\n"
+    "         produto, faz review, dá instrução, fala com quem assiste.\n"
+    "         Conta mesmo se estiver baixo ou com música junto.\n"
+    "MUSICA — QUALQUER vocal que faça parte da faixa musical: canto, RAP,\n"
+    "         refrão, frase gravada repetida, sample, vinheta. Também som\n"
+    "         ambiente, barulho do produto, ou silêncio.\n\n"
+    "⚠️ VOCAL DE MÚSICA É MUSICA, e isso NÃO é caso de dúvida:\n"
+    "   · canção cantada em inglês ......... MUSICA\n"
+    "   · RAP sobre uma batida ............. MUSICA\n"
+    "   · frase solta dentro da trilha\n"
+    "     ('Bringing it to the moon') ...... MUSICA\n"
+    "   · mulher explicando um produto ..... VOZ\n"
+    "   · homem narrando o que faz ......... VOZ\n\n"
+    "⚠️ Pergunte-se: essa voz está DIZENDO ALGO A ALGUÉM sobre o que aparece\n"
+    "   na tela, ou ela é parte da música? Se é parte da música, é MUSICA.\n"
     "⚠️ Só entre FALA e AUSÊNCIA DE FALA, na dúvida responda VOZ.\n\n"
     "Responda assim, em uma linha:\n"
     "VOZ | <3 a 6 palavras dizendo o que você ouviu>\n"
