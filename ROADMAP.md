@@ -993,6 +993,57 @@ for ruim, não ficou nada ligado por engano.
 que o detector **não achou a ação** e quem segurou foi a trava — não é o
 detector funcionando, é a trava funcionando. Esses precisam de olho redobrado.
 
+**Medido (40 sorteados):**
+
+```
+✂️  4 cortados (10%) · menor 0.8s · mediana 1.0s · maior 1.0s
+▶️  36 sairiam inteiros
+```
+
+**Nenhum bateu no teto** — o detector achou transição real nos quatro e a trava
+nunca precisou salvar. Risco baixo (come 1s de um vídeo de 13s), **ganho
+modesto**: 10% dos vídeos, 1 segundo cada.
+
+### 🚨 E O ACHADO QUE IMPORTA: o `corte=N` nunca foi ligado
+
+```
+grep -c "corte=" tiktok_perfis.txt  →  3
+```
+
+**As 3 ocorrências são comentário explicando a sintaxe.** Os **44 perfis estão
+todos sem marcação**.
+
+O pedido do Dre em 03/09 — *"as contas que começam com 'Amazon Gadgets' de
+início, pode cortar os 2 primeiros segundos"* — **foi construído e nunca foi
+ligado**, porque faltava o dado: QUAIS perfis abrem com carimbo.
+
+Isso não está na memória de ninguém de forma confiável, **mas está nos vídeos**,
+e o detector já sabe ler. `--por-perfil` agrupa a detecção por perfil de origem
+e lista quem tem carimbo em 60%+ dos vídeos — esses são os candidatos a
+`corte=N`.
+
+⚠️ **Piso de 60%, não 30%, de propósito:** `corte=N` corta **sempre**, inclusive
+nos vídeos daquele perfil que não têm carimbo. Cravar em cima de um padrão fraco
+come conteúdo bom em silêncio.
+
+> O detector automático é conservador ("corta ~1s quando tenho certeza"). O
+> `corte=N` é decisão humana ("este perfil SEMPRE abre com 2s de intro"). Um não
+> substitui o outro — o relatório diz em quem vale cravar o manual.
+
+### ⚠️ E o meu comando de conferir a trilha estava quebrado
+
+```bash
+ls -la "$(grep -E '^MUSICA_FUNDO_DIR' .env | cut -d= -f2 || echo assets/inbox/audio)"
+→ ls: cannot access '': No such file or directory
+```
+
+Não é "pasta vazia": quando o `grep` não acha nada ele não imprime, mas o `cut`
+**termina com sucesso**, então o `||` nunca dispara e o `ls` recebe string
+vazia. O certo é `ls -la ~/jarvis/assets/inbox/audio/`.
+
+O que dá pra concluir: **`MUSICA_FUNDO_DIR` não está no `.env`** (o grep não
+achou), então vale o padrão.
+
 ### ⚠️ E eu quebrei a regra de deploy que eu mesmo escrevi
 
 ```

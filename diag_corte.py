@@ -23,6 +23,17 @@
 #
 #   .venv/bin/python diag_corte.py
 #   .venv/bin/python diag_corte.py --amostra 60 --provas /tmp/cortes.jpg
+#   .venv/bin/python diag_corte.py --amostra 300 --por-perfil
+#
+# ⚠️ MEDIDO EM 06/09 (40 sorteados): 4 cortados (10%), todos entre 0,8s e 1,0s,
+# NENHUM no teto — ou seja, o detector achou transição de verdade nos quatro e
+# a trava nunca precisou salvar. Risco baixo (come 1s de um vídeo de 13s), ganho
+# modesto.
+#
+# ⚠️ E O ACHADO QUE IMPORTA: os 44 perfis do tiktok_perfis.txt estão TODOS sem
+# `corte=N`. O pedido de 03/09 ("as contas que abrem com 'Amazon Gadgets', corta
+# os 2 primeiros segundos") foi construído e nunca ligado, porque faltava saber
+# QUAIS perfis têm carimbo. `--por-perfil` responde isso com dado, não memória.
 import json
 import os
 import random
@@ -95,6 +106,66 @@ def _folha(pares, destino: Path) -> Path:
     return destino
 
 
+def _por_perfil(vids, TC) -> int:
+    """Quais PERFIS abrem com carimbo — pra saber em quem pôr `corte=N`.
+
+    ⚠️ A PERGUNTA REAL (achada em 06/09/2026). O pedido do Dre em 03/09 foi:
+    "as contas que começam com 'Amazon Gadgets' de início, pode cortar os 2
+    primeiros segundos". A funcionalidade (`corte=N` no tiktok_perfis.txt) foi
+    construída e **NUNCA FOI LIGADA**: os 44 perfis estão sem marcação nenhuma,
+    e as 3 ocorrências de 'corte=' no arquivo são comentário explicando a
+    sintaxe.
+
+    Faltava o dado: QUAIS perfis abrem com carimbo. Isso não está na cabeça de
+    ninguém de forma confiável — mas está nos vídeos, e o detector já sabe ler.
+
+    O detector automático é conservador (corta ~1s quando tem certeza). O
+    `corte=N` é a decisão humana: "este perfil SEMPRE abre com 2s de intro,
+    corta sempre". Um não substitui o outro — este relatório diz em quem vale a
+    pena cravar o manual.
+    """
+    porp = {}
+    for pasta, v in vids:
+        perfil = pasta.name.rsplit("_", 1)[0] if "_" in pasta.name else pasta.name
+        dur = _dur(v)
+        if dur <= 0:
+            continue
+        try:
+            t = TC._corte_intro(v, dur, "")
+        except Exception:
+            continue
+        d = porp.setdefault(perfil, {"n": 0, "cortes": []})
+        d["n"] += 1
+        if t > 0:
+            d["cortes"].append(t)
+
+    linhas = []
+    for perfil, d in porp.items():
+        if d["n"] < 3:
+            continue        # 1-2 vídeos não dizem nada sobre um perfil
+        taxa = len(d["cortes"]) / d["n"]
+        med = (sorted(d["cortes"])[len(d["cortes"]) // 2] if d["cortes"] else 0.0)
+        linhas.append((taxa, perfil, d["n"], len(d["cortes"]), med))
+    linhas.sort(reverse=True)
+
+    print("\n── carimbo de abertura POR PERFIL (≥3 vídeos) ──")
+    if not linhas:
+        print("   (nenhum perfil com 3+ vídeos na amostra — use --amostra maior)")
+        return 0
+    print(f"   {'perfil':34} {'vídeos':>6} {'c/ carimbo':>11} {'mediana':>8}")
+    for taxa, perfil, n, c, med in linhas[:25]:
+        marca = "  ← candidato a corte=" + str(max(1, round(med))) if taxa >= 0.6 else ""
+        print(f"   {perfil[:34]:34} {n:6} {c:6} ({taxa*100:3.0f}%) {med:7.1f}s{marca}")
+
+    cand = [l for l in linhas if l[0] >= 0.6]
+    print(f"\n   {len(cand)} perfil(is) com carimbo em 60%+ dos vídeos.")
+    if cand:
+        print("   ⚠️ ANTES DE CRAVAR: confira 1 vídeo de cada na folha de provas.")
+        print("      `corte=N` corta SEMPRE, inclusive nos vídeos daquele perfil")
+        print("      que não têm carimbo — por isso o piso é 60% e não 30%.")
+    return 0
+
+
 def main() -> int:
     args = sys.argv[1:]
     n_alvo = 40
@@ -121,6 +192,10 @@ def main() -> int:
         print(f"❌ não consegui importar (rode na VPS, com a .venv): {str(e)[:90]}")
         return 1
 
+    if not INBOX.exists():
+        print(f"❌ {INBOX} não existe — rode na VPS, dentro de ~/jarvis")
+        return 1
+
     vids = []
     for pasta in INBOX.iterdir():
         if not pasta.is_dir() or pasta.name.startswith("_"):
@@ -144,6 +219,9 @@ def main() -> int:
     random.shuffle(vids)            # sorteia: a frente da fila não é amostra
     vids = vids[:n_alvo]
     print(f"📦 {len(vids)} vídeo(s) sorteados\n")
+
+    if "--por-perfil" in args:
+        return _por_perfil(vids, TC)
 
     cortados, intactos, pares = [], 0, []
     for pasta, v in vids:
