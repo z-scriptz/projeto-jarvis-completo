@@ -741,6 +741,48 @@ reais de produção que não podem ser marcados**.
 > teste são os casos que ele NÃO pode pegar. Falso positivo aqui custa mais que
 > falso negativo.
 
+### A rodada cheia do `--sem-foto`: a conta fechou de novo
+
+```
+✅ 488 confere · ❌ 116 ERRADO · 🤔 38 incerto · ⚠️ 0 falhou
+🪙 558.942 tokens · R$ 0,91 · 43 min
+```
+
+**116 de 642 = 18%**, contra os **15%** da amostra. R$0,91 contra R$0,81
+projetados. Os 38 🤔 ficaram na fila — na dúvida o pacote continua.
+
+### 🚨 E o prompt vazado eram QUATRO, todos aprovados com ✅
+
+```
+✅ 1) É O NOME DE UM PRODUTO FÍSICO À VEN · jen_adams_interiordesignerella
+✅ 1) É O NOME DE UM PRODUTO FÍSICO À VEN · k_adryan_DboZopCvQbH
+✅ 1) É O NOME DE UM PRODUTO FÍSICO À VEN · tkjusticebuy_75751837484974768
+✅ 1) É O NOME DE UM PRODUTO FÍSICO À VEN · u9_tech_DcQ6T3KKJoT
+```
+
+Não era um caso isolado. E os quatro saíram do `--marcar` gravados como
+`match_conferido: sim` — **carimbados como conferidos e liberados pra
+produzir**.
+
+> **A fraqueza do juiz não é teórica: ele confere SEMELHANÇA, não SANIDADE.**
+> Perguntado "este vídeo mostra um `1) É O NOME DE UM PRODUTO FÍSICO À
+> VENDA`?", ele acha um jeito de dizer sim. Um veredito de modelo carimbando
+> lixo como conferido é pior que não conferir — dá confiança onde não há.
+
+O `caca_prompt_vazado.py` pega os quatro (ele só pula o que já está
+bloqueado, e estes foram *aprovados*).
+
+### ⚠️ E eu quebrei a regra de deploy que eu mesmo escrevi
+
+```
+fatal: path 'caca_prompt_vazado.py' exists on disk, but not in 'FETCH_HEAD'
+```
+
+Dei um bloco com `git show FETCH_HEAD:` **sem o `git fetch` antes**. O
+`FETCH_HEAD` ainda apontava pro commit anterior. Está escrito no roadmap desde
+03/09 que **todo bloco de deploy TEM que começar pelo fetch** — e o erro foi
+meu, no bloco que eu montei.
+
 ---
 
 ## 🗓️ Dia 2026-09-05 (e) — o truncamento, e a produção pra 12/dia
