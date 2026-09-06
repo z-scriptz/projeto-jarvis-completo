@@ -143,6 +143,13 @@ checa("casa", "Cobertor refrescante para noites de calor, absorve o calor "
 checa("casa", "Super Rodo 2 em 1 vassoura magica, 78-150cm Escalável rodo de "
               "silicone mágico Cabo Longo Ajustável")
 
+print("\n── 'CÃO QUENTE' é hot dog, não é bicho ──")
+# ⚠️ CASO REAL: um suporte de salsicha de CHURRASCO foi pro @topshoppet_ porque
+# o título traduziu 'hot dog' ao pé da letra. Mesma família do 'orelha de
+# coelho', mas o veto não pegaria — aqui quem salva é a regra do rabo.
+checa("", "Engraçado Suporte De Salsicha Para Churrasco Aço Inoxidável "
+          "Cão Quente Grill Titular Portátil Acampamento Mochila Rack")
+
 print("\n── produtos dos vídeos que saíram certos (não pode regredir) ──")
 checa("moda", "botas pantufa Dragon Ball Z")
 checa("casa", "Kit 2 Travesseiro De Corpo Xuxão")

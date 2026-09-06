@@ -805,6 +805,21 @@ melhor que eu.
 
 `teste_roteador.py`: **44/44**.
 
+### 'CÃO QUENTE' é hot dog
+
+```
+'Engraçado Suporte De Salsicha Para Churrasco Aço Inoxidável CÃO QUENTE
+ Grill Titular Portátil Acampamento Mochila Rack'   → @topshoppet_
+```
+
+Um suporte de salsicha de **churrasco** foi pro perfil de **pet** porque o
+título traduziu "hot dog" ao pé da letra e `cao ` está na lista de pet.
+
+Mesma família do "orelha de coelho", mas o `_VETO_PET` **não pegaria** — quem
+salva aqui é a **regra do rabo**: "Cão" está na posição 60 de um título de 116.
+Duas defesas diferentes pro mesmo tipo de erro, e cada uma pega o que a outra
+deixa passar.
+
 ### ⏳ Observado, ainda NÃO diagnosticado: o rodízio não bateu
 
 Na rodada de 12, a janela tinha as 6 contas
@@ -815,6 +830,17 @@ A suspeita é que `_nicho_da_pasta` (que o rodízio usa pra montar os baldes) e
 `conta_do_produto` (que o `_produzir` usa na hora) discordam — aí o balanço é
 feito com um nicho e a postagem acontece em outro. **Não confirmei**, e não vou
 mexer antes de medir.
+
+**`diag_rodizio.py`** faz essa medição: roda as duas funções nos 240 da frente
+da fila e mostra as discordâncias agrupadas por transição.
+
+⚠️ Ele pode chamar a IA pro que a lista não decide, **mas o roteador tem cache
+por nome** e esses pacotes já foram roteados quando produziram — o normal é
+cache quente e custo ~zero. `--limite 40` confirma isso antes da rodada cheia.
+
+⚠️ **E ele pode me desmentir**, o que é o ponto: se as duas concordarem, minha
+suspeita estava errada e o desequilíbrio vem de outro lugar — melhor descobrir
+isso do que "consertar" o que já estava certo.
 
 ### ⚠️ E eu quebrei a regra de deploy que eu mesmo escrevi
 
