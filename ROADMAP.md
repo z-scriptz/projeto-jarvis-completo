@@ -869,6 +869,55 @@ da janela + `rodizio()`) e mede só nela. É a única amostra que responde.
 > processa, não da que é fácil de pegar. "Os primeiros N" é a amostra mais
 > cômoda e quase sempre a errada — foi o mesmo erro do `fotografia --sortear`.
 
+### ✅ DIAGNOSTICADO: a etiqueta da fonte estava sendo jogada fora
+
+Com a amostra certa (`--lote 12`), o número apareceu:
+
+```
+reservado (balde)   beleza=2 · casa=2 · geral=2 · moda=2 · pet=2 · tech=2
+real (conta.json)   beleza=2 · casa=1 · geral=2 · moda=3 · pet=3 · tech=1
+discordam: 2 de 12 (17%)
+```
+
+**O `rodizio()` está perfeito** — reservou 2 exatos pra cada uma das 6 contas.
+Quem quebra o balanço são os 2 que trocam de conta na hora de produzir.
+
+**A causa, confirmada:**
+
+```python
+# _nicho_da_pasta (monta o rodízio) — HONRA a etiqueta
+nf = (info.get("nicho_fonte") or "").strip().lower()
+if nf in _CONTAS: return nf        # decide aqui, nem chama o roteador
+
+# _produzir (posta) — IGNORAVA
+conta = _RC.conta_do_produto(nome, categoria)      # sem nicho_fonte
+```
+
+Os dois casos, verificados no roteador: `'Caneca Gato Rosa Carinhas'` → a lista
+diz **pet** (por causa de "Gato"), a fonte dizia **casa**.
+`'relógio de fibra de carbono'` → lista diz **moda**, fonte dizia **tech**.
+
+⚠️ **A segunda consequência é pior que a primeira.** Não é só o rodízio
+desbalanceado: **marcar uma fonte como `#casa` não valia NADA na hora de
+postar.** A curadoria era honrada só pra contar vaga, e descartada pra decidir
+o perfil.
+
+> A etiqueta da fonte é decisão humana sobre o acervo inteiro; a lista de
+> palavras é palpite sobre um título. Quando discordam, a humana ganha — por
+> isso ela entra ANTES, não como desempate.
+
+**Conserto:** `conta_do_produto(nome, categoria, nicho_forcado)`, e o
+`_produzir` passa o `nicho_fonte`. Uma porta só. O `decidido_por` grava
+`"fonte"` pra dar pra rastrear depois.
+
+`teste_nicho_fonte.py`: **12/12** — inclusive etiqueta inválida (o arquivo de
+fontes é editado à mão: `#cozinha`, `#$%`, `None`, `' CASA '` todos tratados).
+
+⚠️ **E o diagnóstico também estava errado:** ele chamava
+`conta_do_produto(nome, "")` — sem categoria e sem `nicho_fonte`. Parte da
+divergência que ele acusou era artefato meu. Agora chama igualzinho ao
+`_produzir`, senão eu meço o meu script em vez da produção.
+
 ### ⚠️ E eu quebrei a regra de deploy que eu mesmo escrevi
 
 ```

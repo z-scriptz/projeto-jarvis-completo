@@ -549,11 +549,34 @@ def nicho_do_produto(nome: str, categoria: str = "") -> str:
     return nicho_do_produto_detalhado(nome, categoria)[0]
 
 
-def conta_do_produto(nome: str, categoria: str = "") -> dict:
+def conta_do_produto(nome: str, categoria: str = "",
+                     nicho_forcado: str = "") -> dict:
     """Retorna a conta (dict) do nicho do produto, com o token JÁ resolvido do
-    .env (campo 'token'). Cai no _default se o nicho não tiver conta."""
+    .env (campo 'token'). Cai no _default se o nicho não tiver conta.
+
+    ⚠️ `nicho_forcado` É A CURADORIA DA FONTE, E ELA ESTAVA SENDO JOGADA FORA
+    (medido em 06/09/2026). O `_nicho_da_pasta` do produtor honra o
+    `nicho_fonte` do plano.json — a etiqueta que você põe na fonte pra dizer
+    "o que vem daqui é de casa". Mas o `_produzir` chamava esta função SEM ele,
+    e a lista de palavras decidia sozinha. Resultado medido no lote real:
+
+        balde 'casa' → postou em 'pet'    'Caneca Gato Rosa Carinhas'
+        balde 'tech' → postou em 'moda'   'relógio de fibra de carbono'
+
+    Duas consequências, e a segunda é pior que a primeira:
+      1. o rodízio reserva vaga numa conta e o vídeo sai noutra (2 de 12 = 17%)
+      2. **marcar uma fonte não servia pra nada na hora de postar**
+
+    A etiqueta da fonte é decisão humana sobre o acervo inteiro; a lista de
+    palavras é palpite sobre um título. Quando as duas discordam, a humana
+    ganha — por isso ela entra ANTES, e não como desempate.
+    """
     contas = carregar_contas()
-    nicho, quem = nicho_do_produto_detalhado(nome, categoria)
+    nf = (nicho_forcado or "").strip().lower()
+    if nf in _NICHOS_VALIDOS:
+        nicho, quem = nf, "fonte"
+    else:
+        nicho, quem = nicho_do_produto_detalhado(nome, categoria)
 
     escolhida = contas.get(nicho)
     if escolhida is None and nicho != "geral":

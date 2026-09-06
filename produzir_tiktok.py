@@ -480,7 +480,13 @@ def _produzir(pasta: Path, pj: Path, video_src: Path) -> bool:
     if os.getenv("MULTI_CONTA", "0").strip().lower() in ("1", "true", "sim"):
         try:
             import roteador_contas as _RC
-            conta = _RC.conta_do_produto(nome, categoria)
+            # ⚠️ O `nicho_fonte` PRECISA ENTRAR AQUI (06/09/2026). Sem ele, o
+            # `_nicho_da_pasta` (que monta o rodízio) honrava a etiqueta da
+            # fonte e este trecho a ignorava — duas respostas pro mesmo pacote.
+            # O rodízio reservava vaga numa conta e o vídeo saía noutra, e a
+            # curadoria manual da fonte não valia nada na hora de postar.
+            conta = _RC.conta_do_produto(nome, categoria,
+                                         info.get("nicho_fonte", ""))
             if conta.get("handle"):
                 os.environ["TOPSHOP_HANDLE"] = conta["handle"]
                 _log(f"   🎯 conta '{conta.get('nicho')}' → {conta['handle']}")

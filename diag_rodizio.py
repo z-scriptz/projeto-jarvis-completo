@@ -78,13 +78,25 @@ def _medir_lote(PT, RC, quantos: int) -> int:
     prev, real_c, dif = {}, {}, []
     for pasta, pj, _vid in lote:
         balde = balde_de.get(pasta, "?")
+        # ⚠️ TEM QUE CHAMAR IGUALZINHO AO `_produzir`, senão eu meço o meu
+        # próprio script em vez da produção. A 1ª versão passava categoria
+        # vazia e sem `nicho_fonte` — parte da divergência que ela acusou era
+        # artefato meu, não do sistema.
+        info = {}
         try:
             info = json.loads(pj.read_text(encoding="utf-8"))
-            nome = info.get("produto") or info.get("termo") or ""
         except Exception:
-            nome = ""
+            pass
+        nome = info.get("produto") or info.get("termo") or ""
+        categoria = ""
         try:
-            conta = RC.conta_do_produto(nome, "")
+            from creative_engine.narration_script_builder import _categoria_do_produto
+            categoria = _categoria_do_produto(nome) or ""
+        except Exception:
+            pass
+        try:
+            conta = RC.conta_do_produto(nome, categoria,
+                                        info.get("nicho_fonte", ""))
             real = (conta.get("nicho") or "") if conta else ""
         except Exception as e:
             real = f"erro:{str(e)[:16]}"
