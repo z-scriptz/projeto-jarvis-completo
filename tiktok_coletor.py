@@ -1571,6 +1571,16 @@ def main():
                 continue
             pasta = INBOX / f"{_slug(meta['uploader'])}_{vid}"
             termo, termo_com_juizo = _identificar_produto(meta["descricao"])
+            # ⚠️ DE ONDE VEIO O TERMO — GRAVADO, NÃO ADIVINHADO (07/09/2026).
+            # O Dre achou vídeos de bastidores de festa em Hollywood anunciados
+            # como "Guia Retrátil para Cães". Pra consertar eu precisava saber
+            # QUAL estágio errou — a heurística de legenda, a visão, ou a busca
+            # da loja — e o plano.json não guardava nada disso. Sem essa linha o
+            # diagnóstico vira arqueologia: reexecutar a identificação de 2.600
+            # pacotes pra descobrir o que já tinha acontecido.
+            # Três estados, três consertos diferentes. Custa um campo de texto.
+            termo_por = ("gemini_legenda" if termo_com_juizo
+                         else "heuristica" if termo else "")
             arq_pre = None
             # IG: a legenda é quase sempre um HOOK (curiosity-gap: "pouca gente imagina…"),
             # NÃO o produto — então a VISÃO (Gemini) é a autoridade. TikTok: a legenda
@@ -1644,6 +1654,7 @@ def main():
                     # a visão vence a legenda-hook — e ela é o Gemini olhando o
                     # frame, então tem o mesmo juízo que o extrator de legenda
                     termo, termo_com_juizo = tv, True
+                    termo_por = "visao"
                 elif fonte == "instagram" or _duvidoso:
                     # a visão OLHOU e não achou produto. O termo da heurística
                     # já era suspeito (foi ele que chamou a visão), então
@@ -1746,7 +1757,7 @@ def main():
                 "perfil_fonte": perfil.lstrip("@").lower(),   # PERFIL curado (p/ CEO medir/podar)
                 "url": meta["url"], "uploader": meta["uploader"],
                 "views": meta["views"], "descricao": meta["descricao"],
-                "termo": termo, "produto": produto_nome,
+                "termo": termo, "termo_por": termo_por, "produto": produto_nome,
                 "link_afiliado": link, "imagem": imagem,
                 "origem_url": origem,      # URL original → produzir re-etiqueta por canal
                 "comissao_valor": comissao,
