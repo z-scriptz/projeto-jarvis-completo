@@ -72,23 +72,55 @@ def _carregar_env():
 
 
 def _frame(video: Path, dur: float = 0) -> bytes:
-    """UM frame do meio do vídeo. Um só, de propósito: dois frames dobram o
-    custo da imagem e a pergunta aqui é binária ('é o mesmo objeto?'), não
-    'que produto é este?' — essa já foi respondida lá atrás pela visão."""
-    pos = max(1.0, (float(dur) or 6.0) * 0.5)
-    f = video.with_suffix(".match.jpg")
-    try:
-        subprocess.run(["ffmpeg", "-y", "-ss", f"{pos:.1f}", "-i", str(video),
-                        "-vframes", "1", "-vf", "scale=512:-2", "-q:v", "4",
-                        str(f)], capture_output=True, timeout=40)
-        return f.read_bytes() if f.exists() and f.stat().st_size > 500 else b""
-    except Exception:
-        return b""
-    finally:
+    """UM frame do meio do vídeo. Compatibilidade — ver `_frames`."""
+    fs = _frames(video, dur, 1)
+    return fs[0] if fs else b""
+
+
+def _frames(video: Path, dur: float = 0, n: int = 1) -> list:
+    """`n` frames espalhados pelo vídeo.
+
+    ⚠️ UM FRAME SÓ ERA POUCO, E O LOG DA 1ª RODADA COM O JUIZ MOSTROU (07/09).
+    O texto que estava aqui dizia que um frame bastava porque a pergunta é
+    binária ('é o mesmo objeto?'). O raciocínio ignora COMO SÃO OS VÍDEOS QUE
+    A GENTE COLETA: as fontes gringas postam *haul* — 'Restocking purse
+    station', 'Amazon kitchen finds', '10 things you need from Amazon'. Esses
+    vídeos não têm UM produto, têm DEZ em sequência.
+
+    O frame do meio cai em qualquer um deles. Então o juiz comparava a foto da
+    loja com um produto DIFERENTE do que a visão tinha identificado, e reprovava
+    par que estava certo. No log:
+
+        'suporte para lavar boné'      → *Suporte Para Lavar Bonés Na Máquina*  ❌
+        'Adaptador de tomada giratório'→ *Adaptador de Tomada 3 Saídas Plug Gi* ❌
+
+    Os dois são o mesmo produto pelo nome. O que mudou não foi o juiz: foi o
+    frame que ele recebeu.
+
+    📌 Com `n` frames a pergunta vira "o produto aparece EM ALGUM MOMENTO?",
+    que é a pergunta certa pra vídeo de haul. Custa `n`× a imagem — a ~R$0,002
+    por item, 3 frames em 348 itens dá uns R$2 na rodada.
+    """
+    saida, tmp = [], []
+    d = float(dur) or 6.0
+    for i in range(max(1, n)):
+        pos = max(0.8, d * (i + 1) / (max(1, n) + 1))
+        f = video.with_suffix(f".match{i}.jpg")
+        tmp.append(f)
+        try:
+            subprocess.run(["ffmpeg", "-y", "-ss", f"{pos:.1f}", "-i", str(video),
+                            "-vframes", "1", "-vf", "scale=512:-2", "-q:v", "4",
+                            str(f)], capture_output=True, timeout=40)
+            if f.exists() and f.stat().st_size > 500:
+                saida.append(f.read_bytes())
+        except Exception:
+            pass
+    for f in tmp:
         try:
             f.unlink()
         except Exception:
             pass
+    return saida
 
 
 def _contato(pares, destino: Path) -> Path:
@@ -137,14 +169,20 @@ def _baixar_imagem(url: str) -> bytes:
 
 
 _PROMPT = (
-    "Duas imagens. A PRIMEIRA é um quadro de um vídeo que mostra um produto. "
-    "A SEGUNDA é a foto de um produto anunciado numa loja.\n\n"
-    "PERGUNTA: é o MESMO produto, ou pelo menos o mesmo TIPO de produto que "
-    "resolve a mesma coisa?\n\n"
+    "As PRIMEIRAS imagens são quadros de um mesmo vídeo curto. A ÚLTIMA é a "
+    "foto de um produto anunciado numa loja.\n\n"
+    # ⚠️ 'EM ALGUM DOS QUADROS' É O CORAÇÃO DA PERGUNTA (07/09/2026). As fontes
+    # gringas postam HAUL — 'Restocking purse station', '10 things you need
+    # from Amazon' — vídeos com DEZ produtos em sequência. Perguntar se "o
+    # vídeo é sobre este produto" reprova o haul inteiro; a pergunta útil é se
+    # o produto ANUNCIADO aparece lá dentro, porque é ele que o link vende.
+    "PERGUNTA: em ALGUM dos quadros do vídeo aparece o MESMO produto da foto "
+    "da loja, ou pelo menos o mesmo TIPO de produto que resolve a mesma "
+    "coisa?\n\n"
     "Responda SÓ uma palavra:\n"
-    "SIM  — mesmo produto ou mesmo tipo (cor/marca/modelo diferentes tudo bem)\n"
-    "NAO  — produtos diferentes, quem clicasse receberia outra coisa\n"
-    "TALVEZ — o quadro do vídeo não deixa ver o produto direito\n\n"
+    "SIM  — aparece em algum quadro (cor/marca/modelo diferentes tudo bem)\n"
+    "NAO  — não aparece em quadro nenhum; quem clicasse receberia outra coisa\n"
+    "TALVEZ — os quadros não deixam ver o produto direito\n\n"
     "⚠️ Na dúvida entre SIM e NAO, responda TALVEZ. Só diga NAO quando as duas "
     "imagens mostram claramente coisas diferentes."
 )
@@ -226,10 +264,17 @@ def conferir_nome(frame: bytes, nome: str) -> tuple:
         return "erro", 0
 
 
-def conferir(frame: bytes, foto: bytes) -> tuple:
-    """(veredito, custo_tokens). Veredito: sim / nao / talvez / erro."""
+def conferir(frame, foto: bytes) -> tuple:
+    """(veredito, custo_tokens). Veredito: sim / nao / talvez / erro.
+
+    `frame` aceita bytes (um quadro) OU lista de bytes (vários) — ver `_frames`
+    pra por que vários. Os dois formatos porque o `main()` deste arquivo e o
+    coletor chamam daqui, e mudar a assinatura dos dois de uma vez é como se
+    quebra um caminho sem perceber.
+    """
     key = os.getenv("GEMINI_API_KEY", "")
-    if not key or not frame or not foto:
+    quadros = [f for f in (frame if isinstance(frame, (list, tuple)) else [frame]) if f]
+    if not key or not quadros or not foto:
         return "erro", 0
     try:
         from google import genai
@@ -237,9 +282,10 @@ def conferir(frame: bytes, foto: bytes) -> tuple:
         cli = genai.Client(api_key=key)
         r = cli.models.generate_content(
             model=MODELO,
-            contents=[types.Part.from_bytes(data=frame, mime_type="image/jpeg"),
-                      types.Part.from_bytes(data=foto, mime_type="image/jpeg"),
-                      _PROMPT])
+            contents=[types.Part.from_bytes(data=q, mime_type="image/jpeg")
+                      for q in quadros]
+                     + [types.Part.from_bytes(data=foto, mime_type="image/jpeg"),
+                        _PROMPT])
         t = (r.text or "").strip().upper()
         # ⚠️ o número de tokens vem do PRÓPRIO retorno, não de estimativa minha.
         # Foi estimativa minha ("são centavos") que virou R$50 em 04/09.

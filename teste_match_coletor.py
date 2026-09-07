@@ -82,10 +82,20 @@ checa("juiz de match indisponível → 'deixo passar'",
 checa("regra +18 indisponível → não colhe (_v18 = True)",
       _i_18 > 0 and "_v18, _m18 = True" in _src)
 
+print("\n── ⚠️ TRÊS QUADROS, NÃO UM: o vídeo de haul tem dez produtos ──")
+# o quadro do meio cai em qualquer um deles; foi assim que o juiz reprovou
+# 'suporte para lavar boné' contra *Suporte Para Lavar Bonés Na Máquina*
+checa("o coletor pede vários quadros (`_frames`)", "_frames" in _src)
+checa("tem interruptor MATCH_FRAMES", "MATCH_FRAMES" in _src)
+_cm_src = (BASE / "conferir_match.py").read_text("utf-8")
+checa("o prompt do juiz pergunta por 'algum dos quadros'",
+      "ALGUM dos quadros" in _cm_src)
+checa("conferir() aceita lista de quadros", "isinstance(frame, (list, tuple))" in _cm_src)
+
 print("\n── o juiz de verdade continua importável e com a mesma cara ──")
 _cm = ast.parse((BASE / "conferir_match.py").read_text("utf-8"))
 _fns = {n.name for n in _cm.body if isinstance(n, ast.FunctionDef)}
-for nome in ("conferir", "_frame", "_baixar_imagem"):
+for nome in ("conferir", "_frame", "_frames", "_baixar_imagem"):
     checa(f"conferir_match.{nome} existe", nome in _fns)
 # ⚠️ o juiz é IMPORTADO, nunca copiado: duas cópias seriam dois juízes, e um
 # deles desatualizado sem ninguém saber

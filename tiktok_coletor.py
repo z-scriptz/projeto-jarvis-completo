@@ -1831,9 +1831,18 @@ def main():
                 else:
                     try:
                         from conferir_match import conferir as _juiz
-                        from conferir_match import _frame as _frame_do_video
+                        from conferir_match import _frames as _frames_do_video
                         from conferir_match import _baixar_imagem as _foto_da_loja
-                        _fr = _frame_do_video(arq, float(meta.get("duracao") or 0))
+                        # ⚠️ TRÊS QUADROS, NÃO UM (07/09/2026, na 1ª rodada com
+                        # o juiz ligado). As fontes gringas postam HAUL — dez
+                        # produtos em sequência — e o quadro do MEIO cai em
+                        # qualquer um deles. O juiz reprovou pares certos:
+                        #   'suporte para lavar boné' → *Suporte Para Lavar
+                        #   Bonés Na Máquina De Lavar* ❌
+                        # Não era o juiz: era o quadro que ele recebia.
+                        _n_fr = int(os.getenv("MATCH_FRAMES", "3"))
+                        _fr = _frames_do_video(arq, float(meta.get("duracao") or 0),
+                                               _n_fr)
                         _ft = _foto_da_loja(imagem)
                         _match, _tk = _juiz(_fr, _ft)
                         if reprova_match(_match):
