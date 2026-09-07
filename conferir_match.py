@@ -123,6 +123,27 @@ def _frames(video: Path, dur: float = 0, n: int = 1) -> list:
     return saida
 
 
+def _duracao(video: Path) -> float:
+    """Duração real do vídeo, via ffprobe. 0 se não der.
+
+    ⚠️ EXISTE PORQUE O `plano.json` NÃO GUARDA DURAÇÃO, e sem ela o `_frames`
+    cai no padrão de 6s — ou seja, os 3 quadros sairiam todos dos primeiros 4,5
+    segundos, mesmo num vídeo de 30s. Na COLETA a duração vem do metadado do
+    yt-dlp; aqui, na auditoria, não vem. Se eu deixasse assim, o `--controle`
+    validaria uma amostragem DIFERENTE da que roda em produção — que é
+    exatamente o erro do `--frame0` desta semana: medir algo *parecido* com o
+    que acontece e chamar de prova.
+    """
+    try:
+        r = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=nw=1:nk=1", str(video)],
+            capture_output=True, text=True, timeout=30)
+        return float((r.stdout or "0").strip() or 0)
+    except Exception:
+        return 0.0
+
+
 def _contato(pares, destino: Path) -> Path:
     """Uma folha com os pares lado a lado: vídeo à esquerda, loja à direita.
 
@@ -384,21 +405,30 @@ def main() -> int:
     tokens = 0
     reprovados = []
     provas = []
-    coletados = []          # (nome, frame, foto) — só usado pelo --controle
+    # (nome, QUADROS, foto) — só usado pelo --controle.
+    # ⚠️ GUARDA A LISTA INTEIRA DE QUADROS, NÃO UM. O controle negativo existe
+    # pra provar que ESTE juiz discrimina; se ele julgasse com 1 quadro
+    # enquanto a passada real usa 3, o número que ele produz seria de um juiz
+    # que não roda em lugar nenhum. Prova de outra coisa não é prova.
+    coletados = []
 
     for pj, info, vid in alvos:
         nome = (info.get("produto") or "?")[:38]
-        # ⚠️ o plano.json NÃO guarda duração (conferi os campos que o coletor
-        # escreve). Passar `info.get("duracao")` seria ler um campo que não
-        # existe e achar que estou usando a duração real — o `_frame` cai no
-        # padrão de 6s e tira o quadro aos 3s, que é o que de fato acontece.
-        frame = _frame(vid)
+        # ⚠️ MESMO NÚMERO DE QUADROS QUE A PRODUÇÃO, E PELA MESMA DURAÇÃO.
+        # O coletor manda MATCH_FRAMES quadros espalhados pela duração real.
+        # Se o `--controle` julgasse com 1 quadro dos primeiros segundos, ele
+        # estaria validando um juiz que NINGUÉM executa — e eu chamaria isso de
+        # prova. É o erro do `--frame0` de novo: a garantia tem que medir a
+        # coisa, não uma parecida.
+        # O plano.json não guarda duração, então ela sai do ffprobe.
+        quadros = _frames(vid, _duracao(vid), int(os.getenv("MATCH_FRAMES", "3")))
+        frame = quadros[0] if quadros else b""     # folha de contato e --sem-foto
         if a.sem_foto:
             foto = b""                      # não há foto: o outro lado é o nome
             veredito, tk = conferir_nome(frame, info.get("produto") or "")
         else:
             foto = _baixar_imagem(info.get("imagem", ""))
-            veredito, tk = conferir(frame, foto)
+            veredito, tk = conferir(quadros, foto)
         tokens += tk
         tot[veredito] = tot.get(veredito, 0) + 1
 
@@ -412,7 +442,7 @@ def main() -> int:
             # guarda o que JÁ foi baixado — o controle não baixa nada de novo.
             # No modo --sem-foto o 3º item é o NOME COMPLETO, que é contra o
             # que o juiz compara ali.
-            coletados.append((nome, frame,
+            coletados.append((nome, quadros,
                               (info.get("produto") or "") if a.sem_foto else foto))
 
         if a.marcar and veredito == "nao":
@@ -465,10 +495,12 @@ def main() -> int:
             print(f"   são pares errados de fábrica: o juiz TEM que reprovar.\n")
             ctl = {"sim": 0, "nao": 0, "talvez": 0, "erro": 0}
             tk_ctl = 0
-            for i, (nome, frame, _f) in enumerate(coletados):
+            for i, (nome, quads, _f) in enumerate(coletados):
                 outro_nome, _fr, outro_lado = coletados[(i + 1) % len(coletados)]
-                v, tk = (conferir_nome(frame, outro_lado) if a.sem_foto
-                         else conferir(frame, outro_lado))
+                # `conferir_nome` ainda julga 1 quadro contra o NOME — é outro
+                # juiz, com outra pergunta, e não mudou.
+                v, tk = (conferir_nome(quads[0] if quads else b"", outro_lado)
+                         if a.sem_foto else conferir(quads, outro_lado))
                 tk_ctl += tk
                 ctl[v] = ctl.get(v, 0) + 1
                 marca = {"sim": "✅", "nao": "❌", "talvez": "🤔", "erro": "⚠️"}[v]
