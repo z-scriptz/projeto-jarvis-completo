@@ -527,6 +527,131 @@ Ex.: "O segredo pra ter um iPhone 17 sem gastar / uma fortuna ✨".
 
 ---
 
+## 🗓️ Dia 2026-09-07 — 64 mil pessoas viram, e ninguém seguiu
+
+### A primeira medição do objetivo, em 3 dias de trabalho
+
+Puxei o Instagram das seis contas pelo conector (Windsor). É a primeira vez que
+a meta — **1.000 seguidores em cada conta** — tem número em vez de sensação.
+
+| conta | alcance 21d | seguidores | posts | alcance/post |
+|---|---:|---:|---:|---:|
+| topshop.__ | 28.256 | 54 | 101 | 280 |
+| topshoptech_ | 14.235 | 410 | 111 | 128 |
+| topshopbeauty._ | 10.356 | 39 | 92 | 113 |
+| topshopcasa_ | 6.550 | 13 | 66 | 99 |
+| topshopmoda_ | 3.800 | 22 | 34 | 112 |
+| topshoppet_ | 715 | 9 | 15 | 48 |
+| **total** | **63.912** | **547** | | |
+
+**`topshoptech_`: 5 seguidores novos em 21 dias sobre 14.235 de alcance —
+0,035%.** É a única conta com 100+ seguidores, e por isso a única onde o
+Instagram libera `follower_count_1d`; nas outras cinco o campo volta `null` por
+limite de API, não por falta de crescimento. Piso de uma conta de nicho
+saudável: 0,5% a 2%. Estamos ~30x abaixo.
+
+⚠️ **A CONCLUSÃO QUE ISSO FORÇA: o gargalo nunca foi distribuição.** Três dias
+inteiros foram gastos consertando a ESTEIRA — juiz, rodízio, download,
+roteador, áudio. Tudo isso era real e precisava, mas nenhum defeito ali explica
+64 mil pessoas alcançadas e ~0 seguidor. O conteúdo é entregue; ele não
+converte. O próximo trabalho é conversão, e a régua dele é essa linha de 0,035%.
+
+⚠️ **O `reach_1d` do Instagram INCLUI alcance pago** — eu levantei isso como
+ressalva e o Dre a derrubou: o anúncio de R$300 era para o grupo do WhatsApp,
+não tocou o Instagram. Então os 63.912 são orgânicos inteiros.
+
+### Os R$300 do tráfego pago: o objetivo é que estava errado
+
+Campanha de **Tráfego** apontando para um grupo de WhatsApp. Resultado: **1
+membro**. Números do anúncio: CTR 5–7%, CPC R$0,07–0,10, 2.467 cliques no link,
+1.656 visualizações da página de destino.
+
+O anúncio fez o que foi mandado fazer. **Entrada em grupo de WhatsApp é
+invisível pro Meta** — sem pixel, sem evento, sem retorno — então o algoritmo
+não tinha como aprender quem virava membro e otimizou pela única coisa que
+enxergava: clique barato. R$0,07 é o preço do clique acidental (Audience
+Network). A digital está no próprio funil: **811 das 2.467 pessoas clicaram e
+nunca carregaram a página (33%)**.
+
+⚠️ **REGRA:** campanha de Tráfego só para destino que o Meta consegue MEDIR.
+Para encher o grupo sem mudar o funil (grupo → achadinhos → vendas): página com
+pixel + botão do grupo, e otimizar por conversão personalizada no clique do
+botão. Aí o Meta aprende com quem chega no botão, não com quem esbarra no
+anúncio.
+
+Conector do Meta Ads no Windsor = **`facebook`** (não estava conectado; só
+`instagram` e `instagram_public` estavam).
+
+### O 1º comentário: eu escrevi o módulo e nunca liguei o fio
+
+O Dre: *"após todo post ele posta 1 comentário igual, e eu tinha te dado 5
+comentários ou mais nas conversas passadas para colocar, e isso não mudou"*.
+
+Não tinha mudado mesmo. Em **02/09** escrevi o `comentarios.py` inteiro — as
+seis frases dele palavra por palavra, banco separado por formato (reel /
+carrossel / lista), rotação com memória, veto do "corre ver" — e **nunca troquei
+a chamada no `meta_uploader`**. O `_montar_comentario` seguiu lendo a constante
+`_TMPL_IG`, que ainda dizia *"corre pegar o seu"* — a MESMA construção que ele
+vetou nos ganchos em 21/08 e que eu removi do arquivo novo. Cinco dias, seis
+contas, uma frase só, e a frase era a proibida.
+
+⚠️ **ARQUIVO NA PASTA NÃO É ARQUIVO EM USO — TERCEIRA VEZ ESTA SEMANA.**
+O `_so_musica` que nenhum caminho chamava; as trilhas na pasta de música desde
+11/07 que nada lia; e agora seis frases prontas que nenhum post usou. Escrever o
+módulo é METADE do trabalho. A outra metade é a linha que o chama, e é a que eu
+venho esquecendo — sempre com o mesmo sintoma: nenhum erro, nenhum log, só o
+comportamento velho continuando calado.
+
+**Conserto:** `_montar_comentario` chama `comentarios.escolher()`; ganhou
+parâmetro `formato`, e a chamada do carrossel passa `formato="carrossel"` (sem
+isso ele herdava o banco de Reel e comentava *"alguém aqui já tem um desses?"*
+embaixo de um post que não mostrou produto nenhum — a segunda metade da queixa
+de 22/08, aberta desde então). As constantes `_TMPL_*` viraram rede de segurança
+e tiveram o texto trocado: se um dia forem ao ar, vão sem a frase vetada.
+
+**`teste_comentario.py` — 20/20.** ⚠️ Metade dele olha a FIAÇÃO por AST, não o
+banco: testar só o `escolher()` teria dado 100% em 02/09 com o sistema
+publicando a frase velha. O teste tem que fazer a pergunta que ninguém fez —
+*"o uploader chama isso?"*.
+
+### Os hooks: o defeito não está no hook, está no MATCH
+
+Dump de 15 pacotes com produto + hook + legenda do vídeo gringo. Três deles:
+
+| produto | hook | legenda do vídeo |
+|---|---|---|
+| Guia Dupla Retrátil para 2 Cães | "Meu passeio noturno com eles parecia uma coreografia de nós e puxões 🤪" | *"V stepped into the crowd… Vogue World: Hollywood"* |
+| spray de defesa pessoal | "Me sentia um alvo fácil toda vez que o sol se punha 🌇" | *"Behind the scenes at a high-profile Hollywood after-party, @thv…"* |
+| Meia Calça Infantil para Ballet | "Eu morria de vergonha da filha ajeitando a meia no palco 😭" | *"Your feet won't get cold anymore 😏 #gadgets #coolgadgets"* |
+
+**3 de 15 (20%) têm vídeo categoricamente sem relação com o produto.** Dois deles
+são vídeos de celebridade em evento de moda virando "guia para cães" e "spray de
+defesa pessoal". Os outros 12 hooks estão BONS — "Meu gato me deu um corte de
+cabelo pior que o dele 💇‍♀️", "Comer minha própria comida gelada me fazia querer
+nem levar 🥶" casam com o produto e com o vídeo.
+
+⚠️ **ENTÃO O "HOOK NADA A VER" É SINTOMA, NÃO DOENÇA.** O hook é escrito a partir
+do NOME DO PRODUTO; quando o produto está errado, o hook sai coerente com um
+produto que o vídeo não mostra. A causa está um estágio antes:
+`tiktok_coletor.py:1573` identifica o produto pela **LEGENDA** do gringo
+(`_identificar_produto(meta["descricao"])`), não pelo vídeo. Legenda de post de
+celebridade → busca lixo → Shopee devolve qualquer coisa.
+
+Segundo achado do mesmo dump: **15 de 15 hooks são a MESMA FRASE** — "[eu]
+[sofria com] [problema] [emoji]", no passado, em primeira pessoa. O
+`aberturas_gastas` (06/09) pega abertura literal repetida, não FORMA repetida.
+Quem vê dois Reels nossos vê o mesmo post duas vezes.
+
+### Pendências abertas
+- ✅ 41 vídeos com áudio restaurado (8 sem origem ficam com trilha repetida)
+- ⏳ pôr 8+ faixas em `assets/inbox/audio/` (3 hoje; `PISO_TRILHAS_LOTE=8` trava lote)
+- ⏳ tirar `Beautifully Stranded (Reels Sound...).mp4` do banco de trilhas (tem voz falada)
+- ⏳ **o match pelo vídeo, não pela legenda** — a causa dos 20%
+- ⏳ **variar a FORMA do hook**, não só a abertura
+- ⏳ o Dre nunca conferiu um vídeo de `pronto_para_postar/` com o olho
+
+---
+
 ## 🗓️ Dia 2026-09-05 — o juiz não pode ser o próprio jurado
 
 ### O problema

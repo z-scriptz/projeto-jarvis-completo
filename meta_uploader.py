@@ -235,10 +235,33 @@ def _page_access_token() -> Optional[str]:
 # Gated por ENGAJAR_COMENTARIO=1. Best-effort: se falhar (ex: falta permissão),
 # loga e segue — o post em si continua valendo.
 # ══════════════════════════════════════════════════════════════════════════
-_TMPL_IG = ("🛒 O link tá na BIO, corre pegar o seu! 😍\n"
-            "💬 comenta \"EU QUERO\" que eu te ajudo a achar 👇")
-_TMPL_FB = ("🛒 Compra aqui ó: {link}\n"
-            "😍 aproveita que a oferta some rápido!")
+#
+# ⚠️ ESTE ARQUIVO IGNOROU O `comentarios.py` POR 5 DIAS (02/09 → 07/09).
+# O Dre, hoje: *"temos que mudar esses comentários genéricos também, após todo
+# post ele posta 1 comentário igual, e eu tinha te dado 5 comentários ou mais
+# nas conversas passadas para colocar, e isso não mudou"*.
+#
+# Ele está certo, e o motivo é o pior possível: em 02/09 eu escrevi o
+# `comentarios.py` INTEIRO — os seis textos dele palavra por palavra, banco por
+# formato, rotação com memória, veto do "corre ver" — e NUNCA troquei a chamada
+# aqui. O `_montar_comentario` continuou lendo as constantes abaixo. Módulo
+# pronto, testado, versionado, e morto: nenhum post usou uma linha dele.
+#
+# ⚠️ É A TERCEIRA VEZ QUE ESTE MESMO ERRO APARECE NESTA SEMANA — o `_so_musica`
+# que nunca era chamado, as trilhas na pasta que nada lia, e agora isto.
+# ARQUIVO NA PASTA NÃO É ARQUIVO EM USO. Escrever o módulo é metade do
+# trabalho; a outra metade é a linha que o chama, e é a que eu venho esquecendo.
+#
+# E o `_TMPL_IG` abaixo carregava *"corre pegar o seu"* — a MESMA construção que
+# o Dre vetou nos ganchos em 21/08 e que eu removi do `comentarios.py`. A régua
+# só valeu no arquivo que ninguém executava.
+#
+# Daqui pra frente estas duas constantes são REDE DE SEGURANÇA, não o plano: só
+# aparecem se o import do `comentarios` falhar. Por isso o texto delas mudou —
+# se um dia elas forem ao ar, vão ao ar sem a frase vetada.
+_TMPL_IG = ("deixei na bio 💛 no grupo eu mando os achadinhos antes de "
+            "aparecerem por aqui.")
+_TMPL_FB = "tá aqui ó: {link}"
 
 
 def _engajar_ligado() -> bool:
@@ -256,20 +279,46 @@ def _dados_engajamento(video_path) -> dict:
     return {}
 
 
-def _montar_comentario(plataforma: str, video_path) -> str:
+def _montar_comentario(plataforma: str, video_path, formato: str = "reel") -> str:
+    """A frase do 1º comentário. "" quando não há nada honesto a dizer.
+
+    ⚠️ O `formato` NÃO É ENFEITE. O banco do carrossel é separado de propósito:
+    quatro das seis frases de Reel falam de COMPRAR ("o perigo é comprar um e
+    depois querer outro"), e num carrossel de "3 erros que quase todo mundo
+    comete" não existe "um desses" pra comprar — o post entrega conteúdo. Foi a
+    segunda metade da reclamação do Dre em 22/08, e ela ficou aberta junto com a
+    primeira: comentário repetido cansa, comentário desconexo denuncia a máquina.
+    """
     d = _dados_engajamento(video_path)
-    ctx = {
-        "link":    (d.get("link") or "").strip(),
-        "handle":  (_CTX.get("handle") or d.get("handle") or "").strip(),
-        "produto": (d.get("produto") or "").strip(),
-    }
-    tmpl = (os.environ.get("ENGAJAR_IG_TMPL", _TMPL_IG) if plataforma == "instagram"
-            else os.environ.get("ENGAJAR_FB_TMPL", _TMPL_FB))
+    link = (d.get("link") or "").strip()
+    handle = (_CTX.get("handle") or d.get("handle") or "").strip()
+    produto = (d.get("produto") or "").strip()
+
+    # override manual do .env continua ganhando de tudo — é a válvula pra
+    # trocar a frase sem deploy. Só que agora ele é a EXCEÇÃO, não o padrão.
+    tmpl = os.environ.get("ENGAJAR_IG_TMPL" if plataforma == "instagram"
+                          else "ENGAJAR_FB_TMPL", "").strip()
+    if not tmpl:
+        try:
+            import comentarios
+            texto = comentarios.escolher(plataforma, formato=formato,
+                                         conta=handle, link=link,
+                                         produto=produto, handle=handle)
+            if texto:
+                return texto
+            # "" do banco é decisão, não falha: ex. frase de link sem link.
+            # Cair na rede aqui reintroduziria justamente o que ele evitou.
+            return ""
+        except Exception as e:
+            log.warning(f"   ⚠️  comentarios.py não carregou ({str(e)[:70]}) — "
+                        f"uso a frase de reserva")
+            tmpl = (_TMPL_IG if plataforma == "instagram" else _TMPL_FB)
+
     # se o template precisa do {link} mas não temos, não comenta (evita "Compra aqui: ")
-    if "{link}" in tmpl and not ctx["link"]:
+    if "{link}" in tmpl and not link:
         return ""
     try:
-        return tmpl.format(**ctx).strip()
+        return tmpl.format(link=link, handle=handle, produto=produto).strip()
     except Exception:
         return ""
 
@@ -795,7 +844,12 @@ def postar_instagram_carrossel(imagens: list, legenda: str = "") -> dict:
         return {"sucesso": False, "erro": f"publish do carrossel recusado: {err}"}
 
     if _engajar_ligado():
-        _comentar(media_id, _montar_comentario("instagram", slides[0]), tok)
+        # ⚠️ formato="carrossel": este post entrega CONTEÚDO, não um produto.
+        # Sem isso ele herdava o banco de Reel e comentava "alguém aqui já tem
+        # um desses?" embaixo de um carrossel que não mostrou produto nenhum.
+        _comentar(media_id,
+                  _montar_comentario("instagram", slides[0], formato="carrossel"),
+                  tok)
     # ⚠️ os arquivos publicados NÃO são apagados aqui de propósito: a Meta pode
     # rebuscar a imagem depois do publish. A coleta por idade do midia_publica
     # (6h) resolve sem correr esse risco.
