@@ -60,6 +60,25 @@ def main() -> int:
         print("❌ sem trilha na pasta de música — não tenho com o que substituir")
         return 1
 
+    # ⚠️ PISO DE TRILHAS — A TRAVA QUE FALTAVA (06/09/2026). Eu escrevi o aviso
+    # de repetição no `produzir_tiktok` ("4 faixas pra 12 vídeos repete ~3x") e
+    # construí ESTE script, que troca áudio em LOTE, sem nenhum piso: ele só
+    # exigia ≥1 trilha. Com 3 faixas e 382 vídeos, cada faixa cairia em ~127
+    # posts, nas 6 contas. O Dre mandou parar no meio da rodada, e tinha razão.
+    #
+    # Aviso não basta num script de lote: quando ele aparece, o estrago já
+    # começou. Aqui é PORTA FECHADA — só abre com --forcar consciente.
+    _piso = int(os.environ.get("PISO_TRILHAS_LOTE", "8"))
+    if aplicar and len(trilhas) < _piso and "--forcar" not in args:
+        print(f"🚨 SÓ {len(trilhas)} TRILHA(S) PRA {len(list(PRONTOS.iterdir()))} "
+              f"VÍDEO(S). Não vou trocar em lote.")
+        print(f"   Cada faixa cairia em ~{len(list(PRONTOS.iterdir()))//max(1,len(trilhas))} "
+              f"posts, espalhada pelas 6 contas —")
+        print(f"   quem seguir duas contas ouve a mesma música o dia inteiro.")
+        print(f"\n   Ponha pelo menos {_piso} faixas em {PT._dir_musica()},")
+        print(f"   ou rode com --forcar se souber o que está fazendo.")
+        return 1
+
     vids = []
     for pasta in sorted(PRONTOS.iterdir()):
         if not pasta.is_dir():
