@@ -18,13 +18,20 @@
 # defeito de outra ordem: some da tela quem lê, não some do ouvido de quem
 # escuta.
 #
-# ⚠️ NÃO APAGA NADA. Escreve num temporário e só troca se der certo.
+# ⚠️ ATENÇÃO: ISTO DESTRÓI O ÁUDIO ORIGINAL, SEM CÓPIA.
+# A 1ª versão dizia aqui "NÃO APAGA NADA". Era verdade sobre o ARQUIVO (temp +
+# troca só se der certo) e FALSO sobre o CONTEÚDO: a faixa de áudio original é
+# sobrescrita. "Não apaga o arquivo" não é "não destrói dado", e eu tratei como
+# se fosse. Pra desfazer existe o `restaurar_audio_fila.py`, que recola o áudio
+# vindo de `inbox_tiktok/_produzidos` — e só funciona enquanto a origem existir.
 #
 #   .venv/bin/python consertar_audio_fila.py            # só mede
 #   .venv/bin/python consertar_audio_fila.py --aplicar  # troca de verdade
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parent
@@ -117,7 +124,14 @@ def main() -> int:
         # ⚠️ -c:v copy: a IMAGEM não é reprocessada. É por isso que isto leva
         # segundos e o render leva 10 min — e é por isso que o hook queimado
         # continua o antigo, o que aqui é aceitável.
-        saida = v.with_suffix(".novoaudio.mp4")
+        # ⚠️ TEMPORÁRIO FORA DA PASTA, E O RELÓGIO CAPTURADO ANTES DE TUDO.
+        # A 1ª versão escrevia o temp DENTRO da pasta e só depois lia o mtime
+        # pra "preservar" — mas o ffmpeg já tinha zerado ele ao criar o arquivo.
+        # Medido: pasta de 30 dias virava 0 antes da captura. Resultado: 41
+        # pacotes ficaram com data de hoje e furariam a fila.
+        _st = v.parent.stat()
+        _relogio = (_st.st_atime, _st.st_mtime)
+        saida = Path(tempfile.gettempdir()) / f"jarvis_audio_{os.getpid()}.mp4"
         vol = os.getenv("MUSICA_SO_VOL", "0.85")
         cmd = ["ffmpeg", "-y", "-i", str(v), "-stream_loop", "-1",
                "-i", str(musica), "-map", "0:v:0", "-map", "1:a:0",
@@ -130,25 +144,15 @@ def main() -> int:
             falhas += 1
             continue
         if r.returncode == 0 and saida.exists() and saida.stat().st_size > 10000:
-            # ⚠️ GUARDA O RELÓGIO DA PASTA ANTES DE TROCAR (06/09/2026). O
-            # `_vencido` do daemon mede a idade pelo mtime da PASTA, e trocar um
-            # arquivo dentro dela zera esse mtime — medido: pasta de 40 dias
-            # virava de 0. Rodar isto na fila REJUVENESCERIA os vídeos que
-            # tocasse (só os ~23% com voz), criando idades falsas e misturadas.
-            #
-            # Ferramenta de conserto não pode mexer no relógio de validade: ela
-            # conserta o áudio, e a fila continua com as idades que tinha.
+            # O `_vencido` do daemon mede a idade pelo mtime da PASTA, e o
+            # daemon decide o que postar e o que vencer por ela. Ferramenta de
+            # conserto não pode mexer nesse relógio — devolvo pasta E arquivo.
+            shutil.move(str(saida), str(v))   # temp pode estar noutro fs
             try:
-                _st = v.parent.stat()
-                _relogio = (_st.st_atime, _st.st_mtime)
+                os.utime(v, _relogio)
+                os.utime(v.parent, _relogio)
             except Exception:
-                _relogio = None
-            saida.replace(v)          # só troca DEPOIS de dar certo
-            if _relogio:
-                try:
-                    os.utime(v.parent, _relogio)
-                except Exception:
-                    pass
+                pass
             trocados += 1
             print(f"      🎵 áudio trocado por '{musica.name[:40]}'")
         else:

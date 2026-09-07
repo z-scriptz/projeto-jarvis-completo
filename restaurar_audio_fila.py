@@ -23,16 +23,22 @@
 # o áudio intacto. Este script recola essa faixa no vídeo já renderizado.
 #
 # COMO SEI QUAIS FORAM TOCADOS (sem nenhum log, porque eu não gravei nenhum):
-# o `consertar_audio_fila` preserva o mtime da PASTA mas o `replace()` deixa o
-# ARQUIVO com a hora de agora. Então `video.mp4 mais novo que a pasta` é a
-# assinatura exata de quem ele mexeu. Foi sorte, não projeto.
+# pelo ÁUDIO. Se a faixa do vídeo É uma das nossas 3 trilhas, ele foi trocado.
+#
+# ⚠️ A 1ª TENTATIVA FOI POR MTIME E FALHOU POR OUTRO ERRO MEU. Eu tinha "salvo"
+# o relógio da pasta no consertar_audio_fila — mas capturava DEPOIS do ffmpeg
+# escrever o temporário dentro dela, ou seja, restaurava um valor já destruído.
+# Os 41 tocados ficaram com data de hoje, e a detecção por mtime achou zero.
+# Assinatura tirada do DADO não depende de eu ter acertado o relógio.
 #
 #   .venv/bin/python restaurar_audio_fila.py            # só lista
 #   .venv/bin/python restaurar_audio_fila.py --aplicar  # devolve o áudio
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parent
@@ -41,6 +47,49 @@ FEITOS = BASE / "inbox_tiktok" / "_produzidos"
 INBOX = BASE / "inbox_tiktok"
 VIDEO_EXTS = (".mp4", ".mov", ".m4v")
 PARCIAIS = (".part", ".ytdl", ".temp", ".tmp", ".download")
+
+
+def _pcm(caminho: Path, seg: int = 6):
+    """Áudio cru, mono 8kHz, pros primeiros `seg` segundos. None se falhar."""
+    try:
+        import numpy as np
+    except Exception:
+        return None
+    try:
+        r = subprocess.run(
+            ["ffmpeg", "-v", "error", "-i", str(caminho), "-t", str(seg),
+             "-vn", "-ac", "1", "-ar", "8000", "-f", "s16le", "-"],
+            capture_output=True, timeout=90)
+        if r.returncode != 0 or len(r.stdout) < 8000:
+            return None
+        return np.frombuffer(r.stdout, dtype="<i2").astype("float32")
+    except Exception:
+        return None
+
+
+def parecido(a, b) -> float:
+    """Correlação entre dois trechos de áudio, 0 a 1. Pura, pra dar pra testar.
+
+    ⚠️ NORMALIZA ANTES DE COMPARAR porque a trilha entrou com volume 0.85 — sem
+    isso, o mesmo áudio mais baixo pareceria diferente. Normalizado, volume some
+    da conta e sobra a FORMA da onda.
+    """
+    try:
+        import numpy as np
+    except Exception:
+        return 0.0
+    if a is None or b is None:
+        return 0.0
+    n = min(len(a), len(b))
+    if n < 8000:                     # menos de 1s: não dá pra afirmar nada
+        return 0.0
+    x, y = a[:n], b[:n]
+    x = x - x.mean()
+    y = y - y.mean()
+    dx, dy = float(np.sqrt((x * x).sum())), float(np.sqrt((y * y).sum()))
+    if dx < 1e-6 or dy < 1e-6:       # silêncio dos dois lados
+        return 0.0
+    return abs(float((x * y).sum()) / (dx * dy))
 
 
 def _mapa_origem(slugify) -> dict:
@@ -82,7 +131,31 @@ def main() -> int:
         print(f"❌ {PRONTOS} não existe")
         return 1
 
-    # ── quem foi tocado: arquivo mais novo que a pasta ────────────────────
+    # ── quem foi tocado: o ÁUDIO DELE É UMA DAS NOSSAS TRILHAS ────────────
+    #
+    # ⚠️ A 1ª VERSÃO USAVA MTIME E NÃO FUNCIONOU — E O MOTIVO FOI OUTRO ERRO MEU
+    # (06/09/2026). O `consertar_audio_fila` "preservava" o mtime da pasta, mas
+    # capturava o relógio DEPOIS do ffmpeg já ter escrito o arquivo temporário
+    # dentro dela — ou seja, restaurava um valor já destruído. Medido: pasta de
+    # 30 dias virava 0 antes mesmo da captura.
+    #
+    # Resultado: os tocados ficaram com data de HOJE (e com `ordem_da_fila:
+    # mais_novo` furariam a fila na frente do formato novo), e a detecção por
+    # mtime achava 0 deles.
+    #
+    # Agora a assinatura é o próprio dado: se o áudio do vídeo É uma das nossas
+    # 3 trilhas, ele foi trocado. Isso não depende de relógio nenhum.
+    trilhas = PT._trilhas()
+    if not trilhas:
+        print("❌ sem trilhas na pasta de música — não tenho com o que comparar")
+        return 1
+    print(f"🎧 comparando com {len(trilhas)} trilha(s) nossa(s)…")
+    refs = [(t.name, _pcm(t)) for t in trilhas]
+    if not any(p is not None for _n, p in refs):
+        print("❌ não consegui ler o áudio das trilhas (ffmpeg/numpy?)")
+        return 1
+
+    piso = float(os.environ.get("PISO_PARECIDO", "0.90"))
     tocados = []
     for pasta in sorted(PRONTOS.iterdir()):
         if not pasta.is_dir():
@@ -90,9 +163,14 @@ def main() -> int:
         for v in pasta.iterdir():
             if v.suffix.lower() not in VIDEO_EXTS or v.stat().st_size < 10000:
                 continue
-            # 5s de folga: produção grava pasta e arquivo quase juntos
-            if v.stat().st_mtime > pasta.stat().st_mtime + 5:
-                tocados.append((pasta, v))
+            amostra = _pcm(v)
+            melhor, qual = 0.0, ""
+            for nome, ref in refs:
+                s = parecido(amostra, ref)
+                if s > melhor:
+                    melhor, qual = s, nome
+            if melhor >= piso:
+                tocados.append((pasta, v, melhor, qual))
             break
 
     if not tocados:
@@ -104,18 +182,25 @@ def main() -> int:
     print(f"   {len(mapa)} origem(ns) mapeada(s) em _produzidos/\n")
 
     ok = semfonte = falhas = 0
-    for pasta, v in tocados:
+    for pasta, v, sim, qual in tocados:
         origem = mapa.get(pasta.name)
         if not origem or not origem.exists():
             semfonte += 1
-            print(f"   ❌ SEM ORIGEM  {pasta.name[:52]}")
+            print(f"   ❌ SEM ORIGEM  {pasta.name[:40]:42} "
+                  f"(bate {sim:.2f} com {qual[:22]})")
             continue
         if not aplicar:
             ok += 1
-            print(f"   ↩️  restauraria  {pasta.name[:44]:46} ← {origem.parent.name[:26]}")
+            print(f"   ↩️  restauraria  {pasta.name[:40]:42} "
+                  f"(bate {sim:.2f} com {qual[:22]})")
             continue
 
-        saida = v.with_suffix(".origaudio.mp4")
+        # ⚠️ TEMPORÁRIO FORA DA PASTA. Escrever dentro dela zera o mtime da
+        # pasta — foi assim que o `consertar_audio_fila` destruiu a idade de 41
+        # pacotes antes mesmo de eu "preservar" o relógio.
+        st = pasta.stat()
+        relogio = (st.st_atime, st.st_mtime)
+        saida = Path(tempfile.gettempdir()) / f"jarvis_restaura_{os.getpid()}.mp4"
         # imagem do RENDERIZADO + áudio do ORIGINAL. -c:v copy: não reprocessa.
         cmd = ["ffmpeg", "-y", "-i", str(v), "-i", str(origem),
                "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy",
@@ -127,9 +212,7 @@ def main() -> int:
             print(f"   ⚠️ timeout      {pasta.name[:52]}")
             continue
         if r.returncode == 0 and saida.exists() and saida.stat().st_size > 10000:
-            st = pasta.stat()
-            relogio = (st.st_atime, st.st_mtime)
-            saida.replace(v)
+            shutil.move(str(saida), str(v))     # temp está noutro filesystem
             # devolve o relógio DA PASTA e do ARQUIVO — assim o vídeo deixa de
             # aparecer como "tocado" e a restauração não vira um novo estrago.
             try:
