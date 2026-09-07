@@ -61,6 +61,39 @@ BASE = Path(__file__).resolve().parent
 FEITOS = BASE / "inbox_tiktok" / "_produzidos"
 INBOX = BASE / "inbox_tiktok"
 
+
+def _carregar_env():
+    """A GEMINI_API_KEY mora no `.env` da VPS, não no ambiente do shell.
+
+    ⚠️ ESQUECI ISTO E O `--olho` MORREU NA PRIMEIRA TENTATIVA com
+    'GEMINI_API_KEY vazio' — parecendo problema de configuração do Dre quando
+    era arquivo meu que não lia o `.env`. Todo script deste projeto que fala com
+    o Gemini carrega; eu escrevi um novo e não copiei.
+
+    ⏳ DÍVIDA REGISTRADA: esta função já existe IDÊNTICA em `postar_grupo`,
+    `conferir_match`, `deploy_site`, `probe_subid` e `probe_conversao` — esta é
+    a sexta cópia. É o mesmo "meia regra em cada superfície" que este projeto já
+    pagou caro; não unifiquei agora porque mexer em cinco arquivos de produção
+    no meio de outra tarefa é como se quebra coisa que estava funcionando.
+    """
+    for cand in (BASE / ".env", Path(".env")):
+        if not cand.exists():
+            continue
+        for linha in cand.read_text(encoding="utf-8").splitlines():
+            linha = linha.strip()
+            if not linha or linha.startswith("#") or "=" not in linha:
+                continue
+            if linha.lower().startswith("export "):
+                linha = linha[7:]
+            k, _, v = linha.partition("=")
+            k, v = k.strip(), v.strip().strip('"').strip("'")
+            if k and k not in os.environ:
+                os.environ[k] = v
+        break
+
+
+_carregar_env()
+
 # palavras que aparecem em quase todo título de marketplace e não provam nada
 _VAZIAS = {
     "para", "com", "sem", "dos", "das", "kit", "unidades", "unidade", "pecas",
@@ -197,7 +230,11 @@ def _frames(video: Path, dur: float, n: int = 2) -> list:
 
 def _olhar(amostra: int) -> int:
     if not os.getenv("GEMINI_API_KEY"):
-        print("❌ GEMINI_API_KEY vazio — o --olho precisa dela")
+        # diz ONDE procurei: "vazio" sozinho não distingue chave ausente de
+        # arquivo que eu não li — e foi exatamente essa confusão na 1ª rodada.
+        _tem_env = (BASE / ".env").exists()
+        print(f"❌ GEMINI_API_KEY não encontrada (nem no ambiente, nem em "
+              f"{BASE / '.env'}{'' if _tem_env else ' — que não existe'})")
         return 1
     from google import genai
     from google.genai import types
