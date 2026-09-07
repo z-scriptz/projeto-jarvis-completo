@@ -300,7 +300,21 @@ def _montar_comentario(plataforma: str, video_path, formato: str = "reel") -> st
                           else "ENGAJAR_FB_TMPL", "").strip()
     if not tmpl:
         try:
-            import comentarios
+            # ⚠️ O REPO É ACHATADO E A VPS USA PACOTES. `import comentarios`
+            # sozinho funciona aqui e pode falhar lá — e falhar aqui significa
+            # cair calado na reserva, ou seja, voltar exatamente ao defeito que
+            # este conserto existe pra tirar. Mesmo idioma de dois caminhos que
+            # o próprio `comentarios._convite_whats` usa pro bio_page_builder.
+            comentarios = None
+            for _cam in ("comentarios", "creative_engine.comentarios",
+                         "integrations.comentarios"):
+                try:
+                    comentarios = __import__(_cam, fromlist=["escolher"])
+                    break
+                except Exception:
+                    continue
+            if comentarios is None:
+                raise ImportError("comentarios.py não encontrado em nenhum caminho")
             texto = comentarios.escolher(plataforma, formato=formato,
                                          conta=handle, link=link,
                                          produto=produto, handle=handle)
