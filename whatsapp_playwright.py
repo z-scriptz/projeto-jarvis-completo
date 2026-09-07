@@ -72,8 +72,10 @@ if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 try:
     from shared.termos import nome_de_produto_ruim as _nome_ruim
+    from shared.termos import conteudo_adulto as _adulto
 except Exception as _e_imp:          # noqa: N816
     _nome_ruim = None
+    _adulto = None
     _ERRO_REGRA = str(_e_imp)[:120]
 
 # Mesma trava do postar_grupo, pela mesma razão: em 04/08 o crontab tinha a
@@ -1003,18 +1005,38 @@ def _candidatos(fila, ja: set, quantos: int, resta_dia: int) -> list:
         _log(f"❌ não consegui carregar shared/termos.py ({_ERRO_REGRA}) — sem a "
              "regra de nome eu não mando nada, pra não postar rótulo interno.")
         return []
-    novos, pulados = [], 0
+    # ⚠️ SEM A REGRA DE +18, NÃO MANDO NADA (07/09/2026). O Dre viu um
+    # masturbador nas promos da Alana e disse: *"não quero que nada disso seja
+    # postado no meu grupo!!"*. Se o import da regra falhar, o comportamento
+    # seguro é PARAR — igual ao `_nome_ruim` logo acima. Um grupo que não
+    # recebeu achadinho hoje se recupera; um grupo que recebeu isso, não.
+    if _adulto is None:
+        _log(f"❌ não consegui carregar a regra de conteúdo adulto "
+             f"({_ERRO_REGRA}) — não mando nada.")
+        return []
+    novos, pulados, barrados = [], 0, 0
     for it in fila:
         if not isinstance(it, dict):
             continue
         if not it.get("link") or not it.get("imagem") or it["link"] in ja:
             continue
-        if _nome_ruim(_nome_do_item(it)):
+        nome = _nome_do_item(it)
+        # olha nome + descrição + categoria: a loja às vezes deixa o título
+        # limpo e põe o termo explícito só na categoria
+        veta, motivo = _adulto(nome, it.get("descricao", ""),
+                               it.get("categoria", ""))
+        if veta:
+            barrados += 1
+            _log(f"   🔞 barrado ({motivo}): {nome[:60]}")
+            continue
+        if _nome_ruim(nome):
             pulados += 1
             continue
         novos.append(it)
     if pulados:
         _log(f"{pulados} item(ns) pulado(s) por nome que não serve pra cliente")
+    if barrados:
+        _log(f"🔞 {barrados} item(ns) barrado(s) por conteúdo adulto")
     return novos[:max(0, min(quantos, resta_dia))]
 
 

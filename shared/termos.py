@@ -234,3 +234,121 @@ def nome_para_cliente(nome: str, limite: int = 70) -> str:
     if len(t) > limite:
         t = t[:limite].rsplit(" ", 1)[0].rstrip(" -–—/|,;:.") + "…"
     return t.strip()
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# CONTEÚDO ADULTO — o que NUNCA pode chegar num grupo do cliente
+#
+# ⚠️ O DRE, 07/09/2026: *"reparei nas promos da Alana no WhatsApp, ela postou um
+# masturbador, +18. Não quero que nada disso seja postado no meu grupo!! falta
+# de respeito."*
+#
+# Ele está certo e o risco é maior que o constrangimento: grupo de achadinho tem
+# gente que entrou por indicação de parente, e um item desses derruba a
+# confiança do grupo inteiro de uma vez — sem contar as regras das próprias
+# plataformas. O projeto NÃO TINHA NENHUM FILTRO DISSO: procurei em todos os
+# .py e não existe uma linha sobre conteúdo adulto em lugar nenhum.
+#
+# ⚠️ POR QUE ISSO NÃO É UMA LISTA DE PALAVRAS PROIBIDAS, E POR QUE EU QUASE FIZ
+# UMA. As palavras mais óbvias do vocabulário adulto são palavras COMUNS de
+# catálogo, e bloquear por elas quebraria a fila de produto honesto:
+#
+#     "plug"        → *Plug adaptador de tomada*, *plug P2*  (comuníssimo)
+#     "lubrificante"→ *Lubrificante de corrente de bicicleta*
+#     "vibratório"  → *Massageador vibratório muscular*, escova de limpeza
+#     "boneca"      → *Boneca de pano*, *boneca reborn*  (brinquedo!)
+#     "anel"        → *Anel de prata*, *anel de vedação*
+#     "bomba"       → *Bomba d'água*, *bomba de encher pneu*
+#     "íntimo"      → *sabonete íntimo* (higiene, não erótico)
+#     "casal"       → *pijama de casal*, *cama de casal*
+#
+# Bloquear qualquer uma dessas sozinha jogaria fora dezenas de produtos bons em
+# silêncio — e silêncio é como este projeto perde coisa há semanas.
+#
+# DESENHO EM DOIS NÍVEIS:
+#   NÍVEL 1 — termos que NÃO têm uso inocente em catálogo de achadinho.
+#             Reprovam sozinhos.
+#   NÍVEL 2 — pares: palavra ambígua SÓ reprova junto de um qualificador
+#             sexual. "plug" passa; "plug anal" não. "vibrador" sozinho já é
+#             nível 1, mas "massageador" só cai com "íntimo"/"ponto g".
+#
+# 📌 A RÉGUA DE QUEM PUBLICA, igual à do `nome_de_produto_ruim`: na dúvida,
+# pular um produto bom custa MUITO menos que mandar isso pro grupo do cliente.
+# Por isso o nível 1 é generoso e o nível 2 existe pra não pagar esse preço nos
+# casos onde a palavra é de uso geral.
+# ══════════════════════════════════════════════════════════════════════════
+
+# Nível 1: não existe versão inocente disto num grupo de achadinhos.
+ADULTO_DIRETO = (
+    "masturbador", "masturbadora", "vibrador", "vibrador ponto g", "plug anal",
+    "plug de silicone", "sex shop", "sexshop", "sexyshop", "sex toy", "sextoy",
+    "penis", "peniano", "peniana", "vagina", "vaginal", "vulva", "clitoris",
+    "anal", "erotico", "erotica", "erotizante", "afrodisiaco", "afrodisiaca",
+    "preservativo", "camisinha", "consolo", "dildo", "protese peniana",
+    "boneca inflavel", "boneca sexual", "gel lubrificante intimo",
+    "algema erotica", "algemas eroticas", "tapa sexo", "fio dental sexy",
+    "calcinha comestivel", "sutia erotico", "chicote erotico", "mordaca",
+    "bolinha tailandesa", "anel peniano", "bomba peniana", "estimulador",
+    "estimulador clitoriano", "sado", "bdsm", "fetiche", "pompoarismo",
+    "lingerie erotica", "espartilho erotico", "strap on", "plug de cauda",
+    "+18", "18+", "adulto sensual", "prazer intimo", "brinquedo sexual",
+    "brinquedo erotico", "satisfyer", "sugador de clitoris",
+)
+
+# Nível 2: (palavra ambígua, qualificadores). Só reprova se algum qualificador
+# aparecer no mesmo texto — senão o produto honesto passa.
+ADULTO_PAR = (
+    ("plug", ("anal", "silicone", "cauda", "prazer", "intimo")),
+    ("lubrificante", ("intimo", "sexual", "prazer", "base agua")),
+    ("massageador", ("intimo", "ponto g", "clitor", "sexual", "prazer")),
+    # ⚠️ "realista" SAIU DAQUI E O TESTE FOI QUEM MOSTROU. Eu tinha posto
+    # ("boneca", ... "realista" ...) e isso reprova *Boneca Reborn Realista Bebê
+    # 55cm* — categoria grande e honesta na Shopee, anunciada EXATAMENTE com
+    # essa palavra. O filtro comeria a categoria inteira, em silêncio.
+    # Fica o buraco conhecido: uma boneca adulta anunciada só como "Boneca
+    # Realista Silicone 158cm" passa por aqui. Aceito de propósito — na prática
+    # esses anúncios trazem palavra anatômica ou "+18", que são nível 1; e o
+    # preço de fechar esse buraco é apagar as reborn sem ninguém perceber.
+    ("boneca", ("inflavel", "sexual", "adulto")),
+    ("anel", ("peniano", "vibratorio para casal", "prazer")),
+    ("bomba", ("peniana", "penis", "ereca")),
+    ("gel", ("intimo", "sexual", "excitante", "retardante", "prazer")),
+    ("vela", ("sensual", "erotica", "massagem intima")),
+    ("baralho", ("sensual", "erotico", "picante", "casal picante")),
+    ("kit", ("sensual", "erotico", "casal picante", "prazer")),
+    ("calcinha", ("comestivel", "erotica", "sensual")),
+    ("oleo", ("excitante", "sensual intimo", "beijavel")),
+)
+
+
+def conteudo_adulto(nome, descricao="", categoria=""):
+    """(True, motivo) se isto NÃO pode ir pro grupo do cliente. (False, "") senão.
+
+    Olha nome + descrição + categoria juntos: a Shopee às vezes põe o termo
+    explícito só na categoria ("Saúde > Bem-estar sexual") e deixa o título
+    limpo — e é justamente esse caso que passaria batido por um filtro de nome.
+
+    ⚠️ COMPARA SEM ACENTO E COM BORDA DE PALAVRA. Sem a borda, "anal" casaria
+    dentro de "*anal*isador", "c*anal*", "*anal*ógico" — e "canal" já é palavra
+    comum na fila (veio do LIXO_BUSCA, de chamada de canal do Telegram). Um
+    filtro que reprova "Cabo Canal HDMI" por conter "anal" é pior que filtro
+    nenhum, porque some com produto bom e ninguém entende por quê.
+    """
+    texto = _sem_acento(f"{nome or ''} {descricao or ''} {categoria or ''}".lower())
+    if not texto.strip():
+        return False, ""
+
+    for termo in ADULTO_DIRETO:
+        t = _sem_acento(termo)
+        # \b não serve pra termos com espaço/'+': uso cerca explícita
+        if re.search(r"(?<![a-z0-9])" + re.escape(t) + r"(?![a-z0-9])", texto):
+            return True, f"termo adulto: '{termo}'"
+
+    for palavra, quals in ADULTO_PAR:
+        p = _sem_acento(palavra)
+        if not re.search(r"(?<![a-z0-9])" + re.escape(p) + r"(?![a-z0-9])", texto):
+            continue
+        for q in quals:
+            if _sem_acento(q) in texto:
+                return True, f"'{palavra}' + '{q}'"
+    return False, ""

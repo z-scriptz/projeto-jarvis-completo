@@ -250,10 +250,38 @@ def _rodar():
         _log(f"aviso: sem shared/termos ({str(e)[:60]}) — não filtro nomes")
         nome_de_produto_ruim = lambda _n: False
 
+    # ⚠️ +18 NÃO SEGUE A REGRA ACIMA — AQUI, NA DÚVIDA, PARA (07/09/2026).
+    # Duas linhas acima está escrito que sem a regra de NOME é melhor publicar
+    # do que travar o grupo, "e o defeito volta a ser visível". Isso vale pra
+    # nome feio: constrange e some. NÃO vale pra conteúdo adulto — esse defeito
+    # não é visível depois, é irreversível na hora, e foi o que o Dre viu nas
+    # promos da Alana ("falta de respeito"). Regra ausente = não posto.
+    try:
+        from shared.termos import conteudo_adulto
+    except Exception as e:
+        _log(f"❌ sem a regra de conteúdo adulto ({str(e)[:60]}) — "
+             f"não posto nada nesta rodada.")
+        return 1
+
     # candidatos: tem link, tem foto (grupo sem foto fica feio), e ainda não postado.
     novos = [it for it in fila
              if isinstance(it, dict) and it.get("link") and it.get("imagem")
              and it["link"] not in ja]
+    _barrados = []
+    for it in novos:
+        veta, motivo = conteudo_adulto(
+            str(it.get("campeao") or it.get("produto") or ""),
+            it.get("descricao", ""), it.get("categoria", ""))
+        if veta:
+            _barrados.append((motivo, str(it.get("campeao")
+                                          or it.get("produto") or "")))
+    if _barrados:
+        _proibidos = {n for _m, n in _barrados}
+        novos = [it for it in novos
+                 if str(it.get("campeao") or it.get("produto") or "")
+                 not in _proibidos]
+        for motivo, nome in _barrados:
+            _log(f"   🔞 barrado ({motivo}): {nome[:60]}")
     antes = len(novos)
     novos = [it for it in novos
              if not nome_de_produto_ruim(str(it.get("campeao")

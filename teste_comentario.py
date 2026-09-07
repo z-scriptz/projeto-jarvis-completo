@@ -31,6 +31,23 @@ sys.path.insert(0, str(BASE))
 
 import comentarios                                     # noqa: E402
 
+
+def _fonte_uploader() -> str:
+    """O código do meta_uploader, esteja ele na raiz ou em `agents/`.
+
+    ⚠️ ISTO ESTOUROU NA VPS E A CULPA É DO PRÓPRIO ROADMAP TER AVISADO.
+    Eu li o arquivo em `BASE / "meta_uploader.py"` — verdade no repo, que é
+    achatado, e MENTIRA na VPS, onde ele mora em `agents/meta_uploader.py`.
+    O teste morreu com FileNotFoundError bem na seção que existe pra provar que
+    a fiação está certa, ou seja: o único teste que perguntava "o uploader chama
+    o módulo?" não conseguia nem abrir o uploader. Caminho fixo é a mesma
+    armadilha do deploy no destino errado, agora dentro do teste.
+    """
+    for cand in (BASE / "meta_uploader.py", BASE / "agents" / "meta_uploader.py"):
+        if cand.exists():
+            return cand.read_text("utf-8")
+    raise SystemExit("❌ não achei meta_uploader.py nem na raiz nem em agents/")
+
 # memória de mentira: o teste não pode sujar a rotação de produção
 comentarios.MEMORIA = Path(tempfile.gettempdir()) / "teste_coment_memoria.json"
 try:
@@ -96,7 +113,7 @@ checa("com link, a frase do FB carrega o link",
 print("\n── ⚠️ A FIAÇÃO: o meta_uploader realmente chama o módulo? ──")
 # Isto é o que faltou em 02/09. Não importo o meta_uploader (ele puxa requests
 # e token da Meta); leio a árvore, que é suficiente pra responder a pergunta.
-_arv = ast.parse((BASE / "meta_uploader.py").read_text("utf-8"))
+_arv = ast.parse(_fonte_uploader())
 _fn = next((n for n in ast.walk(_arv)
             if isinstance(n, ast.FunctionDef) and n.name == "_montar_comentario"), None)
 checa("_montar_comentario existe", _fn is not None)
@@ -119,7 +136,6 @@ checa("exatamente 1 chamada passa formato='carrossel'", len(_carr) == 1,
       f"achei {len(_carr)}")
 
 print("\n── a rede de segurança não pode ressuscitar a frase vetada ──")
-_src = (BASE / "meta_uploader.py").read_text("utf-8")
 _tmpl = [n for n in ast.walk(_arv)
          if isinstance(n, ast.Assign)
          and any(getattr(t, "id", "").startswith("_TMPL_") for t in n.targets)]

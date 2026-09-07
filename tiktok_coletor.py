@@ -1722,6 +1722,28 @@ def main():
                     shutil.rmtree(pasta, ignore_errors=True)
                 continue
 
+            # ⚠️ +18 NÃO ENTRA NA ESTEIRA (07/09/2026). O Dre viu um masturbador
+            # nas promos da Alana: *"não quero que nada disso seja postado no
+            # meu grupo"*. Os dois postadores de grupo já barram — mas barrar só
+            # na saída deixa o pacote ser BAIXADO, RENDERIZADO (~10 min) e ficar
+            # meses na fila esperando alguém tropeçar nele. E a esteira do vídeo
+            # não termina no grupo: ela termina nas SEIS CONTAS do Instagram,
+            # onde um item desses não é constrangimento, é a conta.
+            # Aqui é o funil inteiro, então é aqui que sai mais barato.
+            try:
+                from shared.termos import conteudo_adulto as _adulto18
+                _v18, _m18 = _adulto18(produto_nome, meta.get("descricao", ""),
+                                       termo)
+            except Exception as _e18:
+                # regra ausente = não colhe. Mesmo raciocínio dos postadores:
+                # rodada vazia se recupera amanhã, produto desses na fila não.
+                _v18, _m18 = True, f"regra indisponível ({str(_e18)[:40]})"
+            if _v18:
+                _log(f"     🔞 '{produto_nome[:40]}' barrado ({_m18}) — não entra")
+                if arq_pre:
+                    shutil.rmtree(pasta, ignore_errors=True)
+                continue
+
             # dedup por PRODUTO: o mesmo item não entra 2x (dentro de DEDUP_DIAS)
             chave_prod = _norm_produto(produto_nome)
             if _produto_repetido(chave_prod, produtos_vistos):
