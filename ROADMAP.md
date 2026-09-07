@@ -642,8 +642,50 @@ Segundo achado do mesmo dump: **15 de 15 hooks são a MESMA FRASE** — "[eu]
 `aberturas_gastas` (06/09) pega abertura literal repetida, não FORMA repetida.
 Quem vê dois Reels nossos vê o mesmo post duas vezes.
 
+### ⚠️ O `--olho` mediu 38%, e eu estava errado sobre QUAL estágio quebra
+
+60 pacotes, o Gemini assistindo o vídeo contra o nome do produto: **23 não
+casam — 38%**. O censo grátis tinha dito 2,4%, e eu já sabia que ele media
+outra coisa. O que eu **não** sabia é qual estágio era o culpado.
+
+**Eu disse que era o TERMO. A maioria é a LOJA.** Lendo os 23 um a um:
+
+| termo buscado | produto que a loja devolveu | o vídeo mostra |
+|---|---|---|
+| suporte de celular portátil | Antena Digital de TV **com Suporte** | suporte de celular |
+| Filme anti-poeira | **Filme** de Vidro Temperado Anti-Espião | filme protetor de pintura |
+| Descascador e fatiador de maçãs | **Cortador** de Maçã Descaroçador | descascador |
+| Mamadeira prática | Escorredor de Copos … **Mamadeiras** | mamadeiras |
+| régua de tomada USB | Extensão 10 Tomadas 4 USB 2 tipo-C | extensão menor, sem USB-C |
+| Capa MagSafe | Capa Magnética MagSafe **de Couro** | capa metálica |
+
+~15 dos 23 são isto: **o termo descreve o vídeo corretamente, e a Shopee
+devolve um produto que compartilha PALAVRA mas não é a coisa.** "Suporte"
+casou; antena de TV não é suporte de celular.
+
+📌 E é por isso que o `parentesco` não enxerga: esses produtos casam de propósito
+— foi o compartilhamento de palavra que os fez ser escolhidos. A peneira mede
+exatamente o sinal que o defeito usa pra passar.
+
+Os outros ~6 são TERMO, e um deles mostra um furo meu: **`"hagas esto"`**
+(de `"No hagas esto #tipsdetecnologia"`) virou nome de produto. O
+`parece_gringo` e o `_termo_gringo` do coletor são listas de inglês —
+**espanhol passa pelos dois**.
+
+E dois pacotes diferentes carregam a MESMA legenda em japonês sobre o BTS
+(`今夜、BTSのV（@thv）…`) com vídeos de tapete e de mamadeira. Legenda que não é
+do vídeo — não é bug do laço (`meta = _metadados(url)` é por URL, e o `id` sai
+do mesmo dicionário), então é a fonte que devolve descrição errada. Investigar.
+
+**O conserto que os três casos apontam:** o `conferir_match.py` já julga FOTO do
+produto × FOTO do produto e foi validado (87% embaralhado vs 53% real, z≈5,4).
+Ele não roda no caminho do coletor. É a máquina certa no lugar errado.
+
 ### Pendências abertas
 - ✅ 41 vídeos com áudio restaurado (8 sem origem ficam com trilha repetida)
+- ⏳ **38% dos vídeos não são do produto anunciado** — maioria é a busca da loja
+- ⏳ `parece_gringo` / `_termo_gringo` não pegam espanhol
+- ⏳ legenda japonesa em 2 pacotes com vídeo de outro assunto — fonte suspeita
 - ⏳ pôr 8+ faixas em `assets/inbox/audio/` (3 hoje; `PISO_TRILHAS_LOTE=8` trava lote)
 - ⏳ tirar `Beautifully Stranded (Reels Sound...).mp4` do banco de trilhas (tem voz falada)
 - ⏳ **o match pelo vídeo, não pela legenda** — a causa dos 20%
