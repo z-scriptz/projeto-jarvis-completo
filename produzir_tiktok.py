@@ -289,6 +289,11 @@ _PROMPT_VOZ = (
 )
 
 
+def _sem_acento_maiusc(s: str) -> str:
+    return (s or "").strip().upper().translate(str.maketrans(
+        "ÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇ", "AAAAAEEEEIIIIOOOOOUUUUC"))
+
+
 def _audio_amostra(video: Path, seg: int = 25) -> bytes:
     """Os primeiros `seg` segundos do áudio, mono e leve, pra mandar pro modelo."""
     f = video.with_suffix(".voz.mp3")
@@ -340,14 +345,26 @@ def tem_voz(audio: bytes) -> tuple:
                       _PROMPT_VOZ])
         bruto = (r.text or "").strip()
         cabeca, _, motivo = bruto.partition("|")
-        t = cabeca.strip().upper()
-        motivo = " ".join(motivo.split())[:60]
+        t = _sem_acento_maiusc(cabeca)
+        motivo = " ".join(motivo.split())[:60] or " ".join(bruto.split())[:60]
         u = getattr(r, "usage_metadata", None)
         toks = int(getattr(u, "total_token_count", 0) or 0) if u else 0
         if t.startswith("VOZ"):
             return "voz", toks, motivo
-        if t.startswith("MUSICA") or t.startswith("MÚSICA"):
+        if t.startswith("MUSICA"):
             return "musica", toks, motivo
+        # ⚠️ O MODELO ACERTA E ESCREVE DIFERENTE (06/09/2026). Um vídeo sem voz
+        # nenhuma voltou como "NÃO HÁ FALA | Não há vozes, apenas ruído": o
+        # veredito estava CERTO, o formato é que não era o meu. Caía em 'erro',
+        # e 'erro' TROCA o áudio — eu arrancaria a trilha de um vídeo que não
+        # tinha voz alguma, que é o defeito exato que este detector veio evitar.
+        #
+        # Negação de fala é MUSICA. Isto é leitura de sinônimo, não adivinhação:
+        # só aceito frases que digam explicitamente que NÃO há voz.
+        for neg in ("NAO HA FALA", "NAO HA VOZ", "NAO HA VOZES", "SEM FALA",
+                    "SEM VOZ", "NENHUMA VOZ", "NINGUEM FALA", "NAO HA NINGUEM"):
+            if neg in t or neg in _sem_acento_maiusc(bruto):
+                return "musica", toks, motivo
         return "erro", toks, f"resposta estranha: {bruto[:40]}"
     except Exception as e:
         _log(f"      ⚠️ detector de voz: {str(e)[:70]}")

@@ -111,7 +111,25 @@ def main() -> int:
             falhas += 1
             continue
         if r.returncode == 0 and saida.exists() and saida.stat().st_size > 10000:
+            # ⚠️ GUARDA O RELÓGIO DA PASTA ANTES DE TROCAR (06/09/2026). O
+            # `_vencido` do daemon mede a idade pelo mtime da PASTA, e trocar um
+            # arquivo dentro dela zera esse mtime — medido: pasta de 40 dias
+            # virava de 0. Rodar isto na fila REJUVENESCERIA os vídeos que
+            # tocasse (só os ~23% com voz), criando idades falsas e misturadas.
+            #
+            # Ferramenta de conserto não pode mexer no relógio de validade: ela
+            # conserta o áudio, e a fila continua com as idades que tinha.
+            try:
+                _st = v.parent.stat()
+                _relogio = (_st.st_atime, _st.st_mtime)
+            except Exception:
+                _relogio = None
             saida.replace(v)          # só troca DEPOIS de dar certo
+            if _relogio:
+                try:
+                    os.utime(v.parent, _relogio)
+                except Exception:
+                    pass
             trocados += 1
             print(f"      🎵 áudio trocado por '{musica.name[:40]}'")
         else:
