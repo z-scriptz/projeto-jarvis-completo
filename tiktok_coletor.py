@@ -99,6 +99,21 @@ def _amazon_ativo() -> bool:
             and bool(os.getenv("AMAZON_TAG", "").strip()))
 
 
+def reprova_match(veredito: str) -> bool:
+    """O veredito do juiz de imagem manda DESCARTAR o pacote? Pura, testável.
+
+    ⚠️ SÓ 'nao' DESCARTA, e a assimetria é o ponto (07/09/2026). O prompt do
+    `conferir_match` manda responder TALVEZ na dúvida — então TALVEZ é comum, e
+    descartar nele mataria a oferta por incerteza do JUIZ em vez de por defeito
+    do PACOTE. 'erro' idem: API que piscou não é evidência de nada.
+
+    📌 Isto é uma função com nome de propósito. A regra estava numa linha solta
+    dentro de um laço de 300 linhas, onde ninguém consegue testá-la nem
+    encontrá-la — e é a linha que decide se metade da coleta some.
+    """
+    return (veredito or "").strip().lower() == "nao"
+
+
 def _termo_gringo(termo: str) -> bool:
     """O termo é legenda em inglês/espanhol em vez de nome de produto?
 
@@ -1532,6 +1547,10 @@ def main():
     vistos = _carregar_vistos()
     produtos_vistos = _carregar_produtos_vistos()
     achados = 0
+    # quantos o juiz de imagem barrou nesta rodada — sem este contador o corte
+    # de ~38% aparece só como "coletou menos hoje", que é indistinguível de
+    # fonte fraca ou de rede ruim
+    barrados_match = 0
     keepers = defaultdict(int)     # vídeos aproveitados por fonte (p/ poda por coleta)
     for perfil, fonte, nicho_fonte in perfis:
         _log(f"perfil {perfil} [{fonte}{'/' + nicho_fonte if nicho_fonte else ''}] …")
@@ -1768,6 +1787,67 @@ def main():
                 _log("     🚫 marca d'água detectada — descarto (não credita terceiro)")
                 shutil.rmtree(pasta, ignore_errors=True)
                 continue
+            # ══════════════════════════════════════════════════════════════
+            # O VÍDEO MOSTRA O PRODUTO DO LINK? (07/09/2026)
+            #
+            # ⚠️ MEDIDO, NÃO SUPOSTO: 60 pacotes com o Gemini assistindo o vídeo
+            # contra o nome do produto deram **23 que não casam — 38%**. E a
+            # maioria não é termo errado: é a busca da loja devolvendo produto
+            # que compartilha PALAVRA mas não é a coisa —
+            #   'suporte de celular portátil' → *Antena Digital de TV com Suporte*
+            #   'Descascador de maçãs'        → *Cortador de Maçã Descaroçador*
+            #   'Mamadeira prática'           → *Escorredor de Copos … Mamadeiras*
+            #
+            # 📌 POR QUE ISSO NÃO É DETALHE: o hook é escrito a partir do NOME DO
+            # PRODUTO. Produto errado ⇒ a frase na tela promete uma coisa e a
+            # imagem mostra outra, em 38% dos Reels. Numa conta que vive de quem
+            # NÃO segue, isso é passar direto garantido.
+            #
+            # ⚠️ A MÁQUINA JÁ EXISTIA E ESTAVA NO LUGAR ERRADO. O
+            # `conferir_match` julga foto×foto e foi VALIDADO com controle
+            # negativo (87% reprovado no embaralhado vs 53% no real, z≈5,4,
+            # p<1e-7). Ele só rodava como auditoria, depois do estrago. Aqui ele
+            # decide. É importado, nunca copiado — duas cópias do juiz seriam
+            # dois juízes, e um deles desatualizado sem ninguém saber.
+            #
+            # ONDE: depois do download (preciso de um frame) e ANTES do
+            # `plano.json`. O download custa segundos; o render custa ~10 min.
+            # É o ponto mais tarde que ainda evita o caro.
+            #
+            # ⚠️ SÓ 'NAO' DESCARTA. O prompt manda responder TALVEZ na dúvida, e
+            # descartar TALVEZ mataria a oferta por incerteza do juiz em vez de
+            # por defeito do pacote.
+            #
+            # ⚠️ E AQUI A FALHA É PARA O LADO OPOSTO DO FILTRO +18: juiz
+            # indisponível DEIXA PASSAR. São riscos de naturezas diferentes —
+            # +18 no grupo do cliente é irreversível; match ruim é post fraco,
+            # que já é o normal de hoje. Travar a coleta inteira porque a API do
+            # Gemini piscou seria trocar um defeito por um pior.
+            _match = "sem_foto"
+            if os.getenv("MATCH_NO_COLETOR", "1").strip().lower() in ("1", "true", "sim"):
+                if not imagem:
+                    # Amazon entra por busca, sem foto de produto: nada a comparar
+                    _log("     ⚖️  sem foto da loja — não dá pra julgar o match")
+                else:
+                    try:
+                        from conferir_match import conferir as _juiz
+                        from conferir_match import _frame as _frame_do_video
+                        from conferir_match import _baixar_imagem as _foto_da_loja
+                        _fr = _frame_do_video(arq, float(meta.get("duracao") or 0))
+                        _ft = _foto_da_loja(imagem)
+                        _match, _tk = _juiz(_fr, _ft)
+                        if reprova_match(_match):
+                            barrados_match += 1
+                            _log(f"     ⚖️  DESCARTO: o vídeo não mostra "
+                                 f"'{produto_nome[:38]}' (juiz: não casa)")
+                            shutil.rmtree(pasta, ignore_errors=True)
+                            continue
+                        _log(f"     ⚖️  match: {_match}")
+                    except Exception as _ej:
+                        _match = "erro"
+                        _log(f"     ⚖️  juiz indisponível ({str(_ej)[:50]}) — "
+                             f"deixo passar")
+
             # onde a AÇÃO começa. Medido aqui (o vídeo cru está na mão e o
             # ffmpeg é barato) e APLICADO no render — assim o número fica
             # gravado no plano.json e dá pra auditar/sobrescrever depois.
@@ -1780,6 +1860,11 @@ def main():
                 "url": meta["url"], "uploader": meta["uploader"],
                 "views": meta["views"], "descricao": meta["descricao"],
                 "termo": termo, "termo_por": termo_por, "produto": produto_nome,
+                # veredito do juiz de imagem: sim | talvez | erro | sem_foto
+                # ('nao' nunca chega aqui — foi descartado acima). Gravado pelo
+                # mesmo motivo do `termo_por`: sem registro, auditar depois vira
+                # reprocessar tudo pra descobrir o que já tinha acontecido.
+                "match_video": _match,
                 "link_afiliado": link, "imagem": imagem,
                 "origem_url": origem,      # URL original → produzir re-etiqueta por canal
                 "comissao_valor": comissao,
@@ -1809,6 +1894,12 @@ def main():
              "Instagram vieram da legenda (que é hook) e saem tortos de "
              "propósito. Numa rodada real a visão nomeia ou descarta. Use o "
              "--dry pra ver VIEWS e FONTES, não pra julgar nome de produto.")
+    if barrados_match:
+        _tot = achados + barrados_match
+        _log(f"⚖️  {barrados_match} de {_tot} ({barrados_match/_tot*100:.0f}%) "
+             f"descartados: o vídeo não mostrava o produto do link")
+        _log(f"   (medido em 07/09 sem o juiz: 38% da fila estava assim. "
+             f"Desligue com MATCH_NO_COLETOR=0 se a oferta secar.)")
     _log(f"fim. {achados} produto(s) casado(s) na Shopee "
          f"{'(dry — nada baixado, cache intacto)' if dry else ''}")
     return 0
