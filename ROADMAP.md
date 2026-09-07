@@ -681,9 +681,36 @@ do mesmo dicionário), então é a fonte que devolve descrição errada. Investi
 produto × FOTO do produto e foi validado (87% embaralhado vs 53% real, z≈5,4).
 Ele não roda no caminho do coletor. É a máquina certa no lugar errado.
 
+### ⚠️ OS CARROSSÉIS ESTÃO MORTOS: 53 posts, 120 pessoas no total
+
+Puxei `media_type` + `media_reach` por post (14 dias, 165 posts):
+
+| tipo | posts | alcance mediano | máximo | alcance total |
+|---|---:|---:|---:|---:|
+| REELS | 112 | ~130 | 2.839 | dezenas de milhares |
+| CAROUSEL_ALBUM (FEED) | **53** | **2** | **6** | **120** |
+
+**32% da produção entrega 120 pessoas somadas.** Nenhum carrossel, em nenhuma
+das seis contas, em 14 dias, passou de 6 pessoas.
+
+O mecanismo é conhecido e não é castigo: post de FEED só alcança SEGUIDOR. Com
+9 a 54 seguidores, alcançar 1 a 4 pessoas é exatamente o esperado. Reel é
+empurrado pra quem não segue — por isso 130 de mediana e picos de 2.839.
+**Enquanto não houver seguidor, feed não tem público.** Carrossel só passa a
+valer depois da meta dos 1.000, não antes.
+
+⚠️ **E ISSO QUASE VIROU UMA CONCLUSÃO ERRADA MINHA.** Olhando só legenda ×
+alcance, os posts que começam com *"Pouca gente imagina que…"* tinham mediana
+132 e os de *"Gente, eu juro…"* tinham 2 — 66x. Eu ia dizer que o Instagram
+estava punindo legenda vendedora. Era confusão de variável: os de mediana 2 são
+os CARROSSÉIS, e os de 132 são os REELS. A legenda não tinha nada a ver.
+Puxei `media_type` antes de falar porque `watch_time = 0.0s` nos piores não
+fechava com "Reel ruim" — e não fechava mesmo.
+
 ### Pendências abertas
 - ✅ 41 vídeos com áudio restaurado (8 sem origem ficam com trilha repetida)
 - ⏳ **38% dos vídeos não são do produto anunciado** — maioria é a busca da loja
+- ⏳ carrossel não rende nada antes dos 1.000 seguidores — não contar com ele
 - ⏳ `parece_gringo` / `_termo_gringo` não pegam espanhol
 - ⏳ legenda japonesa em 2 pacotes com vídeo de outro assunto — fonte suspeita
 - ⏳ pôr 8+ faixas em `assets/inbox/audio/` (3 hoje; `PISO_TRILHAS_LOTE=8` trava lote)
