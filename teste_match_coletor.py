@@ -106,6 +106,24 @@ for nome in ("conferir", "_frame", "_frames", "_baixar_imagem"):
 checa("o coletor não tem uma cópia do prompt do juiz",
       "_PROMPT" not in _src or "Duas imagens" not in _src)
 
+print("\n── ⚠️ A FILA DE POSTAGEM TEM PONTO CEGO ──")
+# 138 de 349 videos em pronto_para_postar nao casam com pacote nenhum (a
+# origem foi podada). Sem plano.json, nenhum modo do auditor os alcanca -- e
+# sao 40% do que ainda vai ao ar.
+checa("existe o modo --fila", '"--fila"' in _cm_src)
+checa("o --fila le o engajamento.json (o que sobra na pasta pronta)",
+      "engajamento.json" in _cm_src)
+checa("na fila o juiz e o do NOME (nao ha foto da loja)",
+      "a.sem_foto = True" in _cm_src)
+# ⚠️ tirar por CAMINHO, nao por slug: na fila a pasta ja esta na mao, e
+# recalcular o slug seria inventar uma chance de errar onde nao ha duvida
+checa("na fila tira a pasta por caminho (_tirar_pasta)",
+      "_tirar_pasta(pj.parent)" in _cm_src)
+checa("so 'nao' tira da fila (erro/talvez nao tiram)",
+      'veredito == "nao"' in _cm_src)
+checa("move pra fora de pronto_para_postar",
+      'REPROVADOS = BASE_DIR / "reprovado_match"' in _cm_src)
+
 print("\n── ⚠️ FONTE MORTA vs TIKTOK ME BLOQUEOU ──")
 # a poda por coleta apaga quem volta 0 video. Se bloqueio entrasse por esse
 # caminho, apagaria as 42 melhores fontes do Dre com o log dizendo "zumbi".

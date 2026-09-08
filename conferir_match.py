@@ -165,6 +165,22 @@ def _slug_do_produto(nome: str) -> str:
         return ""
 
 
+def _tirar_pasta(pasta: Path) -> int:
+    """Move uma pasta de `pronto_para_postar` pra quarentena. 1 se moveu."""
+    if not pasta.is_dir():
+        return 0
+    REPROVADOS.mkdir(parents=True, exist_ok=True)
+    destino = REPROVADOS / pasta.name
+    try:
+        if destino.exists():
+            return 0
+        pasta.rename(destino)
+        return 1
+    except Exception as e:
+        print(f"      ⚠️ não consegui tirar '{pasta.name[:40]}': {str(e)[:60]}")
+        return 0
+
+
 def _tirar_da_fila(produto: str) -> int:
     """Tira de `pronto_para_postar` o vídeo deste produto. 1 se tirou, 0 se não.
 
@@ -376,6 +392,12 @@ def conferir(frame, foto: bytes) -> tuple:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="o vídeo mostra o produto do link?")
+    ap.add_argument("--fila", action="store_true",
+                    help="audita pronto_para_postar/ DIRETO, pelo "
+                         "engajamento.json. É o único jeito de alcançar os "
+                         "vídeos cujo pacote de origem foi podado — 138 de 349 "
+                         "na medição de 08/09. Julga pelo NOME (a pasta pronta "
+                         "não guarda a foto da loja).")
     ap.add_argument("--tirar-marcados", action="store_true",
                     dest="tirar_marcados",
                     help="NÃO julga nada: varre os pacotes que JÁ têm "
@@ -447,14 +469,52 @@ def main() -> int:
     if not os.getenv("GEMINI_API_KEY"):
         print("❌ GEMINI_API_KEY vazio — abortando antes de gastar tempo")
         return 1
-    if not INBOX.exists():
+    if not a.fila and not INBOX.exists():
         print(f"❌ {INBOX} não existe")
         return 1
+    if a.fila and not PRONTOS.exists():
+        print(f"❌ {PRONTOS} não existe")
+        return 1
+
+    # ⚠️ 138 DE 349 VÍDEOS DA FILA SÃO INVISÍVEIS PRO AUDITOR (08/09/2026).
+    # Medido: das 349 pastas em `pronto_para_postar`, 138 não casam com pacote
+    # nenhum — a origem foi podada de `_produzidos`. Sem plano.json elas não
+    # entram por nenhum caminho acima, e são 40% do que ainda vai ao ar.
+    #
+    # O que sobra na pasta pronta é o `engajamento.json`, que tem o NOME do
+    # produto. Então aqui o juiz é o do NOME (mais fraco que imagem×imagem, e
+    # por isso passa pelo MESMO controle negativo antes de tirar da fila).
+    if a.fila:
+        a.sem_foto = True               # não há foto da loja na pasta pronta
+        alvos = []
+        for pasta in sorted(PRONTOS.iterdir()) if PRONTOS.exists() else []:
+            if not pasta.is_dir():
+                continue
+            ej = pasta / "engajamento.json"
+            vids = [v for v in pasta.glob("video.*")
+                    if v.suffix.lower() in (".mp4", ".mov", ".m4v")]
+            if not ej.exists() or not vids:
+                continue
+            try:
+                info = json.loads(ej.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if not (info.get("produto") or "").strip():
+                continue
+            if info.get("nao_e_produto"):   # já reprovado numa rodada anterior
+                continue
+            alvos.append((ej, info, vids[0]))
+        print(f"📦 {len(alvos)} vídeo(s) NA FILA DE POSTAGEM "
+              f"(julgados pelo NOME do produto)\n")
+        if not alvos:
+            print("✅ nada a conferir")
+            return 0
 
     # só o que dá pra conferir: precisa de vídeo E de foto da loja.
     # Pacote de Amazon não tem foto (o link é busca), então fica de fora — e
     # isso é metade do inbox. Dizer "confere tudo" seria mentira.
-    alvos = []
+    if not a.fila:
+        alvos = []
     sem_foto = 0
     # ⚠️ SÓ A INBOX NÃO BASTA MAIS (08/09/2026). O Dre rodou o --controle com
     # 50 conferíveis, achou 18 com link errado (45%), e quando foi marcar
@@ -464,10 +524,10 @@ def main() -> int:
     _raizes = [INBOX]
     if a.produzidos:
         _raizes.append(INBOX / "_produzidos")
-    _planos = []
-    for _r in _raizes:
+    _planos = [] if a.fila else None
+    for _r in ([] if a.fila else _raizes):
         _planos.extend(sorted(_r.glob("*/plano.json")))
-    for pj in _planos:
+    for pj in (_planos or []):
         try:
             info = json.loads(pj.read_text(encoding="utf-8"))
         except Exception:
@@ -486,7 +546,9 @@ def main() -> int:
             continue
         alvos.append((pj, info, vids[0]))
 
-    if a.sem_foto:
+    if a.fila:
+        pass                            # já imprimiu o próprio cabeçalho
+    elif a.sem_foto:
         print(f"📦 {len(alvos)} pacote(s) SEM foto de loja (confere pelo NOME) "
               f"· {sem_foto} fora deste modo\n")
     else:
@@ -577,16 +639,22 @@ def main() -> int:
         # MOVE, NÃO APAGA, e move pra FORA de `pronto_para_postar` — o daemon
         # itera a pasta inteira, então uma subpasta `_reprovado` ali dentro
         # continuaria no caminho dele.
-        if a.marcar and a.tirar_da_fila and veredito == "nao":
-            _tirados += _tirar_da_fila(info.get("produto") or "")
+        if a.marcar and veredito == "nao":
+            # ⚠️ NA FILA A PASTA JÁ ESTÁ NA MÃO: tiro por caminho, não por slug.
+            # Recalcular o slug aqui seria inventar uma chance de errar num
+            # lugar onde não existe dúvida.
+            if a.fila:
+                _tirados += _tirar_pasta(pj.parent)
+            elif a.tirar_da_fila:
+                _tirados += _tirar_da_fila(info.get("produto") or "")
 
     seg = time.time() - t0
     n = len(alvos)
     print(f"\n── resultado ──")
-    if a.marcar and a.tirar_da_fila:
+    if a.marcar and (a.tirar_da_fila or a.fila):
         print(f"   🚫 {_tirados} vídeo(s) TIRADOS de pronto_para_postar/ "
               f"→ reprovado_match/  (reversível: é só mover de volta)")
-    elif a.marcar:
+    elif a.marcar and not a.fila:
         # ⚠️ dizer o que a marca NÃO faz é parte de não mentir sobre ela
         print(f"   ⚠️ os marcados que JÁ viraram vídeo continuam em "
               f"pronto_para_postar/ e o daemon vai postar — a marca só impede "
