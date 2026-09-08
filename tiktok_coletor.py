@@ -1763,6 +1763,38 @@ def main():
                 if arq_pre:
                     shutil.rmtree(pasta, ignore_errors=True)
                 continue
+            # ⚠️ O TERMO É NOME DE PRODUTO, OU PEDAÇO DE LEGENDA? (08/09/2026)
+            # Depois do juiz de imagem limpar a fila sobrou isto, tudo com ✅:
+            #   'salva não perder nenhum' · 'Valem cada centavoo' ·
+            #   'Facilitam dia dia' · 'assim aguentar frio'
+            # A `_termo_heuristico` corta a 1ª frase da legenda e devolve as
+            # cinco palavras que sobram; nas fontes brasileiras a legenda é
+            # conversa, não nome de coisa.
+            #
+            # O juiz de IMAGEM não pega isso: a pergunta dele é "o vídeo mostra
+            # ISTO?", e "o vídeo mostra 'salva não perder nenhum'?" não tem
+            # resposta — o modelo chuta SIM. A pergunta certa é sobre o TEXTO.
+            #
+            # AQUI, e não depois: é antes da busca na loja e antes do download.
+            # Termo que não é produto não tem o que procurar em loja nenhuma.
+            #
+            # ⚠️ NA DÚVIDA PASSA. Só 'frase' barra; erro de API, formato
+            # estranho e ausência da chave deixam seguir. O erro caro deste
+            # portão é o silencioso — reprovar produto bom em toda coleta seca
+            # a fila sem ninguém ver. Ver `nome_e_produto._controle`.
+            if os.getenv("JUIZ_NOME", "1").strip().lower() in ("1", "true", "sim"):
+                try:
+                    from nome_e_produto import julgar as _jn, bloqueia as _bn
+                    _vn, _ = _jn(termo)
+                    if _bn(_vn):
+                        _log(f"   • '{termo[:44]}' não é nome de produto "
+                             f"(é pedaço de legenda) — pulo")
+                        if arq_pre:
+                            shutil.rmtree(pasta, ignore_errors=True)
+                        continue
+                except Exception as _ejn:
+                    _log(f"     (juiz de nome off: {str(_ejn)[:50]})")
+
             _log(f"   • {meta['views']:,} views | produto: '{termo}'")
 
             m = minerar_oportunidades(termo)
