@@ -144,6 +144,56 @@ def _duracao(video: Path) -> float:
         return 0.0
 
 
+PRONTOS = BASE_DIR / "pronto_para_postar"
+REPROVADOS = BASE_DIR / "reprovado_match"
+
+
+def _slug_do_produto(nome: str) -> str:
+    """O nome da pasta em `pronto_para_postar` pra este produto.
+
+    Usa o MESMO `_slugify` do renderizador — importado, não reescrito. Slug
+    calculado por outra régua acha pasta nenhuma, e o sintoma seria "não tinha
+    vídeo na fila", que é indistinguível de ter dado certo.
+    """
+    try:
+        import sys as _sys
+        if str(BASE_DIR) not in _sys.path:
+            _sys.path.insert(0, str(BASE_DIR))
+        import produzir_tiktok as _PT
+        return _PT.H._slugify(nome or "")
+    except Exception:
+        return ""
+
+
+def _tirar_da_fila(produto: str) -> int:
+    """Tira de `pronto_para_postar` o vídeo deste produto. 1 se tirou, 0 se não.
+
+    ⚠️ MOVE, NÃO APAGA — mesma regra do `--marcar`: veredito de modelo tem que
+    ser reversível. Volta com um `mv` de `reprovado_match/<slug>` de volta.
+
+    ⚠️ E MOVE PRA FORA DE `pronto_para_postar`. O daemon varre
+    `PRONTO_DIR.iterdir()` inteiro; uma subpasta de quarentena ali dentro
+    continuaria no caminho dele, e a "quarentena" seria só um nome novo pra
+    mesma fila.
+    """
+    slug = _slug_do_produto(produto)
+    if not slug:
+        return 0
+    origem = PRONTOS / slug
+    if not origem.is_dir():
+        return 0
+    REPROVADOS.mkdir(parents=True, exist_ok=True)
+    destino = REPROVADOS / slug
+    try:
+        if destino.exists():
+            return 0            # já tirado numa rodada anterior
+        origem.rename(destino)
+        return 1
+    except Exception as e:
+        print(f"      ⚠️ não consegui tirar '{slug[:40]}' da fila: {str(e)[:60]}")
+        return 0
+
+
 def _contato(pares, destino: Path) -> Path:
     """Uma folha com os pares lado a lado: vídeo à esquerda, loja à direita.
 
@@ -326,6 +376,17 @@ def conferir(frame, foto: bytes) -> tuple:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="o vídeo mostra o produto do link?")
+    ap.add_argument("--tirar-marcados", action="store_true",
+                    dest="tirar_marcados",
+                    help="NÃO julga nada: varre os pacotes que JÁ têm "
+                         "'nao_e_produto' e tira os vídeos deles de "
+                         "pronto_para_postar/. Grátis, sem chamar a API.")
+    ap.add_argument("--tirar-da-fila", action="store_true",
+                    dest="tirar_da_fila",
+                    help="além de marcar o plano.json, MOVE a pasta "
+                         "correspondente de pronto_para_postar/ pra "
+                         "reprovado_match/ — é o único jeito de o daemon não "
+                         "postar um vídeo que já foi renderizado")
     ap.add_argument("--produzidos", action="store_true",
                     help="também audita inbox_tiktok/_produzidos (o que já "
                          "virou vídeo e está esperando na fila de postagem)")
@@ -355,6 +416,34 @@ def main() -> int:
 
     arq = _carregar_env()
     print(f"📄 .env: {arq or '(não achei — vai falhar)'}")
+    # ⚠️ ANTES DE QUALQUER COISA QUE CUSTE. Os 173 pacotes reprovados na rodada
+    # de 08/09 JÁ estão marcados no plano.json — rejulgar tudo pra tirá-los da
+    # fila custaria R$1 e 45 min pra reproduzir um veredito que já está gravado.
+    # Este caminho lê a marca e age; não chama o Gemini uma vez sequer.
+    if a.tirar_marcados:
+        _raizes = [INBOX, INBOX / "_produzidos"]
+        vistos, tirados, sem_video = 0, 0, 0
+        for _r in _raizes:
+            if not _r.exists():
+                continue
+            for pj in sorted(_r.glob("*/plano.json")):
+                try:
+                    info = json.loads(pj.read_text(encoding="utf-8"))
+                except Exception:
+                    continue
+                if not info.get("nao_e_produto"):
+                    continue
+                vistos += 1
+                n = _tirar_da_fila(info.get("produto") or "")
+                tirados += n
+                if not n:
+                    sem_video += 1
+        print(f"\n🚫 {vistos} pacote(s) marcados como 'não é o produto'")
+        print(f"   {tirados} tirado(s) de pronto_para_postar/ → reprovado_match/")
+        print(f"   {sem_video} sem vídeo na fila (nunca renderizou, ou já saiu)")
+        print(f"\n   reversível: mv reprovado_match/<pasta> pronto_para_postar/")
+        return 0
+
     if not os.getenv("GEMINI_API_KEY"):
         print("❌ GEMINI_API_KEY vazio — abortando antes de gastar tempo")
         return 1
@@ -417,6 +506,7 @@ def main() -> int:
     t0 = time.time()
     tot = {"sim": 0, "nao": 0, "talvez": 0, "erro": 0}
     tokens = 0
+    _tirados = 0
     reprovados = []
     provas = []
     # (nome, QUADROS, foto) — só usado pelo --controle.
@@ -474,10 +564,33 @@ def main() -> int:
             info["match_conferido"] = veredito
             pj.write_text(json.dumps(info, ensure_ascii=False, indent=2),
                           encoding="utf-8")
+        # ⚠️ MARCAR O plano.json NÃO IMPEDE O POST DE UM VÍDEO JÁ PRONTO
+        # (08/09/2026). O `produzir_tiktok` lê `nao_e_produto` e pula — mas isso
+        # só vale pra quem AINDA VAI ser renderizado. O pacote que já virou
+        # vídeo tem a cópia em `pronto_para_postar/<slug>/`, e o daemon posta
+        # de lá varrendo `PRONTO_DIR.iterdir()` sem NUNCA abrir plano.json.
+        #
+        # Ou seja: rodar `--produzidos --marcar` bloqueava 173 pacotes e não
+        # tirava um único vídeo da fila. Quarta vez nesta semana que a marca é
+        # escrita num lugar que ninguém lê no caminho que importa.
+        #
+        # MOVE, NÃO APAGA, e move pra FORA de `pronto_para_postar` — o daemon
+        # itera a pasta inteira, então uma subpasta `_reprovado` ali dentro
+        # continuaria no caminho dele.
+        if a.marcar and a.tirar_da_fila and veredito == "nao":
+            _tirados += _tirar_da_fila(info.get("produto") or "")
 
     seg = time.time() - t0
     n = len(alvos)
     print(f"\n── resultado ──")
+    if a.marcar and a.tirar_da_fila:
+        print(f"   🚫 {_tirados} vídeo(s) TIRADOS de pronto_para_postar/ "
+              f"→ reprovado_match/  (reversível: é só mover de volta)")
+    elif a.marcar:
+        # ⚠️ dizer o que a marca NÃO faz é parte de não mentir sobre ela
+        print(f"   ⚠️ os marcados que JÁ viraram vídeo continuam em "
+              f"pronto_para_postar/ e o daemon vai postar — a marca só impede "
+              f"quem ainda ia ser renderizado. Use --tirar-da-fila.")
     print(f"   ✅ {tot['sim']} confere · ❌ {tot['nao']} ERRADO · "
           f"🤔 {tot['talvez']} incerto · ⚠️ {tot['erro']} falhou")
     print(f"   ⏱️  {seg:.0f}s ({seg/max(1,n):.1f}s por pacote)")
