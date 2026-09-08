@@ -326,6 +326,9 @@ def conferir(frame, foto: bytes) -> tuple:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="o vídeo mostra o produto do link?")
+    ap.add_argument("--produzidos", action="store_true",
+                    help="também audita inbox_tiktok/_produzidos (o que já "
+                         "virou vídeo e está esperando na fila de postagem)")
     ap.add_argument("--amostra", type=int, default=0,
                     help="confere só N pacotes sorteados e MEDE custo/acerto")
     ap.add_argument("--marcar", action="store_true",
@@ -364,7 +367,18 @@ def main() -> int:
     # isso é metade do inbox. Dizer "confere tudo" seria mentira.
     alvos = []
     sem_foto = 0
-    for pj in sorted(INBOX.glob("*/plano.json")):
+    # ⚠️ SÓ A INBOX NÃO BASTA MAIS (08/09/2026). O Dre rodou o --controle com
+    # 50 conferíveis, achou 18 com link errado (45%), e quando foi marcar
+    # sobraram ZERO: a produção tinha movido os pacotes pra `_produzidos` no
+    # meio do caminho. O auditor não alcançava justamente os que já viraram
+    # vídeo e estão na fila de postagem — os únicos que ainda vão ao ar.
+    _raizes = [INBOX]
+    if a.produzidos:
+        _raizes.append(INBOX / "_produzidos")
+    _planos = []
+    for _r in _raizes:
+        _planos.extend(sorted(_r.glob("*/plano.json")))
+    for pj in _planos:
         try:
             info = json.loads(pj.read_text(encoding="utf-8"))
         except Exception:

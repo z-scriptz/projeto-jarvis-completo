@@ -99,6 +99,31 @@ def _amazon_ativo() -> bool:
             and bool(os.getenv("AMAZON_TAG", "").strip()))
 
 
+def feed_vazio(d: dict) -> bool:
+    """O perfil RESOLVEU mas veio sem lista de vídeos? Pura, testável.
+
+    ⚠️ ISTO SEPARA "FONTE MORTA" DE "TIKTOK ME BLOQUEOU" (08/09/2026), e a
+    diferença vale as 42 melhores fontes do Dre. A poda por coleta apaga quem
+    volta 0 vídeo repetidas vezes; se um bloqueio do TikTok entrasse por esse
+    caminho, ele apagaria as fontes uma a uma com o log dizendo "zumbi".
+
+    O que o TikTok devolve hoje pra cliente sem sessão:
+        {"title": "airlandolists", "_type": "playlist",
+         "entries": [null], "playlist_count": 0}
+    Tem id e título — o perfil existe e resolveu. Não tem vídeo nenhum.
+
+    📌 `entries: [null]` é diferente de `entries: []`: o primeiro é uma vaga que
+    o extrator não conseguiu preencher, o segundo é lista vazia. Os dois contam
+    como feed vazio aqui, mas só o segundo chegaria inteiro no laço — o
+    primeiro estourava AttributeError em `None.get`, que caía no `except` por
+    acidente. Depender de acidente é depender de nada.
+    """
+    if not isinstance(d, dict):
+        return False
+    reais = [e for e in (d.get("entries") or []) if isinstance(e, dict)]
+    return not reais and bool(d.get("id") or d.get("title"))
+
+
 def reprova_match(veredito: str) -> bool:
     """O veredito do juiz de imagem manda DESCARTAR o pacote? Pura, testável.
 
@@ -364,13 +389,40 @@ def _resolver_ytdlp():
 
 
 def _cookies_args(fonte: str = "") -> list:
-    """Cookies pro yt-dlp. O Instagram quase sempre EXIGE sessão logada pra listar
-    Reels — aponte YTDLP_COOKIES (ou IG_COOKIES) pra um cookies.txt exportado do
-    navegador. Sem cookies, o IG costuma falhar (login wall). O TikTok não precisa.
-    Alternativa: YTDLP_COOKIES_FROM_BROWSER=chrome (usa cookies do navegador local)."""
-    arq = (os.environ.get("YTDLP_COOKIES") or os.environ.get("IG_COOKIES") or "").strip()
-    if arq and Path(arq).exists():
-        return ["--cookies", arq]
+    """Cookies pro yt-dlp, por FONTE.
+
+    Instagram: quase sempre EXIGE sessão logada pra listar Reels (login wall).
+
+    ⚠️ "O TIKTOK NÃO PRECISA" ERA VERDADE E DEIXOU DE SER (08/09/2026). Este
+    docstring afirmava isso, e 42 de ~60 perfis do TikTok falharam numa rodada
+    com `Failed to parse JSON`. O nightly do yt-dlp mostrou o que de fato volta:
+
+        {"title": "airlandolists", "_type": "playlist",
+         "entries": [null], "playlist_count": 0}
+
+    O perfil RESOLVE — veio o sec_uid real — e a lista de vídeos vem VAZIA. Não
+    é extrator quebrado nem versão velha (o nightly faz igual): é o TikTok
+    servindo a casca do perfil sem o feed pra cliente sem sessão.
+
+    ⚠️ E O PARÂMETRO `fonte` ESTAVA AQUI SEM SER USADO. Quem chamava passava a
+    fonte achando que escolhia o cookie certo, e a função devolvia o mesmo
+    arquivo pros dois. Com um cookies.txt só do Instagram, o TikTok recebia
+    cookie de outro site — que é o mesmo que não receber nada.
+
+    Agora: TIKTOK_COOKIES pro TikTok, IG_COOKIES pro Instagram, YTDLP_COOKIES
+    como o compartilhado. Um arquivo exportado de um navegador logado nos dois
+    serve pros dois — mas aí é preciso que ele esteja logado nos DOIS.
+    """
+    f = (fonte or "").strip().lower()
+    especifico = ("TIKTOK_COOKIES" if f == "tiktok"
+                  else "IG_COOKIES" if f == "instagram" else "")
+    candidatos = [os.environ.get(especifico, "")] if especifico else []
+    candidatos += [os.environ.get("YTDLP_COOKIES", ""),
+                   os.environ.get("IG_COOKIES", "")]
+    for arq in candidatos:
+        arq = (arq or "").strip()
+        if arq and Path(arq).exists():
+            return ["--cookies", arq]
     nav = os.environ.get("YTDLP_COOKIES_FROM_BROWSER", "").strip()
     if nav:
         return ["--cookies-from-browser", nav]
@@ -604,8 +656,28 @@ def _listar_videos(perfil: str, limite: int, fonte: str = "tiktok") -> list:
     r = _ytdlp(["--flat-playlist", "-J", "--playlist-end", str(limite), url], fonte=fonte)
     try:
         d = json.loads(r.stdout)
+        entradas = [e for e in (d.get("entries") or []) if isinstance(e, dict)]
+        # ⚠️ PERFIL QUE RESOLVE COM O FEED VAZIO NÃO É FONTE MORTA (08/09/2026).
+        # O TikTok passou a servir a casca do perfil sem a lista de vídeos pra
+        # cliente sem sessão. O yt-dlp nightly devolve JSON VÁLIDO assim:
+        #
+        #     {"title": "airlandolists", "_type": "playlist",
+        #      "entries": [null], "playlist_count": 0}
+        #
+        # Se isso passasse pelo caminho de sucesso, a fonte voltaria 0 vídeo e
+        # levaria uma rodada 0-keeper — e a poda por coleta apaga quem repete
+        # isso. Ou seja: um bloqueio do TikTok apagaria em silêncio as 42
+        # melhores fontes do Dre, uma por uma, e o log diria "fonte zumbi".
+        # A versão estável mascarava isto com um erro de JSON, que caía no
+        # `except` e registrava falha de listagem. Com o nightly o JSON é
+        # válido, e a proteção some junto. Agora é explícito.
+        if feed_vazio(d):
+            raise ValueError(
+                f"perfil resolveu mas veio SEM VÍDEOS "
+                f"(playlist_count={d.get('playlist_count')}) — "
+                f"provável exigência de sessão/cookies do {fonte or 'tiktok'}")
         out = []
-        for e in (d.get("entries") or []):
+        for e in entradas:
             # o --flat-playlist do TikTok já traz view_count em muitos casos;
             # quando não traz, 0 e o _metadados resolve depois
             vw = int(e.get("view_count") or 0)
@@ -615,14 +687,19 @@ def _listar_videos(perfil: str, limite: int, fonte: str = "tiktok") -> list:
             elif e.get("id") and fonte == "tiktok":   # TikTok resolve id→url
                 out.append((f"https://www.tiktok.com/@x/video/{e.get('id')}", vw))
         return out
-    except Exception:
+    except Exception as _e_lista:
         # ⚠️ REGISTRA A FALHA DE LISTAGEM (04/09/2026). Sem isto a poda não
         # distingue "listei e não rendeu nada" de "nem consegui perguntar", e
         # trata as duas como rodada 0-keeper. Foi o que comentou o
         # @airlandolists — a MELHOR fonte da rodada anterior, ~50 vídeos —
         # depois de um erro de JSON do TikTok. Ver `_atualizar_saude_e_podar`.
         _falhou_listar.add(_norm_perfil(perfil))
-        _log(f"   não consegui listar {perfil} [{fonte}]: {(r.stderr or '')[:120]}")
+        # ⚠️ O MOTIVO SAI DA EXCEÇÃO, NÃO SÓ DO stderr (08/09/2026). Quando o
+        # yt-dlp devolve JSON válido com o feed vazio, o stderr vem LIMPO — e a
+        # mensagem antiga imprimia string vazia, ou seja, uma falha sem motivo
+        # nenhum na tela. O erro que interessa é o que eu levanto acima.
+        _motivo = (r.stderr or "").strip() or str(_e_lista)
+        _log(f"   não consegui listar {perfil} [{fonte}]: {_motivo[:150]}")
         return []
 
 

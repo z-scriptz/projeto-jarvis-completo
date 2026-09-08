@@ -32,7 +32,11 @@ _ns = {}
 for _no in _arv.body:
     if isinstance(_no, ast.FunctionDef) and _no.name == "reprova_match":
         exec(compile(ast.Module([_no], []), "x", "exec"), _ns)
+for _no in _arv.body:
+    if isinstance(_no, ast.FunctionDef) and _no.name == "feed_vazio":
+        exec(compile(ast.Module([_no], []), "x", "exec"), _ns)
 reprova_match = _ns.get("reprova_match")
+feed_vazio = _ns.get("feed_vazio")
 
 ok = falhou = 0
 
@@ -101,6 +105,29 @@ for nome in ("conferir", "_frame", "_frames", "_baixar_imagem"):
 # deles desatualizado sem ninguém saber
 checa("o coletor não tem uma cópia do prompt do juiz",
       "_PROMPT" not in _src or "Duas imagens" not in _src)
+
+print("\n── ⚠️ FONTE MORTA vs TIKTOK ME BLOQUEOU ──")
+# a poda por coleta apaga quem volta 0 video. Se bloqueio entrasse por esse
+# caminho, apagaria as 42 melhores fontes do Dre com o log dizendo "zumbi".
+checa("feed_vazio existe", feed_vazio is not None)
+if feed_vazio:
+    # o retorno REAL do TikTok hoje, copiado do log do nightly
+    checa("perfil resolve com entries:[null] → feed vazio",
+          feed_vazio({"id": "MS4wLjAB", "title": "airlandolists",
+                      "entries": [None], "playlist_count": 0}))
+    checa("entries:[] também é feed vazio",
+          feed_vazio({"title": "x", "entries": []}))
+    checa("sem entries nenhum é feed vazio", feed_vazio({"title": "x"}))
+    # ⚠️ O LADO QUE NÃO PODE DISPARAR: perfil com video de verdade
+    checa("perfil COM vídeo não é feed vazio",
+          not feed_vazio({"title": "x", "entries": [{"id": "1", "url": "u"}]}))
+    checa("um vídeo entre nulls não é feed vazio",
+          not feed_vazio({"title": "x", "entries": [None, {"id": "1"}]}))
+    # sem id nem titulo o perfil nem resolveu — é outro erro, nao este
+    checa("resposta sem id/título NÃO vira 'feed vazio'",
+          not feed_vazio({"entries": []}))
+    checa("None não quebra", not feed_vazio(None))
+    checa("lista no lugar de dict não quebra", not feed_vazio([]))
 
 print(f"\n{'='*64}\n   {ok} passou · {falhou} falhou\n{'='*64}")
 raise SystemExit(1 if falhou else 0)
