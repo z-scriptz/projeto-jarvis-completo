@@ -44,6 +44,14 @@ BASE_DIR = Path(__file__).resolve().parent
 MEMORIA = BASE_DIR / "shared" / "comentarios_recentes.json"
 LEMBRAR = int(os.environ.get("COMENT_LEMBRAR", "4"))
 
+# a regra do "não repete" mora em shared/rotacao.py desde 09/09 — os dois
+# arquivos que respondem no Instagram usam a MESMA. O import tem os dois
+# caminhos porque o repo é achatado e a VPS usa pacotes.
+try:
+    from shared.rotacao import escolher_sem_repetir as _rodar
+except Exception:  # pragma: no cover
+    from rotacao import escolher_sem_repetir as _rodar
+
 
 # ══════════════════════════════════════════════════════════════════════════
 # OS BANCOS
@@ -215,24 +223,14 @@ def escolher(plataforma: str, formato: str = "reel", conta: str = "",
     chave = f"{conta or '?'}|{(plataforma or 'ig')[:2]}|{formato}"
     recentes = memoria.get(chave) or []
 
-    # ⚠️ SORTEIO PURO REPETE. Com 8 frases, a chance de sair a mesma da vez
-    # anterior é 1 em 8 — umas 9 vezes por mês no nosso volume, e é exatamente
-    # essa repetição que faz parecer robô. Tira as últimas do bolo primeiro.
-    novas = [f for f in disponiveis if f not in recentes]
-    escolhida = random.choice(novas or disponiveis)
-
-    # ⚠️ A MEMÓRIA SE AJUSTA AO TAMANHO DO BANCO (02/09). LEMBRAR=4 fixo com um
-    # banco de 3 frases é anti-repetição MORTO: as 3 ficariam "recentes", a
-    # lista `novas` sairia vazia e o `or disponiveis` cairia em sorteio puro —
-    # exatamente o que este arquivo existe pra impedir, sem nenhum sintoma além
-    # de frases repetindo. Lembrar de tudo é o mesmo que não lembrar de nada.
-    # METADE do banco, no máximo. `len-1` parece o teto óbvio e é armadilha:
-    # com 3 frases ele lembra 2, sobra exatamente 1 candidata e a rotação vira
-    # um ciclo fixo 1-2-3-1-2-3 — nunca repete, e é lido como robô do mesmo
-    # jeito, só que por regularidade em vez de repetição. Medido antes de subir.
-    # Metade preserva o comportamento de hoje nos bancos de 8 (lembrava 4).
-    teto = max(1, min(LEMBRAR, len(disponiveis) // 2))
-    memoria[chave] = ([escolhida] + recentes)[:teto]
+    # ⚠️ A REGRA SAIU DAQUI EM 09/09 e virou `shared/rotacao.py`. Ela estava
+    # certa e documentada — e morava só neste arquivo, enquanto o
+    # `auto_resposta.py` respondia os comentários com `random.choice` puro e
+    # mandava "Bio 🔗 dá uma olhada e me fala" pra três pessoas no mesmo post.
+    # O raciocínio inteiro (por que metade, por que não `len-1`) está lá.
+    escolhida, memoria[chave] = _rodar(disponiveis, recentes, LEMBRAR)
+    if not escolhida:
+        return ""
     _gravar(memoria)
 
     try:

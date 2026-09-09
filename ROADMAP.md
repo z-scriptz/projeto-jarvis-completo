@@ -527,6 +527,76 @@ Ex.: "O segredo pra ter um iPhone 17 sem gastar / uma fortuna ✨".
 
 ---
 
+## 🗓️ Dia 2026-09-09 — 6 respostas, 4 frases, uma delas 3 vezes
+
+### 🤖 O Reel do pet explodiu, e o robô se denunciou nos comentários
+
+O Dre, com os prints: *"esse burro respondendo quase tudo igual, parecendo um
+robozinho, o povo até desanima de comprar, ou para de comentar"*. Dá pra contar:
+
+| quem comentou | o que recebeu |
+|---|---|
+| ennycosta__ | Bio 🔗 dá uma olhada e me fala |
+| isa__debortoli | Achei também! Link na bio pra você ver o preço 👀 |
+| melissaemari2021 | Bio 🔗 dá uma olhada e me fala ← **2ª** |
+| brsarah7 | O link tá na bio 🔗 depois me conta o que achou! |
+| bonitobeloved | Bio 🔗 dá uma olhada e me fala ← **3ª** |
+| gabryelle_00 | Na bio tem ele e uns parecidos 👀 |
+
+**A causa: `random.choice` puro.** Com 8 frases e 6 sorteios, repetir é o
+esperado, não o azar.
+
+### ⚠️ E A REGRA QUE IMPEDE ISSO JÁ EXISTIA — NO ARQUIVO AO LADO
+
+O `comentarios.py` (1º comentário do post) tem memória de rotação **desde
+22/08**, com o raciocínio todo escrito: sorteio puro repete, tira as recentes do
+bolo primeiro, lembra METADE do banco. O `auto_resposta.py` (resposta aos
+comentários) nunca soube dessa regra.
+
+**Quinta vez na semana com esta forma exata:** `_so_musica` sem chamador · as
+trilhas que nada lia · o `comentarios.py` escrito e morto por 5 dias · o
+`_frames` escrevendo dentro da pasta · e agora esta. Regra certa, documentada,
+morando num arquivo só.
+
+Por isso ela **saiu dos dois** e virou `shared/rotacao.py`. Consertar lá
+conserta os dois, e o teste falha se algum deles voltar a ter cópia própria.
+
+### A memória é POR POST, e tem que sobreviver ao cron
+
+Quem lê comentários lê **um post** de cima a baixo: repetir entre posts
+diferentes ninguém nota, repetir dentro do mesmo post é o que denuncia. E os
+comentários daquele Reel chegaram ao longo de **22 horas** — o `auto_resposta`
+roda de cron a cada poucos minutos, então memória em RAM não impediria nada no
+caso real. Vai pra disco (`shared/engajamento/frases_por_post.json`, atômico,
+TTL 7 dias), junto com o `respondidos.json`.
+
+⚠️ **A garantia não é "todas distintas", e isso é desenho.** A memória guarda
+metade do banco: guardar tudo viraria permutação — nunca repete e é lido como
+robô do mesmo jeito, só que por **regularidade** em vez de repetição. O que se
+garante é uma **janela**: dentro de `metade+1` respostas seguidas, nenhuma frase
+aparece duas vezes. Minha primeira asserção do teste (`9 sorteios → 9 frases`)
+estava errada por isso e foi ela que me obrigou a escrever a garantia de fato.
+
+### 💬 O grupo do WhatsApp não estava em NENHUMA das 8 respostas
+
+R$300 de tráfego pago = **1 membro** no grupo. Este Reel tinha dezenas de
+pessoas comentando "Eu quero" — mãos levantadas de graça — e nenhuma resposta
+convidava pro grupo. **O anúncio pagou caro pelo que o comentário dava de
+graça.** Entram 2 frases de grupo em 9 (~1 em 4, a mesma dose do
+`comentarios.py`): toda resposta puxando pro grupo vira panfleto.
+
+⚠️ E elas mandam pra **bio**, não colam `chat.whatsapp.com` — no Instagram link
+em comentário não clica, e o botão do grupo já existe no
+topshopoficial.com.br. Travado em teste.
+
+`teste_resposta_repetida.py` (27/27) exercita disco de verdade, atravessando 3
+rodadas de cron. `teste_comentario.py`: 19 → **21**, e uma falha intermitente de
+~1 em 3 que existia desde 02/09 saiu junto (a asserção do `{link}` no Facebook
+sorteava 1 frase e o banco tem uma de `{whats}`, que legitimamente não leva
+link — a asserção estava errada, não o código).
+
+---
+
 ## 🗓️ Dia 2026-09-09 — o dedup lembra dos acertos e esquece dos erros
 
 ### 🔁 ~50 vídeos, 1 produto, 50 vezes o mesmo "não" pago

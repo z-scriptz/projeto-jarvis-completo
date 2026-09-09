@@ -105,10 +105,18 @@ fb_sem = [comentarios.escolher("facebook", formato="reel", conta="@x", link="")
           for _ in range(8)]
 checa("no Facebook sem link, nunca sai '{link}' cru",
       all("{link}" not in (f or "") for f in fb_sem), str(fb_sem)[:90])
-com = comentarios.escolher("facebook", formato="reel", conta="@y",
-                           link="https://s.shopee.com.br/abc")
-checa("com link, a frase do FB carrega o link",
-      "shopee.com.br/abc" in (com or "") or com == "", com)
+# ⚠️ ESTA ASSERÇÃO ERA FALHA INTERMITENTE (~1 em 3) DESDE 02/09, e passar a
+# maioria das vezes é justamente o que a escondeu: o banco do FB tem TRÊS
+# frases e uma delas é a do grupo ({whats}), que legitimamente não leva
+# {link}. Sortear essa não é defeito — a asserção é que estava errada.
+# Testar 12 sorteios em vez de 1 troca "às vezes falha" por "sempre responde".
+fb_com = [comentarios.escolher("facebook", formato="reel", conta="@y",
+                               link="https://s.shopee.com.br/abc")
+          for _ in range(12)]
+checa("com link, alguma frase do FB carrega o link de verdade",
+      any("shopee.com.br/abc" in (f or "") for f in fb_com), str(fb_com)[:120])
+checa("nenhuma sai com chave crua ({link} ou {whats})",
+      not any("{" in (f or "") for f in fb_com), str(fb_com)[:120])
 
 print("\n── ⚠️ A FIAÇÃO: o meta_uploader realmente chama o módulo? ──")
 # Isto é o que faltou em 02/09. Não importo o meta_uploader (ele puxa requests

@@ -52,6 +52,14 @@ try:
 except Exception:
     _REQ_OK = False
 
+# a regra do "não repete enquanto houver alternativa" mora num lugar só desde
+# 09/09 — este arquivo e o `comentarios.py` usam a MESMA. Os dois caminhos de
+# import porque o repo é achatado e a VPS usa pacotes.
+try:
+    from shared.rotacao import escolher_sem_repetir as _rodar
+except Exception:  # pragma: no cover
+    from rotacao import escolher_sem_repetir as _rodar
+
 
 def _log(m):
     print(f"[auto_resposta] {m}")
@@ -104,6 +112,20 @@ _IG_TMPLS_DEFAULT = (
 # ⚠️ ESTAS NUNCA PROMETEM DIRECT. É o que sobra quando o DM está desligado, e
 # prometer o que não vai chegar é pior que não responder: a pessoa espera,
 # não recebe, e aprende que a conta mente.
+#
+# ⚠️ E O GRUPO DO WHATSAPP NÃO ESTAVA EM NENHUMA DAS 8 (09/09). O Dre queimou
+# R$300 de tráfego pago pra conseguir **1 membro** no grupo — e neste Reel do
+# @topshoppet_ tinha uma fila de gente comentando "Eu quero", ou seja, dezenas
+# de pessoas levantando a mão de graça, e nenhuma resposta convidava pro grupo.
+# O anúncio pagou caro pelo que o comentário dava de graça.
+#
+# Entra em ~1 de cada 4 frases, não em todas: é a mesma dose do `comentarios.py`
+# (encher o grupo é meta corrente, mas toda resposta puxando pro grupo vira
+# panfleto e a pessoa que só queria o link some).
+#
+# ⚠️ NO INSTAGRAM LINK EM COMENTÁRIO NÃO CLICA — por isso a frase do grupo
+# manda pra BIO, onde o botão do grupo já existe (topshopoficial.com.br), e não
+# cola um `chat.whatsapp.com` que ninguém consegue tocar.
 _IG_TMPLS_SEM_DM_DEFAULT = (
     "O link tá na bio 🚀 depois me conta o que achou!|||"
     "Tá na bio 💛 corre que some rápido|||"
@@ -111,8 +133,28 @@ _IG_TMPLS_SEM_DM_DEFAULT = (
     "Deixei na bio pra facilitar 😊|||"
     "Bio 🔗 dá uma olhada e me fala|||"
     "É esse mesmo! Tá tudo na bio ✨|||"
-    "Na bio tem ele e uns parecidos 👀")
+    "Na bio tem ele e uns parecidos 👀|||"
+    "tá na bio 💛 e no grupo do zap eu mando esses antes de postar aqui|||"
+    "link na bio ✨ lá tem o botão do grupo, é onde sai primeiro")
 _IG_TMPL_SEM_DM = "O link tá na bio 🚀 depois me conta o que achou!"
+
+# ── MEMÓRIA POR POST ───────────────────────────────────────────────────────
+# ⚠️ ERA `random.choice` PURO, E DÁ PRA CONTAR NOS PRINTS DO DRE (09/09): num
+# Reel só, **6 respostas, 4 frases, e "Bio 🔗 dá uma olhada e me fala" três
+# vezes**. Ele: *"esse burro respondendo quase tudo igual, parecendo um
+# robozinho, o povo até desanima de comprar, ou para de comentar"*.
+#
+# ⚠️ E A REGRA JÁ EXISTIA NO ARQUIVO AO LADO. O `comentarios.py` tem memória de
+# rotação desde 22/08, com o raciocínio todo escrito. Este arquivo nunca soube.
+# Agora os dois importam `shared/rotacao.py` — quinta vez na semana que o
+# defeito é "a regra existe e mora num arquivo só".
+#
+# ⚠️ A MEMÓRIA É POR POST, NÃO POR CONTA. Quem lê os comentários lê UM post de
+# cima a baixo: repetir a frase entre posts diferentes ninguém nota, repetir
+# dentro do mesmo post é o que denuncia. E o `auto_resposta` roda de cron a
+# cada poucos minutos, então a memória tem que sobreviver ao processo — daí o
+# arquivo em vez de um dicionário na função.
+FRASES_POST = STORE_DIR / "frases_por_post.json"
 
 
 def _ig_tmpls() -> list:
@@ -125,20 +167,61 @@ def _menciona_dm(t: str) -> bool:
     return "dm" in n or "direct" in n
 
 
-def _escolhe_ig_tmpl(dm_ok: bool) -> str:
-    """Sorteia uma resposta. Sem DM confirmado, só usa as que NÃO prometem
-    direct (pra nunca mentir 'te mandei no direct' sem ter mandado).
+def _carregar_frases_post() -> dict:
+    try:
+        d = json.loads(FRASES_POST.read_text(encoding="utf-8"))
+        corte = time.time() - 7 * 86400        # mesmo TTL do respondidos.json
+        return {k: v for k, v in d.items()
+                if isinstance(v, dict) and float(v.get("ts", 0)) >= corte}
+    except Exception:
+        return {}
+
+
+def _salvar_frases_post(d: dict) -> None:
+    """Atômico, pelo mesmo motivo do `respondidos.json`: o cron pode rodar de
+    novo no meio da escrita e ler um arquivo pela metade."""
+    try:
+        FRASES_POST.parent.mkdir(parents=True, exist_ok=True)
+        tmp = FRASES_POST.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(d, ensure_ascii=False, indent=2),
+                       encoding="utf-8")
+        tmp.replace(FRASES_POST)
+    except Exception:
+        pass          # memória é conforto, não requisito: nunca trava a resposta
+
+
+def _banco_ig(dm_ok: bool) -> list:
+    """As frases disponíveis pro modo atual.
 
     ⚠️ COM O DM OFF O CONJUNTO É OUTRO, não o mesmo filtrado. Antes isto
     peneirava a lista única e sobrava 1 frase — todo comentário recebia a
-    mesma. Agora cada modo tem o seu banco, então a variedade não depende de
-    quantas frases por acaso não citam direct."""
+    mesma. Cada modo tem o seu banco, então a variedade não depende de quantas
+    frases por acaso não citam direct."""
     if dm_ok:
-        return random.choice(_ig_tmpls())
+        return _ig_tmpls() or [_IG_TMPL_SEM_DM]
     raw = os.environ.get("AUTO_RESP_IG_TMPLS_SEM_DM", _IG_TMPLS_SEM_DM_DEFAULT)
     tmpls = [t.strip() for t in raw.split("|||")
              if t.strip() and not _menciona_dm(t)]
-    return random.choice(tmpls or [_IG_TMPL_SEM_DM])
+    return tmpls or [_IG_TMPL_SEM_DM]
+
+
+def _escolhe_ig_tmpl(dm_ok: bool, post: str = "", memoria: dict = None) -> str:
+    """Sorteia uma resposta SEM repetir o que já foi dito NESTE post.
+
+    Sem DM confirmado, só usa as que NÃO prometem direct — prometer o que não
+    vai chegar é pior que não responder: a pessoa espera, não recebe, e aprende
+    que a conta mente.
+    """
+    banco = _banco_ig(dm_ok)
+    if memoria is None or not post:
+        # sem post identificado não há como ter memória; melhor sortear que
+        # travar a resposta
+        return random.choice(banco)
+    chave = f"{post}|{'dm' if dm_ok else 'bio'}"
+    reg = memoria.get(chave) or {}
+    escolhida, recentes = _rodar(banco, reg.get("frases") or [])
+    memoria[chave] = {"frases": recentes, "ts": int(time.time())}
+    return escolhida or random.choice(banco)
 
 
 def _dm_ligado() -> bool:
@@ -310,7 +393,8 @@ def _velho_demais(carimbo: str, horas: int) -> bool:
         return False
 
 
-def _resp_instagram(conta, token, gatilhos, respondidos, limites, teste) -> int:
+def _resp_instagram(conta, token, gatilhos, respondidos, limites, teste,
+                    frases_post=None) -> int:
     ig = str(conta.get("instagram_user_id", "")).strip()
     if not ig:
         return 0
@@ -347,8 +431,10 @@ def _resp_instagram(conta, token, gatilhos, respondidos, limites, teste) -> int:
             dm_ok = True if teste and _dm_ligado() else \
                 (_enviar_dm_ig(ig, cid, token, m.get("permalink", ""))
                  if (_dm_ligado() and not teste) else False)
-            # 2) resposta pública: sorteia 1 dos 3 estilos (só promete direct se DM foi)
-            msg = _escolhe_ig_tmpl(dm_ok)
+            # 2) resposta pública, sem repetir o que já foi dito NESTE post
+            # (quem lê os comentários lê um post inteiro — é aí que a
+            # repetição aparece, não entre posts diferentes)
+            msg = _escolhe_ig_tmpl(dm_ok, str(m.get("id") or ""), frases_post)
 
             if teste:
                 # no dry-run mostra QUAL link o DM levaria — é o que distingue
@@ -367,6 +453,14 @@ def _resp_instagram(conta, token, gatilhos, respondidos, limites, teste) -> int:
                      + (" +DM" if dm_ok else ""))
                 respondidos[cid] = int(time.time()); feitos += 1
                 _salvar_respondidos(respondidos)
+                # ⚠️ grava JUNTO com o respondidos, não só no fim: o cron roda
+                # a cada poucos minutos e um post viral é respondido ao longo
+                # de várias rodadas. Memória que só existe em RAM durante a
+                # rodada não impede repetição NENHUMA entre rodadas — que é
+                # exatamente o caso do Reel do @topshoppet_ (comentários
+                # chegando por 22h seguidas).
+                if frases_post is not None:
+                    _salvar_frases_post(frases_post)
             else:
                 err = (r.get("error") or {}).get("message") or str(r)[:120]
                 _log(f"   ⚠️ IG não respondeu ({err})")
@@ -464,6 +558,7 @@ def main():
 
     gatilhos = _gatilhos()
     respondidos = _carregar_respondidos()
+    frases_post = _carregar_frases_post()
     limites = {
         "horas": _arg("--horas", int(float(os.environ.get("AUTO_RESP_HORAS", "168")))),
         "midias": _arg("--midias", int(float(os.environ.get("AUTO_RESP_MIDIAS", "25")))),
@@ -482,7 +577,8 @@ def main():
         rest = {**limites, "max": max(0, limites["max"] - total)}
         if rest["max"] <= 0:
             break
-        total += _resp_instagram(conta, token, gatilhos, respondidos, rest, teste)
+        total += _resp_instagram(conta, token, gatilhos, respondidos, rest, teste,
+                                 frases_post)
         rest = {**limites, "max": max(0, limites["max"] - total)}
         if rest["max"] <= 0:
             break
@@ -490,6 +586,7 @@ def main():
 
     if not teste:
         _salvar_respondidos(respondidos)
+        _salvar_frases_post(frases_post)
     _log(f"✅ {'simularia' if teste else 'respondi'} {total} comentário(s).")
     return 0
 
