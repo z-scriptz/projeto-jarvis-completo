@@ -124,6 +124,22 @@ checa("so 'nao' tira da fila (erro/talvez nao tiram)",
 checa("move pra fora de pronto_para_postar",
       'REPROVADOS = BASE_DIR / "reprovado_match"' in _cm_src)
 
+print("\n── ⚠️ MATAR A RODADA NÃO PODE FAZER PAGAR DE NOVO ──")
+# O Dre matou uma rodada de ~R$48 as 3h da manha. O cache `vistos` so era
+# gravado na ULTIMA linha, entao tudo que ja tinha sido julgado (e pago)
+# voltaria na rodada seguinte pra ser pago outra vez.
+checa("grava o cache DURANTE a rodada, não só no fim",
+      "_desde_gravou" in _src and "COLETA_GRAVA_CADA" in _src)
+_i_add = _src.find("vistos.add(vid)")
+_i_grava = _src.find("_desde_gravou >= _GRAVA_CADA")
+checa("a gravação periódica vem logo depois de marcar como visto",
+      0 < _i_add < _i_grava < _i_add + 1200,
+      f"add={_i_add} grava={_i_grava}")
+# ⚠️ o --dry nao pode persistir: senao a rodada real pula tudo que o teste viu
+checa("o --dry continua sem gravar cache", "if not dry and _desde_gravou" in _src)
+checa("o salvamento do fim continua lá (a rodada completa grava tudo)",
+      "_salvar_vistos(vistos)" in _src and _src.count("_salvar_vistos(") >= 3)
+
 print("\n── ⚠️ FONTE MORTA vs TIKTOK ME BLOQUEOU ──")
 # a poda por coleta apaga quem volta 0 video. Se bloqueio entrasse por esse
 # caminho, apagaria as 42 melhores fontes do Dre com o log dizendo "zumbi".

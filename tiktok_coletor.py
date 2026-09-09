@@ -1629,6 +1629,25 @@ def main():
     # fonte fraca ou de rede ruim
     barrados_match = 0
     keepers = defaultdict(int)     # vídeos aproveitados por fonte (p/ poda por coleta)
+    # ⚠️ O PREÇO APARECE ANTES, NÃO NA FATURA (09/09/2026). O Dre rodou com
+    # POR_PERFIL=10, viu R$12, e soltou a rodada cheia (POR_PERFIL=40) achando
+    # que seria parecido. São ~R$48. Eu tinha o número pra fazer essa conta e
+    # não fiz — então agora quem faz é o próprio script, antes de gastar.
+    # Cada vídeo que passa do filtro de views paga até 3 chamadas:
+    # visão (~R$0,002) + juiz de nome (~R$0,001) + juiz de imagem (~R$0,003).
+    if not dry:
+        _cand = len(perfis) * limite
+        _log(f"💰 {len(perfis)} fonte(s) × {limite} vídeo(s) = até {_cand:,} "
+             f"candidatos · estimativa R$ {_cand * 0.006:,.2f}")
+        _log(f"   (piso de views atual: MIN_VIEWS={MIN_VIEWS:,} — subir corta "
+             f"ANTES de qualquer chamada paga)")
+    # de quantos em quantos vídeos o cache vai pro disco (ver `vistos.add`)
+    _GRAVA_CADA = int(os.environ.get("COLETA_GRAVA_CADA", "10"))
+    _desde_gravou = 0
+    # 📌 SEM try/finally DE PROPÓSITO. O jeito "certo" seria envolver o laço
+    # inteiro, mas isso reindenta ~350 linhas de código que funciona, num
+    # arquivo que decide o que vai ao ar — risco alto por um ganho pequeno,
+    # porque com gravação a cada 10 um Ctrl+C perde no máximo 10 vídeos.
     for perfil, fonte, nicho_fonte in perfis:
         _log(f"perfil {perfil} [{fonte}{'/' + nicho_fonte if nicho_fonte else ''}] …")
         if fonte == "instagram" and ig_delay > 0 and not dry:
@@ -1639,6 +1658,18 @@ def main():
             if not vid or vid in vistos:
                 continue
             vistos.add(vid)      # marca cedo pra não repetir mesmo se descartar
+            # ⚠️ GRAVA DE TEMPO EM TEMPO, NÃO SÓ NO FIM (09/09/2026). O cache
+            # só era salvo na última linha da rodada. O Dre matou uma rodada de
+            # ~R$48 no meio, às 3h da manhã — e como nada tinha sido gravado,
+            # TODOS os vídeos já julgados voltariam na rodada seguinte pra
+            # serem pagos de novo. O `vistos` é o que impede pagar duas vezes;
+            # deixá-lo só na memória durante horas de rodada paga é apostar que
+            # nada vai interromper.
+            _desde_gravou += 1
+            if not dry and _desde_gravou >= _GRAVA_CADA:
+                _salvar_vistos(vistos)
+                _salvar_produtos_vistos(produtos_vistos)
+                _desde_gravou = 0
 
             # a listagem sabe mais que o yt-dlp no IG: lá o view_count não vem
             if not meta.get("views") and views_listagem:
