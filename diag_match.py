@@ -53,6 +53,7 @@ import random
 import re
 import subprocess
 import sys
+import tempfile
 import unicodedata
 from collections import Counter
 from pathlib import Path
@@ -210,7 +211,10 @@ def _frames(video: Path, dur: float, n: int = 2) -> list:
     d = float(dur) or 8.0
     for i in range(n):
         pos = max(0.5, d * (i + 1) / (n + 1))
-        f = video.with_suffix(f".dm{i}.jpg")
+        # ⚠️ FORA DA PASTA — ver `conferir_match._frames`. Aqui roda só em
+        # `_produzidos`, mas o mtime de lá também é dado de auditoria, e o
+        # defeito é o mesmo.
+        f = Path(tempfile.gettempdir()) / f"dm_{os.getpid()}_{i}.jpg"
         tmps.append(f)
         try:
             subprocess.run(["ffmpeg", "-y", "-ss", f"{pos:.1f}", "-i", str(video),

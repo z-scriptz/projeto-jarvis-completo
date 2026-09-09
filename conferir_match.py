@@ -44,6 +44,7 @@ import json
 import os
 import random
 import subprocess
+import tempfile
 import time
 import urllib.request
 from pathlib import Path
@@ -101,11 +102,28 @@ def _frames(video: Path, dur: float = 0, n: int = 1) -> list:
     que é a pergunta certa pra vídeo de haul. Custa `n`× a imagem — a ~R$0,002
     por item, 3 frames em 348 itens dá uns R$2 na rodada.
     """
+    # ⚠️⚠️ O QUADRO SAI PRA FORA DA PASTA, E ISSO NÃO É DETALHE (09/09/2026).
+    # Escrever `video.match0.jpg` AO LADO do vídeo cria e apaga arquivo DENTRO
+    # da pasta do pacote — e criar/apagar arquivo ZERA O MTIME DA PASTA. O
+    # daemon ordena a fila por esse mtime (`daemon_maestro._drenar_por_idade`),
+    # então uma passada do juiz rejuvenesce tudo que ela toca.
+    #
+    # Medido depois do `--fila --marcar` de 08/09: 185 de 310 pastas com data
+    # falsificada, TODAS empatadas na mesma hora. Com `ordem_da_fila:
+    # mais_novo`, vídeo de 23,8 dias do formato ANTIGO subiu pro topo da fila e
+    # voltou a ir ao ar. Foi o Dre quem viu: *"vídeos com formato antigo está
+    # voltando... vai quebrar o perfil novamente"*.
+    #
+    # ⚠️ É A SEGUNDA VEZ EM 48 HORAS. O `consertar_audio_fila` fez o MESMO em
+    # 06/09 (41 pacotes), eu documentei em dois arquivos, escrevi "TEMPORÁRIO
+    # FORA DA PASTA" nos dois — e deixei este aqui como estava, porque na hora
+    # eu estava consertando *aquele* arquivo, não procurando o padrão.
     saida, tmp = [], []
     d = float(dur) or 6.0
+    _dir = Path(tempfile.gettempdir())
     for i in range(max(1, n)):
         pos = max(0.8, d * (i + 1) / (max(1, n) + 1))
-        f = video.with_suffix(f".match{i}.jpg")
+        f = _dir / f"cm_{os.getpid()}_{abs(hash(str(video)))%10**8}_{i}.jpg"
         tmp.append(f)
         try:
             subprocess.run(["ffmpeg", "-y", "-ss", f"{pos:.1f}", "-i", str(video),
