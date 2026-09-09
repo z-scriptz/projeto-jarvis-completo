@@ -527,6 +527,52 @@ Ex.: "O segredo pra ter um iPhone 17 sem gastar / uma fortuna ✨".
 
 ---
 
+## 🗓️ Dia 2026-09-09 — o dedup lembra dos acertos e esquece dos erros
+
+### 🔁 ~50 vídeos, 1 produto, 50 vezes o mesmo "não" pago
+
+No log da rodada com as fontes de TikTok de volta, a `@miniluxury.perfume`
+mandou ~50 vídeos. Quase todos foram identificados como *"Mini perfume"*, quase
+todos casaram com o **MESMO** item da loja (*Mini Frasco De Perfume 2ml 100PCS
+Spray Recar*) e quase todos foram **DESCARTO** pelo juiz de imagem — cada um
+pagando 3 quadros de novo.
+
+**Por que o dedup não pegava** (`tiktok_coletor:2004`):
+
+```python
+produtos_vistos[chave_prod] = int(time.time())   # só marca o que FICOU
+```
+
+O `produtos_vistos` só é escrito na linha do `plano.json`. Quando o juiz
+descarta, o produto **nunca entra no dedup** — então o vídeo seguinte do mesmo
+produto paga o juiz outra vez. **O dedup lembra dos acertos e esquece dos
+erros**, e o custo do esquecimento é exatamente o caminho caro.
+
+**E re-julgar não compra informação:** quando o mesmo item da loja é reprovado
+três vezes, o defeito está no caminho `termo → busca da loja` (item que
+compartilha palavra e não é a coisa), não em cada vídeo. O quarto vídeo vai dar
+o mesmo "não", só que pago.
+
+### O conserto: `_produto_queimado` (mesmo formato do `MAX_FALHAS_RENDER=3`)
+
+`shared/produtos_reprovados.json` — `{chave: {"n": 3, "ts": …}}`, chave = nome
+normalizado da loja (as mesmas 8 primeiras palavras do dedup).
+
+| decisão | por quê |
+|---|---|
+| pula **antes do download e dos 3 quadros** | depois do juiz não economizaria nada — já foi pago |
+| conta **expira** (`MATCH_REPROVA_DIAS=30`) | o defeito pode ser da loja ou do termo, os dois consertáveis |
+| **só `sim` zera** a conta | `talvez` é a resposta da dúvida — ausência de evidência, não evidência do par certo. Se zerasse, o laço voltava sozinho |
+| `erro` **não conta** | API que piscou não é evidência (mesma regra do `reprova_match`) |
+| cache ilegível → **não barra ninguém** | ⚠️ isto é economia, não regra de segurança. Travar a coleta por causa de um JSON corrompido troca um defeito barato por um caro — o oposto do +18, e a assimetria está travada no teste |
+| `MATCH_MAX_REPROVA=0` desliga | |
+
+`teste_match_coletor.py`: **45 → 67**, e 8 dos novos olham a **fiação** (a
+posição do `continue` no arquivo, entre o dedup e o `_baixar`), porque testar só
+a regra passaria 100% com o guarda desligado — que é o estado anterior.
+
+---
+
 ## 🗓️ Dia 2026-09-08 — três juízes, e o meu próprio controle estava viciado
 
 ### O que entrou em produção

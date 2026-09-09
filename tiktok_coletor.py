@@ -1262,6 +1262,115 @@ def _produto_repetido(chave: str, pv: dict) -> bool:
     return (time.time() - ts) < dias * 86400
 
 
+# ── PRODUTO QUEIMADO: o mesmo item da loja reprovado pelo juiz vídeo após vídeo
+#
+# ⚠️ O LAÇO QUE QUEIMA DINHEIRO (09/09/2026). No log da rodada com as fontes de
+# TikTok de volta, a `@miniluxury.perfume` mandou ~50 vídeos. Quase todos foram
+# identificados como "Mini perfume", quase todos casaram com o MESMO item da
+# loja (*Mini Frasco De Perfume 2ml 100PCS Spray Recar*) e quase todos foram
+# DESCARTADOS pelo juiz de imagem — cada um pagando 3 quadros de novo.
+#
+# 📌 POR QUE ISSO ACONTECE E O DEDUP NÃO PEGA: o `produtos_vistos` só é marcado
+# na linha do `plano.json`, ou seja, *só o que FICOU*. Quando o juiz descarta, o
+# produto nunca entra no dedup — então o próximo vídeo do mesmo produto paga o
+# juiz outra vez. O dedup lembra dos acertos e esquece dos erros.
+#
+# 📌 E POR QUE RE-JULGAR NÃO COMPRA INFORMAÇÃO: quando o MESMO produto da loja é
+# reprovado três vezes seguidas, o defeito não está em cada vídeo — está no
+# caminho `termo → busca da loja`, que está devolvendo um item que compartilha
+# palavra e não é a coisa. O quarto vídeo vai dar o mesmo "não", só que pago.
+#
+# É o mesmo formato do `MAX_FALHAS_RENDER=3` do `produzir_tiktok`: pacote que
+# falha três vezes é veneno, para de tentar.
+#
+# ⚠️ ESTA PORTA FALHA PARA O LADO DE DEIXAR PASSAR. Se o arquivo sumir ou vier
+# corrompido, o dicionário volta vazio e nada é barrado. É de propósito: isto é
+# economia, não regra de segurança — travar a coleta por causa de um cache
+# ilegível seria trocar um defeito barato por um caro. (O +18 é o oposto, e a
+# assimetria está travada no teste_match_coletor.py.)
+PRODUTOS_REPROVADOS = BASE_DIR / "shared" / "produtos_reprovados.json"
+
+
+def _carregar_reprovados() -> dict:
+    try:
+        d = json.loads(PRODUTOS_REPROVADOS.read_text(encoding="utf-8"))
+        return dict(d) if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
+def _salvar_reprovados(pr: dict):
+    try:
+        PRODUTOS_REPROVADOS.parent.mkdir(parents=True, exist_ok=True)
+        PRODUTOS_REPROVADOS.write_text(json.dumps(pr, ensure_ascii=False, indent=2),
+                                       encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _produto_queimado(chave: str, pr: dict, limite: int = None,
+                      dias: int = None) -> bool:
+    """True se este produto já foi reprovado pelo juiz `limite` vezes recentes.
+
+    ⚠️ A CONTA EXPIRA. Sem prazo, um produto barrado hoje ficaria barrado para
+    sempre — e o defeito pode ser da loja (listagem trocada) ou do termo, os
+    dois consertáveis. Depois de MATCH_REPROVA_DIAS a evidência velha não vale
+    mais e o produto volta a poder ser julgado.
+    """
+    if not chave:
+        return False
+    if limite is None:
+        try:
+            limite = int(os.getenv("MATCH_MAX_REPROVA", "3"))
+        except ValueError:
+            limite = 3
+    if limite <= 0:                      # 0 = desligado
+        return False
+    if dias is None:
+        try:
+            dias = int(os.getenv("MATCH_REPROVA_DIAS", "30"))
+        except ValueError:
+            dias = 30
+    reg = pr.get(chave)
+    if not isinstance(reg, dict):
+        return False
+    try:
+        n = int(reg.get("n", 0))
+        ts = float(reg.get("ts", 0))
+    except (TypeError, ValueError):
+        return False
+    if (time.time() - ts) >= dias * 86400:
+        return False
+    return n >= limite
+
+
+def _marcar_reprovado(chave: str, pr: dict) -> int:
+    """Soma +1 na conta de reprovações do produto. Devolve o total."""
+    if not chave:
+        return 0
+    reg = pr.get(chave)
+    n = 0
+    if isinstance(reg, dict):
+        try:
+            n = int(reg.get("n", 0))
+        except (TypeError, ValueError):
+            n = 0
+    n += 1
+    pr[chave] = {"n": n, "ts": int(time.time())}
+    return n
+
+
+def _limpar_reprovado(chave: str, pr: dict):
+    """Juiz disse SIM → a conta zera.
+
+    ⚠️ SÓ 'sim' LIMPA, e 'talvez' não. 'talvez' é a resposta que o prompt manda
+    dar na dúvida: é ausência de evidência, não evidência de que o par está
+    certo. Deixar 'talvez' zerar a conta faria o laço voltar sozinho.
+    """
+    if chave:
+        pr.pop(chave, None)
+
+
 def _fonte_do_arg(a: str) -> tuple:
     """Detecta a fonte de um perfil passado na linha de comando.
     'ig:@x' ou url do instagram → instagram; senão tiktok (compat)."""
@@ -1623,11 +1732,15 @@ def main():
 
     vistos = _carregar_vistos()
     produtos_vistos = _carregar_produtos_vistos()
+    produtos_reprovados = _carregar_reprovados()
     achados = 0
     # quantos o juiz de imagem barrou nesta rodada — sem este contador o corte
     # de ~38% aparece só como "coletou menos hoje", que é indistinguível de
     # fonte fraca ou de rede ruim
     barrados_match = 0
+    # quantos foram pulados por produto já queimado — este é o número que diz
+    # se o laço da @miniluxury.perfume voltou a acontecer
+    barrados_queimado = 0
     keepers = defaultdict(int)     # vídeos aproveitados por fonte (p/ poda por coleta)
     # ⚠️ O PREÇO APARECE ANTES, NÃO NA FATURA (09/09/2026). O Dre rodou com
     # POR_PERFIL=10, viu R$12, e soltou a rodada cheia (POR_PERFIL=40) achando
@@ -1669,6 +1782,7 @@ def main():
             if not dry and _desde_gravou >= _GRAVA_CADA:
                 _salvar_vistos(vistos)
                 _salvar_produtos_vistos(produtos_vistos)
+                _salvar_reprovados(produtos_reprovados)
                 _desde_gravou = 0
 
             # a listagem sabe mais que o yt-dlp no IG: lá o view_count não vem
@@ -1910,6 +2024,20 @@ def main():
                 if arq_pre:
                     shutil.rmtree(pasta, ignore_errors=True)
                 continue
+
+            # ⚠️ PRODUTO JÁ QUEIMADO: o juiz de imagem já reprovou este MESMO
+            # item da loja MATCH_MAX_REPROVA vezes. Ver `_produto_queimado`.
+            # AQUI, e não lá embaixo: este `continue` acontece ANTES do download
+            # e ANTES dos 3 quadros do juiz, que é o que custa. Depois do juiz
+            # não economizaria nada — já teria sido pago.
+            if _produto_queimado(chave_prod, produtos_reprovados):
+                barrados_queimado += 1
+                _log(f"     🔁 '{produto_nome[:38]}' já foi reprovado "
+                     f"{produtos_reprovados[chave_prod]['n']}× — pulo sem julgar "
+                     f"(o defeito é a busca da loja, não este vídeo)")
+                if arq_pre:
+                    shutil.rmtree(pasta, ignore_errors=True)
+                continue
             achados += 1
 
             if dry:
@@ -1987,10 +2115,18 @@ def main():
                         _match, _tk = _juiz(_fr, _ft)
                         if reprova_match(_match):
                             barrados_match += 1
+                            # a conta que faz o 4º vídeo deste produto nem
+                            # chegar aqui (`_produto_queimado`, lá em cima)
+                            _n_rep = _marcar_reprovado(chave_prod, produtos_reprovados)
                             _log(f"     ⚖️  DESCARTO: o vídeo não mostra "
-                                 f"'{produto_nome[:38]}' (juiz: não casa)")
+                                 f"'{produto_nome[:38]}' (juiz: não casa) "
+                                 f"[{_n_rep}ª vez neste produto]")
                             shutil.rmtree(pasta, ignore_errors=True)
                             continue
+                        if _match == "sim":
+                            # evidência positiva: o par termo→loja funciona.
+                            # 'talvez' NÃO limpa (é dúvida, não confirmação).
+                            _limpar_reprovado(chave_prod, produtos_reprovados)
                         _log(f"     ⚖️  match: {_match}")
                     except Exception as _ej:
                         _match = "erro"
@@ -2026,6 +2162,7 @@ def main():
     if not dry:
         _salvar_vistos(vistos)
         _salvar_produtos_vistos(produtos_vistos)
+        _salvar_reprovados(produtos_reprovados)
     _atualizar_saude_e_podar(perfis, keepers, dry)   # poda por coleta (zumbis/429)
     _relatorio_views()
     if dry and any(f == "instagram" for _, f, _ in perfis):
@@ -2049,6 +2186,13 @@ def main():
              f"descartados: o vídeo não mostrava o produto do link")
         _log(f"   (medido em 07/09 sem o juiz: 38% da fila estava assim. "
              f"Desligue com MATCH_NO_COLETOR=0 se a oferta secar.)")
+    if barrados_queimado:
+        # cada um destes seria um download + 3 quadros + 1 chamada do juiz
+        _log(f"🔁 {barrados_queimado} vídeo(s) pulados por produto já queimado "
+             f"— economia estimada de R$ {barrados_queimado * 0.003:,.2f}")
+        _log(f"   (produtos com {os.getenv('MATCH_MAX_REPROVA', '3')}+ reprovações; "
+             f"a conta expira em {os.getenv('MATCH_REPROVA_DIAS', '30')} dias. "
+             f"MATCH_MAX_REPROVA=0 desliga.)")
     _log(f"fim. {achados} produto(s) casado(s) na Shopee "
          f"{'(dry — nada baixado, cache intacto)' if dry else ''}")
     return 0

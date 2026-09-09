@@ -21,6 +21,7 @@
 #
 #   python3 teste_match_coletor.py
 import ast
+import re
 import sys
 from pathlib import Path
 
@@ -28,15 +29,18 @@ BASE = Path(__file__).resolve().parent
 _src = (BASE / "tiktok_coletor.py").read_text("utf-8")
 _arv = ast.parse(_src)
 
-_ns = {}
-for _no in _arv.body:
-    if isinstance(_no, ast.FunctionDef) and _no.name == "reprova_match":
-        exec(compile(ast.Module([_no], []), "x", "exec"), _ns)
-for _no in _arv.body:
-    if isinstance(_no, ast.FunctionDef) and _no.name == "feed_vazio":
-        exec(compile(ast.Module([_no], []), "x", "exec"), _ns)
+_ns = {"os": __import__("os"), "time": __import__("time"), "re": re}
+for _alvo in ("reprova_match", "feed_vazio", "_norm_produto",
+              "_produto_queimado", "_marcar_reprovado", "_limpar_reprovado"):
+    for _no in _arv.body:
+        if isinstance(_no, ast.FunctionDef) and _no.name == _alvo:
+            exec(compile(ast.Module([_no], []), "x", "exec"), _ns)
 reprova_match = _ns.get("reprova_match")
 feed_vazio = _ns.get("feed_vazio")
+_norm_produto = _ns.get("_norm_produto")
+_produto_queimado = _ns.get("_produto_queimado")
+_marcar_reprovado = _ns.get("_marcar_reprovado")
+_limpar_reprovado = _ns.get("_limpar_reprovado")
 
 ok = falhou = 0
 
@@ -162,6 +166,69 @@ if feed_vazio:
           not feed_vazio({"entries": []}))
     checa("None não quebra", not feed_vazio(None))
     checa("lista no lugar de dict não quebra", not feed_vazio([]))
+
+print("\n── ⚠️ O MESMO PRODUTO REPROVADO 50× NÃO PAGA O JUIZ 50× ──")
+# @miniluxury.perfume: ~50 videos, quase todos casando com o MESMO item
+# (*Mini Frasco De Perfume 2ml 100PCS Spray Recar*), quase todos DESCARTO —
+# cada um pagando 3 quadros de novo. O dedup nao pega porque `produtos_vistos`
+# so marca o que FICOU: ele lembra dos acertos e esquece dos erros.
+checa("_produto_queimado existe", _produto_queimado is not None)
+checa("_marcar_reprovado existe", _marcar_reprovado is not None)
+if _produto_queimado and _marcar_reprovado and _limpar_reprovado and _norm_produto:
+    _pr = {}
+    _ch = _norm_produto("Mini Frasco De Perfume 2ml 100PCS Spray Recarregável")
+    checa("1ª reprovação não queima", _marcar_reprovado(_ch, _pr) == 1
+          and not _produto_queimado(_ch, _pr, limite=3))
+    checa("2ª reprovação não queima", _marcar_reprovado(_ch, _pr) == 2
+          and not _produto_queimado(_ch, _pr, limite=3))
+    checa("3ª reprovação QUEIMA", _marcar_reprovado(_ch, _pr) == 3
+          and _produto_queimado(_ch, _pr, limite=3))
+    # ⚠️ tem que valer pro MESMO produto vindo de video diferente: a chave e o
+    # nome NORMALIZADO da loja, nao o id do video
+    checa("outro vídeo do mesmo produto cai na mesma chave",
+          _produto_queimado(_norm_produto("mini frasco de perfume 2ml 100pcs spray recarregavel"),
+                            _pr, limite=3))
+    checa("produto diferente NÃO é atingido",
+          not _produto_queimado(_norm_produto("Suporte para lavar bonés"), _pr, limite=3))
+
+    print("\n   ── e a conta tem que poder ser desfeita ──")
+    # ⚠️ so 'sim' limpa. 'talvez' e a resposta que o prompt manda dar na duvida:
+    # ausencia de evidencia, nao evidencia do par certo. Se 'talvez' zerasse, o
+    # laco voltaria sozinho.
+    _limpar_reprovado(_ch, _pr)
+    checa("juiz disse 'sim' → a conta zera", not _produto_queimado(_ch, _pr, limite=3))
+    _pr2 = {"x": {"n": 9, "ts": 0}}      # ts=0 → epoch, muito além da janela
+    checa("conta velha (fora de MATCH_REPROVA_DIAS) expira",
+          not _produto_queimado("x", _pr2, limite=3, dias=30))
+    checa("limite 0 desliga o guarda",
+          not _produto_queimado(_ch, {_ch: {"n": 99, "ts": 2**31}}, limite=0))
+
+    print("\n   ── ⚠️ falha pro lado de DEIXAR PASSAR (é economia, não segurança) ──")
+    checa("cache vazio não barra ninguém", not _produto_queimado(_ch, {}, limite=3))
+    checa("formato antigo (int solto) não barra",
+          not _produto_queimado("x", {"x": 12345}, limite=3))
+    checa("chave vazia não barra", not _produto_queimado("", {"": {"n": 9, "ts": 2**31}}, limite=3))
+    checa("registro sem 'n' não quebra", not _produto_queimado("x", {"x": {}}, limite=3))
+
+print("\n── ⚠️ A FIAÇÃO DO GUARDA: pula ANTES de pagar? ──")
+# depois do juiz nao economizaria nada -- ja teria sido pago.
+_i_ded = _src.find("_produto_repetido(chave_prod")
+_i_queim = _src.find("_produto_queimado(chave_prod")
+_i_baixar = _src.find("arq = arq_pre or _baixar(")
+_i_juizc = _src.find("_frames_do_video(arq")
+checa("o coletor chama _produto_queimado", _i_queim > 0)
+checa("o pulo vem DEPOIS do dedup e ANTES do download",
+      0 < _i_ded < _i_queim < _i_baixar,
+      f"dedup={_i_ded} queimado={_i_queim} baixar={_i_baixar}")
+checa("e antes dos 3 quadros do juiz", 0 < _i_queim < _i_juizc)
+checa("marca a reprovação onde o juiz reprova",
+      "_marcar_reprovado(chave_prod" in _src)
+checa("o cache dos reprovados é gravado durante a rodada",
+      _src.count("_salvar_reprovados(") >= 3)
+checa("o --dry continua sem gravar", "if not dry and _desde_gravou" in _src)
+checa("tem interruptor MATCH_MAX_REPROVA", "MATCH_MAX_REPROVA" in _src)
+checa("conta o que pulou (senão a economia some no log)",
+      "barrados_queimado" in _src)
 
 print(f"\n{'='*64}\n   {ok} passou · {falhou} falhou\n{'='*64}")
 raise SystemExit(1 if falhou else 0)
