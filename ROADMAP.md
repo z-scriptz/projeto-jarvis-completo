@@ -571,6 +571,39 @@ normalizado da loja (as mesmas 8 primeiras palavras do dedup).
 posição do `continue` no arquivo, entre o dedup e o `_baixar`), porque testar só
 a regra passaria 100% com o guarda desligado — que é o estado anterior.
 
+### 🌱 `semear_reprovados.py` — o cache nasce vazio, e a evidência já foi paga
+
+O guarda começa sem saber de nada, então a próxima rodada pagaria 3× por cada
+produto queimado **para reaprender o que o `reprovado_match/` já sabe** (119
+pacotes das auditorias de 08/09: 76 + 37 + 6). Deixar aquilo apodrecendo numa
+pasta é o mesmo defeito que o guarda veio consertar.
+
+O semeador conta as reprovações por produto e grava o cache. Decisões:
+
+- **carimbo = mtime da pasta**, não `agora`. Com `time.time()` as 119 contas
+  expirariam **todas no mesmo dia** e o laço voltaria inteiro de uma vez.
+- **soma, não sobrescreve** — uma rodada já rodada com o guarda tem contas mais
+  novas que as minhas.
+- **`_norm_produto` importado, nunca copiado.** Uma cópia divergente encheria o
+  cache de chaves que o coletor nunca procuraria — cache cheio, guarda inerte,
+  zero erro no log.
+- lê `plano.json` **ou** `engajamento.json` (os dois caminhos de entrada em
+  `reprovado_match/` guardam o campo `produto`).
+- **só lê.** Nenhuma escrita dentro das pastas varridas — são 119, e uma escrita
+  em cada zeraria 119 mtimes de uma vez (o defeito de 06/09 e 08/09).
+
+⚠️ **TETO CONHECIDO DA CHAVE, e o teste foi quem mostrou:** `_norm_produto`
+corta na **8ª palavra**, então *"…Spray Recar"* e *"…Spray Recarregável"* são
+**chaves diferentes**. Caixa, acento, pontuação e espaço duplo colapsam (que é o
+que a loja varia de verdade); a 8ª palavra não. Não é defeito novo — é o
+`_norm_produto` do dedup, reusado de propósito (duas chaves seriam dois caches)
+— mas é o teto do guarda, e está travado em teste para que mexer nele obrigue a
+olhar o dedup de produto, que tem cache em produção.
+
+`teste_semear.py` (20/20) monta árvore de verdade — pacotes, JSONs, mtimes — e
+roda o `main()` em cima: as três falhas que ele pegou na primeira execução eram
+todas a mesma, a 8ª palavra.
+
 ---
 
 ## 🗓️ Dia 2026-09-08 — três juízes, e o meu próprio controle estava viciado
