@@ -527,6 +527,95 @@ Ex.: "O segredo pra ter um iPhone 17 sem gastar / uma fortuna ✨".
 
 ---
 
+## 🗓️ Dia 2026-09-08 — três juízes, e o meu próprio controle estava viciado
+
+### O que entrou em produção
+
+| porta | o que barra | medido |
+|---|---|---|
+| `conteudo_adulto` (+18) | masturbador, sex shop, plug anal… | 0 achados no acervo |
+| `conferir_match` no coletor | vídeo não mostra o produto do link | **33%** da coleta |
+| `nome_e_produto` (novo) | termo é pedaço de legenda | **3,3%** da fila |
+
+⚠️ **AS TRÊS FALHAM PRA LADOS DIFERENTES, E ISSO É DESENHO, NÃO DESCUIDO:**
++18 sem regra → **não colhe** (no grupo do cliente é irreversível). Juiz de
+match ou de nome fora do ar → **deixa passar** (post fraco já é o normal, e
+travar a coleta porque a API piscou troca um defeito por um pior).
+
+### O juiz de imagem estava no lugar errado
+
+O `--olho` mediu 38% dos vídeos mostrando outro produto. O `conferir_match` já
+existia, já era validado, e rodava **como auditoria, depois do estrago**. Ligado
+no coletor: 115 de 348 (33%) na primeira rodada.
+
+⚠️ **UM QUADRO ERA POUCO.** As fontes gringas postam HAUL — *"Restocking purse
+station"*, *"10 things you need from Amazon"* — dez produtos em sequência, e o
+quadro do meio cai em qualquer um. O juiz reprovava par certo
+(`'suporte para lavar boné'` × *Suporte Para Lavar Bonés Na Máquina*). Não era o
+juiz: era o quadro que ele recebia. Três quadros + a pergunta virando *"aparece
+em ALGUM deles?"*. Revalidado: **100% embaralhado × 57% real, 43 pontos.**
+
+### ⚠️ MARCAR NÃO ERA BLOQUEAR (a quarta vez da semana)
+
+`--produzidos --marcar` bloqueou 173 pacotes e **não tirou um vídeo da fila**:
+`produzir_tiktok` lê `nao_e_produto`, mas só pra quem AINDA VAI renderizar. Quem
+já virou vídeo está em `pronto_para_postar/<slug>/`, e o daemon posta de lá
+varrendo a pasta **sem nunca abrir plano.json**.
+
+E a verificação depois do conserto achou o resto do buraco: das 349 pastas da
+fila, **138 não casam com pacote nenhum** — origem podada, mesma população dos
+"SEM ORIGEM" do resgate de áudio. Nenhum modo do auditor as via. Daí o `--fila`,
+que julga pelo `engajamento.json`.
+
+Resultado do dia: **37 tirados** pelo juiz de imagem, **6** pelo de nome.
+
+### ⚠️ O TIKTOK NÃO ESTÁ QUEBRADO — ELE ESTÁ FECHADO
+
+42 de ~60 fontes falharam. Não era yt-dlp velho (o nightly faz igual):
+
+    {"title": "airlandolists", "entries": [null], "playlist_count": 0}
+
+O perfil resolve, o feed vem vazio: exige sessão. **E isso ia apagar as fontes**
+— a poda por coleta remove quem volta 0 vídeo, e a versão estável só protegia
+por acidente (erro de JSON caía no `except`). Com JSON válido o acidente some.
+`feed_vazio()` agora separa "fonte morta" de "me bloquearam".
+
+`_cookies_args(fonte)` recebia a fonte e **nunca a usava** — com cookies só do
+Instagram, o TikTok recebia cookie de outro site.
+
+### ⚠️ E O MEU CONTROLE DO JUIZ DE NOME CONTINHA A RESPOSTA
+
+Ele deu 100%/100%. Só que **10 dos 28 itens de controle estavam nos exemplos do
+próprio prompt** — eu media o modelo repetindo o que eu tinha acabado de
+mostrar. Nos 18 itens limpos o resultado se sustenta (7/7 frases, 11/11
+produtos, com a armadilha `Escova lava carro giratória` inclusa), mas o número
+que eu anunciei estava inflado. Prompt trocado; o teste falha se a sobreposição
+voltar.
+
+📌 É a MESMA falha do `--frame0`: medir algo parecido com o que acontece e
+chamar de prova. Dessa vez dentro da prova que eu mesmo escrevi para não errar
+isso.
+
+### O alcance dobrou. O seguidor não mexeu.
+
+Reels, 07/09 contra 31/08–05/09: mediana **135 → 212**, média **328 → 686**,
+interações/post **6,6 → 11,0**, e 28% passando de 1.000 (era 14%).
+
+E os seguidores: **547 → 549**. Dois, todos na `topshop.__`.
+
+⚠️ **É UM TESTE NATURAL DO QUE EU VINHA DIZENDO:** o Instagram entregou o dobro
+de gente e a conversão não mudou. O gargalo não é distribuição. Ressalvas
+honestas: n=18 num dia, segunda depois de domingo sem post, e mudou tudo junto
+(áudio, comentário, juiz, fontes) — dá pra dizer que melhorou, não POR QUÊ.
+
+### Pendências
+- ⏳ **cookies do TikTok** — 42 fontes paradas até lá (`TIKTOK_COOKIES`)
+- ⏳ o que faz alguém SEGUIR — nunca foi atacado, e é a meta
+- ⏳ carrossel: é vitrine (o que a pessoa vê depois do Reel), não canal
+- ⏳ 15 de 15 hooks são a mesma frase: "[eu] [sofria com] [problema] [emoji]"
+
+---
+
 ## 🗓️ Dia 2026-09-07 — 64 mil pessoas viram, e ninguém seguiu
 
 ### A primeira medição do objetivo, em 3 dias de trabalho

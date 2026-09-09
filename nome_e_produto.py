@@ -78,12 +78,18 @@ _PROMPT = (
     "ter marca, número, medida, caixa alta, palavra em inglês, erro de "
     "português. Nada disso importa: se dá pra procurar numa loja e receber uma "
     "coisa, é PRODUTO.\n"
-    "  ex.: 'Kit 3 Necessaire Impermeável', 'pantufa cogumelo', 'Bloqueador "
-    "Wi-Fi', 'tinta efeito granilite', 'Escada rolante', 'soco inglês choque'\n\n"
+    # ⚠️ NENHUM EXEMPLO DAQUI PODE ESTAR NO CONTROLE (08/09/2026). A 1ª versão
+    # usava como exemplo as MESMAS frases e produtos da lista de controle — 10
+    # dos 28 itens. O 100%/100% que ela deu media o modelo repetindo o que eu
+    # tinha acabado de mostrar, não julgando. É a mesma falha do `--frame0`
+    # desta semana, agora dentro da minha própria prova. `teste_nome_produto`
+    # falha se a sobreposição voltar.
+    "  ex.: 'Panela de Vidro Borossilicato com Tampa', 'aspirador de cama', "
+    "'fita silicone vedação fogão', 'meia térmica masculina'\n\n"
     "FRASE — é conversa, opinião ou pedaço de legenda. Costuma ter verbo "
     "conjugado, primeira pessoa, ou simplesmente não nomeia objeto nenhum.\n"
-    "  ex.: 'salva não perder nenhum', 'Valem cada centavoo', 'Facilitam dia "
-    "dia', 'Pro dia das mães', 'sou apaixonadaa', 'assim aguentar frio'\n\n"
+    "  ex.: 'olha só que coisa linda', 'não acreditei quando vi', "
+    "'todo mundo precisa disso', 'juro que vale muito'\n\n"
     "⚠️ NA DÚVIDA responda PRODUTO. Nome esquisito de marketplace é comum; "
     "jogar fora um produto bom custa mais caro que deixar passar uma frase.\n\n"
     "Responda em uma linha:\nPRODUTO | <2 a 5 palavras do porquê>\n"

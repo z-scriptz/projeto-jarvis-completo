@@ -90,6 +90,23 @@ checa("'Escova lava carro giratória' está no controle como PRODUTO",
 checa("as frases do controle vieram da fila real (não inventadas)",
       "salva não perder nenhum" in _src and "Valem cada centavoo" in _src)
 
+print("\n── ⚠️ O CONTROLE NÃO PODE ESTAR DENTRO DO PROMPT ──")
+# A 1ª versao usava como exemplo as MESMAS frases e produtos do controle: 10
+# dos 28 itens. O 100%/100% media o modelo repetindo o que eu acabara de
+# mostrar. Prova que contem a resposta nao e prova.
+import re as _re
+_prompt = _src.split("_PROMPT = (")[1].split('"Texto: {nome}"')[0].lower()
+def _itens(bloco):
+    return [x for x in _re.findall(r'"([^"]+)"',
+            _src.split(bloco)[1].split("]")[0])]
+for _rot, _bloco in (("FRASES", "FRASES = ["), ("PRODUTOS", "PRODUTOS = [")):
+    _lista = _itens(_bloco)
+    _dentro = [n for n in _lista if n[:24].lower() in _prompt]
+    checa(f"nenhum item de {_rot} aparece nos exemplos do prompt",
+          not _dentro, f"vazaram: {_dentro}")
+    checa(f"{_rot} tem pelo menos 10 itens", len(_lista) >= 10,
+          f"tem {len(_lista)}")
+
 print("\n── move, não apaga ──")
 checa("a quarentena é uma pasta separada",
       'REPROVADOS = BASE_DIR / "reprovado_nome"' in _src)
