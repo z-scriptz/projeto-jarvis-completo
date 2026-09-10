@@ -763,9 +763,45 @@ processo. **Eu tinha acabado de mandar o Dre usar
 comando não teria feito nada, e o sintoma seria nenhum.**
 
 Mesma família do defeito que mais se repete aqui: escrito, documentado,
-versionado — e não ligado em lugar nenhum. Virou `shared/envfile.py` em vez de
-uma quarta cópia do `_carregar_env` (`auto_resposta` e `tiktok_coletor` têm as
-suas; migrar as duas fica pendente).
+versionado — e não ligado em lugar nenhum. Virou `shared/envfile.py`.
+
+### 📏 A DÍVIDA MEDIDA: não eram 3 cópias, eram 40 (10/09)
+
+O Dre: *"bora migrar o auto resposta e o tiktokcoletor também"*. Migrados — e a
+varredura depois deu o tamanho real:
+
+| | |
+|---|---|
+| cópias de `_carregar_env` | **40** |
+| implementações distintas (por AST, ignorando formatação) | **26** |
+| que **sobrescrevem** variável já exportada | **0** |
+
+📌 **A divergência perigosa não existe.** Todas as 40 respeitam a variável já
+exportada, então `AUTO_RESP_DM=0 python x.py` nunca mentiu. Isso rebaixa a
+dívida de "urgente" para "dívida" — e é o tipo de número que muda a decisão.
+
+⚠️ **Mas uma das 40 sabia algo que as outras 39 não.** O
+`hook_alana._carregar_env` também preenche variável que existe mas está
+**VAZIA**, e o comentário dele conta como aprendeu: a `GEMINI_API_KEY` chegava
+vazia (não ausente), o `k not in os.environ` dos outros achava que estava tudo
+certo, e hook e legenda caíam no banco de reserva **em silêncio** — a conta de
+beleza publicando curiosidade genérica sobre organização da casa. *"Variável
+vazia esconde o problema do mesmo jeito que a ausente."* Essa regra virou a do
+`shared/envfile.py`.
+
+📌 **Sobram 35 com cópia própria, e não migrei de propósito.** O motivo está
+escrito no `diag_match` desde antes: *"não unifiquei agora porque mexer em cinco
+arquivos de produção no meio de outra tarefa é como se quebra coisa que estava
+funcionando"*. O `teste_envfile.py` **conta** as que faltam e não reprova por
+elas — número na mesa, decisão do Dre.
+
+⚠️ E o contador errou na primeira versão: eu procurava a string `"envfile"` no
+corpo da função, e os três migrados (`return _carregar_env_shared(BASE_DIR)`)
+foram contados como cópias. **Contador errado num teste de dívida é pior que não
+ter contador — ele reprova o conserto que acabou de ser feito.** Agora o critério
+é escrever no `os.environ`, que é o que de fato distingue cópia de delegação.
+
+`teste_envfile.py` (20/20) — novo.
 
 ### 🕶️ E O `.env` PODE MATAR AS FRASES NOVAS SEM DAR SINAL
 

@@ -41,7 +41,21 @@ def carregar_env(base: Path = None, sobrescrever: bool = False) -> int:
 
     ⚠️ NÃO SOBRESCREVE por padrão: variável exportada na mão (ou pelo systemd)
     tem que ganhar do arquivo, senão `AUTO_RESP_DM=0 python x.py` mentiria pra
-    quem está testando.
+    quem está testando. Medido: as 40 cópias espalhadas pelo projeto fazem
+    todas assim — nesse ponto não havia divergência nenhuma pra conciliar.
+
+    ⚠️ MAS VARIÁVEL VAZIA CONTA COMO AUSENTE, e esta regra vem da melhor das 40
+    cópias (`hook_alana._carregar_env`), que a descobriu do jeito caro: a
+    `GEMINI_API_KEY` chegava VAZIA (não ausente), o `k not in os.environ` dos
+    outros carregadores achava que estava tudo certo, e hook e legenda caíam no
+    banco de reserva **em silêncio** — a conta de beleza publicando curiosidade
+    genérica sobre organização da casa. Como está escrito lá: *"variável vazia
+    esconde o problema do mesmo jeito que a ausente"*.
+
+    ⚠️ E `.env` ILEGÍVEL NÃO PODE DERRUBAR IMPORT. Metade do projeto chama isto
+    na primeira linha do módulo; uma exceção aqui viraria "o agente não sobe",
+    com o motivo escondido num traceback de encoding. Devolve 0 e segue — quem
+    quiser cobrar, cobra pelo retorno.
     """
     base = base or Path(__file__).resolve().parent.parent
     n = 0
@@ -60,7 +74,7 @@ def carregar_env(base: Path = None, sobrescrever: bool = False) -> int:
                 linha = linha[7:]
             k, _, v = linha.partition("=")
             k, v = k.strip(), v.strip().strip('"').strip("'")
-            if k and (sobrescrever or k not in os.environ):
+            if k and (sobrescrever or not os.environ.get(k)):
                 os.environ[k] = v
                 n += 1
         break            # o primeiro que existir manda; não empilha os dois

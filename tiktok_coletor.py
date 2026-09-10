@@ -278,21 +278,21 @@ def _termo_por_visao(video, dur=0, legenda="") -> str:
                 pass
 
 
+# ⚠️ ERA UMA CÓPIA IDÊNTICA, E A TERCEIRA (10/09/2026). O `comentarios.py` não
+# tinha nenhuma e por isso os overrides que ele ANUNCIAVA nunca funcionaram —
+# ninguém notou por semanas, porque a falha é silenciosa por natureza: variável
+# que não foi lida é indistinguível de variável que não foi definida.
+# Três leituras do mesmo arquivo é o mesmo formato do defeito que já apareceu na
+# rotação de frases: enquanto forem cópias, consertar uma deixa as outras
+# quebradas. O fallback existe porque o repo é achatado e a VPS usa pacotes.
+try:
+    from shared.envfile import carregar_env as _carregar_env_shared
+except Exception:  # pragma: no cover
+    from envfile import carregar_env as _carregar_env_shared
+
+
 def _carregar_env():
-    for cand in (BASE_DIR / ".env", Path(".env")):
-        if not cand.exists():
-            continue
-        for linha in cand.read_text(encoding="utf-8").splitlines():
-            linha = linha.strip()
-            if not linha or linha.startswith("#") or "=" not in linha:
-                continue
-            if linha.lower().startswith("export "):
-                linha = linha[7:]
-            k, _, v = linha.partition("=")
-            k, v = k.strip(), v.strip().strip('"').strip("'")
-            if k and k not in os.environ:
-                os.environ[k] = v
-        break
+    return _carregar_env_shared(BASE_DIR)
 
 
 _carregar_env()
