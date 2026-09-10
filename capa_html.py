@@ -218,8 +218,14 @@ def montar_html(plano: dict) -> str:
                 break
     fundo_u = _b64(fundo) if fundo else ""
 
-    hook = (capa.get("hook") or "").strip().upper()
-    sub = _h.escape((capa.get("sub") or "").strip().upper())
+    # ⚠️ O CRU E O MAIÚSCULO SÃO COISAS DIFERENTES, e eu tinha misturado: o
+    # Python já entregava `.upper()` pros dois estilos, então "tirar o
+    # uppercase" no CSS do claro não mudou NADA — a capa saiu em caixa alta
+    # igual, e o teste passou porque conferia a regra CSS em vez do texto.
+    hook_cru = (capa.get("hook") or "").strip()
+    sub_cru = _h.escape((capa.get("sub") or "").strip())
+    hook = hook_cru.upper()
+    sub = sub_cru.upper()
     total = len(plano.get("slides") or []) + 2
     arrasta = _h.escape((capa.get("arrasta") or "ARRASTA PRO LADO").upper())
     handle = _h.escape(plano.get("handle") or "")
@@ -229,7 +235,7 @@ def montar_html(plano: dict) -> str:
     if estilo not in ESTILOS:
         estilo = _escolher_estilo(plano.get("handle") or nicho)
     if estilo == "claro":
-        return _html_claro(hook=hook, sub=sub, total=total, arrasta=arrasta,
+        return _html_claro(hook=hook_cru, sub=sub_cru, total=total, arrasta=arrasta,
                            handle=handle, cor=cor, fonte_u=fonte_u,
                            corpo_u=corpo_u, fundo_u=fundo_u)
 
@@ -370,8 +376,10 @@ def _html_claro(hook, sub, total, arrasta, handle, cor,
     # invertida no Python < 3.12, e este arquivo roda em três máquinas.
     cartao = (f"<div class=\"cartao\" style=\"background-image:url('{fundo_u}')\">"
               f"</div>") if tem_foto else ""
-    margem_rodape = "34" if tem_foto else "auto"
-    teto_hook = "520" if tem_foto else "900"
+    margem_rodape = "34px" if tem_foto else "auto"
+    teto_hook = "520" if tem_foto else "760"
+    justificar = "flex-start" if tem_foto else "center"
+    # com o texto centralizado o hook tem mais folga vertical
     return f"""<!doctype html><html><head><meta charset="utf-8"><style>
 @font-face {{ font-family:'Titulo'; src:url('{fonte_u}'); }}
 @font-face {{ font-family:'Corpo'; src:url('{corpo_u}'); }}
@@ -379,25 +387,42 @@ def _html_claro(hook, sub, total, arrasta, handle, cor,
 body {{ width:{LARG}px; height:{ALT}px; overflow:hidden;
         font-family:'Corpo',sans-serif; background:#f4f1ea; color:#111; }}
 .palco {{ position:relative; width:100%; height:100%;
-          padding:96px 80px 80px; display:flex; flex-direction:column; }}
+          padding:96px 80px 80px; display:flex; flex-direction:column;
+          justify-content:flex-start; }}
+/* ⚠️ SEM FOTO, O TEXTO VAI PRO CENTRO — e quem centraliza é ESTE bloco, não o
+   palco. O `justify-content` do palco não funcionava porque o rodapé tem
+   `margin-top:auto`, que num flex absorve todo o espaço livre e não sobra
+   nada pra distribuir. Sintoma: 400px de vazio entre o subtítulo e o rodapé,
+   com a capa parecendo inacabada. Nos virais sem imagem (@rafabri7o) o texto
+   ocupa o meio da tela. */
+.texto {{ position:relative; flex:1; display:flex; flex-direction:column;
+          justify-content:{justificar}; }}
 
 /* ⚠️ a mancha de cor é o ÚNICO enfeite, e fica ATRÁS do texto: nos virais o
    fundo tem uma forma (a nuvem azul da @olga_lehnerg), não um gradiente. */
 .mancha {{ position:absolute; width:760px; height:760px; right:-190px;
            top:-160px; border-radius:50%; background:{cor}1f; }}
 
-.hook {{ position:relative; font-family:'Titulo',sans-serif; font-size:126px;
+.hook {{ position:relative; z-index:1;
+         font-family:'Titulo',sans-serif; font-size:126px;
          line-height:1.02; letter-spacing:-2px; color:#111;
          /* sem text-shadow: em fundo claro ela suja a letra em vez de recortar */ }}
 .hook em {{ font-style:normal; }}
 .cor {{ color:{cor}; }}
-/* a tarja continua marcador, não retângulo — mas em fundo claro ela é a
-   palavra em BRANCO sobre a cor, e não preta sobre a cor */
-.tarja {{ position:relative; color:#fff; padding:0 14px; display:inline;
-          line-height:inherit; }}
-.tarja::before {{ content:''; position:absolute; left:-6px; right:-6px;
-                  top:-.02em; bottom:-.10em; background:{cor}; z-index:-1;
-                  transform:rotate(-1.2deg); border-radius:6px; }}
+/* ⚠️ A TARJA AQUI NÃO USA `::before`, E O MOTIVO SAIU DA PRIMEIRA IMAGEM
+   RENDERIZADA: no exemplo o trecho marcado era "na casa", que QUEBRA EM DUAS
+   LINHAS — e `position:absolute` dentro de um `display:inline` partido se
+   ancora só no primeiro fragmento. O bloco colapsou numa barra vertical de
+   6px e sobrou "NA CASA" em BRANCO sobre fundo creme: ilegível.
+   ⚠️ E não era o `z-index`, que foi meu primeiro palpite (copiado do aviso
+   que eu mesmo tinha escrito no template escuro). Lá a tarja nunca quebrou
+   linha, então o defeito estava lá o tempo todo, dormindo.
+   `box-decoration-break:clone` é o recurso feito pra isto: pinta o fundo em
+   CADA fragmento de linha. Perde a inclinação de -1.2°, e é uma troca boa —
+   marcador torto ilegível não é marcador. */
+.tarja {{ background:{cor}; color:#fff; padding:2px 14px; display:inline;
+          line-height:inherit; border-radius:6px;
+          -webkit-box-decoration-break:clone; box-decoration-break:clone; }}
 
 .sub {{ position:relative; margin-top:38px; padding-right:90px; font-size:40px;
         line-height:1.34; color:#4a4a52; text-transform:none; }}
@@ -407,7 +432,7 @@ body {{ width:{LARG}px; height:{ALT}px; overflow:hidden;
            border-radius:28px; overflow:hidden; background:#e8e4db center/cover
            no-repeat; box-shadow:0 18px 50px rgba(0,0,0,.16); }}
 
-.rodape {{ position:relative; margin-top:{margem_rodape}px;
+.rodape {{ position:relative; margin-top:{margem_rodape};
            display:flex; align-items:center; gap:16px; font-size:30px;
            color:#6b6b74; }}
 .rodape b {{ color:#111; font-weight:800; }}
@@ -417,8 +442,10 @@ body {{ width:{LARG}px; height:{ALT}px; overflow:hidden;
 .arrasta i {{ font-style:normal; color:{cor}; font-size:32px; }}
 </style></head><body><div class="palco">
   <div class="mancha"></div>
-  <div class="hook" id="hook">{_marcar(hook)}</div>
-  <div class="sub">{sub}</div>
+  <div class="texto">
+    <div class="hook" id="hook">{_marcar(hook)}</div>
+    <div class="sub">{sub}</div>
+  </div>
   {cartao}
   <div class="rodape"><b>{handle}</b> · {total} slides
     <div class="arrasta">{arrasta} <i>&#10132;</i></div></div>
@@ -515,7 +542,13 @@ def main() -> int:
     p.add_argument("--saida", default="")
     p.add_argument("--html", metavar="NICHO", help="cospe o HTML e sai")
     p.add_argument("--fundo", default="", help="imagem de fundo pro exemplo")
+    p.add_argument("--estilo", default="", choices=("",) + tuple(ESTILOS),
+                   help=f"força o estilo da capa: {', '.join(ESTILOS)}")
+    p.add_argument("--todos", action="store_true",
+                   help="gera UMA capa de cada estilo, pra comparar lado a lado")
     a = p.parse_args()
+    if a.estilo:
+        os.environ["CARR_ESTILO"] = a.estilo
 
     nicho = a.exemplo or a.html
     if a.plano:
@@ -533,11 +566,30 @@ def main() -> int:
         print(montar_html(plano))
         return 0
 
-    saida = a.saida or f"capa_{plano.get('nicho', 'geral')}.jpg"
-    r = renderizar_capa(plano, saida)
-    if not r:
-        return 1
-    print(f"✅ {r}  ({Path(r).stat().st_size // 1024} KB)")
+    # ⚠️ O NOME LEVA O ESTILO, e isso não é enfeite: rodar duas vezes pra
+    # comparar escuro × claro sobrescrevia o mesmo `capa_casa.jpg` e o Dre
+    # ficava com UMA imagem, achando que tinha as duas. Comparação que só
+    # existe se você lembrar de renomear no meio não é comparação.
+    nicho_nome = plano.get("nicho", "geral")
+    estilos_pedidos = list(ESTILOS) if a.todos else [
+        a.estilo or os.environ.get("CARR_ESTILO", "").strip().lower() or ""]
+
+    feitos = []
+    for est in estilos_pedidos:
+        if est:
+            os.environ["CARR_ESTILO"] = est
+            plano.setdefault("capa", {})["estilo"] = est
+        sufixo = f"_{est}" if est else ""
+        saida = a.saida if (a.saida and len(estilos_pedidos) == 1) \
+            else f"capa_{nicho_nome}{sufixo}.jpg"
+        r = renderizar_capa(plano, saida)
+        if not r:
+            return 1
+        feitos.append(r)
+        print(f"✅ {r}  ({Path(r).stat().st_size // 1024} KB)"
+              + (f"  [estilo: {est}]" if est else ""))
+    if len(feitos) > 1:
+        print(f"\n   {len(feitos)} capas lado a lado — abra as duas antes de decidir.")
     return 0
 
 

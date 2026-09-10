@@ -584,7 +584,39 @@ Ligado em **12**, e o `lista` cedeu de **40 → 30**: sozinho ele era 40% de tud
 o que saía, contra o pedido explícito de variar. O teste trava a distribuição
 (nenhum formato passa de ⅓ da roda).
 
-`teste_capa_estilo.py` (26/26) — novo.
+### 🖼️ E A PRIMEIRA IMAGEM RENDERIZADA DERRUBOU O MEU PRÓPRIO TESTE
+
+O teste passou 26/26 com a capa **errada**. Só apareceu quando eu renderizei o
+JPG e **olhei**:
+
+1. ⚠️⚠️ **CAIXA ALTA — testei a REGRA, não o EFEITO.** Assertei
+   `"text-transform:uppercase" not in claro` (verdadeiro) e a capa saiu em caixa
+   alta do mesmo jeito, porque `montar_html` já fazia `.upper()` no **Python**
+   antes de escolher o estilo. A regra CSS nunca teve chance de importar. É
+   exatamente a classe de defeito que este projeto persegue o dia todo, cometida
+   por mim no teste que existia pra pegá-la.
+2. **A tarja sumiu.** O trecho marcado era *"na casa"* e **quebrou em duas
+   linhas** — `::before` absoluto dentro de `display:inline` partido se ancora
+   só no primeiro fragmento. Virou uma barra de 6px, e sobrou "NA CASA" em
+   **branco sobre creme**: ilegível. ⚠️ Meu primeiro palpite foi `z-index`,
+   copiado do aviso que eu mesmo escrevi no template escuro — e estava errado:
+   lá a tarja nunca quebrou linha, então o defeito dormia há semanas.
+   `box-decoration-break:clone` pinta o fundo em cada fragmento.
+3. **`margin-top:autopx`** — valor inválido, ignorado, e o rodapé não descia.
+4. **400px de vazio no meio.** O `justify-content` do palco não fazia nada
+   porque o rodapé tem `margin-top:auto`, que num flex **absorve todo o espaço
+   livre** e não sobra o que distribuir. Quem centraliza virou um bloco próprio.
+
+📌 **A lição é a mesma que eu venho escrevendo e não segui: o teste tem que
+olhar o que SAI, não o que está escrito.** Nenhuma das quatro falhas era
+invisível — bastava renderizar uma imagem, que custa 2 segundos.
+
+`teste_capa_estilo.py` (33/33) — as asserções novas conferem o **texto**
+renderizado, não a regra CSS.
+
+📌 `--todos` gera uma capa de cada estilo com o nome do estilo no arquivo:
+rodar duas vezes sobrescrevia `capa_casa.jpg` e sobrava UMA imagem, com quem
+pediu a comparação achando que tinha as duas.
 
 📌 **Pendências que ele fechou nesta rodada:** trilhas ficam com o áudio
 original por enquanto (*"depois eu arrumo isso"*), e os "15 ganchos com o mesmo

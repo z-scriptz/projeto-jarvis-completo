@@ -75,12 +75,39 @@ checa("o claro NÃO tem o selo ✓", "selo" not in claro)
 checa("o claro NÃO tem contador de página no topo", '<div class="pag">' not in claro)
 checa("mas a marca continua na capa (rodapé)", "@topshopcasa_" in claro)
 
-print("\n── ⚠️ E O HOOK DEIXA DE SER UM BLOCO DE CAIXA ALTA ──")
-# `text-transform:uppercase` num hook de 10 palavras vira mancha cinza no feed;
-# os cinco exemplos usam caixa normal, e é ela que faz a frase ser LIDA
+print("\n── ⚠️⚠️ CAIXA ALTA: TESTAR O TEXTO, NÃO A REGRA CSS ──")
+# ⚠️ A PRIMEIRA VERSÃO DESTE TESTE PASSOU COM A CAPA ERRADA. Eu assertava
+# `"text-transform:uppercase" not in claro` — verdadeiro — e a capa saiu em
+# CAIXA ALTA do mesmo jeito, porque o `montar_html` já fazia `.upper()` no
+# Python antes de escolher o estilo. **Testei a regra, não o efeito**, que é
+# exatamente a classe de defeito que este projeto persegue o dia todo. Só
+# apareceu quando eu renderizei a imagem e OLHEI.
 checa("o escuro força uppercase (como era)", "text-transform:uppercase" in escuro)
-checa("o claro NÃO força uppercase no hook",
+checa("o claro não tem a regra CSS de uppercase",
       "text-transform:uppercase" not in claro)
+checa("⚠️ e o TEXTO do claro chega em caixa normal",
+      "quase todo mundo comete" in claro,
+      "o Python já entregava .upper() — a regra CSS não desfaz isso")
+checa("⚠️ o subtítulo do claro também",
+      "o terceiro me custou caro" in claro)
+checa("o escuro continua recebendo o texto em maiúscula",
+      "QUASE TODO MUNDO COMETE" in escuro)
+
+print("\n── ⚠️ A TARJA TEM QUE SOBREVIVER À QUEBRA DE LINHA ──")
+# ⚠️ Na 1ª imagem renderizada o trecho marcado era "na casa", que quebrou em
+# DUAS linhas — e `::before` absoluto dentro de um `display:inline` partido se
+# ancora só no primeiro fragmento. O bloco virou uma barra de 6px e sobrou
+# "NA CASA" em BRANCO sobre fundo creme: ilegível.
+# `box-decoration-break:clone` pinta o fundo em cada fragmento.
+checa("o claro não usa ::before pra tarja", ".tarja::before" not in claro)
+checa("usa box-decoration-break (pinta cada linha)",
+      "box-decoration-break:clone" in claro)
+checa("a cor do nicho está na própria tarja", ".tarja {" in claro or ".tarja{" in claro)
+_marcado = C.montar_html({"nicho": "casa", "handle": "@x", "slides": [{}],
+                          "capa": {"hook": "erro [na casa] que ninguem ve",
+                                   "sub": "s", "estilo": "claro"}})
+checa("trecho marcado que quebra linha continua no html",
+      'class="tarja"' in _marcado and "na casa" in _marcado)
 
 print("\n── ⚠️ A FOTO É CARTÃO, NÃO FUNDO ESCURECIDO ──")
 # no @lucasmagazinetech o produto é a estrela; escurecer a 62% é o oposto
