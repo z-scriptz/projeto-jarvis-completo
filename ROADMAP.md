@@ -660,7 +660,28 @@ o rodapé com 500px de branco embaixo · cartão branco sobre página branca (s�
 sombra denunciava que havia algo ali) · um `×` entre MITO e VERDADE, que lê como
 multiplicação.
 
-`teste_capa_estilo.py`: 33 → **58**.
+### 🖼️ E A FOTO ERA O QUE FALTAVA PRA CHEGAR NA REFERÊNCIA
+
+No @homemquesabetudo a **mesma esponja** aparece em MITO e em VERDADE — o
+contraste está no texto, e repetir a imagem é o que deixa isso óbvio antes de a
+pessoa ler. A minha versão só tinha texto.
+
+Agora os cartões aceitam foto por lado, e o `carrossel_brain` preenche
+(`_lados_da_capa`):
+
+| formato | o que vai |
+|---|---|
+| `comparacao` | os **dois produtos** — nome e foto de cada |
+| `mitos` | a **mesma foto** nos dois lados (é o formato, não economia) + os textos dos slides |
+| resto | nada — campo vazio é pior que ausente: a capa trata *ausente* como "cai pro slide" e *vazio* como "é isso mesmo" |
+
+⚠️ **E apareceu um defeito antigo no `_b64`:** caminho vazio virava `Path(".")`,
+que **existe e é diretório**, e o `read_bytes()` estourava com
+`IsADirectoryError`. Estava ali desde sempre — só apareceu quando um chamador
+novo passou `""`. `exists()` respondia a pergunta errada; `is_file()` responde a
+certa.
+
+`teste_capa_estilo.py`: 33 → **70**.
 
 📌 `--todos` gera uma capa de cada estilo com o nome do estilo no arquivo:
 rodar duas vezes sobrescrevia `capa_casa.jpg` e sobrava UMA imagem, com quem

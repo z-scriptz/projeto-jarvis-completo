@@ -112,8 +112,14 @@ def _b64(caminho) -> str:
     """Arquivo → data: URI. ⚠️ O Chromium headless recusa `file://` a partir de
     uma página `data:`/`about:blank`, e embutir é mais simples que servir uma
     pasta por HTTP só pra isso."""
+    # ⚠️ CAMINHO VAZIO VIRA `Path(".")`, QUE EXISTE E É DIRETÓRIO — e o
+    # `read_bytes()` estourava com IsADirectoryError. Estava aqui desde sempre;
+    # só apareceu quando um chamador novo passou "" (capa sem foto por lado).
+    # `is_file()` responde a pergunta certa; `exists()` responde outra.
+    if not caminho:
+        return ""
     p = Path(caminho)
-    if not p.exists():
+    if not p.is_file():
         return ""
     tipo = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
             "webp": "image/webp", "ttf": "font/ttf", "otf": "font/otf"}.get(
@@ -561,7 +567,15 @@ def _dois_lados(plano: dict, estilo: str) -> tuple:
         rot_a = (capa.get("rotulo_a") or a or "A").strip()[:26]
         rot_b = (capa.get("rotulo_b") or b or "B").strip()[:26]
         a = b = ""
-    return rot_a, rot_b, a[:120], b[:120]
+    # ⚠️ AS FOTOS SÃO O QUE FALTAVA PRA CHEGAR NA REFERÊNCIA. No
+    # @homemquesabetudo (4.163 curtidas) a esponja aparece nos DOIS lados — é a
+    # imagem que faz o contraste ser visto antes de ser lido. Sem foto a capa
+    # ainda sai (o cartão vira só texto), porque nem todo plano tem imagem por
+    # lado e "não saiu" custa mais que uma capa sóbria.
+    foto_a = _b64(capa.get("foto_a") or (slides[0].get("foto") if slides else "") or "")
+    foto_b = _b64(capa.get("foto_b") or
+                  (slides[1].get("foto") if len(slides) > 1 else "") or "")
+    return rot_a, rot_b, a[:120], b[:120], foto_a, foto_b
 
 
 def _html_dois_lados(estilo, hook, sub, total, arrasta, handle, cor,
@@ -581,7 +595,7 @@ def _html_dois_lados(estilo, hook, sub, total, arrasta, handle, cor,
     import html as _h
     cor_texto = _escurecer(cor)
     cor_tarja = _contraste(cor)
-    rot_a, rot_b, txt_a, txt_b = _dois_lados(plano, estilo)
+    rot_a, rot_b, txt_a, txt_b, foto_a, foto_b = _dois_lados(plano, estilo)
     if estilo == "mito_verdade":
         fundo_pag, cor_a, cor_b = "#e8f2fb", "#d64545", "#2f9e5f"
         titulo_a, titulo_b = _h.escape(rot_a), _h.escape(rot_b)
@@ -597,6 +611,10 @@ def _html_dois_lados(estilo, hook, sub, total, arrasta, handle, cor,
     # lê como multiplicação. No versus o "vs" É o nome do formato.
     meio = "vs" if estilo == "versus" else ""
     meio_html = f'<div class="meio">{meio}</div>' if meio else ""
+    img_a = (f'<div class="img" style="background-image:url(\'{foto_a}\')"></div>'
+             if foto_a else "")
+    img_b = (f'<div class="img" style="background-image:url(\'{foto_b}\')"></div>'
+             if foto_b else "")
 
     return f"""<!doctype html><html><head><meta charset="utf-8"><style>
 @font-face {{ font-family:'Titulo'; src:url('{fonte_u}'); }}
@@ -633,7 +651,10 @@ body {{ width:{LARG}px; height:{ALT}px; overflow:hidden;
         line-height:1.04; letter-spacing:-1px; }}
 .lado.a .rot {{ color:{cor_a}; }}
 .lado.b .rot {{ color:{cor_b}; }}
-.txt {{ margin-top:24px; font-size:33px; line-height:1.36; color:#3d3d45; }}
+.txt {{ margin-top:20px; font-size:33px; line-height:1.36; color:#3d3d45; }}
+/* a foto do lado: quadrada, sem escurecer — aqui o produto é a prova visual */
+.img {{ margin-top:22px; width:100%; height:250px; border-radius:18px;
+        background:#eee center/cover no-repeat; }}
 .meio {{ align-self:center; font-family:'Titulo',sans-serif; font-size:62px;
          color:#9a9aa4; }}
 
@@ -650,10 +671,10 @@ body {{ width:{LARG}px; height:{ALT}px; overflow:hidden;
   <div class="sub">{sub}</div>
   <div class="lados">
     <div class="lado a"><div class="rot">{titulo_a}</div>
-      {'<div class="txt">' + corpo_a + '</div>' if tem_corpo else ''}</div>
+      {'<div class="txt">' + corpo_a + '</div>' if tem_corpo else ''}{img_a}</div>
     {meio_html}
     <div class="lado b"><div class="rot">{titulo_b}</div>
-      {'<div class="txt">' + corpo_b + '</div>' if tem_corpo else ''}</div>
+      {'<div class="txt">' + corpo_b + '</div>' if tem_corpo else ''}{img_b}</div>
   </div>
   </div>
   <div class="rodape"><b>{handle}</b> · {total} slides

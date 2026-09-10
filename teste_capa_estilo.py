@@ -214,6 +214,53 @@ checa("o mito/verdade NÃO tem símbolo no meio (× lê como multiplicação)",
 checa("⚠️ o cartão não é branco sobre branco no versus",
       "#f2f2f5" in _vs, "cartão invisível: só a sombra denunciava")
 
+print("\n── ⚠️ A FOTO É O QUE FALTAVA PRA CHEGAR NA REFERÊNCIA ──")
+# no @homemquesabetudo (4.163 curtidas) a MESMA esponja aparece em MITO e em
+# VERDADE: o contraste está no texto, e repetir a imagem é o que deixa isso
+# óbvio antes de a pessoa ler
+_com_foto = C.montar_html({
+    "nicho": "casa", "handle": "@c", "slides": [{}],
+    "capa": {"hook": "e ai?", "sub": "s", "estilo": "mito_verdade",
+             "lado_a": "a", "lado_b": "b",
+             "foto_a": str(BASE / "teste_capa_estilo.py")}})   # arquivo real
+checa("com foto, o cartão ganha bloco de imagem", 'class="img"' in _com_foto)
+checa("sem foto, nenhum bloco de imagem vazio",
+      'class="img"' not in _sem_lados)
+# ⚠️ `_b64("")` virava Path(".") — que EXISTE e é DIRETÓRIO — e estourava com
+# IsADirectoryError. Estava ali desde sempre; só apareceu quando um chamador
+# novo passou "". `is_file()` responde a pergunta certa, `exists()` não.
+checa("caminho vazio não estoura o _b64", C._b64("") == "")
+checa("diretório não vira imagem", C._b64(".") == "")
+checa("arquivo inexistente devolve vazio", C._b64("/nao/existe.jpg") == "")
+
+print("\n── ⚠️ E O GERADOR PREENCHE OS DOIS LADOS ──")
+# capa que adivinha é capa que um dia adivinha errado
+_cb = (BASE / "carrossel_brain.py").read_text("utf-8")
+_ns = {}
+for _n in ast.parse(_cb).body:
+    if isinstance(_n, ast.FunctionDef) and _n.name == "_lados_da_capa":
+        exec(compile(ast.Module([_n], []), "x", "exec"), _ns)
+_lados = _ns.get("_lados_da_capa")
+checa("_lados_da_capa existe", _lados is not None)
+if _lados:
+    checa("formato sem dois lados não ganha campo nenhum",
+          _lados("lista", [{"nome": "x", "foto": "a.jpg"}], [{}]) == {})
+    _c = _lados("comparacao", [{"nome": "Fone 40", "foto": "a.jpg"},
+                               {"nome": "Fone 200", "foto": "b.jpg"}], [])
+    checa("comparação leva os DOIS produtos e as DUAS fotos",
+          _c.get("rotulo_a") == "Fone 40" and _c.get("foto_b") == "b.jpg", str(_c))
+    _m = _lados("mitos", [{"nome": "Esponja", "foto": "e.jpg"}],
+                [{"titulo": "usar ate estragar"}, {"titulo": "trocar em 15 dias"}])
+    checa("⚠️ no mitos a foto é a MESMA dos dois lados (é o formato)",
+          _m.get("foto_a") == _m.get("foto_b") == "e.jpg", str(_m))
+    checa("e os textos vêm dos slides", _m.get("lado_a") == "usar ate estragar")
+    checa("sem produto e sem slide não inventa campo vazio",
+          _lados("mitos", [], []) == {},
+          "campo vazio é pior que ausente: a capa trata ausente como 'cai pro "
+          "slide' e vazio como 'é isso mesmo'")
+    checa("o gerador realmente chama isso",
+          "**_lados_da_capa(formato, produtos, slides)" in _cb)
+
 print("\n── ⚠️ O FORMATO QUE ELE MANDOU ESTAVA DESLIGADO ──")
 # @homemquesabetudo, MITO | VERDADE sobre a esponja: 4.163 curtidas. A
 # estrutura estava pronta aqui, em peso 0, com o comentário "entra na roda

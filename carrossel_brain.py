@@ -1360,12 +1360,55 @@ def montar_plano(nicho: str, formato: str = "", fotos_em: Path = None) -> dict:
         "motivo_do_formato": motivo, "reserva": bool(d.get("reserva")),
         "capa": {"hook": _cortar(hook),
                  "sub": _cortar(d.get("capa_sub") or "", 10),
-                 "foto": next((p["foto"] for p in produtos if p.get("foto")), "")},
+                 "foto": next((p["foto"] for p in produtos if p.get("foto")), ""),
+                 # ⚠️ OS DOIS LADOS, pras capas de duas colunas (10/09/2026).
+                 # `mitos` ganha a capa MITO|VERDADE e `comparacao` a de versus
+                 # (ver `capa_html.AFINIDADE`), e as duas leem estes campos.
+                 # Sem eles a capa ainda sai — ela cai nos dois primeiros
+                 # slides — mas cai no texto do slide, que nem sempre é o nome
+                 # do produto. Preencher aqui é dizer o que a capa precisa
+                 # saber, em vez de deixá-la adivinhar.
+                 #
+                 # ⚠️ NO `mitos` A FOTO É A MESMA DOS DOIS LADOS, e isso não é
+                 # economia: é o formato. No @homemquesabetudo (4.163 curtidas)
+                 # a MESMA esponja aparece em MITO e em VERDADE — o contraste
+                 # está no texto, e repetir a imagem é o que deixa isso óbvio.
+                 **_lados_da_capa(formato, produtos, slides)},
         "slides": slides, "cta": cta, "aviso": aviso,
         "formato_real": formato_real,
         "legenda": (d.get("legenda") or "").strip(),
         "links": [p["link"] for p in produtos if p.get("link")],
     }
+
+
+def _lados_da_capa(formato: str, produtos: list, slides: list) -> dict:
+    """Os campos que as capas de DUAS COLUNAS leem. {} pros outros formatos.
+
+    Devolve só o que existe: campo vazio é pior que campo ausente, porque a
+    capa trata ausente como "cai pro slide" e vazio como "é isso mesmo".
+    """
+    f = (formato or "").strip().lower()
+    if f not in ("mitos", "comparacao"):
+        return {}
+    fora = {}
+    if f == "comparacao" and len(produtos) >= 2:
+        a, b = produtos[0], produtos[1]
+        for chave, val in (("rotulo_a", a.get("nome")), ("rotulo_b", b.get("nome")),
+                           ("foto_a", a.get("foto")), ("foto_b", b.get("foto"))):
+            if (val or "").strip():
+                fora[chave] = val.strip()
+        return fora
+    # mitos: um produto só, a MESMA foto nos dois lados (ver o comentário na
+    # chamada). Os textos vêm dos slides, que é onde o mito e a verdade moram.
+    foto = next((p.get("foto") for p in produtos if p.get("foto")), "")
+    if foto:
+        fora["foto_a"] = fora["foto_b"] = foto
+    textos = [(s.get("titulo") or s.get("texto") or "").strip()
+              for s in (slides or []) if isinstance(s, dict)]
+    textos = [t for t in textos if t]
+    if len(textos) >= 2:
+        fora["lado_a"], fora["lado_b"] = textos[0], textos[1]
+    return fora
 
 
 def _legenda_reserva(plano: dict) -> str:
