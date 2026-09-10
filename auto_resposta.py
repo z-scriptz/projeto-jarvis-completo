@@ -167,6 +167,30 @@ def _menciona_dm(t: str) -> bool:
     return "dm" in n or "direct" in n
 
 
+def _convite_grupo() -> str:
+    """O link do grupo do WhatsApp, do MESMO lugar que o site publica.
+
+    ⚠️ NÃO COPIO O `chat.whatsapp.com` PRA CÁ. Ele já mora em
+    `bio_page_builder.GRUPO_WHATSAPP` e é o que vai ao ar no site. Duas cópias
+    significam que, no dia em que o convite for trocado, uma delas manda gente
+    pra um grupo morto — e ninguém descobre, porque link errado numa DM não dá
+    erro em lugar nenhum. É a mesma decisão do `comentarios._convite_whats`.
+
+    ⚠️ E AQUI O LINK CLICA. Na DM, ao contrário do comentário do Instagram, o
+    `chat.whatsapp.com` é tocável — então aqui vai o convite direto, não a bio.
+    """
+    env = os.environ.get("WHATSAPP_CONVITE", "").strip()
+    if env:
+        return env
+    for caminho in ("bio_page_builder", "creative_engine.bio_page_builder"):
+        try:
+            mod = __import__(caminho, fromlist=["GRUPO_WHATSAPP"])
+            return (getattr(mod, "GRUPO_WHATSAPP", "") or "").strip()
+        except Exception:
+            continue
+    return ""
+
+
 def _respirar(teste: bool = False) -> None:
     """Pausa entre uma resposta e a próxima.
 
@@ -270,43 +294,143 @@ def _link_do_post(permalink: str) -> str:
     Cai pro site quando não acha — melhor a home que nada, mas o log conta,
     porque cada queda dessas é uma venda que dependia de uma junção que falhou.
     """
+    _carregar_ledger_links()
+    return _LINKS_POR_POST.get(_shortcode(permalink), "")
+
+
+def _shortcode(permalink: str) -> str:
+    """O código do post na URL. É a chave que liga o comentário ao produto."""
+    m = re.search(r"/(?:reel|reels|p|tv)/([^/?#]+)", permalink or "")
+    return m.group(1) if m else ""
+
+
+# ⚠️ O LEDGER ENVELHECE SOZINHO, E ISSO NÃO DAVA SINAL (10/09/2026).
+# O `publicados.jsonl` não é escrito por quem publica: ele é RASPADO DO LOG pelo
+# `ledger_publicados --salvar`, um comando manual. Se ninguém rodar, o post de
+# ontem não está lá — e o sintoma é a DM mandar a home do site, que é
+# exatamente o "degrau mais caro do funil" descrito acima.
+#
+# Então o `auto_resposta` regenera o ledger quando ele está velho. É seguro: o
+# `ledger_publicados` SÓ LÊ logs e o posts_ledger, e escreve um arquivo que já é
+# a saída dele. Não encosta em quem publica.
+LEDGER_VALIDADE_H = float(os.environ.get("AUTO_RESP_LEDGER_H", "6"))
+
+
+def _atualizar_ledger(forcar: bool = False) -> str:
+    """Regenera publicados.jsonl se estiver velho. Devolve o que aconteceu."""
+    arq = BASE_DIR / "shared" / "publicados.jsonl"
+    try:
+        idade_h = (time.time() - arq.stat().st_mtime) / 3600 if arq.exists() else 1e9
+    except Exception:
+        idade_h = 1e9
+    if not forcar and idade_h < LEDGER_VALIDADE_H:
+        return f"ledger com {idade_h:.1f}h — ainda fresco"
+    try:
+        import ledger_publicados as LP
+        dados = LP.juntar()
+        arq.parent.mkdir(parents=True, exist_ok=True)
+        arq.write_text("\n".join(json.dumps(d, ensure_ascii=False) for d in dados),
+                       encoding="utf-8")
+        global _LINKS_POR_POST
+        _LINKS_POR_POST = None          # força reler
+        com_link = sum(1 for d in dados if (d.get("link") or "").strip())
+        return (f"ledger regenerado: {len(dados)} publicação(ões), "
+                f"{com_link} com link de produto")
+    except Exception as e:
+        return f"⚠️ não consegui regenerar o ledger ({str(e)[:60]}) — sigo com o velho"
+
+
+def _carregar_ledger_links() -> dict:
     global _LINKS_POR_POST
-    if _LINKS_POR_POST is None:
-        _LINKS_POR_POST = {}
-        try:
-            arq = BASE_DIR / "shared" / "publicados.jsonl"
-            for ln in arq.read_text(encoding="utf-8", errors="ignore").splitlines():
-                try:
-                    r = json.loads(ln)
-                except Exception:
-                    continue
-                sc, lk = (r.get("id") or "").strip(), (r.get("link") or "").strip()
-                if sc and lk:
-                    _LINKS_POR_POST[sc] = lk
-            _log(f"   {len(_LINKS_POR_POST)} post(s) com link de produto no ledger")
-        except Exception as e:
-            _log(f"   (sem publicados.jsonl: {str(e)[:50]}) — DM vai pro site")
-    m = re.search(r"/(?:reel|p|tv)/([^/?#]+)", permalink or "")
-    return _LINKS_POR_POST.get(m.group(1), "") if m else ""
+    if _LINKS_POR_POST is not None:
+        return _LINKS_POR_POST
+    _LINKS_POR_POST = {}
+    _sem_link = 0
+    try:
+        arq = BASE_DIR / "shared" / "publicados.jsonl"
+        for ln in arq.read_text(encoding="utf-8", errors="ignore").splitlines():
+            try:
+                r = json.loads(ln)
+            except Exception:
+                continue
+            sc, lk = (r.get("id") or "").strip(), (r.get("link") or "").strip()
+            if sc and lk:
+                _LINKS_POR_POST[sc] = lk
+            elif sc:
+                _sem_link += 1
+        # ⚠️ OS DOIS NÚMEROS, NÃO SÓ O BOM. "505 com link" sozinho parece saúde;
+        # ao lado de quantos ficaram SEM link vira diagnóstico — post no ledger
+        # sem link é junção que falhou (slug não pareou), e é uma causa
+        # diferente de "o post nem está no ledger" (ledger velho).
+        _log(f"   {len(_LINKS_POR_POST)} post(s) com link de produto no ledger"
+             + (f" · {_sem_link} sem link (junção falhou)" if _sem_link else ""))
+    except Exception as e:
+        _log(f"   (sem publicados.jsonl: {str(e)[:50]}) — DM vai pro site")
+    return _LINKS_POR_POST
+
+
+# ⚠️ A DM TAMBÉM ERA UMA FRASE SÓ (10/09). Duas constantes, uma pra cada caso —
+# ou seja, 200 pessoas recebendo a MESMA mensagem privada no mesmo dia. Na DM
+# isso é pior que no comentário: comentário público a pessoa entende como
+# legenda, mensagem privada idêntica é claramente robô. Mesma rotação do resto.
+_DM_PRODUTO_DEFAULT = (
+    "Oiee! 😍 é esse aqui ó: {link} 💛 corre que some rápido!|||"
+    "achei aqui pra você 🥰 {link} — qualquer coisa me chama|||"
+    "é esse 👉 {link} ✨ dá uma olhada no preço|||"
+    "oi! tá aqui ó 💛 {link} — se tiver dúvida me fala|||"
+    "prontinho 😊 {link} · me conta depois se você gostou")
+
+# ⚠️ E O PLANO B NÃO É MAIS SÓ A HOME DO SITE. Mandar `topshopoficial.com.br`
+# pra quem perguntou de UM produto é devolver trabalho: a pessoa tem que
+# procurar sozinha o que acabou de ver. Se eu não sei qual é o produto, o
+# grupo do WhatsApp é o melhor destino que existe — lá tem gente e tem busca,
+# e encher o grupo é meta corrente. Vira membro em vez de virar beco sem saída.
+_DM_SEM_LINK_DEFAULT = (
+    "Oiee! 😍 esse eu mando certinho no grupo dos achadinhos: {whats} "
+    "💛 lá eu poso o link de tudo|||"
+    "oi! 🥰 entra no grupo que eu mando o link de todos os achados: {whats}|||"
+    "tá tudo aqui ó: {site} 💛 e no grupo eu mando antes: {whats}")
+_DM_SEM_LINK_SEM_GRUPO = ("Oiee! 😍 tá tudo aqui ó: {site} "
+                          "💛 corre que as ofertas somem rápido!")
+
+
+def _banco_dm(tem_link: bool, ctx: dict) -> list:
+    env = os.environ.get("AUTO_RESP_DM_TMPL_PRODUTO" if tem_link
+                         else "AUTO_RESP_DM_TMPL", "")
+    bruto = env if env.strip() else (_DM_PRODUTO_DEFAULT if tem_link
+                                     else _DM_SEM_LINK_DEFAULT)
+    frases = [t.strip() for t in bruto.split("|||") if t.strip()]
+    # ⚠️ frase que pede {whats} sem convite viraria "entra no grupo: " — a
+    # mesma regra do comentarios.py. Convidar sem dizer pra onde é pior que
+    # não convidar.
+    frases = [f for f in frases if "{whats}" not in f or ctx.get("whats")]
+    return frases or [_DM_SEM_LINK_SEM_GRUPO]
 
 
 def _enviar_dm_ig(ig: str, comment_id: str, token: str,
-                  permalink: str = "") -> bool:
+                  permalink: str = "", memoria: dict = None) -> bool:
     """DM (private reply) em resposta a um comentário. No direct o link CLICA.
     Precisa do escopo instagram_manage_messages. Best-effort."""
-    site = os.environ.get("AUTO_RESP_SITE", "topshopoficial.com.br")
     link = _link_do_post(permalink)
-    if link:
-        msg = os.environ.get(
-            "AUTO_RESP_DM_TMPL_PRODUTO",
-            "Oiee! 😍 é esse aqui ó: {link} 💛 corre que some rápido!"
-        ).format(link=link)
+    ctx = {"link": link,
+           "site": os.environ.get("AUTO_RESP_SITE", "topshopoficial.com.br"),
+           "whats": _convite_grupo()}
+    if not link:
+        _log(f"   ⚠️ sem link do produto pra {permalink[-14:] or '?'} — "
+             f"{'mando o grupo' if ctx['whats'] else 'mando o site'} "
+             f"(rode --diag-dm pra ver por quê)")
+    banco = _banco_dm(bool(link), ctx)
+    chave = f"dm|{_shortcode(permalink)}|{'prod' if link else 'plano_b'}"
+    if memoria is not None:
+        reg = memoria.get(chave) or {}
+        escolhida, recentes = _rodar(banco, reg.get("frases") or [])
+        memoria[chave] = {"frases": recentes, "ts": int(time.time())}
     else:
-        _log(f"   ⚠️ sem link do produto pra {permalink[-14:] or '?'} — mando o site")
-        msg = os.environ.get(
-            "AUTO_RESP_DM_TMPL",
-            "Oiee! 😍 tá tudo aqui ó: {site} 💛 corre que as ofertas somem rápido!"
-        ).format(site=site)
+        escolhida = random.choice(banco)
+    try:
+        msg = escolhida.format(**ctx)
+    except Exception:
+        msg = re.sub(r"\{[^}]*\}", "", escolhida).strip()
     r = _post(f"{GRAPH}/{ig}/messages", {
         "recipient": json.dumps({"comment_id": comment_id}),
         "message": json.dumps({"text": msg}),
@@ -493,7 +617,7 @@ def _resp_instagram(conta, token, gatilhos, respondidos, limites, teste,
 
             # 1) DM (private reply) com o link clicável — se ligado e com escopo
             dm_ok = True if teste and _dm_ligado() else \
-                (_enviar_dm_ig(ig, cid, token, m.get("permalink", ""))
+                (_enviar_dm_ig(ig, cid, token, m.get("permalink", ""), frases_post)
                  if (_dm_ligado() and not teste) else False)
             # 2) resposta pública, sem repetir o que já foi dito NESTE post
             # (quem lê os comentários lê um post inteiro — é aí que a
@@ -597,6 +721,80 @@ def _resp_facebook(conta, token, gatilhos, respondidos, limites, teste) -> int:
     return feitos
 
 
+def _diag_dm(contas, limites) -> int:
+    """Por que a DM manda a home do site em vez do produto?
+
+    ⚠️ ESTE MODO EXISTE PORQUE "SEM LINK DO PRODUTO" TEM DUAS CAUSAS QUE PEDEM
+    CONSERTOS OPOSTOS, e o log antigo não distinguia:
+      · o post NÃO ESTÁ no ledger  → ledger velho (ninguém rodou --salvar)
+      · está no ledger SEM link    → a junção por slug falhou na produção
+    Consertar a errada não muda nada, e o sintoma continua igual.
+    """
+    print(f"\n{'='*70}\n  DIAGNÓSTICO DA DM — de onde sai o link do produto\n{'='*70}")
+    print(f"\n{_atualizar_ledger(forcar=True)}")
+    ledger = _carregar_ledger_links()
+
+    # o que está no arquivo, sem link (junção falhou) — pra separar as causas
+    sem_link = set()
+    try:
+        arq = BASE_DIR / "shared" / "publicados.jsonl"
+        for ln in arq.read_text(encoding="utf-8", errors="ignore").splitlines():
+            try:
+                r = json.loads(ln)
+            except Exception:
+                continue
+            sc = (r.get("id") or "").strip()
+            if sc and not (r.get("link") or "").strip():
+                sem_link.add(sc)
+    except Exception:
+        pass
+
+    tot = com = fora = quebrado = 0
+    for chave, conta in contas.items():
+        token = _token_da_conta(conta)
+        ig = str(conta.get("instagram_user_id", "")).strip()
+        if not token or not ig:
+            continue
+        midia = _get(f"{GRAPH}/{ig}/media",
+                     {"fields": "id,timestamp,permalink", "limit": limites["midias"],
+                      "access_token": token}).get("data", [])
+        recentes = [m for m in midia
+                    if not _velho_demais(m.get("timestamp", ""), limites["horas"])]
+        if not recentes:
+            continue
+        print(f"\n── {conta.get('handle', chave)} · {len(recentes)} post(s) na janela ──")
+        for m in recentes[:12]:
+            sc = _shortcode(m.get("permalink", ""))
+            tot += 1
+            if not sc:
+                quebrado += 1
+                marca, detalhe = "❌", "permalink sem shortcode (formato novo?)"
+            elif sc in ledger:
+                com += 1
+                marca, detalhe = "✅", ledger[sc][:52]
+            elif sc in sem_link:
+                quebrado += 1
+                marca, detalhe = "⚠️ ", "no ledger SEM link — a junção por slug falhou"
+            else:
+                fora += 1
+                marca, detalhe = "🕳️ ", "não está no ledger (log não tem o par 📤/✅)"
+            print(f"   {marca} {sc or '?':<14} {m.get('timestamp','')[:10]}  {detalhe}")
+
+    print(f"\n{'='*70}")
+    print(f"  {tot} post(s) recentes · ✅ {com} mandariam o PRODUTO · "
+          f"🕳️ {fora} fora do ledger · ⚠️ {quebrado} com junção quebrada")
+    if tot:
+        print(f"  {com/tot*100:.0f}% das DMs levariam o link certo.")
+    if fora:
+        print(f"\n  🕳️ {fora} não estão no ledger. O `publicados.jsonl` é RASPADO")
+        print(f"     do log — se o log rotacionou ou o post saiu por outro caminho,")
+        print(f"     o par 📤/✅ não existe e não há como reconstruir.")
+    if quebrado:
+        print(f"\n  ⚠️ {quebrado} estão no ledger mas SEM link: o slug não pareou")
+        print(f"     com o posts_ledger.jsonl. Conserto é na produção, não aqui.")
+    return 0
+
+
 def main():
     teste = "--teste" in sys.argv or "--dry" in sys.argv
 
@@ -612,7 +810,10 @@ def main():
             return padrao
     if not _REQ_OK:
         _log("❌ 'requests' não instalado."); return 1
-    if not _ligado() and not teste:
+    # o --diag-dm só LÊ (ledger + lista de posts): não depende do interruptor,
+    # e negar diagnóstico porque a automação está desligada seria esconder
+    # justamente o dado de quem está decidindo se liga
+    if not _ligado() and not teste and "--diag-dm" not in sys.argv:
         _log("⚪ AUTO_RESPONDER desligado (rode com --teste pra simular, ou "
              "'echo AUTO_RESPONDER=1 >> .env' pra ligar).")
         return 0
@@ -623,9 +824,19 @@ def main():
     except Exception as e:
         _log(f"❌ não carreguei contas.json: {e}"); return 1
 
+    if "--diag-dm" in sys.argv:
+        return _diag_dm(contas, {
+            "horas": _arg("--horas", int(float(os.environ.get("AUTO_RESP_HORAS", "168")))),
+            "midias": _arg("--midias", int(float(os.environ.get("AUTO_RESP_MIDIAS", "25")))),
+        })
+
     gatilhos = _gatilhos()
     respondidos = _carregar_respondidos()
     frases_post = _carregar_frases_post()
+    # ⚠️ ANTES DE RESPONDER, o ledger. Sem isto a DM do post de ontem manda a
+    # home do site — e é justo no post novo que a pergunta chega.
+    if _dm_ligado():
+        _log(f"   {_atualizar_ledger()}")
     limites = {
         "horas": _arg("--horas", int(float(os.environ.get("AUTO_RESP_HORAS", "168")))),
         "midias": _arg("--midias", int(float(os.environ.get("AUTO_RESP_MIDIAS", "25")))),

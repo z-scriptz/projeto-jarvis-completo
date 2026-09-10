@@ -231,6 +231,88 @@ checa("a pausa tem jitter (intervalo exato também é assinatura)",
 checa("o dry-run não dorme", "if teste:\n        return" in _src_ar)
 checa("a pausa é regulável por .env", "AUTO_RESP_PAUSA" in _src_ar)
 
+print("\n── ⚠️ A DM: quem pergunta é quem JÁ decidiu ──")
+# No dry-run do Dre: "(+DM: SITE — sem link do produto)". A pessoa perguntou de
+# um produto específico e ia receber a home do site pra procurar sozinha. O
+# próprio código já chamava isso de "o degrau mais caro do funil inteiro".
+_ctx_com = {"link": "https://s.shopee.com.br/ABC", "site": "site.com.br",
+            "whats": "https://chat.whatsapp.com/XYZ"}
+_ctx_sem_grupo = {"link": "", "site": "site.com.br", "whats": ""}
+
+banco_prod = ar._banco_dm(True, _ctx_com)
+banco_b = ar._banco_dm(False, _ctx_com)
+checa("com link, o banco da DM tem mais de 1 frase", len(banco_prod) > 1,
+      f"{len(banco_prod)}")
+checa("todas as frases de produto carregam {link}",
+      all("{link}" in f for f in banco_prod), str(banco_prod)[:80])
+
+print("\n   ── ⚠️ o plano B vira MEMBRO do grupo, não beco sem saída ──")
+# mandar a home pra quem perguntou de UM produto é devolver trabalho. Se eu não
+# sei qual é o produto, o grupo é o melhor destino: lá tem gente e tem busca.
+checa("sem link, alguma frase convida pro grupo",
+      any("{whats}" in f for f in banco_b), str(banco_b)[:80])
+checa("⚠️ nenhuma frase do plano B promete um produto específico",
+      not any("{link}" in f for f in banco_b), str(banco_b)[:80])
+
+print("\n   ── ⚠️ SEM CONVITE, A FRASE DO GRUPO NEM É SORTEADA ──")
+# "entra no grupo: " (vazio) é pior que não convidar
+b_sem = ar._banco_dm(False, _ctx_sem_grupo)
+checa("sem convite, nenhuma frase de {whats} sobra",
+      not any("{whats}" in f for f in b_sem), str(b_sem))
+checa("e ainda sobra pelo menos uma frase (o site)", len(b_sem) >= 1, str(b_sem))
+_render = [f.format(**_ctx_sem_grupo) for f in b_sem]
+checa("nada sai com chave crua", not any("{" in r for r in _render), str(_render))
+
+print("\n   ── ⚠️ na DM o link do WhatsApp CLICA (ao contrário do comentário) ──")
+# no comentário do IG o link não clica e por isso a frase manda pra bio; na DM
+# é o contrário, e mandar pra bio ali seria um passo a mais de graça
+_gr = [f for f in banco_b if "{whats}" in f]
+checa("as frases do grupo usam o convite direto, não 'bio'",
+      all("bio" not in f.lower() for f in _gr), str(_gr)[:100])
+# ⚠️ o que não pode existir é um CONVITE literal (domínio + código), não a
+# menção ao domínio: o comentário explica de propósito por que na DM o link
+# clica. Convite duplicado vira grupo morto no dia em que um dos dois trocar,
+# e link errado numa DM não dá erro em lugar nenhum.
+import re as _re
+_convites = _re.findall(r"chat\.whatsapp\.com/[A-Za-z0-9]{6,}",
+                        (BASE / "auto_resposta.py").read_text("utf-8"))
+checa("nenhum convite de grupo copiado no arquivo (vem do bio_page_builder)",
+      not _convites, str(_convites))
+
+print("\n   ── ⚠️ e a DM não repete a mesma frase pra 200 pessoas ──")
+mem_dm = {}
+_saidas_dm = []
+for _ in range(5):
+    banco = ar._banco_dm(True, _ctx_com)
+    esc, rec = rodar(banco, (mem_dm.get("k") or {}).get("frases") or [])
+    mem_dm["k"] = {"frases": rec}
+    _saidas_dm.append(esc)
+checa("5 DMs seguidas não repetem a anterior",
+      not any(_saidas_dm[i] == _saidas_dm[i + 1] for i in range(4)),
+      str(_saidas_dm)[:100])
+_src_ar_dm = (BASE / "auto_resposta.py").read_text("utf-8")
+checa("o _enviar_dm_ig recebe a memória de rotação",
+      "def _enviar_dm_ig(ig, comment_id" in _src_ar_dm.replace(": str", "")
+      or "memoria: dict = None) -> bool:" in _src_ar_dm)
+checa("e a chamada real passa o frases_post",
+      '_enviar_dm_ig(ig, cid, token, m.get("permalink", ""), frases_post)' in _src_ar_dm)
+
+print("\n── ⚠️ O LEDGER ENVELHECE E ISSO NÃO DAVA SINAL ──")
+# publicados.jsonl é RASPADO do log por um comando manual. Se ninguém roda, o
+# post de ontem não está lá -- e é justo no post novo que a pergunta chega.
+checa("o auto_resposta regenera o ledger quando está velho",
+      "_atualizar_ledger" in _src_ar_dm and "AUTO_RESP_LEDGER_H" in _src_ar_dm)
+checa("só regenera se a DM estiver ligada (senão é trabalho à toa)",
+      "if _dm_ligado():" in _src_ar_dm)
+checa("existe o modo --diag-dm", "--diag-dm" in _src_ar_dm)
+checa("o --diag-dm funciona com o AUTO_RESPONDER desligado",
+      '"--diag-dm" not in sys.argv' in _src_ar_dm)
+# ⚠️ as duas causas pedem consertos OPOSTOS e o log antigo não distinguia
+checa("o diagnóstico separa 'fora do ledger' de 'junção quebrada'",
+      "não está no ledger" in _src_ar_dm and "junção por slug falhou" in _src_ar_dm)
+checa("o carregador conta os SEM link, não só os bons",
+      "sem link (junção falhou)" in _src_ar_dm)
+
 print("\n── ⚠️ A REGRA MORA NUM LUGAR SÓ ──")
 # foi o defeito da semana inteira: regra certa, documentada, num arquivo só.
 _src_ar = (BASE / "auto_resposta.py").read_text("utf-8")

@@ -621,7 +621,52 @@ porque intervalo exato é assinatura de robô tanto quanto frase repetida.
 
 `teste_resposta_repetida.py` (27 → **41**) exercita disco de verdade,
 atravessando 3 rodadas de cron, e uma API falsa de 1000 comentários em 20
-páginas. `teste_comentario.py`: 19 → **21**, e uma falha intermitente de
+páginas.
+
+📌 **E a medição derrubou a hipótese do volume.** Rodado na VPS depois do
+conserto: `simularia 0` e **nenhuma linha `📣`** — nenhum post passou de 50
+comentários na janela. A paginação estava faltando e agora está lá, mas hoje ela
+não era o gargalo: simplesmente não havia comentário sem resposta. O número que
+o Dre citou (*"+1000 comentários"*) ainda não apareceu nas contas dele.
+
+### 📬 A DM mandava a home do site — e havia DUAS causas, não uma (10/09)
+
+No dry-run: `(+DM: SITE — sem link do produto)`, com **505 posts com link no
+ledger**. A pessoa perguntou de um produto específico e ia receber
+`topshopoficial.com.br` pra procurar sozinha. O próprio código já chamava isso
+de *"o degrau mais caro do funil inteiro: quem pergunta é quem já decidiu"*.
+
+⚠️ **E "sem link do produto" tinha duas causas que pedem consertos opostos:**
+
+| causa | o que significa | onde conserta |
+|---|---|---|
+| 🕳️ o post **não está** no ledger | `publicados.jsonl` é **raspado do log** por `ledger_publicados --salvar`, um comando **manual** — se ninguém roda, o post de ontem não está lá | regenerar (feito) |
+| ⚠️ está no ledger **sem** link | a junção por slug falhou: o `✅ publicado` não achou o `📤` antes | na produção |
+
+O log antigo dizia só *"505 com link"* — que parece saúde. Agora diz também
+quantos ficaram **sem** link, e o `--diag-dm` mostra post a post qual das duas
+causas atingiu cada um. Consertar a causa errada não mudaria nada e o sintoma
+continuaria idêntico.
+
+**O que mudou:**
+- `auto_resposta` **regenera o ledger** quando ele passa de 6h (`AUTO_RESP_LEDGER_H`).
+  É seguro: o `ledger_publicados` só **lê** logs e escreve o arquivo que já é a
+  saída dele. Não encosta em quem publica — `publish_guard` mora em `agents/` na
+  VPS, fora do repo, e editar às cegas o caminho que funciona não vale o risco.
+- `--diag-dm` separa as duas causas e dá a % de DMs que levariam o link certo.
+- A DM **também era uma frase só** — duas constantes, uma por caso. 200 pessoas
+  recebendo a mesma mensagem **privada** no mesmo dia. Na DM isso é pior que no
+  comentário: comentário público a pessoa lê como legenda, mensagem privada
+  idêntica é claramente robô. Agora rotaciona pela mesma `shared/rotacao.py`.
+- ⚠️ **O plano B deixou de ser a home do site.** Se não sei qual é o produto, a
+  DM manda o **grupo do WhatsApp** — lá tem gente e tem busca, e encher o grupo
+  é meta corrente. Vira membro em vez de virar beco sem saída.
+- ⚠️ **Na DM o link do WhatsApp CLICA**, ao contrário do comentário do
+  Instagram. Por isso ali vai o convite direto e não a bio — e o convite vem do
+  `bio_page_builder`, nunca copiado (convite duplicado vira grupo morto no dia
+  em que um dos dois trocar, e link errado numa DM não dá erro em lugar nenhum).
+
+`teste_resposta_repetida.py`: 41 → **59**. `teste_comentario.py`: 19 → **21**, e uma falha intermitente de
 ~1 em 3 que existia desde 02/09 saiu junto (a asserção do `{link}` no Facebook
 sorteava 1 frase e o banco tem uma de `{whats}`, que legitimamente não leva
 link — a asserção estava errada, não o código).
