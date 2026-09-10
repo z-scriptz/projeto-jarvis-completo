@@ -864,7 +864,40 @@ tokens/segredos no chat"*) virou código: valor mascarado por padrão, só apare
 quando é claramente frase e a chave não cheira a segredo. O teste tenta vazar de
 propósito, com chave do Gemini e cookie do TikTok, e falha se sair na saída.
 
-`teste_diag_env.py` (17/17) — novo.
+`teste_diag_env.py` (20/20) — novo.
+
+⚠️⚠️ **E NA PRIMEIRA EXECUÇÃO REAL ELE MANDOU APAGAR CONFIGURAÇÃO VIVA.** Listou
+**18 "linhas mortas"** no `.env` do Dre — e a maioria não era. Duas formas de
+leitura são invisíveis pro AST:
+
+- `os.environ.get(especifico)`, com `especifico = "TIKTOK_COOKIES" if …` —
+  **os cookies que o Dre tinha acabado de configurar**;
+- `os.environ.get(conta["page_token_env"])`, com o nome da chave vindo do
+  `contas.json` — apagar aquelas 4 linhas **derrubaria a postagem de 4 contas**;
+- `os.environ.get(f"CARR_PESO_{nome.upper()}")` — chave montada em f-string.
+
+**Mandar apagar isso é o pior estrago que um diagnóstico pode causar** — ele
+carrega a autoridade de uma medição. Entrou a categoria **🔗 INDIRETA** (lida por
+caminho que o AST não vê, com o aviso *"NÃO APAGUE"*), e `FANTASMA` passou a
+exigir que o nome **não apareça em nenhum arquivo do projeto**. Arquivos
+`teste_*` não contam como uso: variável citada só numa fixture continua morta.
+
+### 🚨 E SOBROU UM DEFEITO REAL: `FILA_VALIDADE_DIAS=45` não faz nada
+
+Das 18, **uma é fantasma de verdade** — e é justo a que o Dre mexeu de
+propósito. O daemon lê a validade do **JSON**, não do ambiente:
+
+```python
+daemon_maestro:1124  int(carregar_config().get("fila_validade_dias", 7))
+```
+
+Não existe nenhum `os.environ.get("FILA_VALIDADE_DIAS")` no projeto. A linha do
+`.env` é decorativa: a fila expira pelo `agendador_config.json`, ou pelos **27**
+dos `DEFAULTS` — nunca pelos 45 que ele configurou.
+
+📌 E este arquivo já tinha o aviso, de 25/08: *"ISTO QUASE CUSTOU 184 PACOTES
+BONS… eu lia o `agendador_config.json` e, não achando `fila_validade_dias`,
+aplicava 7"*. Mesma chave, mesma armadilha, vindo pelo outro lado.
 
 ⚠️ **O `teste_envfile` também media a máquina em vez do código** (18·2 na VPS,
 20·0 aqui): o carregador tenta `base/.env` e depois `Path(".env")`, que é

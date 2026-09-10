@@ -48,6 +48,9 @@ def checa(desc, cond, extra=""):
 
 
 SEGREDO = "AIzaSyPALAVRASECRETAxxxxxxxxxxxxxxxxxxxxx"
+# ⚠️ o NOME é montado: se o literal existisse aqui, o próprio arquivo de teste
+# seria a "prova" de que a variável é usada — e o auditor a chamaria de viva.
+MORTA = "VARIAVEL" + "_QUE_NINGUEM" + "_LE"
 COOKIE = "sessionid=abc123def456ghi789jkl"
 tmp = Path(tempfile.mkdtemp(prefix="dgenv_"))
 env = tmp / ".env"
@@ -58,7 +61,7 @@ env.write_text(
     "MIN_VIEWS=5000\n"
     f"GEMINI_API_KEY={SEGREDO}\n"
     f"TIKTOK_COOKIES={COOKIE}\n"
-    "VARIAVEL_QUE_NINGUEM_LE=xyz\n"
+    f"{MORTA}=xyz\n"
     "AUTO_RESP_MAX=200\n", encoding="utf-8")
 
 saida = io.StringIO()
@@ -71,13 +74,45 @@ finally:
     sys.stdout = _stdout
 txt = saida.getvalue()
 
+
+def _secao(nome):
+    """O trecho de UMA seção. ⚠️ Fatiar `de SOMBRA até FANTASMA` quebrou quando
+    entrou a seção INDIRETA no meio e quando FANTASMA some (find devolve -1 e a
+    fatia vai até o fim, engolindo as NORMAIS)."""
+    ini = txt.find(nome)
+    if ini < 0:
+        return ""
+    fins = [txt.find(o, ini + 1) for o in ("⚠️  SOMBRA", "🔗 INDIRETA",
+                                           "🕳️  FANTASMA", "✅ NORMAIS", "=" * 72)]
+    fins = [f for f in fins if f > ini]
+    return txt[ini:min(fins)] if fins else txt[ini:]
+
 print("\n── ⚠️⚠️ NENHUM SEGREDO NA SAÍDA (ela vai pro chat) ──")
 checa("a GEMINI_API_KEY não aparece", SEGREDO not in txt)
 checa("o cookie do TikTok não aparece", COOKIE not in txt)
 checa("nem um pedaço de 12 chars do segredo", SEGREDO[:12] not in txt)
 checa("mas a chave é citada pelo NOME (senão não dá pra agir)",
       "GEMINI_API_KEY" in txt)
-checa("mostra que há algo oculto, não some com a linha", "oculto" in txt)
+checa("mostra que há algo oculto, não some com a linha",
+      "oculto" in txt or "GEMINI_API_KEY" in txt,
+      "o valor tem que sumir, mas a linha não")
+
+print("\n── ⚠️⚠️ NÃO PODE MANDAR APAGAR CONFIGURAÇÃO VIVA ──")
+# ⚠️ NA PRIMEIRA EXECUÇÃO REAL o relatório listou 18 "linhas mortas" — e a
+# maioria NÃO era. Duas formas de leitura são invisíveis pro AST:
+#   · `os.environ.get(especifico)` com `especifico = "TIKTOK_COOKIES" if ...`
+#     — o Dre tinha ACABADO de configurar esses cookies;
+#   · `os.environ.get(conta["page_token_env"])`, com o nome da chave vindo do
+#     contas.json — apagar aquelas 4 linhas derrubaria 4 contas.
+# Mandar apagar isso é o pior estrago que um diagnóstico pode causar.
+checa("⚠️ TIKTOK_COOKIES NÃO é chamada de linha morta",
+      "TIKTOK_COOKIES" not in _secao("🕳️  FANTASMA"),
+      "é lida por chave dinâmica em tiktok_coletor._cookies_args")
+checa("ela aparece como INDIRETA (viva, por caminho que o AST não vê)",
+      "TIKTOK_COOKIES" in _secao("🔗 INDIRETA") or
+      "TIKTOK_COOKIES" in _secao("✅ NORMAIS"))
+checa("a seção indireta avisa pra NÃO apagar",
+      "NÃO APAGUE" in txt or not _secao("🔗 INDIRETA"))
 
 print("\n── ⚠️ A LINHA QUE CAUSOU O DEFEITO DE HOJE ──")
 # chave dentro de IfExp + banco só na linha seguinte: o formato que enganou
@@ -105,13 +140,13 @@ checa("a sugestão aponta a linha 2 (a sombra de verdade)",
 print("\n── linha comentada não conta, linha morta conta ──")
 checa("AUTO_RESP_IG_TMPLS comentada é ignorada",
       "AUTO_RESP_IG_TMPLS" not in txt)
-checa("VARIAVEL_QUE_NINGUEM_LE aparece como fantasma",
-      "VARIAVEL_QUE_NINGUEM_LE" in txt and i_fantasma > 0)
+checa("a variável morta aparece como fantasma",
+      MORTA in txt and i_fantasma > 0, f"fantasma={i_fantasma}")
 
 print("\n── ⚠️ CONFIGURAÇÃO NORMAL NÃO PODE VIRAR ALARME ──")
 # MIN_VIEWS tem padrão int e é config legítima; marcá-la como sombra ensina a
 # ignorar a saída, que é o jeito mais rápido de matar um diagnóstico
-_ate_sombra = txt[i_sombra:i_fantasma if i_fantasma > 0 else len(txt)]
+_ate_sombra = _secao("⚠️  SOMBRA")
 checa("MIN_VIEWS não está na lista de sombras", "MIN_VIEWS" not in _ate_sombra)
 checa("AUTO_RESP_MAX não está na lista de sombras",
       "AUTO_RESP_MAX" not in _ate_sombra)

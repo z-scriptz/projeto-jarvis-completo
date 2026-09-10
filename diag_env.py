@@ -168,6 +168,66 @@ def _lidas_pelo_codigo() -> dict:
     return achados
 
 
+def _prefixos_dinamicos() -> list:
+    """Prefixos de chaves montadas em tempo de execução: `f"CARR_PESO_{x}"`.
+
+    ⚠️ SEM ISTO O RELATÓRIO MANDA APAGAR CONFIGURAÇÃO VIVA. Na primeira
+    execução real ele listou 18 "linhas mortas" — e a maioria não era. O
+    `CARR_PESO_COMPARACAO` é lido por `os.environ.get(f"CARR_PESO_{nome.upper()}")`
+    e o AST não vê a chave montada.
+    """
+    pref = []
+    for p in sorted(BASE.glob("*.py")) + sorted(BASE.glob("*/*.py")):
+        try:
+            arv = ast.parse(p.read_text("utf-8", errors="ignore"))
+        except Exception:
+            continue
+        for n in ast.walk(arv):
+            if not (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                    and n.func.attr in ("get", "getenv") and n.args):
+                continue
+            if "environ" not in ast.dump(n.func) and n.func.attr != "getenv":
+                continue
+            a0 = n.args[0]
+            if isinstance(a0, ast.JoinedStr):
+                # o pedaço literal do começo é o prefixo
+                for v in a0.values:
+                    if isinstance(v, ast.Constant) and isinstance(v.value, str) \
+                            and len(v.value) >= 4:
+                        pref.append((v.value, p.name))
+                    break
+    return pref
+
+
+def _citada_em_algum_lugar(chave: str) -> str:
+    """Onde a chave aparece como TEXTO, fora dos `.env`. "" se em lugar nenhum.
+
+    ⚠️⚠️ ESTA FUNÇÃO É O QUE IMPEDE O RELATÓRIO DE CAUSAR ESTRAGO. Duas formas
+    de leitura são invisíveis pro AST e as duas apareceram no primeiro uso real:
+      · `os.environ.get(especifico)` com `especifico = "TIKTOK_COOKIES" if ...`
+        — o Dre tinha ACABADO de configurar esses cookies;
+      · `os.environ.get(conta["page_token_env"])`, com o NOME DA CHAVE vindo do
+        `contas.json` — apagar essas quatro linhas derrubaria a postagem de
+        quatro contas.
+    Se o nome aparece em qualquer arquivo do projeto, a variável não está morta:
+    está sendo lida por um caminho que o AST não alcança.
+    """
+    for padrao in ("*.py", "*/*.py", "*.json", "*/*.json", "*.txt", "*.sh"):
+        for p in BASE.glob(padrao):
+            # ⚠️ TESTE NÃO CONTA COMO USO. Uma variável citada só numa fixture
+            # de teste continua morta em produção — e contá-la faria o relatório
+            # dizer "está viva" sobre exatamente o que se quer limpar.
+            if p.name.startswith("teste_") or p.suffix == ".env" \
+                    or p.name.startswith(".env"):
+                continue
+            try:
+                if chave in p.read_text("utf-8", errors="ignore"):
+                    return p.name
+            except Exception:
+                continue
+    return ""
+
+
 def _tipo_do_padrao(no, consts: dict) -> str:
     """O padrão que a variável substitui é um BANCO ou um número?
 
@@ -202,8 +262,11 @@ def main() -> int:
     a = ap.parse_args()
 
     arq = Path(a.env) if a.env else (BASE / ".env")
+    import warnings
+    warnings.simplefilter("ignore")      # SyntaxWarning de arquivos analisados
     env = _chaves_do_env(arq)
     lidas = _lidas_pelo_codigo()
+    prefixos = _prefixos_dinamicos()
 
     print(f"\n{'='*72}\n  AUDITORIA DO .env — {arq}\n{'='*72}")
     if not env:
@@ -212,11 +275,21 @@ def main() -> int:
     print(f"\n  {len(env)} variável(is) ativa(s) no .env · "
           f"{len(lidas)} lida(s) pelo código\n")
 
-    sombras, fantasmas, normais = [], [], []
+    sombras, fantasmas, indiretas, normais = [], [], [], []
     for k, (linha, valor) in sorted(env.items(), key=lambda kv: kv[1][0]):
         usos = lidas.get(k)
         if not usos:
-            fantasmas.append((linha, k, valor))
+            # ⚠️ ANTES DE CHAMAR DE MORTA: a chave pode ser montada em tempo de
+            # execução (f-string) ou vir de um JSON. Ver `_citada_em_algum_lugar`.
+            _pref = next(((pf, a) for pf, a in prefixos if k.startswith(pf)), None)
+            if _pref:
+                indiretas.append((linha, k, f'montada como f"{_pref[0]}…"', _pref[1]))
+            else:
+                _onde = _citada_em_algum_lugar(k)
+                if _onde:
+                    indiretas.append((linha, k, "nome citado em", _onde))
+                else:
+                    fantasmas.append((linha, k, valor))
         elif (any(t and (t.startswith("constante") or t == "texto_longo")
                   for _, t in usos)
               # ⚠️ E O VALOR TEM QUE PARECER FRASE. Sem isto, a heurística de
@@ -242,8 +315,14 @@ def main() -> int:
             print(f"             lida por: {', '.join(arqs[:3])}")
             if bancos:
                 print(f"             substitui: {', '.join(sorted(bancos)[:3])}")
+    if indiretas:
+        print(f"\n🔗 INDIRETA — {len(indiretas)}: lida por caminho que o AST não vê.")
+        print("    Chave montada em f-string ou vinda de um JSON (contas.json).")
+        print("    ⚠️ NÃO APAGUE: é configuração VIVA.\n")
+        for linha, k, como, onde in indiretas:
+            print(f"   linha {linha:>3}  {k:<30} {como} {onde}")
     if fantasmas:
-        print(f"\n🕳️  FANTASMA — {len(fantasmas)}: nenhum arquivo lê essa variável.")
+        print(f"\n🕳️  FANTASMA — {len(fantasmas)}: o nome não aparece em NENHUM arquivo.")
         print("    Linha morta: erro de digitação, ou sobra de algo removido.")
         print("    ⚠️ Não faz mal — mas quem lê o .env acha que está configurado.\n")
         for linha, k, valor in fantasmas:
@@ -258,8 +337,8 @@ def main() -> int:
             print(f"   linha {linha:>3}  {k:<28} ({len(arqs)} arquivo(s))")
 
     print(f"\n{'='*72}")
-    print(f"  ⚠️ {len(sombras)} sombra(s) · 🕳️ {len(fantasmas)} fantasma(s) · "
-          f"✅ {len(normais)} normal(is)")
+    print(f"  ⚠️ {len(sombras)} sombra(s) · 🔗 {len(indiretas)} indireta(s) · "
+          f"🕳️ {len(fantasmas)} fantasma(s) · ✅ {len(normais)} normal(is)")
     if sombras:
         print(f"\n  As sombras são as que apagam trabalho novo sem dar sinal.")
         print(f"  Comente estas linhas do .env:")
