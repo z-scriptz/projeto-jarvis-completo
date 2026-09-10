@@ -156,6 +156,64 @@ checa("valor inválido no .env não trava a capa",
       C._escolher_estilo("@x") in C.ESTILOS)
 os.environ.pop("CARR_ESTILO", None)
 
+print("\n── ⚠️ AFINIDADE: quando o conteúdo tem forma, o template segue a forma ──")
+# O Dre: *"podemos misturar estilos... e manter o template pra cada um"*. Sim —
+# mas sortear entre TODOS seria pior que o template único: colocaria duas
+# colunas MITO|VERDADE num carrossel de "5 achadinhos", onde não há dois lados.
+os.environ.pop("CARR_ESTILO", None)
+checa("carrossel de mitos → capa de mito/verdade",
+      C._escolher_estilo("@x", "mitos") == "mito_verdade")
+checa("carrossel de comparação → capa de versus",
+      C._escolher_estilo("@x", "comparacao") == "versus")
+for f in ("lista", "erros", "historia", "passo_a_passo", "antes_depois", ""):
+    checa(f"'{f or 'sem formato'}' cai no sorteio livre",
+          C._escolher_estilo("@y", f) in C.ESTILOS_LIVRES)
+# ⚠️ o lado que NÃO pode disparar: estilo de duas colunas em post sem dois lados
+checa("⚠️ o sorteio livre NUNCA devolve capa de duas colunas",
+      all(C._escolher_estilo(f"@c{i}", "lista") in ("claro", "escuro")
+          for i in range(12)))
+
+print("\n── ⚠️ AS CORES DA PALETA FORAM FEITAS PRA FUNDO PRETO ──")
+# renderizado o pet (#5EC8FF) sobre o creme, a palavra em destaque ficou MAIS
+# fraca que o preto ao lado: a que devia saltar virou a menos legível
+checa("_escurecer escurece de verdade",
+      C._escurecer("#5EC8FF") != "#5EC8FF" and len(C._escurecer("#5EC8FF")) == 7)
+checa("cor inválida não quebra", C._escurecer("nao-e-cor") == "nao-e-cor")
+# e o texto SOBRE a tarja tem que ser escolhido pela luminância, não cravado
+# ⚠️ EU TINHA ASSERTADO QUE O ROXO PEDIA TEXTO BRANCO, e a medição derrubou:
+# #D67AFF tem luminância 0.59 e com ela o texto ESCURO é mais legível. Medindo
+# a paleta inteira, as SEIS cores são claras (0.59 a 0.87) — foram desenhadas
+# pra fundo preto, onde elas é que são o brilho. Então em capa clara nenhuma
+# aceita texto branco por cima, e a função só existe pra não travar isso numa
+# constante: no dia em que entrar uma cor escura, ela decide sozinha.
+for _n, _c in C.CORES.items():
+    checa(f"tarja de '{_n}' pede texto escuro (paleta clara)",
+          C._contraste(_c) == "#111", f"{_c} lum alta")
+checa("e uma cor ESCURA pediria texto claro", C._contraste("#2B1B4D") == "#fff")
+checa("_contraste não quebra com lixo", C._contraste("") in ("#111", "#fff"))
+_tech = C.montar_html({"nicho": "tech", "handle": "@t", "slides": [{}],
+                       "capa": {"hook": "um [dobro] disso", "sub": "s",
+                                "estilo": "claro"}})
+checa("⚠️ a capa do tech não pinta branco sobre limão",
+      "color:#111" in _tech, "branco sobre #A3FF4F some")
+
+print("\n── ⚠️ A CAPA DE DUAS COLUNAS DEGRADA, NÃO QUEBRA ──")
+# capa que só sai com o JSON perfeito é capa que um dia não sai, e "não saiu"
+# no meio da esteira custa mais que uma capa genérica
+_sem_lados = C.montar_html({"nicho": "casa", "handle": "@c", "slides": [{}],
+                            "capa": {"hook": "e ai?", "sub": "s",
+                                     "estilo": "mito_verdade"}})
+checa("sem lado_a/lado_b ainda sai capa", bool(_sem_lados) and "MITO" in _sem_lados)
+checa("os rótulos MITO e VERDADE aparecem",
+      "MITO" in _sem_lados and "VERDADE" in _sem_lados)
+_vs = C.montar_html({"nicho": "tech", "handle": "@t", "slides": [{}, {}],
+                     "capa": {"hook": "qual?", "sub": "s", "estilo": "versus"}})
+checa("o versus tem o 'vs' no meio", ">vs<" in _vs)
+checa("o mito/verdade NÃO tem símbolo no meio (× lê como multiplicação)",
+      'class="meio"' not in _sem_lados)
+checa("⚠️ o cartão não é branco sobre branco no versus",
+      "#f2f2f5" in _vs, "cartão invisível: só a sombra denunciava")
+
 print("\n── ⚠️ O FORMATO QUE ELE MANDOU ESTAVA DESLIGADO ──")
 # @homemquesabetudo, MITO | VERDADE sobre a esponja: 4.163 curtidas. A
 # estrutura estava pronta aqui, em peso 0, com o comentário "entra na roda

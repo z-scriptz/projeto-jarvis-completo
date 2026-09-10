@@ -71,6 +71,43 @@ def _cor(nicho: str) -> str:
     return CORES.get((nicho or "geral").lower(), CORES["geral"])
 
 
+def _escurecer(hex_cor: str, fator: float = 0.62) -> str:
+    """A mesma cor, mais escura. Pra texto em fundo CLARO.
+
+    ⚠️ A PALETA FOI DESENHADA PRA FUNDO PRETO. Renderizado o `pet` (#5EC8FF) e
+    o `beleza` (#D67AFF) sobre o creme da capa clara, a palavra em destaque
+    ficou MAIS FRACA que o preto ao lado — ou seja, a palavra escolhida pra
+    saltar virou a menos legível da capa. Inversão do propósito, e só apareceu
+    olhando o JPG.
+    Escurecer resolve sem tocar na identidade: é a mesma cor, com menos luz.
+    A tarja continua com a cor cheia, porque lá o texto é branco POR CIMA dela.
+    """
+    try:
+        h = (hex_cor or "").lstrip("#")
+        r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+        return "#%02x%02x%02x" % (int(r * fator), int(g * fator), int(b * fator))
+    except Exception:
+        return hex_cor
+
+
+def _contraste(hex_cor: str) -> str:
+    """#111 ou #fff — o que for legível SOBRE essa cor.
+
+    ⚠️ EU TINHA CRAVADO `color:#fff` NA TARJA e o `tech` mostrou o erro: o
+    verde-limão (#A3FF4F) tem luminância alta, e branco sobre ele some. A cor
+    do texto não pode ser escolhida uma vez pra seis paletas diferentes —
+    quatro delas são claras. Fórmula de luminância relativa (W3C), que é a
+    mesma que decide contraste de acessibilidade.
+    """
+    try:
+        h = (hex_cor or "").lstrip("#")
+        r, g, b = (int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
+        lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
+        return "#111" if lum > 0.55 else "#fff"
+    except Exception:
+        return "#fff"
+
+
 def _b64(caminho) -> str:
     """Arquivo → data: URI. ⚠️ O Chromium headless recusa `file://` a partir de
     uma página `data:`/`about:blank`, e embutir é mais simples que servir uma
@@ -164,31 +201,60 @@ def _marcar(hook: str) -> str:
 # como uma LISTA que cresce, sorteada com memória (`shared/rotacao.py`, a mesma
 # que impede a resposta repetida) — e não como um segundo template fixo, que só
 # trocaria uma mesmice por outra.
-ESTILOS = ("escuro", "claro")
+ESTILOS = ("escuro", "claro", "mito_verdade", "versus")
+
+# ⚠️ AFINIDADE FORMATO → ESTILO, E ELA VALE MAIS QUE O SORTEIO (10/09/2026)
+#
+# O Dre: *"podemos misturar estilos... e manter o template pra cada um"*. Sim —
+# mas sortear entre TODOS seria pior que o template único que a gente acabou de
+# matar, porque colocaria um layout de duas colunas MITO|VERDADE num carrossel
+# de "5 achadinhos", onde não há mito nenhum pra contrastar.
+#
+# 📌 A regra: **quando o conteúdo já tem forma, o template segue a forma.**
+# `mitos` é literalmente dois lados; `comparacao` é literalmente A contra B. Pra
+# esses, o estilo não é gosto, é a estrutura da informação. Pro resto — lista,
+# erros, história, passo a passo — não há forma imposta, e aí sim vale o sorteio
+# com memória, que é o que impede a mesmice.
+#
+# É a mesma lógica que já governa o `comentarios.py`: banco por FORMATO, porque
+# num carrossel de "3 erros" pedir "corre pegar o seu" é resposta pra pergunta
+# que ninguém fez.
+AFINIDADE = {
+    "mitos": "mito_verdade",
+    "comparacao": "versus",
+}
+# os que entram no sorteio livre — os de forma imposta ficam de fora, senão
+# sairiam em carrossel que não tem dois lados
+ESTILOS_LIVRES = ("escuro", "claro")
 _MEM_ESTILO = BASE_DIR / "shared" / "capa_estilos_recentes.json"
 
 
-def _escolher_estilo(conta: str) -> str:
-    """Sorteia o estilo da capa, sem repetir o anterior daquela conta.
+def _escolher_estilo(conta: str, formato: str = "") -> str:
+    """O estilo da capa: por AFINIDADE se o formato tem forma, senão sorteio.
 
     `CARR_ESTILO=claro` no .env força um (pra testar ou pra travar).
     """
     forcado = os.environ.get("CARR_ESTILO", "").strip().lower()
     if forcado in ESTILOS:
         return forcado
+    # ⚠️ a afinidade vem ANTES do sorteio: num carrossel de mitos, duas colunas
+    # não é preferência, é a estrutura do conteúdo
+    afim = AFINIDADE.get((formato or "").strip().lower())
+    if afim in ESTILOS:
+        return afim
     try:
         from shared.rotacao import escolher_sem_repetir as _rodar
     except Exception:
         try:
             from rotacao import escolher_sem_repetir as _rodar
         except Exception:
-            return random.choice(list(ESTILOS))
+            return random.choice(list(ESTILOS_LIVRES))
     try:
         mem = json.loads(_MEM_ESTILO.read_text(encoding="utf-8"))
     except Exception:
         mem = {}
     chave = (conta or "?").lstrip("@").lower()
-    escolhido, recentes = _rodar(list(ESTILOS), mem.get(chave) or [])
+    escolhido, recentes = _rodar(list(ESTILOS_LIVRES), mem.get(chave) or [])
     mem[chave] = recentes
     try:
         _MEM_ESTILO.parent.mkdir(parents=True, exist_ok=True)
@@ -233,7 +299,12 @@ def montar_html(plano: dict) -> str:
     # ⚠️ o estilo é do PLANO se ele mandar (auditoria, --estilo), senão sorteia
     estilo = (capa.get("estilo") or plano.get("estilo") or "").strip().lower()
     if estilo not in ESTILOS:
-        estilo = _escolher_estilo(plano.get("handle") or nicho)
+        estilo = _escolher_estilo(plano.get("handle") or nicho,
+                                  plano.get("formato") or "")
+    if estilo in ("mito_verdade", "versus"):
+        return _html_dois_lados(estilo, hook=hook_cru, sub=sub_cru, total=total,
+                                arrasta=arrasta, handle=handle, cor=cor,
+                                fonte_u=fonte_u, corpo_u=corpo_u, plano=plano)
     if estilo == "claro":
         return _html_claro(hook=hook_cru, sub=sub_cru, total=total, arrasta=arrasta,
                            handle=handle, cor=cor, fonte_u=fonte_u,
@@ -372,6 +443,8 @@ def _html_claro(hook, sub, total, arrasta, handle, cor,
     e um texto cortado.
     """
     tem_foto = bool(fundo_u)
+    cor_texto = _escurecer(cor)
+    cor_tarja = _contraste(cor)
     # ⚠️ montado FORA da f-string: expressão de f-string não aceita barra
     # invertida no Python < 3.12, e este arquivo roda em três máquinas.
     cartao = (f"<div class=\"cartao\" style=\"background-image:url('{fundo_u}')\">"
@@ -408,7 +481,7 @@ body {{ width:{LARG}px; height:{ALT}px; overflow:hidden;
          line-height:1.02; letter-spacing:-2px; color:#111;
          /* sem text-shadow: em fundo claro ela suja a letra em vez de recortar */ }}
 .hook em {{ font-style:normal; }}
-.cor {{ color:{cor}; }}
+.cor {{ color:{cor_texto}; }}
 /* ⚠️ A TARJA AQUI NÃO USA `::before`, E O MOTIVO SAIU DA PRIMEIRA IMAGEM
    RENDERIZADA: no exemplo o trecho marcado era "na casa", que QUEBRA EM DUAS
    LINHAS — e `position:absolute` dentro de um `display:inline` partido se
@@ -420,7 +493,7 @@ body {{ width:{LARG}px; height:{ALT}px; overflow:hidden;
    `box-decoration-break:clone` é o recurso feito pra isto: pinta o fundo em
    CADA fragmento de linha. Perde a inclinação de -1.2°, e é uma troca boa —
    marcador torto ilegível não é marcador. */
-.tarja {{ background:{cor}; color:#fff; padding:2px 14px; display:inline;
+.tarja {{ background:{cor}; color:{cor_tarja}; padding:2px 14px; display:inline;
           line-height:inherit; border-radius:6px;
           -webkit-box-decoration-break:clone; box-decoration-break:clone; }}
 
@@ -458,6 +531,140 @@ body {{ width:{LARG}px; height:{ALT}px; overflow:hidden;
   for (var t = 126; t > 54; t -= 2) {{
     h.style.fontSize = t + 'px';
     if (h.offsetHeight <= teto) break;
+  }}
+}})();
+</script></body></html>"""
+
+
+def _dois_lados(plano: dict, estilo: str) -> tuple:
+    """Os dois rótulos e os dois textos da capa de duas colunas.
+
+    ⚠️ DEGRADA EM VEZ DE QUEBRAR. Se o plano não trouxer os dois lados, a capa
+    ainda sai — com os rótulos e os dois primeiros slides. Capa que só funciona
+    com o JSON perfeito é capa que um dia não sai, e "não saiu" no meio da
+    esteira custa mais que uma capa genérica.
+    """
+    capa = plano.get("capa") or {}
+    slides = [s for s in (plano.get("slides") or []) if isinstance(s, dict)]
+    if estilo == "mito_verdade":
+        rot_a, rot_b = "MITO", "VERDADE"
+    else:
+        rot_a, rot_b = "A", "B"
+    a = (capa.get("lado_a") or "").strip()
+    b = (capa.get("lado_b") or "").strip()
+    if not a and slides:
+        a = (slides[0].get("titulo") or slides[0].get("texto") or "").strip()
+    if not b and len(slides) > 1:
+        b = (slides[1].get("titulo") or slides[1].get("texto") or "").strip()
+    # no versus os rótulos são os PRÓPRIOS produtos quando existirem
+    if estilo == "versus":
+        rot_a = (capa.get("rotulo_a") or a or "A").strip()[:26]
+        rot_b = (capa.get("rotulo_b") or b or "B").strip()[:26]
+        a = b = ""
+    return rot_a, rot_b, a[:120], b[:120]
+
+
+def _html_dois_lados(estilo, hook, sub, total, arrasta, handle, cor,
+                     fonte_u, corpo_u, plano) -> str:
+    """As capas de DUAS COLUNAS — `mito_verdade` e `versus`.
+
+    ⚠️ POR QUE ESTAS DUAS COMPARTILHAM UM HTML: elas são a MESMA estrutura
+    (título em cima, dois blocos lado a lado embaixo) com rótulos e cores
+    diferentes. Escrever dois arquivos quase iguais seria criar a próxima
+    divergência — foi assim que o `_carregar_env` virou 40 cópias.
+
+    · `mito_verdade` vem do @homemquesabetudo (4.163 curtidas): fundo azul
+      claro, MITO à esquerda em vermelho, VERDADE à direita em verde.
+    · `versus` vem do @lucureau (4.757): fundo branco, os dois nomes empilhados
+      com o "vs" no meio, tipografia preta e pesada.
+    """
+    import html as _h
+    cor_texto = _escurecer(cor)
+    cor_tarja = _contraste(cor)
+    rot_a, rot_b, txt_a, txt_b = _dois_lados(plano, estilo)
+    if estilo == "mito_verdade":
+        fundo_pag, cor_a, cor_b = "#e8f2fb", "#d64545", "#2f9e5f"
+        titulo_a, titulo_b = _h.escape(rot_a), _h.escape(rot_b)
+    else:
+        # ⚠️ NÃO é branco puro: o cartão também é branco, e branco sobre
+        # branco vira caixa invisível — só a sombra denunciava que havia
+        # algo ali. Cinza levíssimo dá o degrau sem virar outra cor.
+        fundo_pag, cor_a, cor_b = "#f2f2f5", "#111111", cor_texto
+        titulo_a, titulo_b = _h.escape(rot_a), _h.escape(rot_b)
+    corpo_a, corpo_b = _h.escape(txt_a), _h.escape(txt_b)
+    tem_corpo = bool(txt_a or txt_b)
+    # ⚠️ no mito/verdade não há símbolo no meio: um "×" entre MITO e VERDADE
+    # lê como multiplicação. No versus o "vs" É o nome do formato.
+    meio = "vs" if estilo == "versus" else ""
+    meio_html = f'<div class="meio">{meio}</div>' if meio else ""
+
+    return f"""<!doctype html><html><head><meta charset="utf-8"><style>
+@font-face {{ font-family:'Titulo'; src:url('{fonte_u}'); }}
+@font-face {{ font-family:'Corpo'; src:url('{corpo_u}'); }}
+* {{ margin:0; padding:0; box-sizing:border-box; }}
+body {{ width:{LARG}px; height:{ALT}px; overflow:hidden;
+        font-family:'Corpo',sans-serif; background:{fundo_pag}; color:#111; }}
+.palco {{ position:relative; width:100%; height:100%;
+          padding:88px 72px 76px; display:flex; flex-direction:column; }}
+/* ⚠️ o grupo inteiro (título + sub + colunas) vai pro CENTRO, com o rodapé no
+   pé. Sem isto o conteúdo grudava no topo e sobravam 500px de vazio embaixo —
+   o mesmo defeito que a capa clara teve, pela mesma razão: `margin-top:auto`
+   no rodapé absorve o espaço livre e não sobra o que distribuir no palco. */
+.miolo {{ flex:1; display:flex; flex-direction:column; justify-content:center; }}
+.hook {{ font-family:'Titulo',sans-serif; font-size:96px; line-height:1.02;
+         letter-spacing:-1.6px; color:#111; }}
+.hook em {{ font-style:normal; }}
+.cor {{ color:{cor_texto}; }}
+.tarja {{ background:{cor}; color:{cor_tarja}; padding:2px 12px; display:inline;
+          border-radius:6px; -webkit-box-decoration-break:clone;
+          box-decoration-break:clone; }}
+.sub {{ margin-top:26px; font-size:36px; line-height:1.3; color:#55555f; }}
+
+/* as duas colunas: é aqui que o formato vira desenho.
+   ⚠️ `align-items:center`, não `stretch`: com stretch os cartões esticavam até
+   o rodapé e sobravam 500px de branco embaixo de duas linhas de texto — a capa
+   parecia um formulário vazio. O cartão tem que ter o tamanho do que ele diz. */
+.lados {{ flex:0 0 auto; display:flex; gap:32px; align-items:stretch;
+          margin:44px 0 0; }}
+.lado {{ flex:1; display:flex; flex-direction:column; justify-content:center;
+         min-height:280px; border-radius:26px; background:#fff; padding:38px 32px;
+         box-shadow:0 10px 34px rgba(0,0,0,.08); }}
+.rot {{ font-family:'Titulo',sans-serif; font-size:{'72' if estilo == 'mito_verdade' else '58'}px;
+        line-height:1.04; letter-spacing:-1px; }}
+.lado.a .rot {{ color:{cor_a}; }}
+.lado.b .rot {{ color:{cor_b}; }}
+.txt {{ margin-top:24px; font-size:33px; line-height:1.36; color:#3d3d45; }}
+.meio {{ align-self:center; font-family:'Titulo',sans-serif; font-size:62px;
+         color:#9a9aa4; }}
+
+.rodape {{ margin-top:auto; display:flex; align-items:center; gap:16px;
+           font-size:29px; color:#6b6b74; }}
+.rodape b {{ color:#111; font-weight:800; }}
+.arrasta {{ margin-left:auto; display:flex; align-items:center; gap:12px;
+            border:3px solid #111; border-radius:44px; padding:13px 26px;
+            font-size:28px; font-weight:800; color:#111; }}
+.arrasta i {{ font-style:normal; color:{cor_texto}; font-size:31px; }}
+</style></head><body><div class="palco">
+  <div class="miolo">
+  <div class="hook" id="hook">{_marcar(hook)}</div>
+  <div class="sub">{sub}</div>
+  <div class="lados">
+    <div class="lado a"><div class="rot">{titulo_a}</div>
+      {'<div class="txt">' + corpo_a + '</div>' if tem_corpo else ''}</div>
+    {meio_html}
+    <div class="lado b"><div class="rot">{titulo_b}</div>
+      {'<div class="txt">' + corpo_b + '</div>' if tem_corpo else ''}</div>
+  </div>
+  </div>
+  <div class="rodape"><b>{handle}</b> · {total} slides
+    <div class="arrasta">{arrasta} <i>&#10132;</i></div></div>
+</div>
+<script>
+(function () {{
+  var h = document.getElementById('hook');
+  for (var t = 96; t > 44; t -= 2) {{
+    h.style.fontSize = t + 'px';
+    if (h.offsetHeight <= 320) break;
   }}
 }})();
 </script></body></html>"""

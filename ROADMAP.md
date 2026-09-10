@@ -614,6 +614,54 @@ invisível — bastava renderizar uma imagem, que custa 2 segundos.
 `teste_capa_estilo.py` (33/33) — as asserções novas conferem o **texto**
 renderizado, não a regra CSS.
 
+### 🧩 "PODEMOS MISTURAR ESTILOS?" — sim, mas não por sorteio puro
+
+O Dre aprovou a capa clara (*"100% melhor, realmente ela passa como conteúdo…
+a marca tá discreta e ninguém copia, ou seja, é nosso!"*) e pediu: *"podemos
+misturar estilos… e manter o template pra cada um"*.
+
+⚠️ **Sortear entre TODOS seria pior que o template único que acabamos de
+matar** — poria duas colunas MITO|VERDADE num carrossel de "5 achadinhos", onde
+não existem dois lados. A regra que entrou:
+
+> **Quando o conteúdo já tem forma, o template segue a forma. Quando não tem,
+> sorteia.**
+
+| formato | capa | por quê |
+|---|---|---|
+| `mitos` | **mito_verdade** | é literalmente dois lados |
+| `comparacao` | **versus** | é literalmente A contra B |
+| lista, erros, história, passo a passo, antes/depois | sorteio `claro`/`escuro` | não há forma imposta |
+
+É a mesma lógica que já governa o `comentarios.py` (banco por formato), e o
+teste trava o lado que não pode disparar: **o sorteio livre nunca devolve capa
+de duas colunas.**
+
+⚠️ **As duas capas de coluna compartilham UM html.** São a mesma estrutura com
+rótulos e cores diferentes — escrever dois arquivos quase iguais seria criar a
+próxima divergência, que é como o `_carregar_env` virou 40 cópias.
+
+### 🎨 E a paleta foi desenhada pra fundo PRETO
+
+Renderizando `pet` (#5EC8FF) e `beleza` (#D67AFF) sobre o creme: **a palavra em
+destaque ficou mais fraca que o preto ao lado** — a que devia saltar virou a
+menos legível. `_escurecer()` resolve sem tocar na identidade.
+
+E o texto **sobre** a tarja estava cravado em `#fff`: no `tech` (#A3FF4F, verde
+limão) o branco sumia. Virou `_contraste()`, por luminância relativa (W3C).
+
+📌 **Medindo a paleta inteira, as SEIS cores são claras (0,59 a 0,87)** — todas
+pedem texto escuro. Minha asserção dizia que o roxo pediria branco; o teste
+derrubou. A função continua existindo pra decidir sozinha no dia em que entrar
+uma cor escura, em vez de a decisão morar numa constante.
+
+📌 **Três defeitos que só apareceram no JPG renderizado:** cartões esticados até
+o rodapé com 500px de branco embaixo · cartão branco sobre página branca (só a
+sombra denunciava que havia algo ali) · um `×` entre MITO e VERDADE, que lê como
+multiplicação.
+
+`teste_capa_estilo.py`: 33 → **58**.
+
 📌 `--todos` gera uma capa de cada estilo com o nome do estilo no arquivo:
 rodar duas vezes sobrescrevia `capa_casa.jpg` e sobrava UMA imagem, com quem
 pediu a comparação achando que tinha as duas.
