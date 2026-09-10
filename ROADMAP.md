@@ -831,6 +831,41 @@ antigo sem `manda` faria a conta pedir e o robô ignorar.
 como as de comentário já faziam. A *fiação* (qual banco é escolhido quando N>1)
 continua sendo testada no efetivo — é ela que precisa do código real.
 
+### 🔎 `diag_env.py` — parar de caçar variável uma por uma (10/09)
+
+A linha era **uma só**, a 50 do `.env`. Mas o código lê **262 variáveis** e o
+`.env` tem ~100 linhas: escrever uma checagem por variável é garantir que a
+próxima passe. Então virou auditoria geral, com três veredictos:
+
+| | o que é | conserto |
+|---|---|---|
+| ⚠️ **SOMBRA** | substitui um banco/template versionado | comentar a linha |
+| 🕳️ **FANTASMA** | nenhum arquivo lê essa variável | linha morta: typo ou sobra |
+| ✅ **NORMAL** | configuração de verdade | nada |
+
+⚠️ **Errei o veredicto sobre a MESMA linha três vezes, cada uma por um motivo
+diferente** — e isso está no teste porque é o que ensina:
+
+1. **FANTASMA** ("ninguém lê"), porque a chave está dentro de um `IfExp`
+   (`get("A" if x else "B", "")`) e eu só olhava `args[0].value`. O diagnóstico
+   dizia que ninguém lia **a variável que estava apagando as frases novas**.
+2. **NORMAL**, porque o padrão do `get` é `""` — o banco só aparece na linha
+   seguinte (`env if env.strip() else _BANCO`), que é o idioma do projeto
+   inteiro. Passei a olhar a **função**: se ela lê env e menciona uma constante
+   que é banco de frases, a variável pode trocá-lo.
+3. **SOMBRA** para o `GEMINI_API_KEY`, com sugestão de **comentar a chave da
+   API** — porque as funções que a leem também mencionam PROMPTs longos.
+   Diagnóstico que sugere quebrar a produção é pior que diagnóstico nenhum.
+
+⚠️⚠️ **E a pior não foi nenhuma das três: a 1ª versão IMPRIMIU o valor do
+`GEMINI_API_KEY` na tela** — num relatório cuja única razão de existir é ser
+copiado e colado pra outra pessoa ler. A regra do projeto (*"nunca colar
+tokens/segredos no chat"*) virou código: valor mascarado por padrão, só aparece
+quando é claramente frase e a chave não cheira a segredo. O teste tenta vazar de
+propósito, com chave do Gemini e cookie do TikTok, e falha se sair na saída.
+
+`teste_diag_env.py` (17/17) — novo.
+
 ⚠️ **O `teste_envfile` também media a máquina em vez do código** (18·2 na VPS,
 20·0 aqui): o carregador tenta `base/.env` e depois `Path(".env")`, que é
 **relativo ao diretório atual** — rodando de dentro do `~/jarvis` ele acha o
