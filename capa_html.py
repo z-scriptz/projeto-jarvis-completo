@@ -39,6 +39,7 @@ import os
 import re
 import sys
 import json
+import random
 import base64
 import argparse
 from pathlib import Path
@@ -134,6 +135,72 @@ def _marcar(hook: str) -> str:
     return "".join(saida)
 
 
+# ══════════════════════════════════════════════════════════════════════════
+# ESTILOS DE CAPA
+#
+# ⚠️ POR QUE ISTO DEIXOU DE SER UM TEMPLATE SÓ (10/09/2026)
+#
+# O Dre: *"as imagens estão todas iguais... a pessoa sabe que é da página, mas
+# às vezes cansa visualmente, parece estar repetido"*. E não era impressão: o
+# `montar_html` era UM html, escrito uma vez — fundo `#0d0d0f`, foto a 62% de
+# brilho, véu, vinheta, brilho colorido, logo circular com selo ✓ e contador de
+# páginas no topo, hook em CAIXA ALTA. **Sete formatos de conteúdo, um visual.**
+#
+# 📌 E OS CINCO VIRAIS QUE ELE MANDOU DIZEM O CONTRÁRIO DISSO:
+#
+#   @rafabri7o          fundo BRANCO, texto preto gigante, sem logo, sem contador
+#   @lucureau           fundo BRANCO, tipografia preta, ícones, layout de versus
+#   @olga_lehnerg       fundo claro, lettering colorido, recorte de rosto
+#   @homemquesabetudo   fundo azul CLARO, duas colunas MITO|VERDADE
+#   @lucasmagazinetech  escuro, mas com a foto do produto em DESTAQUE (não
+#                       escurecida) e o texto embaixo
+#
+# **Quatro dos cinco têm fundo claro. Nenhum tem bloco de marca no topo.** O
+# nosso fazia exatamente o oposto, em toda capa, todo dia, nas seis contas.
+#
+# ⚠️ E O DRE JÁ DEU A REGRA DE OURO: *"o formato vai variando sempre, não
+# precisam ser todos da mesma forma idêntica; o que estoura hoje pode não
+# estourar amanhã, mas devemos aproveitar e reaproveitar"*. Então isto nasce
+# como uma LISTA que cresce, sorteada com memória (`shared/rotacao.py`, a mesma
+# que impede a resposta repetida) — e não como um segundo template fixo, que só
+# trocaria uma mesmice por outra.
+ESTILOS = ("escuro", "claro")
+_MEM_ESTILO = BASE_DIR / "shared" / "capa_estilos_recentes.json"
+
+
+def _escolher_estilo(conta: str) -> str:
+    """Sorteia o estilo da capa, sem repetir o anterior daquela conta.
+
+    `CARR_ESTILO=claro` no .env força um (pra testar ou pra travar).
+    """
+    forcado = os.environ.get("CARR_ESTILO", "").strip().lower()
+    if forcado in ESTILOS:
+        return forcado
+    try:
+        from shared.rotacao import escolher_sem_repetir as _rodar
+    except Exception:
+        try:
+            from rotacao import escolher_sem_repetir as _rodar
+        except Exception:
+            return random.choice(list(ESTILOS))
+    try:
+        mem = json.loads(_MEM_ESTILO.read_text(encoding="utf-8"))
+    except Exception:
+        mem = {}
+    chave = (conta or "?").lstrip("@").lower()
+    escolhido, recentes = _rodar(list(ESTILOS), mem.get(chave) or [])
+    mem[chave] = recentes
+    try:
+        _MEM_ESTILO.parent.mkdir(parents=True, exist_ok=True)
+        tmp = _MEM_ESTILO.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(mem, ensure_ascii=False, indent=2),
+                       encoding="utf-8")
+        tmp.replace(_MEM_ESTILO)
+    except Exception:
+        pass          # memória é conforto: nunca trava um post
+    return escolhido or "escuro"
+
+
 def montar_html(plano: dict) -> str:
     import html as _h
     capa = plano.get("capa") or {}
@@ -156,6 +223,15 @@ def montar_html(plano: dict) -> str:
     total = len(plano.get("slides") or []) + 2
     arrasta = _h.escape((capa.get("arrasta") or "ARRASTA PRO LADO").upper())
     handle = _h.escape(plano.get("handle") or "")
+
+    # ⚠️ o estilo é do PLANO se ele mandar (auditoria, --estilo), senão sorteia
+    estilo = (capa.get("estilo") or plano.get("estilo") or "").strip().lower()
+    if estilo not in ESTILOS:
+        estilo = _escolher_estilo(plano.get("handle") or nicho)
+    if estilo == "claro":
+        return _html_claro(hook=hook, sub=sub, total=total, arrasta=arrasta,
+                           handle=handle, cor=cor, fonte_u=fonte_u,
+                           corpo_u=corpo_u, fundo_u=fundo_u)
 
     return f"""<!doctype html><html><head><meta charset="utf-8"><style>
 @font-face {{ font-family:'Titulo'; src:url('{fonte_u}'); }}
@@ -262,6 +338,99 @@ body {{ width:{LARG}px; height:{ALT}px; overflow:hidden;
   for (var t = 118; t > 52; t -= 2) {{
     h.style.fontSize = t + 'px';
     if (h.offsetHeight <= 620) break;
+  }}
+}})();
+</script></body></html>"""
+
+
+def _html_claro(hook, sub, total, arrasta, handle, cor,
+                fonte_u, corpo_u, fundo_u) -> str:
+    """A capa CLARA — o formato de 4 dos 5 virais que o Dre mandou.
+
+    ⚠️ O QUE MUDA NÃO É A COR, É O QUE SAI DE CENA. Comparando os virais com a
+    nossa capa escura, o que eles NÃO têm é o que mais pesava:
+
+      · **sem logo circular, sem selo ✓, sem contador no topo.** Aquele bloco
+        comia os 150px superiores de toda capa e é a primeira coisa que
+        denuncia post de página comercial. A marca aparece no rodapé, discreta:
+        quem gosta do conteúdo vai atrás de quem postou.
+      · **sem CAIXA ALTA.** `text-transform:uppercase` num hook de 10 palavras
+        vira bloco cinza no feed. Os cinco exemplos usam caixa normal, e é ela
+        que deixa a frase ser LIDA em vez de escaneada.
+      · **a foto não é fundo escurecido.** Aqui ela é um cartão, com moldura
+        branca — como no @lucasmagazinetech, onde o produto é a estrela e o
+        texto conversa com ele. Sem foto, a capa é só tipografia (@rafabri7o).
+
+    ⚠️ E A ÚNICA COISA QUE FICA IGUAL É A LARGURA DA MEDIDA: o hook continua
+    encolhendo por JS até caber. Isso não é estilo, é a diferença entre uma capa
+    e um texto cortado.
+    """
+    tem_foto = bool(fundo_u)
+    # ⚠️ montado FORA da f-string: expressão de f-string não aceita barra
+    # invertida no Python < 3.12, e este arquivo roda em três máquinas.
+    cartao = (f"<div class=\"cartao\" style=\"background-image:url('{fundo_u}')\">"
+              f"</div>") if tem_foto else ""
+    margem_rodape = "34" if tem_foto else "auto"
+    teto_hook = "520" if tem_foto else "900"
+    return f"""<!doctype html><html><head><meta charset="utf-8"><style>
+@font-face {{ font-family:'Titulo'; src:url('{fonte_u}'); }}
+@font-face {{ font-family:'Corpo'; src:url('{corpo_u}'); }}
+* {{ margin:0; padding:0; box-sizing:border-box; }}
+body {{ width:{LARG}px; height:{ALT}px; overflow:hidden;
+        font-family:'Corpo',sans-serif; background:#f4f1ea; color:#111; }}
+.palco {{ position:relative; width:100%; height:100%;
+          padding:96px 80px 80px; display:flex; flex-direction:column; }}
+
+/* ⚠️ a mancha de cor é o ÚNICO enfeite, e fica ATRÁS do texto: nos virais o
+   fundo tem uma forma (a nuvem azul da @olga_lehnerg), não um gradiente. */
+.mancha {{ position:absolute; width:760px; height:760px; right:-190px;
+           top:-160px; border-radius:50%; background:{cor}1f; }}
+
+.hook {{ position:relative; font-family:'Titulo',sans-serif; font-size:126px;
+         line-height:1.02; letter-spacing:-2px; color:#111;
+         /* sem text-shadow: em fundo claro ela suja a letra em vez de recortar */ }}
+.hook em {{ font-style:normal; }}
+.cor {{ color:{cor}; }}
+/* a tarja continua marcador, não retângulo — mas em fundo claro ela é a
+   palavra em BRANCO sobre a cor, e não preta sobre a cor */
+.tarja {{ position:relative; color:#fff; padding:0 14px; display:inline;
+          line-height:inherit; }}
+.tarja::before {{ content:''; position:absolute; left:-6px; right:-6px;
+                  top:-.02em; bottom:-.10em; background:{cor}; z-index:-1;
+                  transform:rotate(-1.2deg); border-radius:6px; }}
+
+.sub {{ position:relative; margin-top:38px; padding-right:90px; font-size:40px;
+        line-height:1.34; color:#4a4a52; text-transform:none; }}
+
+/* a foto vira CARTÃO, não fundo. Sem foto, a capa é só tipografia. */
+.cartao {{ position:relative; margin-top:auto; width:100%; height:560px;
+           border-radius:28px; overflow:hidden; background:#e8e4db center/cover
+           no-repeat; box-shadow:0 18px 50px rgba(0,0,0,.16); }}
+
+.rodape {{ position:relative; margin-top:{margem_rodape}px;
+           display:flex; align-items:center; gap:16px; font-size:30px;
+           color:#6b6b74; }}
+.rodape b {{ color:#111; font-weight:800; }}
+.arrasta {{ margin-left:auto; display:flex; align-items:center; gap:12px;
+            border:3px solid #111; border-radius:44px; padding:14px 28px;
+            font-size:29px; font-weight:800; color:#111; }}
+.arrasta i {{ font-style:normal; color:{cor}; font-size:32px; }}
+</style></head><body><div class="palco">
+  <div class="mancha"></div>
+  <div class="hook" id="hook">{_marcar(hook)}</div>
+  <div class="sub">{sub}</div>
+  {cartao}
+  <div class="rodape"><b>{handle}</b> · {total} slides
+    <div class="arrasta">{arrasta} <i>&#10132;</i></div></div>
+</div>
+<script>
+// mesma medida da capa escura: o navegador decide o tamanho, não eu
+(function () {{
+  var h = document.getElementById('hook');
+  var teto = {teto_hook};
+  for (var t = 126; t > 54; t -= 2) {{
+    h.style.fontSize = t + 'px';
+    if (h.offsetHeight <= teto) break;
   }}
 }})();
 </script></body></html>"""

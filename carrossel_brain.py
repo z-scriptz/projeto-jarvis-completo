@@ -113,7 +113,7 @@ COBERTURA = int(os.environ.get("CARR_COBERTURA", "3"))
 # ══════════════════════════════════════════════════════════════════════════
 FORMATOS = {
     "lista": {
-        "peso": 40, "produtos": 5,
+        "peso": 30, "produtos": 5,
         "desc": "N produtos, um por slide — cobre 'lista rápida', "
                 "'parecem mentira' e 'checklist'",
         "angulos": [
@@ -171,10 +171,20 @@ FORMATOS = {
             "Isso mudou completamente meu resultado",
         ],
     },
-    # Estrutura pronta, peso 0: entra na roda quando o Dre quiser, sem código
-    # novo — é só `CARR_PESO_MITOS=8` no .env.
+    # ⚠️ LIGADO EM 10/09/2026, E QUEM MANDOU LIGAR FOI O FEED. O Dre mandou
+    # cinco carrosséis estourados de referência e um deles era exatamente isto:
+    # @homemquesabetudo, MITO | VERDADE sobre trocar a esponja de louça —
+    # **4.163 curtidas**. A estrutura estava pronta aqui desde sempre, com o
+    # comentário dizendo "entra na roda quando o Dre quiser"… e ninguém nunca
+    # quis, porque ninguém sabia que dava. Formato construído, testado e
+    # dormindo em peso 0 é a mesma família de "arquivo escrito e nunca ligado"
+    # que já custou cinco dias de comentário repetido.
+    #
+    # Peso 12, e o `lista` cedeu de 40 → 30: com 40 ele sozinho era 40% de tudo
+    # que sai, e o Dre pediu justamente o contrário — *"o formato vai variando
+    # sempre"*. Afinar por `.env` (`CARR_PESO_MITOS=…`) sem deploy.
     "mitos": {
-        "peso": 0, "produtos": 1, "passos": 4,
+        "peso": 12, "produtos": 1, "passos": 4,
         "desc": "mito x verdade alternados — muito compartilhado",
         "angulos": ["{n} mitos que você ainda acredita",
                     "Isso é verdade ou você só ouviu falar?"],

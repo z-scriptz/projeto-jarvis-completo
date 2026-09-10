@@ -527,6 +527,70 @@ Ex.: "O segredo pra ter um iPhone 17 sem gastar / uma fortuna ✨".
 
 ---
 
+## 🗓️ Dia 2026-09-10 — a capa era UM template, e o viral que ele mandou estava desligado
+
+### 🎨 Sete formatos de conteúdo, um visual
+
+O Dre: *"as imagens estão todas iguais… a pessoa sabe que é da página, mas às
+vezes cansa visualmente, parece estar repetido"*. **Não era impressão.**
+
+`carrossel_brain.FORMATOS` tem **7 formatos de conteúdo**, com pesos. Mas
+`capa_html.montar_html` era **um HTML só**: fundo `#0d0d0f`, foto a 62% de
+brilho, véu, vinheta, brilho colorido, logo circular com selo ✓ e contador de
+páginas no topo, hook em CAIXA ALTA. Toda capa, todo dia, nas seis contas.
+
+📌 **E os cinco virais que ele mandou dizem o contrário disso:**
+
+| conta | o que é |
+|---|---|
+| @rafabri7o (10,1 mil) | fundo **branco**, texto preto gigante, sem logo, sem contador |
+| @lucureau (4.757) | fundo **branco**, tipografia preta, ícones, layout de versus |
+| @homemquesabetudo (4.163) | fundo azul **claro**, duas colunas MITO \| VERDADE |
+| @lucasmagazinetech (2.135) | escuro, mas com a foto do produto em **destaque** |
+| @olga_lehnerg (1.068) | fundo claro, lettering colorido, recorte de rosto |
+
+**Quatro dos cinco têm fundo claro. Nenhum tem bloco de marca no topo.** O nosso
+fazia exatamente o oposto.
+
+⚠️ **O QUE MUDA NA CAPA CLARA NÃO É A COR — É O QUE SAI DE CENA:** o logo, o
+selo, o contador (comiam os 150px superiores e são a primeira coisa que denuncia
+página comercial) e o `text-transform:uppercase` (num hook de 10 palavras vira
+mancha cinza no feed). A marca vai pro rodapé; quem gosta do conteúdo procura
+quem postou. E a foto vira **cartão**, não fundo escurecido — no
+@lucasmagazinetech o produto é a estrela, e baixar o brilho a 62% é o contrário.
+
+⚠️ **Nasceu como LISTA, não como segundo template.** A regra veio dele: *"o
+formato vai variando sempre, não precisam ser todos da mesma forma idêntica; o
+que estoura hoje pode não estourar amanhã, mas devemos aproveitar e
+reaproveitar"*. Dois estilos fixos alternando seriam outra mesmice, só que com
+período 2 — por isso o sorteio usa a **mesma `shared/rotacao.py`** que impede a
+resposta repetida, com memória **por conta**, e `CARR_ESTILO` no `.env` pra
+travar um quando ele quiser.
+
+### 🎭 E o formato que ele mandou como exemplo estava DESLIGADO
+
+`@homemquesabetudo`, MITO | VERDADE sobre trocar a esponja: **4.163 curtidas**.
+O formato `mitos` já existia em `FORMATOS`, pronto, com o comentário:
+
+> *"Estrutura pronta, peso 0: entra na roda quando o Dre quiser, sem código
+> novo — é só `CARR_PESO_MITOS=8` no .env."*
+
+**E ninguém nunca quis, porque ninguém sabia que dava.** Formato construído,
+testado e dormindo em peso 0 é a mesma família de "arquivo escrito e nunca
+ligado" que já custou cinco dias de comentário repetido — só que aqui a coisa
+morta era uma **oportunidade**, não um defeito, e por isso ninguém procurou.
+
+Ligado em **12**, e o `lista` cedeu de **40 → 30**: sozinho ele era 40% de tudo
+o que saía, contra o pedido explícito de variar. O teste trava a distribuição
+(nenhum formato passa de ⅓ da roda).
+
+`teste_capa_estilo.py` (26/26) — novo.
+
+📌 **Pendências que ele fechou nesta rodada:** trilhas ficam com o áudio
+original por enquanto (*"depois eu arrumo isso"*), e os "15 ganchos com o mesmo
+molde" saem da lista — ele não reconheceu o problema, e pendência que o dono não
+reconhece é pendência minha, não dele.
+
 ## 🗓️ Dia 2026-09-09 — 6 respostas, 4 frases, uma delas 3 vezes
 
 ### 🤖 O Reel do pet explodiu, e o robô se denunciou nos comentários
