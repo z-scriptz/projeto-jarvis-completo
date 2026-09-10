@@ -319,8 +319,23 @@ def _link_do_post(permalink: str) -> str:
     Cai pro site quando não acha — melhor a home que nada, mas o log conta,
     porque cada queda dessas é uma venda que dependia de uma junção que falhou.
     """
+    ls = _links_do_post(permalink)
+    return ls[0] if ls else ""
+
+
+def _links_do_post(permalink: str) -> list:
+    """TODOS os links do post. Reel devolve 1; carrossel devolve N.
+
+    ⚠️ UM CARROSSEL É UMA LISTA DE PRODUTOS, e escolher um deles pra chamar de
+    "o produto" seria inventar. Quem comentou "eu quero" num post de 5 itens não
+    disse qual — então a DM honesta mostra os que apareceram, em vez de apostar
+    num e errar em 4 de 5.
+    """
     _carregar_ledger_links()
-    return _LINKS_POR_POST.get(_shortcode(permalink), "")
+    v = _LINKS_POR_POST.get(_shortcode(permalink))
+    if not v:
+        return []
+    return [x for x in (v if isinstance(v, (list, tuple)) else [v]) if x]
 
 
 def _shortcode(permalink: str) -> str:
@@ -391,6 +406,38 @@ def _carregar_ledger_links() -> dict:
              + (f" · {_sem_link} sem link (junção falhou)" if _sem_link else ""))
     except Exception as e:
         _log(f"   (sem publicados.jsonl: {str(e)[:50]}) — DM vai pro site")
+
+    # ── ⚠️ O CARROSSEL TEM O PRÓPRIO LEDGER, E É FONTE DE PRIMEIRA MÃO ──
+    # Medido em 10/09: VIDEO 44/44 com link (100%), CAROUSEL 0/28 (0%).
+    # Separação total — não era rotação de log, era formato.
+    #
+    # O `publicados.jsonl` é RASPADO do log procurando "[plataforma] publicado:",
+    # e o carrossel é logado como "✅ Carrossel publicado [conta] — link": a
+    # palavra cai do lado errado do colchete. Consertar aquela regex seria
+    # remendar o remendo — log existe pra humano ler, muda quando alguém melhora
+    # uma mensagem e some quando rotaciona.
+    #
+    # O `carrosseis_ledger.jsonl` é escrito pelo próprio `carrossel_brain` no
+    # momento da publicação, com a `url` na mão. Fonte de primeira mão.
+    _n_carr = 0
+    try:
+        arq = BASE_DIR / "shared" / "carrosseis_ledger.jsonl"
+        for ln in arq.read_text(encoding="utf-8", errors="ignore").splitlines():
+            try:
+                r = json.loads(ln)
+            except Exception:
+                continue
+            sc = _shortcode(r.get("url") or "")
+            links = [l for l in (r.get("links") or []) if l]
+            # ⚠️ NÃO SOBRESCREVE o que já veio do publicados.jsonl: se um post
+            # está nos dois, o primeiro ganha. Aqui é acréscimo, não disputa.
+            if sc and links and sc not in _LINKS_POR_POST:
+                _LINKS_POR_POST[sc] = links
+                _n_carr += 1
+        if _n_carr:
+            _log(f"   +{_n_carr} carrossel(éis) com link (ledger próprio)")
+    except Exception:
+        pass
     return _LINKS_POR_POST
 
 
@@ -419,7 +466,25 @@ _DM_SEM_LINK_SEM_GRUPO = ("Oiee! 😍 tá tudo aqui ó: {site} "
                           "💛 corre que as ofertas somem rápido!")
 
 
+# ⚠️ O CARROSSEL PRECISA DO SEU PRÓPRIO JEITO DE FALAR (10/09). "é esse aqui
+# ó: <link>" num post de 5 produtos está errado em 4 de 5 vezes. Aqui a DM
+# mostra a lista e deixa a pessoa escolher — e continua sendo uma conversa,
+# porque termina perguntando.
+_DM_LISTA_DEFAULT = (
+    "Oiee! 😍 nesse post tinha mais de um — deixei todos aqui ó:\n{lista}\n"
+    "💛 me fala qual você quer que eu te ajudo!|||"
+    "oi! 🥰 esse post era uma listinha, então mandei todos:\n{lista}\n"
+    "qual deles te interessou?|||"
+    "achei aqui pra você ✨ eram esses:\n{lista}\n"
+    "me conta qual chamou atenção 👀")
+
+
 def _banco_dm(tem_link: bool, ctx: dict) -> list:
+    # lista com mais de um item tem banco próprio: ver `_DM_LISTA_DEFAULT`
+    if tem_link and ctx.get("lista") and ctx.get("n_links", 0) > 1:
+        env = os.environ.get("AUTO_RESP_DM_TMPL_LISTA", "")
+        bruto = env if env.strip() else _DM_LISTA_DEFAULT
+        return [t.strip() for t in bruto.split("|||") if t.strip()]
     env = os.environ.get("AUTO_RESP_DM_TMPL_PRODUTO" if tem_link
                          else "AUTO_RESP_DM_TMPL", "")
     bruto = env if env.strip() else (_DM_PRODUTO_DEFAULT if tem_link
@@ -436,8 +501,14 @@ def _enviar_dm_ig(ig: str, comment_id: str, token: str,
                   permalink: str = "", memoria: dict = None) -> bool:
     """DM (private reply) em resposta a um comentário. No direct o link CLICA.
     Precisa do escopo instagram_manage_messages. Best-effort."""
-    link = _link_do_post(permalink)
+    links = _links_do_post(permalink)
+    link = links[0] if links else ""
+    # ⚠️ TETO NA LISTA: um carrossel de 10 vira uma DM que ninguém lê, e o
+    # WhatsApp/Instagram encurtam mensagem longa. 5 é o que cabe numa olhada.
+    _teto = int(os.environ.get("AUTO_RESP_DM_MAX_LINKS", "5"))
     ctx = {"link": link,
+           "n_links": len(links),
+           "lista": "\n".join(f"• {l}" for l in links[:_teto]),
            "site": os.environ.get("AUTO_RESP_SITE", "topshopoficial.com.br"),
            "whats": _convite_grupo()}
     if not link:
@@ -445,7 +516,8 @@ def _enviar_dm_ig(ig: str, comment_id: str, token: str,
              f"{'mando o grupo' if ctx['whats'] else 'mando o site'} "
              f"(rode --diag-dm pra ver por quê)")
     banco = _banco_dm(bool(link), ctx)
-    chave = f"dm|{_shortcode(permalink)}|{'prod' if link else 'plano_b'}"
+    chave = (f"dm|{_shortcode(permalink)}|"
+             f"{'lista' if len(links) > 1 else 'prod' if link else 'plano_b'}")
     if memoria is not None:
         reg = memoria.get(chave) or {}
         escolhida, recentes = _rodar(banco, reg.get("frases") or [])
@@ -809,7 +881,11 @@ def _diag_dm(contas, limites) -> int:
             elif sc in ledger:
                 com += 1
                 por_tipo[tipo][1] += 1
-                marca, detalhe = "✅", ledger[sc][:52]
+                _v = ledger[sc]
+                _ls = _v if isinstance(_v, (list, tuple)) else [_v]
+                marca = "✅"
+                detalhe = (f"{len(_ls)} links · {_ls[0][:38]}…" if len(_ls) > 1
+                           else _ls[0][:52])
             elif sc in sem_link:
                 quebrado += 1
                 marca, detalhe = "⚠️ ", "no ledger SEM link — a junção por slug falhou"

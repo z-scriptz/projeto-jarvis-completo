@@ -312,6 +312,82 @@ checa("o _enviar_dm_ig recebe a memória de rotação",
 checa("e a chamada real passa o frases_post",
       '_enviar_dm_ig(ig, cid, token, m.get("permalink", ""), frases_post)' in _src_ar_dm)
 
+print("\n── ⚠️ O CARROSSEL: 0 de 28 com link, e não era rotação de log ──")
+# Medido pelo --diag-dm em 10/09: VIDEO 44/44 (100%), CAROUSEL 0/28 (0%).
+# Separação total. O publicados.jsonl é RASPADO do log procurando
+# "[plataforma] publicado:", e o carrossel é logado como "✅ Carrossel publicado
+# [conta] — link" — a palavra cai do lado errado do colchete.
+_tmp_l = Path(tempfile.mkdtemp(prefix="ledger_"))
+(_tmp_l / "shared").mkdir()
+(_tmp_l / "shared" / "publicados.jsonl").write_text(
+    json.dumps({"id": "REEL111", "link": "https://s.shopee.com.br/reel"}), "utf-8")
+(_tmp_l / "shared" / "carrosseis_ledger.jsonl").write_text("\n".join([
+    json.dumps({"url": "https://www.instagram.com/p/CARR222/",
+                "links": ["https://s.shopee.com.br/a", "https://s.shopee.com.br/b",
+                          "https://s.shopee.com.br/c"]}),
+    # linha antiga, de antes do conserto: tem url mas não tem links
+    json.dumps({"url": "https://www.instagram.com/p/VELHO33/", "slug": "x"}),
+    # um carrossel que também está no publicados.jsonl não pode ser sobrescrito
+    json.dumps({"url": "https://www.instagram.com/reel/REEL111/",
+                "links": ["https://NAO.DEVE.GANHAR"]}),
+    "{ isso nao e json",
+]), "utf-8")
+_base_real = ar.BASE_DIR
+ar.BASE_DIR = _tmp_l
+ar._LINKS_POR_POST = None
+try:
+    checa("o Reel continua com 1 link",
+          ar._links_do_post("https://www.instagram.com/reel/REEL111/")
+          == ["https://s.shopee.com.br/reel"])
+    _lc = ar._links_do_post("https://www.instagram.com/p/CARR222/")
+    checa("o carrossel devolve os 3 links (não 1)", len(_lc) == 3, str(_lc))
+    checa("_link_do_post continua devolvendo string (compat)",
+          ar._link_do_post("https://www.instagram.com/p/CARR222/")
+          == "https://s.shopee.com.br/a")
+    checa("carrossel sem links (linha antiga) não entra",
+          ar._links_do_post("https://www.instagram.com/p/VELHO33/") == [])
+    checa("⚠️ o ledger do carrossel NÃO sobrescreve o publicados.jsonl",
+          ar._links_do_post("https://www.instagram.com/reel/REEL111/")
+          == ["https://s.shopee.com.br/reel"])
+    checa("linha quebrada não derruba a leitura", len(ar._LINKS_POR_POST) == 2,
+          str(list(ar._LINKS_POR_POST)))
+    checa("post desconhecido devolve lista vazia",
+          ar._links_do_post("https://www.instagram.com/p/NADA/") == [])
+
+    print("\n   ── ⚠️ e a DM do carrossel não aposta num dos 5 ──")
+    # "é esse aqui ó: <link>" num post de 5 produtos erra em 4 de 5
+    _ctx_lista = {"link": "https://s.shopee.com.br/a", "n_links": 3,
+                  "lista": "• a\n• b\n• c", "site": "s.com", "whats": "w"}
+    _b_lista = ar._banco_dm(True, _ctx_lista)
+    checa("com N>1 o banco é o de LISTA", all("{lista}" in f for f in _b_lista),
+          str(_b_lista)[:80])
+    checa("nenhuma frase de lista diz 'é esse aqui'",
+          not any("é esse aqui" in f for f in _b_lista))
+    # ⚠️ a propriedade é PEDIR QUE A PESSOA ESCOLHA, não a pontuação. Minha
+    # primeira asserção procurava "?" ou "me fala" e reprovou "me conta qual
+    # chamou atenção 👀", que pergunta do mesmo jeito. Testar a forma em vez do
+    # sentido reprova texto bom — foi o mesmo erro das duas asserções que
+    # caíram contra as frases do Dre.
+    checa("todas pedem que a pessoa escolha (continua conversa)",
+          all("qual" in f.lower() for f in _b_lista), str(_b_lista)[:100])
+    _ctx_um = {"link": "https://s.shopee.com.br/a", "n_links": 1,
+               "lista": "• a", "site": "s.com", "whats": "w"}
+    checa("com N==1 volta o banco de produto",
+          all("{link}" in f for f in ar._banco_dm(True, _ctx_um)))
+finally:
+    ar.BASE_DIR = _base_real
+    ar._LINKS_POR_POST = None
+    shutil.rmtree(_tmp_l, ignore_errors=True)
+
+print("\n   ── ⚠️ o carrossel grava os links na PUBLICAÇÃO, não no log ──")
+# consertar a regex do ledger_publicados seria remendar o remendo: log existe
+# pra humano ler, muda quando alguém melhora a mensagem e some ao rotacionar
+_cb = (BASE / "carrossel_brain.py").read_text("utf-8")
+checa("o registrar() grava os links", '"links": [l for l in (plano.get("links")' in _cb)
+checa("grava também os nomes dos produtos", '"produtos"' in _cb)
+checa("e a url já era passada na publicação",
+      'url=r.get("url", "") if r.get("sucesso")' in _cb)
+
 print("\n── ⚠️ O LEDGER ENVELHECE E ISSO NÃO DAVA SINAL ──")
 # publicados.jsonl é RASPADO do log por um comando manual. Se ninguém roda, o
 # post de ontem não está lá -- e é justo no post novo que a pergunta chega.

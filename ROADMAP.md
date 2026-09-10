@@ -737,6 +737,41 @@ carrossel é estruturalmente invisível pro ledger.** O `--diag-dm` agora traz
 📌 **E pra carrossel isso é menos grave do que parece:** um post de LISTA não
 tem "o produto". A DM do grupo é a resposta certa ali, não um link de item.
 
+### 🎠 CONFIRMADO: eram os carrosséis, os 28 (10/09)
+
+```
+por tipo de post:
+   VIDEO       44/44  com link (100%)
+   CAROUSEL     0/28  com link (  0%)
+```
+
+**Separação total, sem margem pra interpretação.** Todo Reel tem o link do
+produto; nenhum carrossel tem. Não era rotação de log — era formato.
+
+📌 **E os "61%" não eram 39% de defeito.** É 100% de acerto no formato que tem um
+produto, e 0% num formato que nunca teve *um* produto pra apontar.
+
+**O conserto NÃO foi arrumar a regex do `ledger_publicados`** — isso seria
+remendar o remendo. O log é fonte de **segunda mão**: existe pra humano ler, muda
+de formato quando alguém melhora uma mensagem, e some quando rotaciona. Já tinha
+quebrado exatamente assim.
+
+A fonte de primeira mão já existia e ninguém tinha ligado: `carrossel_brain`
+grava `shared/carrosseis_ledger.jsonl` **no momento da publicação**, com a `url`
+na mão (linha 1457) — e o `plano` tem os `links`. Faltava gravá-los juntos.
+
+⚠️ **E um carrossel devolve LISTA, não link.** Escolher um dos 5 pra chamar de
+"o produto" erra em 4 de 5. Quem comentou "eu quero" num post de lista não disse
+qual — então a DM mostra os que apareceram (teto de 5) e **pergunta qual**, em
+vez de apostar. Banco de DM próprio pra isso.
+
+⚠️ O ledger do carrossel **não sobrescreve** o `publicados.jsonl`: se um post
+está nos dois, o primeiro ganha. É acréscimo, não disputa.
+
+📌 **As 28 linhas antigas não têm `links`** e continuam sem — o registro só passa
+a gravá-los daqui pra frente. Elas caem no plano B (grupo do WhatsApp), que para
+um post de lista é a resposta certa mesmo.
+
 ### ✍️ AS FRASES DO DRE — 14 respostas + 10 comentários fixados (10/09)
 
 O que a comparação ensina, e por isso fica registrado: **as minhas 7 respostas
@@ -758,10 +793,12 @@ O teste agora **extrai as palavras entre aspas das próprias iscas** e exige que
 cada uma dispare o `_bateu` real do `auto_resposta` — frase nova com palavra
 nova falha no teste em vez de falhar no perfil.
 
-⚠️⚠️ **E cada isca é uma promessa que alguém tem que cumprir.** *"Comenta QUERO
-que eu te mando na DM"* com o respondedor desligado = a conta pedindo
-publicamente e não entregando, pra dezenas de pessoas que levantaram a mão. Isso
-não é post fraco, é a conta mentindo. Por isso as 10 só entram no sorteio com
+⚠️ **Correção minha (10/09):** eu chamei a isca de *"a conta mentindo"* e o Dre
+corrigiu — *"não é conta mentindo, isso se chama engajamento"*. Ele está certo:
+pedir comentário pra mandar link é mecânica normal e ele já vai ligar o
+`AUTO_RESP_DM`. O portão continua, mas pelo motivo certo: garantir que a isca não
+saia num dia em que o respondedor esteja fora do ar. Com a DM ligada, ele nem
+aparece. As 10 só entram no sorteio com
 `AUTO_RESPONDER` **e** `AUTO_RESP_DM` ligados — a regra que o cabeçalho do
 arquivo já anunciava desde julho: *"nenhuma promete o que a gente não faz"*. E
 **nunca em carrossel**: num post de "3 erros" não existe "esse achadinho" pra
@@ -774,6 +811,18 @@ todos veem. Aqui é **resposta a quem perguntou**: a pessoa levantou a mão, ent
 oferecer o grupo é responder, não empurrar. Ele mandou 5 de 9 e a proporção é
 dele. O que continua travado é sobrar saída pra quem só quer o link (≥3 frases
 sem grupo).
+
+📌 **E as frases são UNIVERSAIS, não por nicho** — *"essas aí são as frases que
+ficaram em todas as contas"*. Então `pet`, `moda` e `beleza` ficam sem banco
+exclusivo **de propósito**, e o banco universal saltou de 4 → **14** frases. O
+marcador do `--nichos` mudou de 🕳️ *"esperando as frases do Dre"* para ○ *"usa o
+banco universal"*: cobrar o que já foi entregue é o defeito que este ROADMAP
+chama de *"pendência marcada e nunca desmarcada vira mentira com aparência de
+registro"*.
+
+⚠️ **E o `--nichos` agora diz se a isca está VIVA.** As 10 só saem com os dois
+interruptores ligados — uma isca fora do sorteio é exatamente o defeito que este
+projeto repete: frase escrita, versionada e morta, sem nenhum sinal.
 
 ⚠️ **Fica um aviso aberto, não consertado:** duas frases dele convidam pro grupo
 **sem dizer onde ele fica** (*"Entra no nosso grupo 💚 sempre aparecem ofertas

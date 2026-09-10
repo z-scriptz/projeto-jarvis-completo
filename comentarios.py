@@ -416,16 +416,35 @@ def _diag_nichos() -> int:
         if extras is None:
             marca, obs = "⚠️ ", f"nicho '{nicho}' não tem banco — só o universal"
         elif not extras:
-            marca, obs = "🕳️ ", "banco do nicho VAZIO — esperando as frases do Dre"
+            # ⚠️ VAZIO AQUI NÃO É PENDÊNCIA (10/09). O Dre respondeu: *"essas aí
+            # são as frases que ficaram em todas as contas"* — as 14 respostas e
+            # as 10 iscas são UNIVERSAIS de propósito. Este marcador chegou a
+            # dizer "esperando as frases do Dre" e viraria cobrança de uma coisa
+            # já entregue, que é o defeito que o próprio ROADMAP chama de
+            # "pendência marcada e nunca desmarcada vira mentira com aparência
+            # de registro".
+            marca, obs = "○ ", "sem frase exclusiva (usa o banco universal)"
         else:
             marca, obs = "✅", f"+{len(extras)} frase(s) do nicho"
         print(f"   {marca} @{handle:<20} {nicho:<8} {len(banco)} frase(s)  {obs}")
-    faltando = [n for n, v in _IG_REEL_POR_NICHO.items()
-                if not v and n in set(mapa.values())]
-    if faltando:
-        print(f"\n  🕳️ sem frases próprias: {', '.join(sorted(faltando))}")
-        print(f"     Encha por .env sem deploy, ex.:")
-        print(f"     COMENT_IG_REEL_PET='frase 1|||frase 2|||frase 3'")
+    # ⚠️ O NÚMERO QUE IMPORTA AQUI É SE A ISCA ESTÁ VIVA. As 10 iscas de DM só
+    # entram no sorteio com AUTO_RESPONDER e AUTO_RESP_DM ligados — e uma isca
+    # que não sai é exatamente o defeito que este projeto repete: frase
+    # escrita, versionada e morta, sem nenhum sinal.
+    if _dm_responde():
+        print(f"\n  ✅ as {len(_IG_ISCA_DM)} iscas de DM estão ATIVAS "
+              f"(AUTO_RESPONDER e AUTO_RESP_DM ligados)")
+    else:
+        print(f"\n  ⚠️ as {len(_IG_ISCA_DM)} iscas de DM estão FORA do sorteio:")
+        for k in ("AUTO_RESPONDER", "AUTO_RESP_DM"):
+            v = os.environ.get(k, "0")
+            print(f"       {k}={v}" + ("" if v.strip().lower() in ("1", "true", "sim")
+                                       else "   ← desligado"))
+        print(f"     Elas pedem 'comenta QUERO que eu mando na DM'; sem o "
+              f"respondedor\n     ligado o pedido sai e ninguém responde.")
+    print(f"\n  ○ nichos sem frase exclusiva usam o banco universal — o Dre "
+          f"disse que\n    as frases dele valem pra todas as contas. Se um dia "
+          f"quiser específicas:\n    COMENT_IG_REEL_PET='frase 1|||frase 2'")
     return 0
 
 

@@ -1484,6 +1484,29 @@ def registrar(plano: dict, slug: str = "", url: str = "") -> None:
                 "hook": (plano.get("capa") or {}).get("hook", ""),
                 "slides": len(plano.get("slides") or []),
                 "slug": slug, "url": url,
+                # ⚠️ OS LINKS ENTRAM AQUI EM 10/09/2026, E O MOTIVO É UMA
+                # MEDIÇÃO: `auto_resposta --diag-dm` deu VIDEO 44/44 com link
+                # (100%) e CAROUSEL 0/28 (0%). Separação total.
+                #
+                # A causa não era este arquivo — era o `ledger_publicados`, que
+                # RASPA DO LOG procurando "[plataforma] publicado:" enquanto o
+                # `patch_carrossel_uploader` escreve "✅ Carrossel publicado
+                # [conta] — link". A palavra cai do lado errado do colchete e o
+                # carrossel ficava invisível.
+                #
+                # 📌 MAS CONSERTAR A REGEX SERIA REMENDAR O REMENDO. O log é
+                # uma fonte de segunda mão: ele existe pra humano ler, muda de
+                # formato quando alguém melhora uma mensagem, e some quando
+                # rotaciona. Aqui a `url` já estava na mão (linha 1457) e os
+                # links também — faltava só gravá-los juntos. Isto é a fonte
+                # de PRIMEIRA mão, e não depende de ninguém escrever log de um
+                # jeito específico pra sempre.
+                #
+                # Lista, não string: um carrossel é uma LISTA de produtos, e
+                # escolher um deles aqui seria inventar qual é "o" produto.
+                "links": [l for l in (plano.get("links") or []) if l],
+                "produtos": [s.get("titulo", "") for s in (plano.get("slides") or [])
+                             if s.get("titulo")],
             }, ensure_ascii=False) + "\n")
     except Exception as e:
         log.warning(f"   ⚠️  não registrei no ledger: {e}")
