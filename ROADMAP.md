@@ -895,6 +895,39 @@ Não existe nenhum `os.environ.get("FILA_VALIDADE_DIAS")` no projeto. A linha do
 `.env` é decorativa: a fila expira pelo `agendador_config.json`, ou pelos **27**
 dos `DEFAULTS` — nunca pelos 45 que ele configurou.
 
+⚠️ **E O ARQUIVO NÃO ESTÁ ONDE EU MANDEI PROCURAR.** Dei um comando lendo
+`agendador_config.json` na raiz e ele estourou com `FileNotFoundError` — porque
+eu **supus o caminho em vez de ler**. O daemon usa:
+
+```python
+daemon_maestro:54   CONFIG_PATH = PLANS_DIR / "agendador_config.json"
+                    PLANS_DIR   = RAIZ / "shared" / "content_plans"
+```
+
+⚠️⚠️ **E AÍ APARECEU O DEFEITO MAIOR: duas superfícies, dois caminhos.**
+
+| módulo | de onde lê |
+|---|---|
+| `daemon_maestro`, `auditoria_postagem`, `limpar_esteira`, `add_fontes`, `descobridor_grupos` | `shared/content_plans/agendador_config.json` |
+| **`agendador_agent`** | **`RAIZ/agendador_config.json`** |
+
+São **arquivos diferentes com o mesmo nome**. Quem editar o da raiz muda o
+`agendador_agent` e **não muda o daemon** — que é justamente quem decide o que
+vence e vai pra `fila_vencida/`. É a mesma família do `_carregar_env` (40 cópias)
+e da rotação de frases: meia regra em cada superfície, sem sintoma.
+
+📌 **Como perguntar sem adivinhar** — importando a resolução do próprio daemon,
+em vez de eu escrever o caminho de novo (o import não tem efeito colateral,
+verificado por AST):
+
+```bash
+.venv/bin/python -c "
+import sys; sys.path.insert(0,'.')
+from daemon_maestro import CONFIG_PATH, _validade_dias
+print('config:', CONFIG_PATH, '· existe:', CONFIG_PATH.exists())
+print('fila_validade_dias EFETIVO:', _validade_dias())"
+```
+
 📌 E este arquivo já tinha o aviso, de 25/08: *"ISTO QUASE CUSTOU 184 PACOTES
 BONS… eu lia o `agendador_config.json` e, não achando `fila_validade_dias`,
 aplicava 7"*. Mesma chave, mesma armadilha, vindo pelo outro lado.
