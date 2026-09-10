@@ -89,6 +89,19 @@ os.environ["AUTO_RESPONDER"] = "0"          # não deixa nada tentar a rede
 ar = importlib.import_module("auto_resposta")
 ar.FRASES_POST = tmp / "frases_por_post.json"
 
+
+# ⚠️ AS CONSTANTES ENTREGUES, não o banco efetivo. O `auto_resposta` carrega o
+# `.env` no import, então um override lá dentro troca o banco inteiro — e um
+# teste que lê o efetivo estaria testando o `.env` da máquina em vez do que foi
+# versionado. Foi assim que a VPS deu 72·1 enquanto aqui dava 73·0.
+# A seção "O .env PODE ESTAR SOMBREANDO" mais abaixo é quem cobra o override.
+def _banco_padrao(bruto):
+    return [t.strip() for t in bruto.split("|||") if t.strip()]
+
+
+_PAD_SEM_DM = _banco_padrao(ar._IG_TMPLS_SEM_DM_DEFAULT)
+_PAD_COM_DM = _banco_padrao(ar._IG_TMPLS_DEFAULT)
+
 POST = "17900000000000000"                  # o Reel do pet
 respostas = []
 for rodada in range(3):                     # 3 passadas do cron
@@ -106,7 +119,7 @@ checa("o arquivo de memória foi criado", ar.FRASES_POST.exists())
 # regularidade em vez de repetição (o raciocínio está em shared/rotacao.py).
 # Então o que se garante é uma JANELA: dentro de `memória + 1` respostas
 # consecutivas, nenhuma frase aparece duas vezes.
-JANELA = len(ar._banco_ig(False)) // 2 + 1
+JANELA = len(_PAD_SEM_DM) // 2 + 1
 _colisao = [(i, j) for i in range(len(respostas))
             for j in range(i + 1, min(i + JANELA, len(respostas)))
             if respostas[i] == respostas[j]]
@@ -137,14 +150,37 @@ checa("cada post tem sua própria chave",
       len([k for k in mem if k.startswith(POST)]) == 1 and len(mem) == 2,
       str(list(mem)))
 
+print("\n── ⚠️⚠️ O .env PODE ESTAR SOMBREANDO AS FRASES ENTREGUES ──")
+# ⚠️ ESTA SEÇÃO NASCEU DE UMA FALHA QUE SÓ APARECEU NA VPS (10/09): aqui
+# 73 passou · 0 falhou, lá 72 · 1. A diferença é que o `auto_resposta` carrega
+# o `.env` no import — então um `AUTO_RESP_IG_TMPLS_SEM_DM` antigo lá dentro
+# substitui o banco inteiro, e as frases novas do Dre ficam DEAD ON ARRIVAL,
+# sem sintoma nenhum além de um teste passando por engano em outra máquina.
+#
+# 📌 As asserções de CONTEÚDO olham `_PAD_*` (definidos lá em cima); esta seção
+# é a única que compara o EFETIVO com o entregue, que é a pergunta certa aqui.
+_efetivo_sem = ar._banco_ig(False)
+_efetivo_com = ar._banco_ig(True)
+
+_sombra = []
+if set(_efetivo_sem) != set(t for t in _PAD_SEM_DM if not ar._menciona_dm(t)):
+    _sombra.append("AUTO_RESP_IG_TMPLS_SEM_DM")
+if set(_efetivo_com) != set(_PAD_COM_DM):
+    _sombra.append("AUTO_RESP_IG_TMPLS")
+checa("nenhum override de .env sombreando o banco entregue", not _sombra,
+      f"⚠️ {' e '.join(_sombra)} no .env estão SUBSTITUINDO as frases novas — "
+      f"efetivo tem {len(_efetivo_sem)}/{len(_efetivo_com)} frase(s), "
+      f"entregue tem {len(_PAD_SEM_DM)}/{len(_PAD_COM_DM)}. "
+      f"Remova do .env pra usar as frases versionadas.")
+
 print("\n── ⚠️ SEM DM, NENHUMA RESPOSTA PODE PROMETER DIRECT ──")
 # prometer o que não chega é pior que não responder: a pessoa espera, não
 # recebe, e aprende que a conta mente
-banco_sem_dm = ar._banco_ig(False)
+banco_sem_dm = _PAD_SEM_DM
 checa("o banco sem-DM não cita direct/dm",
       not any(ar._menciona_dm(t) for t in banco_sem_dm), str(banco_sem_dm)[:100])
 checa("o banco COM dm é outro, não o mesmo filtrado",
-      set(ar._banco_ig(True)) != set(banco_sem_dm))
+      set(_PAD_COM_DM) != set(banco_sem_dm))
 
 print("\n── ⚠️ O GRUPO DO WHATSAPP ENTRA NA ROTAÇÃO (mas não em todas) ──")
 # R$300 de tráfego pago = 1 membro no grupo. Este Reel tinha dezenas de mãos

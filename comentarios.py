@@ -42,6 +42,28 @@ import sys
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
+
+# ⚠️ ISTO FALTAVA DESDE SEMPRE (10/09/2026). Este arquivo ANUNCIA override por
+# `.env` (`COMENT_IG_CARROSSEL=a|||b|||c`) desde 22/08 — e nunca leu o `.env`.
+# Só olhava `os.environ`, então os overrides só funcionavam por acaso, quando
+# outro módulo tivesse carregado o arquivo antes no mesmo processo.
+#
+# Quem mostrou foi o `--nichos` na VPS, dizendo "AUTO_RESPONDER=0 ← desligado"
+# enquanto o `auto_resposta` (que lê o `.env`) mostrava a DM ligada no mesmo
+# minuto. Duas leituras da mesma máquina discordando: uma delas estava cega.
+#
+# ⚠️ E EU TINHA ACABADO DE MANDAR O DRE USAR `COMENT_IG_REEL_PET='...'` pra
+# soltar frases sem deploy. Aquele comando não teria feito nada, sem sintoma.
+try:
+    from shared.envfile import carregar_env as _carregar_env
+except Exception:  # pragma: no cover
+    try:
+        from envfile import carregar_env as _carregar_env
+    except Exception:
+        def _carregar_env(base=None, sobrescrever=False):
+            return 0
+_carregar_env(BASE_DIR)
+
 MEMORIA = BASE_DIR / "shared" / "comentarios_recentes.json"
 LEMBRAR = int(os.environ.get("COMENT_LEMBRAR", "4"))
 

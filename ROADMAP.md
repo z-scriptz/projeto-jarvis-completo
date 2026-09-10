@@ -737,6 +737,56 @@ carrossel é estruturalmente invisível pro ledger.** O `--diag-dm` agora traz
 📌 **E pra carrossel isso é menos grave do que parece:** um post de LISTA não
 tem "o produto". A DM do grupo é a resposta certa ali, não um link de item.
 
+### 🔇 O `comentarios.py` ANUNCIAVA override por `.env` — e nunca leu o `.env`
+
+Quem mostrou foi o diagnóstico que eu tinha acabado de escrever. Na VPS:
+
+```
+⚠️ as 10 iscas de DM estão FORA do sorteio:
+     AUTO_RESPONDER=0   ← desligado
+     AUTO_RESP_DM=0     ← desligado
+```
+
+E estava **errado**: o `.env` do Dre tem as duas ligadas, e o dry-run do
+`auto_resposta` mostrava `+DM:` na mesma máquina, no mesmo minuto. **Duas
+leituras da mesma máquina discordando — uma delas estava cega.**
+
+⚠️ **A causa:** `auto_resposta.py` chama `_carregar_env()` no import. O
+`comentarios.py` **nunca leu o `.env`** — só olhava `os.environ`.
+
+⚠️⚠️ **E o estrago é maior que o diagnóstico errado.** O `comentarios.py`
+anuncia override por `.env` no próprio docstring desde 22/08
+(`COMENT_IG_CARROSSEL=a|||b|||c`) — e **nenhum deles nunca funcionou**, exceto
+por acaso, quando outro módulo tivesse carregado o `.env` antes no mesmo
+processo. **Eu tinha acabado de mandar o Dre usar
+`COMENT_IG_REEL_PET='frase 1|||frase 2'` pra soltar frases sem deploy: aquele
+comando não teria feito nada, e o sintoma seria nenhum.**
+
+Mesma família do defeito que mais se repete aqui: escrito, documentado,
+versionado — e não ligado em lugar nenhum. Virou `shared/envfile.py` em vez de
+uma quarta cópia do `_carregar_env` (`auto_resposta` e `tiktok_coletor` têm as
+suas; migrar as duas fica pendente).
+
+### 🕶️ E O `.env` PODE MATAR AS FRASES NOVAS SEM DAR SINAL
+
+O teste deu **73·0 aqui e 72·1 na VPS**. A diferença: o `auto_resposta` carrega
+o `.env` no import, então um `AUTO_RESP_IG_TMPLS_SEM_DM` antigo lá dentro
+**substitui o banco inteiro** — e as 9 frases novas do Dre ficariam *dead on
+arrival*, sem sintoma além de um teste passando por engano em outra máquina.
+
+Dois consertos, e a distinção importa:
+1. as asserções de **conteúdo** passaram a olhar as constantes **entregues**,
+   não o banco efetivo — teste que lê o override testa o `.env` da máquina, não
+   o que foi versionado;
+2. uma asserção **nova**, dedicada, compara efetivo × entregue e diz o nome da
+   variável a remover. Falha uma vez, com o diagnóstico pronto, em vez de
+   espalhar falhas por seis asserções de conteúdo.
+
+A mesma checagem entrou no `teste_comentario.py` — agora que ele lê o `.env`,
+herdou o mesmo risco.
+
+`teste_resposta_repetida.py`: 73 → **74** · `teste_comentario.py`: 59 → **60**.
+
 ### 🎠 CONFIRMADO: eram os carrosséis, os 28 (10/09)
 
 ```

@@ -75,6 +75,21 @@ def checa(desc, cond, extra=""):
 # ao ar pode conter isso — nem o banco, nem a rede de segurança.
 VETADAS = ("corre ver", "corre pegar", "corre garantir")
 
+print("\n── ⚠️⚠️ O .env PODE ESTAR SOMBREANDO AS FRASES ENTREGUES ──")
+# ⚠️ ESTE ARQUIVO PASSOU A LER O `.env` EM 10/09 — antes não lia, e por isso
+# TODOS os overrides que ele anuncia no docstring (`COMENT_IG_CARROSSEL=a|||b`)
+# nunca funcionaram, a não ser por acaso. Agora funcionam, e com isso vem o
+# risco espelhado: um `COMENT_*` esquecido no `.env` substitui o banco inteiro
+# e as frases versionadas ficam dead on arrival, sem sintoma.
+#
+# Foi exatamente esse o defeito que apareceu no `auto_resposta` (VPS 72·1,
+# local 73·0). Aqui a checagem vem ANTES de tudo, pra o diagnóstico ser a
+# primeira coisa que se lê.
+_overrides = sorted(k for k in os.environ if k.startswith("COMENT_"))
+checa("nenhum COMENT_* no .env sombreando o banco versionado", not _overrides,
+      f"⚠️ {', '.join(_overrides)} está(ão) SUBSTITUINDO as frases do arquivo. "
+      f"Remova do .env pra usar as versionadas.")
+
 print("\n── o banco é o do Dre, e nenhuma frase vetada passa ──")
 _do_nicho = [f for v in comentarios._IG_REEL_POR_NICHO.values() for f in v]
 todas = (comentarios._IG_REEL + _do_nicho + comentarios._IG_CARROSSEL
