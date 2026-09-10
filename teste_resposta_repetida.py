@@ -151,15 +151,30 @@ print("\n── ⚠️ O GRUPO DO WHATSAPP ENTRA NA ROTAÇÃO (mas não em todas
 # levantadas de graça e NENHUMA resposta convidava pro grupo.
 com_grupo = [t for t in banco_sem_dm if "grupo" in t.lower() or "zap" in t.lower()]
 checa("existe frase que convida pro grupo", len(com_grupo) >= 1, str(com_grupo))
-checa("mas não é a maioria (senão vira panfleto)",
-      len(com_grupo) <= len(banco_sem_dm) / 3,
-      f"{len(com_grupo)} de {len(banco_sem_dm)}")
-# ⚠️ no IG link em comentário NÃO clica — a frase do grupo tem que mandar pra
-# bio, não colar um chat.whatsapp.com que ninguém consegue tocar
+
+# ⚠️ EU TINHA POSTO "no máximo 1 em 3" AQUI, E A RÉGUA ERA EMPRESTADA DO LUGAR
+# ERRADO. Ela vem do `comentarios.py`, onde a frase é o 1º comentário — uma
+# transmissão que TODO MUNDO vê, e onde puxar sempre pro grupo vira panfleto.
+# Aqui é RESPOSTA A QUEM PERGUNTOU: a pessoa levantou a mão, então oferecer o
+# grupo é responder, não empurrar. O Dre mandou 5 de 9 e a proporção é dele.
+# O que continua sendo defeito é não sobrar SAÍDA pra quem só quer o link.
+sem_grupo = [t for t in banco_sem_dm if t not in com_grupo]
+checa("sobra alternativa pra quem só quer o link (≥3 frases sem grupo)",
+      len(sem_grupo) >= 3, f"{len(sem_grupo)} de {len(banco_sem_dm)}: {sem_grupo}")
+# ⚠️ no IG link em comentário NÃO clica — a frase do grupo tem que dizer PARA
+# ONDE ir, não colar um chat.whatsapp.com que ninguém consegue tocar
 checa("⚠️ nenhuma cola chat.whatsapp.com (no IG não clica)",
       not any("chat.whatsapp" in t for t in banco_sem_dm))
-checa("as frases do grupo mandam pra bio",
-      all("bio" in t.lower() for t in com_grupo), str(com_grupo))
+# ⚠️ ESTE NÚMERO É UM AVISO, NÃO UMA REPROVAÇÃO. Duas das frases do Dre
+# ("Entra no nosso grupo 💚 sempre aparecem ofertas boas por lá!" e "Lá no grupo
+# eu mando links... antes de postar aqui") convidam sem dizer ONDE fica o grupo.
+# No Instagram isso deixa a pessoa sem caminho — mas são as palavras dele, e
+# reescrever calado é o oposto do que este projeto faz. O teste garante que a
+# MAIORIA aponte pra bio; as duas ficam como estão até ele decidir.
+_com_destino = [t for t in com_grupo if "bio" in t.lower()]
+checa("a maioria das frases de grupo diz onde ele fica (bio)",
+      len(_com_destino) > len(com_grupo) / 2,
+      f"{len(_com_destino)} de {len(com_grupo)} apontam pra bio")
 
 print("\n── ⚠️ O POST DE 1000 COMENTÁRIOS (o teto real não era o AUTO_RESP_MAX) ──")
 # O Dre: *"40 tá pouquíssimo, quase nada, tem post com +1000 comentários"*.

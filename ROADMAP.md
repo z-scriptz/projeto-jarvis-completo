@@ -708,7 +708,79 @@ inventar na voz dele pra soltar em conta ao vivo trocaria um defeito visível po
 um invisível. Entram por `.env`, sem deploy:
 `COMENT_IG_REEL_PET='frase 1|||frase 2|||frase 3'`.
 
-`teste_comentario.py`: 21 → **42**. `teste_comentario.py`: 19 → **21**, e uma falha intermitente de
+`teste_comentario.py`: 21 → **42**.
+
+### 📊 A MEDIÇÃO DA DM: 61%, e a causa não era a que eu escrevi (10/09)
+
+```
+72 post(s) recentes · ✅ 44 mandariam o PRODUTO · 🕳️ 28 fora do ledger · ⚠️ 0 com junção quebrada
+61% das DMs levariam o link certo.
+```
+
+⚠️ **`0 com junção quebrada`** — a causa que eu tinha listado como provável
+**não existe**. O slug pareia bem. Os 28 são todos "não está no ledger".
+
+⚠️ **E o texto que eu tinha escrito na conclusão do diagnóstico era chute:**
+*"se o log rotacionou… não há como reconstruir"*. Os ausentes caem nas **mesmas
+datas nas seis contas**, ~metade de cada uma — padrão de **formato**, não de
+rotação. A causa está no código:
+
+| onde | o que loga |
+|---|---|
+| `patch_carrossel_uploader:346` | `✅ Carrossel publicado [conta] — link` |
+| `ledger_publicados.RE_OK` procura | `[plataforma] publicad[oa]:` |
+
+A palavra cai do **lado errado do colchete** e o dois-pontos não existe. **O
+carrossel é estruturalmente invisível pro ledger.** O `--diag-dm` agora traz
+`media_type` e uma tabela por tipo — em vez de eu afirmar, a coluna responde.
+
+📌 **E pra carrossel isso é menos grave do que parece:** um post de LISTA não
+tem "o produto". A DM do grupo é a resposta certa ali, não um link de item.
+
+### ✍️ AS FRASES DO DRE — 14 respostas + 10 comentários fixados (10/09)
+
+O que a comparação ensina, e por isso fica registrado: **as minhas 7 respostas
+"com DM" eram sete variações de "te mandei no direct"**. Sete frases que dizem a
+mesma coisa não são sete frases — é uma, com sinônimo. As dele mudam de **verbo
+e de ângulo** ("dá uma olhadinha", "te explico onde encontrar", "o link tá te
+esperando"). Foi por isso que "Bio 🔗 dá uma olhada e me fala" saiu três vezes e
+ninguém estranhou as outras: elas já eram quase iguais entre si.
+
+⚠️⚠️ **E AS FRASES ABRIRAM UM BURACO QUE ELAS MESMAS DEPENDIAM DE FECHAR.** Os
+comentários fixados pedem três palavras: **QUERO, LINK e MANDA**. As duas
+primeiras já casavam com os gatilhos do `auto_resposta`; **`MANDA` não** — a
+lista tinha só `me manda`, e o casamento é por substring (`"me manda"` não está
+contido em `"manda"`). A conta ia pedir *"comenta MANDA"*, a pessoa ia comentar
+exatamente isso, e o robô ia **ignorar**. Pedido atendido ao pé da letra e
+resposta nenhuma é pior que não ter pedido.
+
+O teste agora **extrai as palavras entre aspas das próprias iscas** e exige que
+cada uma dispare o `_bateu` real do `auto_resposta` — frase nova com palavra
+nova falha no teste em vez de falhar no perfil.
+
+⚠️⚠️ **E cada isca é uma promessa que alguém tem que cumprir.** *"Comenta QUERO
+que eu te mando na DM"* com o respondedor desligado = a conta pedindo
+publicamente e não entregando, pra dezenas de pessoas que levantaram a mão. Isso
+não é post fraco, é a conta mentindo. Por isso as 10 só entram no sorteio com
+`AUTO_RESPONDER` **e** `AUTO_RESP_DM` ligados — a regra que o cabeçalho do
+arquivo já anunciava desde julho: *"nenhuma promete o que a gente não faz"*. E
+**nunca em carrossel**: num post de "3 erros" não existe "esse achadinho" pra
+mandar, o pedido não tem objeto.
+
+📌 **Duas asserções minhas caíram contra as frases dele, e as duas estavam
+erradas por empréstimo.** Eu tinha "no máximo 1 grupo em 3 frases" — régua vinda
+do `comentarios.py`, onde a frase é o 1º comentário, uma **transmissão** que
+todos veem. Aqui é **resposta a quem perguntou**: a pessoa levantou a mão, então
+oferecer o grupo é responder, não empurrar. Ele mandou 5 de 9 e a proporção é
+dele. O que continua travado é sobrar saída pra quem só quer o link (≥3 frases
+sem grupo).
+
+⚠️ **Fica um aviso aberto, não consertado:** duas frases dele convidam pro grupo
+**sem dizer onde ele fica** (*"Entra no nosso grupo 💚 sempre aparecem ofertas
+boas por lá!"*). No Instagram, comentário sem "link na bio" deixa a pessoa sem
+caminho. São as palavras dele — reescrever calado é o oposto do que este projeto
+faz, então o teste exige que a **maioria** aponte pra bio e essas duas ficam
+como estão até ele decidir. `teste_comentario.py`: 19 → **21**, e uma falha intermitente de
 ~1 em 3 que existia desde 02/09 saiu junto (a asserção do `{link}` no Facebook
 sorteava 1 frase e o banco tem uma de `{whats}`, que legitimamente não leva
 link — a asserção estava errada, não o código).

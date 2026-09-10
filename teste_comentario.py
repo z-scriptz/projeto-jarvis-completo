@@ -23,6 +23,7 @@
 #   python3 teste_comentario.py
 import ast
 import os
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -162,6 +163,73 @@ checa("COMENT_IG_REEL_CASA substitui o banco daquele nicho",
 del os.environ["COMENT_IG_REEL_CASA"]
 checa("e não vaza pros outros nichos",
       "frase nova do dre" not in comentarios._banco("instagram", "reel", "@topshoptech_"))
+
+print("\n── ⚠️⚠️ A ISCA PEDE UMA PALAVRA — O ROBÔ TEM QUE RECONHECER ELA ──")
+# ⚠️ ESTE É O TESTE MAIS IMPORTANTE DO ARQUIVO, e ele cruza DOIS módulos.
+# Os comentários fixados do Dre pedem QUERO, LINK e MANDA. As duas primeiras já
+# casavam com os gatilhos do `auto_resposta`; **MANDA não** — a lista só tinha
+# `me manda`, e o casamento é por substring ("me manda" não está em "manda").
+# A conta ia pedir "comenta MANDA", a pessoa ia comentar exatamente isso, e o
+# robô ia ignorar. Pedido atendido ao pé da letra e resposta nenhuma é pior que
+# não ter pedido.
+_ar_src = (BASE / "auto_resposta.py").read_text("utf-8")
+_ns_ar = {"os": os, "re": __import__("re"), "unicodedata": __import__("unicodedata")}
+for _no in ast.parse(_ar_src).body:
+    if isinstance(_no, ast.FunctionDef) and _no.name in ("_norm", "_bateu", "_gatilhos"):
+        exec(compile(ast.Module([_no], []), "x", "exec"), _ns_ar)
+    if isinstance(_no, ast.Assign) and getattr(_no.targets[0], "id", "") == "_GATILHOS_DEFAULT":
+        exec(compile(ast.Module([_no], []), "x", "exec"), _ns_ar)
+_gatilhos_reais = _ns_ar["_gatilhos"]()
+_bateu = _ns_ar["_bateu"]
+
+# as palavras que as iscas mandam a pessoa comentar, extraídas das próprias
+# frases — assim, frase nova com palavra nova falha aqui em vez de no perfil
+_pedidas = set()
+for f in comentarios._IG_ISCA_DM:
+    _pedidas |= set(re.findall(r"[“\"]([A-ZÀ-Ú ]{3,})[”\"]", f))
+checa(f"as iscas pedem palavras identificáveis ({len(_pedidas)})", len(_pedidas) >= 3,
+      str(_pedidas))
+for palavra in sorted(_pedidas):
+    checa(f"o robô responde a quem comenta '{palavra}'",
+          _bateu(palavra, _gatilhos_reais),
+          f"'{palavra}' não casa com nenhum gatilho — a conta pede e ignora")
+# e com o texto do jeito que a pessoa realmente escreve
+for real in ("QUERO", "quero!", "Eu Quero", "manda", "MANDA AI", "link", "Link 😍"):
+    checa(f"comentário real '{real}' dispara", _bateu(real, _gatilhos_reais))
+
+print("\n── ⚠️⚠️ A ISCA PROMETE DM: só sai se a DM estiver LIGADA ──")
+# Se o auto_resposta não responde com DM, a conta pede publicamente "comenta
+# QUERO que eu mando na sua DM", dezenas comentam, e nada chega. Isso não é
+# post fraco — é a conta mentindo pra quem levantou a mão.
+def _com_dm(lig):
+    for k in ("AUTO_RESPONDER", "AUTO_RESP_DM"):
+        os.environ[k] = "1" if lig else "0"
+    return comentarios._banco("instagram", "reel", "@topshoppet_")
+
+_b_off = _com_dm(False)
+checa("DM desligada → nenhuma isca no banco",
+      not any(f in comentarios._IG_ISCA_DM for f in _b_off), str(len(_b_off)))
+_b_on = _com_dm(True)
+checa("DM ligada → as 10 iscas entram",
+      sum(1 for f in _b_on if f in comentarios._IG_ISCA_DM) == 10,
+      f"{sum(1 for f in _b_on if f in comentarios._IG_ISCA_DM)}")
+# ⚠️ os DOIS interruptores, não um: AUTO_RESP_DM=1 com AUTO_RESPONDER=0 não
+# responde nada
+os.environ["AUTO_RESPONDER"] = "0"; os.environ["AUTO_RESP_DM"] = "1"
+checa("só o AUTO_RESP_DM ligado não basta",
+      not any(f in comentarios._IG_ISCA_DM
+              for f in comentarios._banco("instagram", "reel", "@x")))
+_com_dm(True)
+
+print("\n   ── ⚠️ e NUNCA em carrossel: o pedido não tem objeto ──")
+# num carrossel de "3 erros" não existe "esse achadinho" pra mandar
+_b_carr = comentarios._banco("instagram", "carrossel", "@topshoppet_")
+checa("carrossel não recebe isca de DM",
+      not any(f in comentarios._IG_ISCA_DM for f in _b_carr))
+checa("carrossel não promete direct nenhum",
+      not any("DM" in f or "direct" in f.lower() for f in _b_carr), str(_b_carr)[:80])
+for k in ("AUTO_RESPONDER", "AUTO_RESP_DM"):
+    os.environ.pop(k, None)
 
 print("\n── carrossel NÃO herda o banco de Reel ──")
 # num carrossel de "3 erros" não existe "um desses" pra comprar

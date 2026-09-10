@@ -207,6 +207,54 @@ _BANCOS = {
 }
 
 
+# ══════════════════════════════════════════════════════════════════════════
+# OS 10 COMENTÁRIOS FIXADOS DO DRE (10/09/2026)
+#
+# Estes são de outra natureza que os de cima: os outros CONVERSAM, estes fazem
+# um PEDIDO — "comenta QUERO que eu te mando na DM". É a isca que alimenta o
+# `auto_resposta`, e num Reel que estoura é o que transforma alcance em conversa.
+#
+# ⚠️⚠️ E CADA UM DELES É UMA PROMESSA QUE ALGUÉM TEM QUE CUMPRIR. Se o
+# `auto_resposta` não estiver respondendo com DM, a conta pede publicamente
+# "comenta QUERO que eu mando na sua DM", dezenas de pessoas comentam, e nada
+# chega. Isso não é post fraco: é a conta mentindo pra quem levantou a mão — e
+# é MUITO pior que o comentário genérico que a gente acabou de consertar.
+#
+# Por isso eles só entram no sorteio quando os DOIS interruptores estão ligados
+# (AUTO_RESPONDER e AUTO_RESP_DM). É a mesma regra que já governa este arquivo
+# desde julho, escrita no cabeçalho: *"NENHUMA PROMETE O QUE A GENTE NÃO FAZ"*.
+#
+# ⚠️ E SÓ EM REEL/LISTA, NUNCA EM CARROSSEL. Num carrossel de "3 erros" não
+# existe "esse achadinho" pra mandar — o pedido não tem objeto. Mesma razão pela
+# qual o carrossel nunca herdou o banco de Reel.
+_IG_ISCA_DM = [
+    "👀 Quer o link desse achadinho? Comenta “QUERO” que eu te mando na DM 💛",
+    "😳 Eu sabia que vocês iam perguntar onde compra kkkkk. Comenta “QUERO” que eu mando o link!",
+    "🔗 Gostou desse? Comenta “LINK” aqui embaixo que eu mando direto na sua DM 👇",
+    "🛍️ Quer achar esse produto sem ficar procurando? Comenta “MANDA” que eu te envio na DM 💛",
+    "👀 Quem quiser o link, deixa um “EU QUERO” aqui que eu mando no direct!",
+    "🔥 Esse aqui merece entrar na lista de achadinhos! Comenta “LINK” que eu te mando onde encontrar.",
+    "💛 Gostou do produto? Escreve “QUERO” aqui embaixo e olha sua DM depois 👀📩",
+    "⚡ Quer ver preço e onde comprar? Comenta “MANDA” que eu envio o acesso na sua DM.",
+    "🛒 Pra quem já tá procurando o link: comenta “EU QUERO” e eu mando no direct 👀",
+    "👇 Quem chegou até aqui e quer esse achadinho, comenta “LINK” que o Jarvis manda na sua DM 🤖💛",
+]
+
+
+def _dm_responde() -> bool:
+    """Os dois interruptores do `auto_resposta` estão ligados?
+
+    ⚠️ ISTO NÃO PROVA QUE A DM CHEGA — prova que ela está LIGADA. O escopo
+    `instagram_manage_messages` pode estar faltando e a chamada falhar em
+    silêncio (o `_enviar_dm_ig` é best-effort de propósito). É o melhor sinal
+    disponível de dentro deste arquivo, e é infinitamente melhor que soltar a
+    isca sem olhar nada.
+    """
+    def _lig(nome):
+        return os.environ.get(nome, "0").strip().lower() in ("1", "true", "sim")
+    return _lig("AUTO_RESPONDER") and _lig("AUTO_RESP_DM")
+
+
 _NICHO_POR_HANDLE = None
 
 
@@ -279,6 +327,9 @@ def _banco(plataforma: str, formato: str, conta: str = "") -> list:
     base = list(_BANCOS.get((p, f)) or _IG_REEL)
     if p == "instagram" and f == "reel" and nicho:
         base += list(_IG_REEL_POR_NICHO.get(nicho) or [])
+    # a isca de DM só entra onde há um produto pra mandar E onde a DM responde
+    if p == "instagram" and f in ("reel", "lista") and _dm_responde():
+        base += list(_IG_ISCA_DM)
     return base
 
 

@@ -75,8 +75,20 @@ def _norm(s: str) -> str:
 
 
 # gatilhos: default pensado pra isca "comenta EU QUERO" + perguntas de compra
+# ⚠️ "MANDA" ENTROU EM 10/09 E ERA UM BURACO ABERTO PELAS PRÓPRIAS FRASES.
+# Os comentários fixados do Dre pedem três palavras: QUERO, LINK e MANDA. As
+# duas primeiras já casavam; **"MANDA" não** — a lista só tinha `me manda`, e o
+# `_bateu` faz substring, então "me manda" NÃO está contido em "manda". Ou seja:
+# a conta ia pedir "comenta MANDA", a pessoa ia comentar exatamente isso, e o
+# robô ia ignorar. Pedido atendido ao pé da letra e resposta nenhuma é pior que
+# não ter pedido.
+#
+# ⚠️ E O ERRO AQUI TEM LADO BARATO. `manda` pega "mandaram", "demanda" — e o
+# custo disso é uma resposta simpática a mais. O custo do contrário é ignorar
+# quem fez exatamente o que a legenda mandou fazer. Na dúvida, responder.
 _GATILHOS_DEFAULT = ("eu quero,quero,quanto custa,quanto,qual valor,valor,preco,"
-                     "link,onde compro,onde compro,como compro,como comprar,me manda,"
+                     "link,onde compro,onde compro,como compro,como comprar,"
+                     "me manda,manda,me envia,envia,quero esse,quero o link,"
                      "quero um,quero comprar,interesse,tenho interesse")
 
 
@@ -101,14 +113,21 @@ def _bateu(texto: str, gatilhos: list) -> bool:
 # qualquer outra coisa que a gente faça.
 #
 # Agora são 7 de cada lado, pra a variedade sobreviver ao filtro do DM.
+#
+# ⚠️ ESTE BANCO É DO DRE (10/09/2026), palavra por palavra. As minhas eram 7
+# variações de "te mandei no direct"; as dele mudam de VERBO e de ângulo
+# ("dá uma olhadinha", "te explico onde encontrar", "o link tá te esperando").
+# Sete frases que dizem a mesma coisa não são sete frases — é a mesma, com
+# sinônimo. Foi por isso que "Bio 🔗 dá uma olhada e me fala" saiu três vezes e
+# ninguém estranhou as outras: elas já eram quase iguais entre si.
 _IG_TMPLS_DEFAULT = (
+    "Dá uma olhadinha na sua DM, mandei por lá 📩|||"
+    "Te chamei no direct com tudo certinho ✨|||"
+    "O link tá te esperando lá na DM 😏|||"
+    "Corre no direct que eu te explico onde encontrar 💛|||"
+    "Te mandei o caminho certinho no direct 👀|||"
     "Feito! Corre ver seu direct 😍|||"
-    "Te mandei no direct 🥰|||"
-    "Mandei tudo no seu direct, dá uma olhada 👀|||"
-    "Já tá no seu direct 💛|||"
-    "Acabei de te mandar no direct, corre lá 🏃‍♀️|||"
-    "Te respondi no direct com tudo certinho ✨|||"
-    "No seu direct tem o link e o preço 😉")
+    "Mandei tudo no seu direct, dá uma olhada 👀")
 # ⚠️ ESTAS NUNCA PROMETEM DIRECT. É o que sobra quando o DM está desligado, e
 # prometer o que não vai chegar é pior que não responder: a pessoa espera,
 # não recebe, e aprende que a conta mente.
@@ -126,16 +145,22 @@ _IG_TMPLS_DEFAULT = (
 # ⚠️ NO INSTAGRAM LINK EM COMENTÁRIO NÃO CLICA — por isso a frase do grupo
 # manda pra BIO, onde o botão do grupo já existe (topshopoficial.com.br), e não
 # cola um `chat.whatsapp.com` que ninguém consegue tocar.
+#
+# ⚠️ TAMBÉM DO DRE (10/09), e ele mandou a proporção certa sem eu pedir: das
+# nove, CINCO puxam pro grupo. Faz sentido aqui e não fazia antes — quando não
+# há DM, a bio é um passo morto ("vai lá, procura"), enquanto o grupo é o único
+# destino onde a pessoa continua sendo alcançável depois. Encher o grupo é a
+# meta que R$300 de tráfego pago não conseguiu mover.
 _IG_TMPLS_SEM_DM_DEFAULT = (
-    "O link tá na bio 🚀 depois me conta o que achou!|||"
-    "Tá na bio 💛 corre que some rápido|||"
-    "Achei também! Link na bio pra você ver o preço 👀|||"
-    "Deixei na bio pra facilitar 😊|||"
-    "Bio 🔗 dá uma olhada e me fala|||"
-    "É esse mesmo! Tá tudo na bio ✨|||"
-    "Na bio tem ele e uns parecidos 👀|||"
-    "tá na bio 💛 e no grupo do zap eu mando esses antes de postar aqui|||"
-    "link na bio ✨ lá tem o botão do grupo, é onde sai primeiro")
+    "Tá no link da bio 💛 dá uma olhadinha lá!|||"
+    "Deixei tudo organizado no link da bio 🔗|||"
+    "Entra no link da bio que deixei os achadinhos por lá 🛍️|||"
+    "Já deixei o acesso fácil pra vocês 💛 confere a bio.|||"
+    "No grupo do WhatsApp eu mando esses achados primeiro 👀💚 link na bio!|||"
+    "Entra no nosso grupo 💚 sempre aparecem ofertas boas por lá!|||"
+    "Quer receber os próximos também? O grupo tá no link da bio 💚|||"
+    "Lá no grupo eu mando links, promoções e achadinhos antes de postar aqui 👀|||"
+    "Vem pro grupo do WhatsApp 💚 o acesso tá no link da bio!")
 _IG_TMPL_SEM_DM = "O link tá na bio 🚀 depois me conta o que achou!"
 
 # ── MEMÓRIA POR POST ───────────────────────────────────────────────────────
@@ -750,14 +775,23 @@ def _diag_dm(contas, limites) -> int:
         pass
 
     tot = com = fora = quebrado = 0
+    por_tipo = {}          # media_type -> [total, com link]
     for chave, conta in contas.items():
         token = _token_da_conta(conta)
         ig = str(conta.get("instagram_user_id", "")).strip()
         if not token or not ig:
             continue
+        # ⚠️ `media_type` ENTRA AQUI PRA UMA PERGUNTA ESPECÍFICA (10/09). Os
+        # posts que faltam no ledger caem todos nas MESMAS datas nas SEIS
+        # contas, ~metade de cada uma — o que não parece rotação de log. A
+        # suspeita é carrossel: o `patch_carrossel_uploader` loga
+        # "✅ Carrossel publicado [conta] — link", e o `ledger_publicados`
+        # procura "[plataforma] publicado:" (palavra DEPOIS do colchete, com
+        # dois-pontos). Formatos incompatíveis ⇒ carrossel nunca entra.
+        # Em vez de eu afirmar isso, a coluna responde.
         midia = _get(f"{GRAPH}/{ig}/media",
-                     {"fields": "id,timestamp,permalink", "limit": limites["midias"],
-                      "access_token": token}).get("data", [])
+                     {"fields": "id,timestamp,permalink,media_type",
+                      "limit": limites["midias"], "access_token": token}).get("data", [])
         recentes = [m for m in midia
                     if not _velho_demais(m.get("timestamp", ""), limites["horas"])]
         if not recentes:
@@ -765,12 +799,16 @@ def _diag_dm(contas, limites) -> int:
         print(f"\n── {conta.get('handle', chave)} · {len(recentes)} post(s) na janela ──")
         for m in recentes[:12]:
             sc = _shortcode(m.get("permalink", ""))
+            tipo = (m.get("media_type") or "?")[:8]
             tot += 1
+            por_tipo[tipo] = por_tipo.get(tipo, [0, 0])
+            por_tipo[tipo][0] += 1
             if not sc:
                 quebrado += 1
                 marca, detalhe = "❌", "permalink sem shortcode (formato novo?)"
             elif sc in ledger:
                 com += 1
+                por_tipo[tipo][1] += 1
                 marca, detalhe = "✅", ledger[sc][:52]
             elif sc in sem_link:
                 quebrado += 1
@@ -778,17 +816,40 @@ def _diag_dm(contas, limites) -> int:
             else:
                 fora += 1
                 marca, detalhe = "🕳️ ", "não está no ledger (log não tem o par 📤/✅)"
-            print(f"   {marca} {sc or '?':<14} {m.get('timestamp','')[:10]}  {detalhe}")
+            print(f"   {marca} {sc or '?':<14} {m.get('timestamp','')[:10]} "
+                  f"{tipo:<9} {detalhe}")
 
     print(f"\n{'='*70}")
     print(f"  {tot} post(s) recentes · ✅ {com} mandariam o PRODUTO · "
           f"🕳️ {fora} fora do ledger · ⚠️ {quebrado} com junção quebrada")
     if tot:
         print(f"  {com/tot*100:.0f}% das DMs levariam o link certo.")
+    if por_tipo:
+        print(f"\n  por tipo de post:")
+        for t, (n, c) in sorted(por_tipo.items(), key=lambda kv: -kv[1][0]):
+            print(f"     {t:<10} {c:3}/{n:<3} com link "
+                  f"({c/n*100:3.0f}%)" if n else "")
     if fora:
-        print(f"\n  🕳️ {fora} não estão no ledger. O `publicados.jsonl` é RASPADO")
-        print(f"     do log — se o log rotacionou ou o post saiu por outro caminho,")
-        print(f"     o par 📤/✅ não existe e não há como reconstruir.")
+        print(f"\n  🕳️ {fora} não estão no ledger.")
+        # ⚠️ EU JÁ ESCREVI AQUI "não há como reconstruir" E ERA CHUTE. Os
+        # ausentes caem nas MESMAS datas nas seis contas, ~metade de cada —
+        # padrão de FORMATO, não de rotação de log. A tabela por tipo acima é
+        # quem responde: se os ausentes forem CAROUSEL, a causa é que o
+        # `patch_carrossel_uploader` loga "✅ Carrossel publicado [conta] — link"
+        # e o `ledger_publicados` procura "[plataforma] publicado:" — a palavra
+        # cai do lado errado do colchete e o dois-pontos não existe.
+        _carr = por_tipo.get("CAROUSEL")
+        if _carr and _carr[1] == 0:
+            print(f"     ⚠️ TODOS os {_carr[0]} CARROSSEL(éis) estão sem link — "
+                  f"e nenhum outro tipo está.")
+            print(f"     Não é rotação de log: o carrossel é logado em outro")
+            print(f"     formato e o ledger não enxerga. Ver ROADMAP 10/09.")
+            print(f"     📌 E pra carrossel isso é MENOS grave do que parece: um")
+            print(f"        post de LISTA não tem 'o produto' — a DM do grupo é a")
+            print(f"        resposta certa ali, não um link de item.")
+        else:
+            print(f"     O `publicados.jsonl` é RASPADO do log; sem o par 📤/✅")
+            print(f"     o post não entra. Veja a tabela por tipo acima.")
     if quebrado:
         print(f"\n  ⚠️ {quebrado} estão no ledger mas SEM link: o slug não pareou")
         print(f"     com o posts_ledger.jsonl. Conserto é na produção, não aqui.")
