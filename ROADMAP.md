@@ -916,17 +916,55 @@ São **arquivos diferentes com o mesmo nome**. Quem editar o da raiz muda o
 vence e vai pra `fila_vencida/`. É a mesma família do `_carregar_env` (40 cópias)
 e da rotação de frases: meia regra em cada superfície, sem sintoma.
 
-📌 **Como perguntar sem adivinhar** — importando a resolução do próprio daemon,
-em vez de eu escrever o caminho de novo (o import não tem efeito colateral,
-verificado por AST):
+### ✅ E A MEDIÇÃO DERRUBOU O MEU PRÓPRIO ALARME (10/09)
 
-```bash
-.venv/bin/python -c "
-import sys; sys.path.insert(0,'.')
-from daemon_maestro import CONFIG_PATH, _validade_dias
-print('config:', CONFIG_PATH, '· existe:', CONFIG_PATH.exists())
-print('fila_validade_dias EFETIVO:', _validade_dias())"
+Eu escrevi acima que a fila expirava aos 27 "nunca aos 45", e depois fiz o Dre
+rodar um comando que devolveu **7** — número que eu quase transformei em crise.
+Os dois estavam errados. O que o serviço roda de verdade:
+
 ```
+ExecStart=/root/jarvis/.venv/bin/python -m agents.daemon_maestro
+
+config  : /root/jarvis/shared/content_plans/agendador_config.json | existe: True
+DEFAULTS: 27
+EFETIVO : 27
+```
+
+⚠️ **O `7` era artefato do meu comando.** Existem QUATRO cópias de
+`daemon_maestro.py` na VPS, e o meu `sys.path.insert(0,'.')` importou
+`/root/jarvis/daemon_maestro.py` — uma **cópia velha na raiz**, cujo `DEFAULTS`
+diz 7 enquanto a que roda (`agents/`) diz 27. Dela saíram os dois erros: o
+`RAIZ` subiu um nível demais (`/root` em vez de `/root/jarvis`) e o número veio
+de um arquivo que ninguém executa.
+
+📌 **E eu ainda fiz o Dre GRAVAR um arquivo** em `/root/shared/content_plans/`,
+fora do jarvis. Removido.
+
+### 🧭 A LIÇÃO: a ferramenta que responderia isso já existia, e eu não rodei
+
+`conferir.py` — *"CONFERIDOR — diz o que está rodando na VPS, arquivo por
+arquivo"* — foi escrito, no cabeçalho dele, por causa **deste defeito exato**:
+
+> *"o mapa vindo do ROADMAP é a fonte autoritativa: foi escrito depois de a
+> postagem balanceada ficar dias travada porque editávamos `daemon_maestro.py`
+> na raiz enquanto o serviço rodava `agents/daemon_maestro.py`"*
+
+E ele já traz `MAPA_DOC = {"daemon_maestro.py": "agents/daemon_maestro.py"}`.
+Um `.venv/bin/python conferir.py` antes do primeiro deploy de hoje teria
+respondido tudo — o caminho, a cópia velha e a validade — sem o susto e sem o
+arquivo no lugar errado.
+
+**Nada do trabalho de hoje caiu no lugar errado** (verificado: só
+`daemon_maestro.py` diverge entre raiz e `agents/`; `metricas_posts.py` e
+`telegram_repurpose_hunter.py` são idênticos, e nenhum dos arquivos tocados hoje
+tem cópia sombra). Mas isso foi **sorte**, não método: eu verifiquei o destino
+dos arquivos que já sabíamos e nunca perguntei se havia uma segunda cópia.
+
+⚠️ **A cópia velha da raiz é uma mina armada:** `/root/jarvis/daemon_maestro.py`
+está desatualizada e um `git checkout … -- daemon_maestro.py` cairia nela, sem
+tocar no que roda. O `auditoria_postagem:48` já se protege
+(`for tentativa in ("agents.daemon_maestro", "daemon_maestro")` — pacote
+primeiro), o que mostra que o projeto já sabia da armadilha.
 
 📌 E este arquivo já tinha o aviso, de 25/08: *"ISTO QUASE CUSTOU 184 PACOTES
 BONS… eu lia o `agendador_config.json` e, não achando `fila_validade_dias`,
