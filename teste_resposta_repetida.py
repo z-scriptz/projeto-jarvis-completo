@@ -161,6 +161,76 @@ checa("⚠️ nenhuma cola chat.whatsapp.com (no IG não clica)",
 checa("as frases do grupo mandam pra bio",
       all("bio" in t.lower() for t in com_grupo), str(com_grupo))
 
+print("\n── ⚠️ O POST DE 1000 COMENTÁRIOS (o teto real não era o AUTO_RESP_MAX) ──")
+# O Dre: *"40 tá pouquíssimo, quase nada, tem post com +1000 comentários"*.
+# Ele está certo de que 40 é pouco — mas 40 não era o que travava. O `limit:50`
+# sem seguir `paging.next` fazia os outros 950 serem INALCANÇÁVEIS, e subir o
+# AUTO_RESP_MAX pra 400 não mudaria nada.
+_paginas_pedidas = []
+
+
+def _api_falsa(url, params):
+    """1000 comentários em páginas de 50, como o Graph devolve."""
+    _paginas_pedidas.append(params.get("after"))
+    ini = int(params.get("after") or 0)
+    fim = min(ini + 50, 1000)
+    d = {"data": [{"id": f"c{i}", "text": "eu quero"} for i in range(ini, fim)]}
+    if fim < 1000:
+        d["paging"] = {"next": "http://x", "cursors": {"after": str(fim)}}
+    return d
+
+
+_get_real = ar._get
+ar._get = _api_falsa
+try:
+    todos = ar._get_paginas("http://x", {"limit": 50}, 20)
+    checa("1000 comentários chegam inteiros (não 50)", len(todos) == 1000,
+          f"vieram {len(todos)}")
+    checa("pediu 20 páginas", len(_paginas_pedidas) == 20, str(len(_paginas_pedidas)))
+    checa("a 1ª página vai sem cursor", _paginas_pedidas[0] is None)
+
+    print("\n   ── ⚠️ e o teto de páginas segura, senão é chamada infinita ──")
+    _paginas_pedidas.clear()
+    parcial = ar._get_paginas("http://x", {"limit": 50}, 3)
+    checa("com teto 3, para em 150", len(parcial) == 150, f"{len(parcial)}")
+
+    # cursor que se repete: a API às vezes devolve o mesmo `after`
+    def _api_travada(url, params):
+        return {"data": [{"id": "c1"}],
+                "paging": {"next": "http://x", "cursors": {"after": "MESMO"}}}
+    ar._get = _api_travada
+    checa("cursor repetido não vira laço infinito",
+          len(ar._get_paginas("http://x", {}, 50)) == 2)
+
+    # ⚠️ o lado que NÃO pode disparar: resposta sem paging nenhum
+    ar._get = lambda u, p: {"data": [{"id": "c1"}, {"id": "c2"}]}
+    checa("post pequeno (sem paging) devolve os 2 e para",
+          len(ar._get_paginas("http://x", {}, 20)) == 2)
+    ar._get = lambda u, p: {}
+    checa("resposta vazia não quebra", ar._get_paginas("http://x", {}, 20) == [])
+finally:
+    ar._get = _get_real
+
+print("\n── ⚠️ O ORÇAMENTO É POR CONTA, NÃO O BOLO DAS SEIS ──")
+# antes: `rest = max - total` com `break` ao zerar. A PRIMEIRA conta do
+# contas.json podia comer tudo e as outras cinco ficavam sem resposta nenhuma —
+# no dia em que um post explode, que é o dia em que mais importa.
+_src_ar = (BASE / "auto_resposta.py").read_text("utf-8")
+checa("existe teto por conta e teto global separados",
+      "AUTO_RESP_MAX_TOTAL" in _src_ar and "teto_total" in _src_ar)
+checa("o laço das contas não dá break ao esgotar a conta (usa continue)",
+      "min(limites[\"max\"], teto_total - total)" in _src_ar)
+checa("o padrão por conta subiu de 40", '"AUTO_RESP_MAX", "200"' in _src_ar)
+
+print("\n── ⚠️ RAJADA DE 200 RESPOSTAS É ASSINATURA DE ROBÔ PRA META ──")
+# as contas SÃO o negócio; um perfil limitado custa mais que 200 respostas
+# atrasadas
+checa("existe pausa entre respostas", "_respirar" in _src_ar)
+checa("a pausa tem jitter (intervalo exato também é assinatura)",
+      "random.uniform" in _src_ar)
+checa("o dry-run não dorme", "if teste:\n        return" in _src_ar)
+checa("a pausa é regulável por .env", "AUTO_RESP_PAUSA" in _src_ar)
+
 print("\n── ⚠️ A REGRA MORA NUM LUGAR SÓ ──")
 # foi o defeito da semana inteira: regra certa, documentada, num arquivo só.
 _src_ar = (BASE / "auto_resposta.py").read_text("utf-8")

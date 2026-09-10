@@ -589,8 +589,39 @@ graça.** Entram 2 frases de grupo em 9 (~1 em 4, a mesma dose do
 em comentário não clica, e o botão do grupo já existe no
 topshopoficial.com.br. Travado em teste.
 
-`teste_resposta_repetida.py` (27/27) exercita disco de verdade, atravessando 3
-rodadas de cron. `teste_comentario.py`: 19 → **21**, e uma falha intermitente de
+### 🚧 E O TETO QUE MACHUCAVA NÃO ERA O `AUTO_RESP_MAX` (10/09)
+
+O Dre: *"tem que ser muito mais do que isso po, 40 tá pouquíssimo, quase nada,
+tem post com +1000 comentários, como pode?"*
+
+Ele está certo de que 40 é pouco — **mas 40 não era o que travava.** O fetch
+pedia `limit: 50` e **nunca seguia `paging.next`** (zero ocorrências de `paging`
+no arquivo inteiro). Num post de 1000 comentários, 950 eram **inalcançáveis**, e
+subir o `AUTO_RESP_MAX` de 40 pra 400 não mudaria **nada** — o comentário nº 51
+nunca chegava a ser lido.
+
+⚠️ **E o sintoma era indistinguível de "está tudo em dia".** Os 50 que voltavam
+eram sempre os mesmos, já no `respondidos.json`. A cada rodada o script lia 50,
+pulava 50 e ia embora dizendo `✅ respondi 0` — igualzinho a um post sem
+comentários novos. Por isso entrou junto uma linha de log que diz **quantos ele
+viu**: sem ela o conserto seria invisível.
+
+| | antes | agora |
+|---|---|---|
+| comentários alcançáveis por post | **50** (fixo) | 1000 (`AUTO_RESP_PAGINAS=20` × 50) |
+| orçamento | 40 **no bolo das 6 contas** | 200 **por conta**, teto global 600 |
+| primeira conta esgota o orçamento | as outras 5 ficavam sem nada | segue pra próxima |
+| ritmo | rajada | pausa de ~2,5s com jitter |
+
+⚠️ **A pausa não é enfeite.** Responder 200 comentários em rajada, do mesmo
+perfil, em segundos, é o padrão que a Meta usa pra marcar automação — e o Dre já
+disse o que está em jogo: *"vai quebrar o perfil novamente"*. As contas **são** o
+negócio; perfil limitado custa mais que 200 respostas atrasadas. Com jitter
+porque intervalo exato é assinatura de robô tanto quanto frase repetida.
+
+`teste_resposta_repetida.py` (27 → **41**) exercita disco de verdade,
+atravessando 3 rodadas de cron, e uma API falsa de 1000 comentários em 20
+páginas. `teste_comentario.py`: 19 → **21**, e uma falha intermitente de
 ~1 em 3 que existia desde 02/09 saiu junto (a asserção do `{link}` no Facebook
 sorteava 1 frase e o banco tem uma de `{whats}`, que legitimamente não leva
 link — a asserção estava errada, não o código).

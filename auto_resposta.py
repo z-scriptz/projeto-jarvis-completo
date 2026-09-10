@@ -167,6 +167,28 @@ def _menciona_dm(t: str) -> bool:
     return "dm" in n or "direct" in n
 
 
+def _respirar(teste: bool = False) -> None:
+    """Pausa entre uma resposta e a próxima.
+
+    ⚠️ ISTO NASCEU JUNTO COM O TETO DE 40→200 (10/09) E NÃO É ENFEITE. Responder
+    200 comentários em rajada, do mesmo perfil, em segundos, é o padrão que a
+    Meta usa pra marcar automação — e o Dre já disse o que está em jogo:
+    *"vai quebrar o perfil novamente"*. As contas SÃO o negócio; um perfil
+    limitado custa mais que 200 respostas atrasadas.
+
+    Com jitter porque intervalo exato é assinatura de robô tanto quanto a frase
+    repetida: 200 respostas espaçadas em 3,000s cada é um gráfico reto.
+    """
+    if teste:
+        return          # dry-run não fala com ninguém, não precisa esperar
+    try:
+        base = float(os.environ.get("AUTO_RESP_PAUSA", "2.5"))
+    except ValueError:
+        base = 2.5
+    if base > 0:
+        time.sleep(base * random.uniform(0.6, 1.7))
+
+
 def _carregar_frases_post() -> dict:
     try:
         d = json.loads(FRASES_POST.read_text(encoding="utf-8"))
@@ -352,6 +374,39 @@ def _post(url, data):
         return {"error": {"message": f"exceção: {str(e)[:80]}"}}
 
 
+# ── ⚠️ O TETO REAL NÃO ERA O `AUTO_RESP_MAX` (10/09/2026) ──────────────────
+# O Dre: *"tem que ser muito mais do que isso po, 40 tá pouquíssimo, quase
+# nada, tem post com +1000 comentários, como pode?"*
+#
+# Ele está certo de que 40 é pouco, mas 40 NÃO era o que estava travando. O
+# `_get` pedia `limit: 50` e **nunca seguia `paging.next`** — nenhuma ocorrência
+# da palavra `paging` no arquivo inteiro. Num post de 1000 comentários a API
+# devolvia 50 e os outros 950 eram INALCANÇÁVEIS. Subir o AUTO_RESP_MAX de 40
+# pra 400 não mudaria nada, porque o comentário nº 51 nunca chegava a ser lido.
+#
+# 📌 E o efeito é pior que "responde menos": os 50 que voltam são sempre os
+# mesmos, já respondidos e já no `respondidos.json`. A cada rodada o script lia
+# 50, pulava 50 e ia embora — o post ficava congelado no mesmo lugar para
+# sempre, com o log dizendo "✅ respondi 0" como se estivesse tudo em dia.
+def _get_paginas(url, params, max_paginas: int = 20) -> list:
+    """Todos os itens, seguindo `paging.next`. Para no teto de páginas.
+
+    ⚠️ O TETO EXISTE PRA NÃO VIRAR LAÇO INFINITO. Um cursor que se repete (a
+    API às vezes devolve o mesmo `after`) rodaria pra sempre gastando chamada;
+    o teto e a checagem de cursor repetido cortam os dois casos.
+    """
+    itens, vistos_cursores = [], set()
+    d = _get(url, params)
+    for _ in range(max(1, int(max_paginas))):
+        itens.extend(d.get("data") or [])
+        prox = ((d.get("paging") or {}).get("cursors") or {}).get("after")
+        if not prox or prox in vistos_cursores or not (d.get("paging") or {}).get("next"):
+            break
+        vistos_cursores.add(prox)
+        d = _get(url, {**params, "after": prox})
+    return itens
+
+
 _URL_RE = re.compile(r"https?://\S+")
 
 
@@ -415,9 +470,18 @@ def _resp_instagram(conta, token, gatilhos, respondidos, limites, teste,
             break
         if _velho_demais(m.get("timestamp", ""), limites["horas"]):
             continue          # fora da janela: nem pede os comentários
-        cmts = _get(f"{GRAPH}/{m.get('id')}/comments",
-                    {"fields": "id,text,username,timestamp", "limit": 50,
-                     "access_token": token}).get("data", [])
+        cmts = _get_paginas(f"{GRAPH}/{m.get('id')}/comments",
+                            {"fields": "id,text,username,timestamp", "limit": 50,
+                             "access_token": token},
+                            limites["paginas"])
+        # ⚠️ SEM ESTA LINHA O CONSERTO DA PAGINAÇÃO É INVISÍVEL. O sintoma
+        # antigo ("respondi 0") é idêntico ao de um post sem comentários novos;
+        # a única forma de distinguir "já respondi todo mundo" de "só enxergo
+        # os primeiros 50" é o script dizer quantos ele VIU.
+        if len(cmts) > 50:
+            _pend = sum(1 for c in cmts if str(c.get("id", "")) not in respondidos)
+            _log(f"   📣 post {(m.get('permalink') or '')[-13:]}: {len(cmts)} "
+                 f"comentário(s) lidos, {_pend} ainda sem resposta")
         for c in cmts:
             cid = str(c.get("id", ""))
             if not cid or cid in respondidos:
@@ -461,6 +525,7 @@ def _resp_instagram(conta, token, gatilhos, respondidos, limites, teste,
                 # chegando por 22h seguidas).
                 if frases_post is not None:
                     _salvar_frases_post(frases_post)
+                _respirar(teste)
             else:
                 err = (r.get("error") or {}).get("message") or str(r)[:120]
                 _log(f"   ⚠️ IG não respondeu ({err})")
@@ -490,9 +555,10 @@ def _resp_facebook(conta, token, gatilhos, respondidos, limites, teste) -> int:
         if _velho_demais(v.get("created_time", ""), limites["horas"]):
             continue
         # filter=toplevel → só comentários de cima (ignora subcomentários/replies)
-        cmts = _get(f"{GRAPH}/{v.get('id')}/comments",
-                    {"fields": "id,message,from", "filter": "toplevel", "limit": 50,
-                     "access_token": token}).get("data", [])
+        cmts = _get_paginas(f"{GRAPH}/{v.get('id')}/comments",
+                            {"fields": "id,message,from", "filter": "toplevel",
+                             "limit": 50, "access_token": token},
+                            limites["paginas"])
         # 1) descobre o LINK do produto a partir do NOSSO 1º comentário (tem o link)
         link = ""
         for c in cmts:
@@ -520,6 +586,7 @@ def _resp_facebook(conta, token, gatilhos, respondidos, limites, teste) -> int:
                 _log(f"   💬 FB respondeu ({conta.get('handle') or page})")
                 respondidos[cid] = int(time.time()); feitos += 1
                 _salvar_respondidos(respondidos)
+                _respirar(teste)
             else:
                 err = (r.get("error") or {}).get("message") or str(r)[:120]
                 _log(f"   ⚠️ FB não respondeu ({err})")
@@ -562,11 +629,24 @@ def main():
     limites = {
         "horas": _arg("--horas", int(float(os.environ.get("AUTO_RESP_HORAS", "168")))),
         "midias": _arg("--midias", int(float(os.environ.get("AUTO_RESP_MIDIAS", "25")))),
-        "max": _arg("--max", int(float(os.environ.get("AUTO_RESP_MAX", "40")))),
+        # ⚠️ AGORA É POR CONTA, NÃO O BOLO DAS SEIS (10/09). Antes o laço fazia
+        # `rest = max - total` e dava `break` quando zerava: a PRIMEIRA conta do
+        # contas.json podia comer o orçamento inteiro e as outras cinco não
+        # recebiam resposta nenhuma — justamente no dia em que um post explode,
+        # que é o dia em que mais importa. E como o `contas.json` tem ordem
+        # fixa, seria sempre a mesma conta ganhando.
+        "max": _arg("--max", int(float(os.environ.get("AUTO_RESP_MAX", "200")))),
+        # quantas páginas de 50 comentários buscar por post (20 = 1000)
+        "paginas": _arg("--paginas", int(float(os.environ.get("AUTO_RESP_PAGINAS", "20")))),
     }
+    # teto global, só como freio de emergência — o orçamento que manda é o por
+    # conta. Sem isto, 6 contas × 200 num dia estranho viram 1200 chamadas.
+    teto_total = _arg("--max-total", int(float(os.environ.get("AUTO_RESP_MAX_TOTAL", "600"))))
     _log(f"{'DRY-RUN' if teste else 'ATIVO'} · {len(contas)} conta(s) · "
          f"gatilhos: {len(gatilhos)} · janela {limites['horas']}h "
-         f"· até {limites['midias']} post(s) por conta")
+         f"· até {limites['midias']} post(s) por conta "
+         f"· até {limites['paginas'] * 50} comentário(s) por post "
+         f"· {limites['max']}/conta (teto {teto_total})")
 
     total = 0
     for chave, conta in contas.items():
@@ -574,14 +654,16 @@ def main():
         if not token:
             _log(f"   ⏭️  {conta.get('handle', chave)}: sem token ({conta.get('page_token_env')}) — pulo")
             continue
-        rest = {**limites, "max": max(0, limites["max"] - total)}
-        if rest["max"] <= 0:
+        if total >= teto_total:
+            _log(f"   ⏸️  teto global de {teto_total} atingido — as contas "
+                 f"restantes ficam pra próxima rodada do cron")
             break
+        rest = {**limites, "max": min(limites["max"], teto_total - total)}
         total += _resp_instagram(conta, token, gatilhos, respondidos, rest, teste,
                                  frases_post)
-        rest = {**limites, "max": max(0, limites["max"] - total)}
+        rest = {**limites, "max": min(limites["max"], max(0, teto_total - total))}
         if rest["max"] <= 0:
-            break
+            continue
         total += _resp_facebook(conta, token, gatilhos, respondidos, rest, teste)
 
     if not teste:
