@@ -38,6 +38,7 @@ import os
 import json
 import random
 import re
+import sys
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -94,14 +95,53 @@ except Exception:  # pragma: no cover
 #
 # São SEIS e não três (ele pediu "3 melhores" e mandou 6): mais frases = menos
 # chance de parecer robô, e o custo de manter as seis é zero.
+#
+# ⚠️ E O BANCO NÃO SABIA EM QUE CONTA ESTAVA (10/09/2026). O Dre, sobre um Reel
+# do @topshoppet_ — um cachorro com problema de ouvido, produto de limpeza
+# auricular: *"o primeiro comentário dele tá péssimo!!"*. O que saiu foi
+# *"esse tem muita cara de produto que viraliza e depois some"* — frase de
+# gadget viral num post de SAÚDE DO PET.
+#
+# E tinha pior sorteável na mesma conta: *"o perigo é comprar um e depois querer
+# outro **pra cada canto da casa**"*, no perfil de pet.
+#
+# A causa: o banco era escolhido por `(plataforma, formato)` e MAIS NADA. Seis
+# contas, seis nichos, um banco só. É a MESMA classe que este arquivo já
+# documenta lá em cima — *"o comentário não sabia o que estava comentando"* —
+# resolvida pra FORMATO em 22/08 e nunca pra NICHO.
+#
+# ⚠️ O CONSERTO NÃO APAGA FRASE DELE. As seis continuam as dele, palavra por
+# palavra: duas apenas deixaram de ser universais e passaram a sair só onde
+# funcionam. Frase boa no lugar errado é problema de endereço, não de texto.
 _IG_REEL = [
     "deixei na bio 💛 no grupo eu mando os achadinhos antes de aparecerem por aqui.",
     "isso aí no dia a dia deve facilitar mais do que parece, salva pra lembrar quando precisar 🥰",
-    "o perigo é comprar um e depois querer outro pra cada canto da casa 😂 curte se quer mais produtos assim por aqui",
-    "esse tem muita cara de produto que viraliza e depois some, salva aí antes que você esqueça o nome 😂",
     "alguém aqui já tem um desses? quero saber se presta mesmo 👀 comenta uma nota de 0 a 10",
     "os achados que valem a pena vão pro grupo primeiro ✨ link na bio",
 ]
+
+# frases que SÓ fazem sentido em alguns nichos, somadas ao banco universal.
+# ⚠️ `pet` e `moda` estão VAZIOS DE PROPÓSITO, e o vazio é o recado: o Dre
+# escreve melhor que eu (medido — as dele conversam, as minhas descreviam), e
+# inventar frase na voz dele pra soltar em conta ao vivo seria trocar um defeito
+# visível por um invisível. Enquanto não chegarem, essas contas usam só o banco
+# universal, que é honesto em qualquer nicho.
+_IG_REEL_POR_NICHO = {
+    "casa": [
+        "o perigo é comprar um e depois querer outro pra cada canto da casa 😂 curte se quer mais produtos assim por aqui",
+    ],
+    "tech": [
+        "esse tem muita cara de produto que viraliza e depois some, salva aí antes que você esqueça o nome 😂",
+    ],
+    # @topshop.__ é a loja genérica: as duas cabem
+    "geral": [
+        "o perigo é comprar um e depois querer outro pra cada canto da casa 😂 curte se quer mais produtos assim por aqui",
+        "esse tem muita cara de produto que viraliza e depois some, salva aí antes que você esqueça o nome 😂",
+    ],
+    "beleza": [],
+    "moda": [],
+    "pet": [],
+}
 
 # ⚠️ O CARROSSEL NÃO HERDA AS SEIS. Quatro delas falam de COMPRAR ("o perigo é
 # comprar um", "alguém já tem um desses") e o carrossel entrega CONTEÚDO — num
@@ -167,18 +207,79 @@ _BANCOS = {
 }
 
 
-def _banco(plataforma: str, formato: str) -> list:
-    """Banco do par, com override por .env (COMENT_IG_CARROSSEL=a|||b|||c)."""
+_NICHO_POR_HANDLE = None
+
+
+def _nicho_da_conta(conta: str) -> str:
+    """O nicho da conta, a partir do `contas.json` — que já é indexado por nicho.
+
+    ⚠️ NÃO DUPLICO O MAPA AQUI. O `contas.json` é a fonte que o roteador usa pra
+    decidir em que conta cada produto vai; uma segunda cópia neste arquivo
+    ficaria desatualizada no dia em que uma conta for criada ou trocar de nicho,
+    e o sintoma seria comentário de nicho errado — exatamente o defeito que este
+    roteamento existe pra consertar.
+
+    ⚠️ HANDLE QUE NÃO RESOLVE DEVOLVE "" (desconhecido), NÃO "geral" — e a
+    diferença é o defeito inteiro. `geral` é o @topshop.__, a loja genérica, e o
+    banco dele carrega JUSTAMENTE as duas frases que não podem sair no pet
+    ("pra cada canto da casa", "produto que viraliza"). Se um handle não
+    resolvesse e caísse em `geral`, o conserto se desfazia sozinho, em silêncio,
+    exatamente na conta que motivou o conserto.
+    Desconhecido usa só o banco universal, que é honesto em qualquer conta.
+    """
+    global _NICHO_POR_HANDLE
+    if _NICHO_POR_HANDLE is None:
+        _NICHO_POR_HANDLE = {}
+        for cam in (BASE_DIR / "contas.json", BASE_DIR / "shared" / "contas.json"):
+            try:
+                dados = json.loads(cam.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            for chave, val in (dados or {}).items():
+                if not isinstance(val, dict):
+                    continue
+                h = (val.get("handle") or "").strip().lstrip("@").lower()
+                if not h:
+                    continue
+                nicho = (val.get("nicho") or "").strip().lower()
+                if not nicho:
+                    # o contas.json é indexado POR NICHO; '_default' é o geral
+                    nicho = "geral" if chave.startswith("_") else chave.lower()
+                _NICHO_POR_HANDLE[h] = nicho
+            break
+    return _NICHO_POR_HANDLE.get((conta or "").strip().lstrip("@").lower(), "")
+
+
+def _banco(plataforma: str, formato: str, conta: str = "") -> list:
+    """Banco do par, com override por .env (COMENT_IG_CARROSSEL=a|||b|||c).
+
+    No Reel do Instagram o banco é universal + as frases do NICHO da conta.
+    """
     p = "facebook" if (plataforma or "").lower().startswith("f") else "instagram"
     f = (formato or "reel").lower()
     if f not in ("reel", "carrossel", "lista"):
         f = "carrossel" if "carro" in f else "reel"
+
+    # override por nicho vem primeiro: COMENT_IG_REEL_PET=a|||b|||c é como o Dre
+    # solta as frases dele sem precisar de deploy
+    nicho = _nicho_da_conta(conta)
+    if p == "instagram" and nicho:
+        env_n = os.environ.get(f"COMENT_IG_{f.upper()}_{nicho.upper()}", "")
+        if env_n.strip():
+            frases = [x.strip() for x in env_n.split("|||") if x.strip()]
+            if frases:
+                return frases
+
     env = os.environ.get(f"COMENT_{p[:2].upper()}_{f.upper()}", "")
     if env.strip():
         frases = [x.strip() for x in env.split("|||") if x.strip()]
         if frases:
             return frases
-    return list(_BANCOS.get((p, f)) or _IG_REEL)
+
+    base = list(_BANCOS.get((p, f)) or _IG_REEL)
+    if p == "instagram" and f == "reel" and nicho:
+        base += list(_IG_REEL_POR_NICHO.get(nicho) or [])
+    return base
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -205,7 +306,7 @@ def _gravar(dados: dict) -> None:
 def escolher(plataforma: str, formato: str = "reel", conta: str = "",
              link: str = "", produto: str = "", handle: str = "") -> str:
     """A frase do 1º comentário. "" quando não há nada honesto a dizer."""
-    frases = _banco(plataforma, formato)
+    frases = _banco(plataforma, formato, conta)
     ctx = {"link": (link or "").strip(), "produto": (produto or "").strip(),
            "handle": (handle or conta or "").strip(),
            "whats": _convite_whats()}
@@ -220,6 +321,8 @@ def escolher(plataforma: str, formato: str = "reel", conta: str = "",
         return ""
 
     memoria = _ler()
+    # ⚠️ a chave da memória continua por CONTA, não por nicho: duas contas do
+    # mesmo nicho postando no mesmo dia não podem herdar a rotação uma da outra.
     chave = f"{conta or '?'}|{(plataforma or 'ig')[:2]}|{formato}"
     recentes = memoria.get(chave) or []
 
@@ -240,9 +343,48 @@ def escolher(plataforma: str, formato: str = "reel", conta: str = "",
         return re.sub(r"\{[^}]*\}", "", escolhida).strip()
 
 
+def _diag_nichos() -> int:
+    """Cada conta resolve pro nicho certo? E que banco ela usa?
+
+    ⚠️ ESTE MODO EXISTE PORQUE O ROTEAMENTO FALHA CALADO. Handle que não está no
+    `contas.json` cai em "desconhecido" e usa só o banco universal — correto,
+    mas invisível: o post sai normal e ninguém descobre que aquela conta nunca
+    recebeu as frases do nicho dela.
+    """
+    _nicho_da_conta("")          # força carregar o mapa
+    mapa = _NICHO_POR_HANDLE or {}
+    print(f"\n{'='*72}\n  NICHO POR CONTA — de onde sai o 1º comentário\n{'='*72}")
+    print(f"\n  contas.json: {len(mapa)} conta(s) mapeada(s)\n")
+    if not mapa:
+        print("  ⚠️ nenhuma! O contas.json não foi lido — todas usam só o "
+              "banco universal.")
+        return 1
+    for handle, nicho in sorted(mapa.items(), key=lambda kv: kv[1]):
+        banco = _banco("instagram", "reel", handle)
+        extras = _IG_REEL_POR_NICHO.get(nicho)
+        if extras is None:
+            marca, obs = "⚠️ ", f"nicho '{nicho}' não tem banco — só o universal"
+        elif not extras:
+            marca, obs = "🕳️ ", "banco do nicho VAZIO — esperando as frases do Dre"
+        else:
+            marca, obs = "✅", f"+{len(extras)} frase(s) do nicho"
+        print(f"   {marca} @{handle:<20} {nicho:<8} {len(banco)} frase(s)  {obs}")
+    faltando = [n for n, v in _IG_REEL_POR_NICHO.items()
+                if not v and n in set(mapa.values())]
+    if faltando:
+        print(f"\n  🕳️ sem frases próprias: {', '.join(sorted(faltando))}")
+        print(f"     Encha por .env sem deploy, ex.:")
+        print(f"     COMENT_IG_REEL_PET='frase 1|||frase 2|||frase 3'")
+    return 0
+
+
 def _cli() -> int:
     import argparse
+    if "--nichos" in sys.argv:
+        return _diag_nichos()
     p = argparse.ArgumentParser(description="Testa o 1º comentário")
+    p.add_argument("--nichos", action="store_true",
+                   help="mostra o nicho de cada conta e o banco que ela usa")
     p.add_argument("--plataforma", default="instagram")
     p.add_argument("--formato", default="carrossel",
                    help="reel · carrossel · lista")

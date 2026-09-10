@@ -22,6 +22,7 @@
 #
 #   python3 teste_comentario.py
 import ast
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -74,10 +75,20 @@ def checa(desc, cond, extra=""):
 VETADAS = ("corre ver", "corre pegar", "corre garantir")
 
 print("\n── o banco é o do Dre, e nenhuma frase vetada passa ──")
-todas = (comentarios._IG_REEL + comentarios._IG_CARROSSEL
+_do_nicho = [f for v in comentarios._IG_REEL_POR_NICHO.values() for f in v]
+todas = (comentarios._IG_REEL + _do_nicho + comentarios._IG_CARROSSEL
          + comentarios._IG_LISTA + comentarios._FB)
-checa(f"banco de Reel tem 6 frases (ele mandou 6)", len(comentarios._IG_REEL) == 6,
-      f"tem {len(comentarios._IG_REEL)}")
+# ⚠️ ELE MANDOU 6 E AS 6 CONTINUAM LÁ. Em 10/09 duas saíram do banco universal
+# e passaram a sair só no nicho onde funcionam ("canto da casa" → casa,
+# "produto que viraliza" → tech) — é conserto de ENDEREÇO, não de texto. A
+# asserção antiga contava `len(_IG_REEL) == 6` e passaria a falhar por um
+# motivo bom; o que ela realmente protege é NENHUMA FRASE DELE SUMIR.
+_reel_dele = set(comentarios._IG_REEL) | set(_do_nicho)
+checa("as 6 frases do Dre continuam todas no ar", len(_reel_dele) == 6,
+      f"tem {len(_reel_dele)}: {sorted(f[:28] for f in _reel_dele)}")
+checa("nenhuma conta recebe menos de 4 frases de Reel",
+      all(len(comentarios._banco("instagram", "reel", h)) >= 4
+          for h in ("@topshopcasa_", "@topshoptech_", "@naomapeada")))
 for v in VETADAS:
     achou = [f for f in todas if v in f.lower()]
     checa(f"nenhuma frase do banco diz '{v}'", not achou, str(achou)[:90])
@@ -90,6 +101,67 @@ repetiu_seguida = any(saidas[i] == saidas[i + 1] for i in range(len(saidas) - 1)
 checa("nunca repete a frase imediatamente anterior", not repetiu_seguida)
 checa("usou pelo menos 4 frases diferentes em 6 posts", len(set(saidas)) >= 4,
       f"usou {len(set(saidas))}")
+
+print("\n── ⚠️ O BANCO TEM QUE SABER EM QUE CONTA ESTÁ ──")
+# O Dre, sobre um Reel do @topshoppet_ (cachorro com problema de ouvido,
+# produto de limpeza auricular): *"o primeiro comentário dele tá péssimo!!"*.
+# O que saiu foi "esse tem muita cara de produto que viraliza e depois some" —
+# frase de gadget num post de saúde do pet. E tinha "pra cada canto da CASA"
+# sorteável na mesma conta.
+CASA = "pra cada canto da casa"
+GADGET = "produto que viraliza"
+_uni = comentarios._IG_REEL
+checa("nenhuma frase universal cita 'canto da casa'",
+      not any(CASA in f for f in _uni), str([f for f in _uni if CASA in f])[:80])
+checa("nenhuma frase universal cita 'produto que viraliza'",
+      not any(GADGET in f for f in _uni))
+checa("as 4 universais + as de nicho continuam sendo as 6 do Dre",
+      len(_uni) + len(comentarios._IG_REEL_POR_NICHO["casa"])
+      + len(comentarios._IG_REEL_POR_NICHO["tech"]) == 6,
+      "o conserto é de ENDEREÇO, não apaga frase dele")
+
+_b_casa = comentarios._banco("instagram", "reel", "@topshopcasa_")
+_b_tech = comentarios._banco("instagram", "reel", "@topshoptech_")
+checa("'canto da casa' sai no @topshopcasa_", any(CASA in f for f in _b_casa))
+checa("'canto da casa' NÃO sai no @topshoptech_", not any(CASA in f for f in _b_tech))
+checa("'produto que viraliza' sai no @topshoptech_", any(GADGET in f for f in _b_tech))
+checa("'produto que viraliza' NÃO sai no @topshopcasa_",
+      not any(GADGET in f for f in _b_casa))
+
+print("\n   ── ⚠️⚠️ HANDLE QUE NÃO RESOLVE NÃO PODE CAIR EM 'geral' ──")
+# `geral` é o @topshop.__ e o banco dele carrega JUSTAMENTE as duas frases que
+# não podem sair no pet. Se um handle desconhecido caísse ali, o conserto se
+# desfazia sozinho, em silêncio, na conta que motivou o conserto. Este teste é
+# o que impede isso de voltar.
+checa("handle desconhecido → nicho vazio, não 'geral'",
+      comentarios._nicho_da_conta("@conta_que_nao_existe") == "")
+_b_desc = comentarios._banco("instagram", "reel", "@conta_que_nao_existe")
+checa("e o banco dele é só o universal", len(_b_desc) == len(_uni), str(len(_b_desc)))
+checa("⚠️ sem 'canto da casa'", not any(CASA in f for f in _b_desc))
+checa("⚠️ sem 'produto que viraliza'", not any(GADGET in f for f in _b_desc))
+checa("conta vazia também não vira 'geral'", comentarios._nicho_da_conta("") == "")
+checa("None não quebra", comentarios._nicho_da_conta(None) == "")
+checa("o @ e a caixa não importam",
+      comentarios._nicho_da_conta("TopShopCasa_") == "casa")
+
+print("\n   ── ⚠️ o mapa vem do contas.json, não de uma 2ª cópia ──")
+# cópia desatualizada = comentário de nicho errado, que é o defeito em questão
+_src_c = (BASE / "comentarios.py").read_text("utf-8")
+_codigo_c = "\n".join(l for l in _src_c.splitlines()
+                      if not l.lstrip().startswith("#"))
+checa("lê o contas.json", "contas.json" in _codigo_c)
+for h in ("topshoppet_", "topshopcasa_", "topshoptech_"):
+    checa(f"não tem '{h}' escrito no código", h not in _codigo_c)
+
+print("\n   ── as frases do Dre entram por .env, sem deploy ──")
+os.environ["COMENT_IG_REEL_CASA"] = "frase nova do dre|||outra frase dele"
+comentarios._NICHO_POR_HANDLE = None
+_b_env = comentarios._banco("instagram", "reel", "@topshopcasa_")
+checa("COMENT_IG_REEL_CASA substitui o banco daquele nicho",
+      _b_env == ["frase nova do dre", "outra frase dele"], str(_b_env)[:80])
+del os.environ["COMENT_IG_REEL_CASA"]
+checa("e não vaza pros outros nichos",
+      "frase nova do dre" not in comentarios._banco("instagram", "reel", "@topshoptech_"))
 
 print("\n── carrossel NÃO herda o banco de Reel ──")
 # num carrossel de "3 erros" não existe "um desses" pra comprar

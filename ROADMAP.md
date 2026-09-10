@@ -666,7 +666,49 @@ continuaria idêntico.
   `bio_page_builder`, nunca copiado (convite duplicado vira grupo morto no dia
   em que um dos dois trocar, e link errado numa DM não dá erro em lugar nenhum).
 
-`teste_resposta_repetida.py`: 41 → **59**. `teste_comentario.py`: 19 → **21**, e uma falha intermitente de
+`teste_resposta_repetida.py`: 41 → **59**.
+
+### 🏷️ O 1º comentário não sabia em que CONTA estava (10/09)
+
+O Dre, no mesmo Reel do @topshoppet_ — cachorro com problema de ouvido, produto
+de limpeza auricular: *"o primeiro comentário dele tá péssimo!!"*.
+
+O que saiu: *"esse tem muita cara de produto que viraliza e depois some, salva
+aí antes que você esqueça o nome"* — frase de **gadget viral** num post de
+**saúde do pet**. E tinha pior sorteável na mesma conta: *"o perigo é comprar um
+e depois querer outro **pra cada canto da casa**"*, no perfil de pet.
+
+**A causa:** o banco era escolhido por `(plataforma, formato)` e **mais nada**.
+Seis contas, seis nichos, um banco só. É a **mesma classe que o arquivo já
+documentava** no próprio cabeçalho — *"o comentário não sabia o que estava
+comentando"* — resolvida pra **formato** em 22/08 e nunca pra **nicho**.
+
+⚠️ **O conserto não apaga frase dele.** As seis continuam as dele, palavra por
+palavra: duas só deixaram de ser universais e passaram a sair onde funcionam
+(`casa` e `tech`). Frase boa no lugar errado é problema de **endereço**, não de
+texto — e o teste passou a proteger isso (nenhuma das 6 pode sumir) em vez do
+`len(_IG_REEL) == 6` antigo, que falharia por um motivo bom.
+
+⚠️⚠️ **E a primeira versão do conserto apontava a falha para o lado errado.**
+Handle que não resolve caía em `geral` — que é o @topshop.__ e carrega
+**justamente as duas frases proibidas no pet**. O conserto se desfazia sozinho,
+em silêncio, exatamente na conta que o motivou. Agora desconhecido → banco
+universal só, e é isso que o teste trava. O `contas.json` do repo tem 4 contas e
+o da VPS tem 6, então essa direção não era teórica.
+
+O mapa `handle → nicho` vem do **`contas.json`** (a mesma fonte do roteador),
+nunca de uma segunda cópia: cópia desatualizada dá comentário de nicho errado,
+que é o defeito em questão. `comentarios.py --nichos` mostra conta a conta qual
+nicho resolveu e quantas frases ela usa — o roteamento **falha calado**, então
+sem esse modo uma conta poderia nunca receber as frases dela sem ninguém notar.
+
+📌 **`pet`, `moda` e `beleza` estão com banco vazio de propósito.** As frases do
+Dre ganham das minhas (medido: as dele conversam, as minhas descreviam), e
+inventar na voz dele pra soltar em conta ao vivo trocaria um defeito visível por
+um invisível. Entram por `.env`, sem deploy:
+`COMENT_IG_REEL_PET='frase 1|||frase 2|||frase 3'`.
+
+`teste_comentario.py`: 21 → **42**. `teste_comentario.py`: 19 → **21**, e uma falha intermitente de
 ~1 em 3 que existia desde 02/09 saiu junto (a asserção do `{link}` no Facebook
 sorteava 1 frase e o banco tem uma de `{whats}`, que legitimamente não leva
 link — a asserção estava errada, não o código).
