@@ -801,7 +801,43 @@ foram contados como cópias. **Contador errado num teste de dívida é pior que 
 ter contador — ele reprova o conserto que acabou de ser feito.** Agora o critério
 é escrever no `os.environ`, que é o que de fato distingue cópia de delegação.
 
-`teste_envfile.py` (20/20) — novo.
+`teste_envfile.py` (21/21) — novo.
+
+### 🔍 O `.env` do Dre estava matando os convites pro grupo (10/09)
+
+A falha que sobrava na VPS (`73 · 1`) apareceu com nome:
+
+```
+❌ sem link, alguma frase convida pro grupo
+   ['Oiee! 😍 tá tudo aqui ó: {site} 💛 corre!']
+```
+
+Um **`AUTO_RESP_DM_TMPL` antigo no `.env`** substituía o banco inteiro do plano
+B da DM — **matando os cinco convites pro grupo do WhatsApp** que tinham acabado
+de entrar. Exatamente o defeito que o detector de sombreamento existe pra pegar.
+
+⚠️ **E o detector não pegou, porque eu só tinha coberto metade das variáveis.**
+Ele olhava `AUTO_RESP_IG_TMPLS*` (os bancos de comentário) e ignorava os três
+bancos da DM, o do Facebook e os gatilhos. **Detector que cobre metade é pior
+que nenhum: ele dá a impressão de que a pergunta já foi feita** — a falha
+aparecia longe dali, numa asserção de conteúdo, sem dizer a causa.
+
+Agora varre as cinco variáveis que trocam banco, cada uma com o nome do que ela
+mata. E o **gatilho** ganhou checagem própria, porque sombreá-lo é pior que
+sombrear frase: as iscas pedem QUERO, LINK e MANDA, e um `AUTO_RESP_GATILHOS`
+antigo sem `manda` faria a conta pedir e o robô ignorar.
+
+📌 **E as asserções de conteúdo da DM passaram a ler as constantes entregues**,
+como as de comentário já faziam. A *fiação* (qual banco é escolhido quando N>1)
+continua sendo testada no efetivo — é ela que precisa do código real.
+
+⚠️ **O `teste_envfile` também media a máquina em vez do código** (18·2 na VPS,
+20·0 aqui): o carregador tenta `base/.env` e depois `Path(".env")`, que é
+**relativo ao diretório atual** — rodando de dentro do `~/jarvis` ele acha o
+`.env` real mesmo com `base` vazia. Não é defeito (é o que faz `python3
+script.py` funcionar na mão, e é por isso que as 40 cópias têm essa linha), mas
+o teste precisa de `chdir` pra isolar. Agora isola **e** testa a propriedade de
+propósito, em vez de sofrê-la.
 
 ### 🕶️ E O `.env` PODE MATAR AS FRASES NOVAS SEM DAR SINAL
 

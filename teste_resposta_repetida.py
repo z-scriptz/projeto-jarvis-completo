@@ -167,11 +167,40 @@ if set(_efetivo_sem) != set(t for t in _PAD_SEM_DM if not ar._menciona_dm(t)):
     _sombra.append("AUTO_RESP_IG_TMPLS_SEM_DM")
 if set(_efetivo_com) != set(_PAD_COM_DM):
     _sombra.append("AUTO_RESP_IG_TMPLS")
-checa("nenhum override de .env sombreando o banco entregue", not _sombra,
-      f"⚠️ {' e '.join(_sombra)} no .env estão SUBSTITUINDO as frases novas — "
-      f"efetivo tem {len(_efetivo_sem)}/{len(_efetivo_com)} frase(s), "
-      f"entregue tem {len(_PAD_SEM_DM)}/{len(_PAD_COM_DM)}. "
-      f"Remova do .env pra usar as frases versionadas.")
+
+# ⚠️ MINHA PRIMEIRA VERSÃO SÓ OLHAVA OS DOIS BANCOS DE COMENTÁRIO — e o que
+# estava sombreado na VPS era o da DM. O detector passava e a falha aparecia
+# LONGE dali, numa asserção de conteúdo ("sem link, alguma frase convida pro
+# grupo"), com o efetivo sendo `['Oiee! 😍 tá tudo aqui ó: {site} 💛 corre!']`:
+# um `AUTO_RESP_DM_TMPL` antigo no `.env` substituindo o banco inteiro do plano
+# B e MATANDO os convites pro grupo do WhatsApp.
+#
+# Detector que cobre metade das variáveis é pior que nenhum: ele dá a impressão
+# de que a pergunta já foi feita. Agora varre TODAS as que trocam banco.
+_BANCOS_ENV = {
+    "AUTO_RESP_DM_TMPL": "plano B da DM (grupo do WhatsApp)",
+    "AUTO_RESP_DM_TMPL_PRODUTO": "DM com o link do produto",
+    "AUTO_RESP_DM_TMPL_LISTA": "DM do carrossel (vários links)",
+    "AUTO_RESP_FB_TMPL": "resposta do Facebook",
+    "AUTO_RESP_GATILHOS": "as palavras que disparam resposta",
+}
+_sombra_env = [f"{k} ({desc})" for k, desc in _BANCOS_ENV.items()
+               if os.environ.get(k, "").strip()]
+checa("nenhum override de .env sombreando o banco entregue",
+      not _sombra and not _sombra_env,
+      "⚠️ no .env: " + "; ".join(_sombra + _sombra_env) +
+      f" — as frases versionadas NÃO estão sendo usadas. "
+      f"Comente essas linhas do .env.")
+
+# ⚠️ E O GATILHO MERECE CHECAGEM PRÓPRIA, porque sombreá-lo é pior que sombrear
+# frase: as iscas do Dre pedem QUERO, LINK e MANDA, e um AUTO_RESP_GATILHOS
+# antigo no .env pode não ter `manda` — a conta pede e o robô ignora.
+_g_efetivos = ar._gatilhos()
+for _p in ("quero", "link", "manda"):
+    checa(f"o gatilho '{_p}' está ativo de verdade (não só no default)",
+          ar._bateu(_p, _g_efetivos),
+          f"⚠️ AUTO_RESP_GATILHOS no .env não cobre '{_p}' — as iscas pedem "
+          f"essa palavra e ninguém responderia")
 
 print("\n── ⚠️ SEM DM, NENHUMA RESPOSTA PODE PROMETER DIRECT ──")
 # prometer o que não chega é pior que não responder: a pessoa espera, não
@@ -290,8 +319,14 @@ _ctx_com = {"link": "https://s.shopee.com.br/ABC", "site": "site.com.br",
             "whats": "https://chat.whatsapp.com/XYZ"}
 _ctx_sem_grupo = {"link": "", "site": "site.com.br", "whats": ""}
 
-banco_prod = ar._banco_dm(True, _ctx_com)
-banco_b = ar._banco_dm(False, _ctx_com)
+# ⚠️ AS CONSTANTES ENTREGUES, pelo mesmo motivo dos bancos de comentário: um
+# `AUTO_RESP_DM_TMPL` no `.env` da máquina troca o banco inteiro, e testar o
+# efetivo aqui testaria o `.env` do Dre em vez do que foi versionado. Foi
+# exatamente isso que apareceu como "sem link, alguma frase convida pro grupo"
+# falhando na VPS e passando aqui. Quem cobra o override é a seção dedicada.
+banco_prod = _banco_padrao(ar._DM_PRODUTO_DEFAULT)
+banco_b = [f for f in _banco_padrao(ar._DM_SEM_LINK_DEFAULT)
+           if "{whats}" not in f or _ctx_com.get("whats")]
 checa("com link, o banco da DM tem mais de 1 frase", len(banco_prod) > 1,
       f"{len(banco_prod)}")
 checa("todas as frases de produto carregam {link}",
@@ -307,7 +342,8 @@ checa("⚠️ nenhuma frase do plano B promete um produto específico",
 
 print("\n   ── ⚠️ SEM CONVITE, A FRASE DO GRUPO NEM É SORTEADA ──")
 # "entra no grupo: " (vazio) é pior que não convidar
-b_sem = ar._banco_dm(False, _ctx_sem_grupo)
+b_sem = [f for f in _banco_padrao(ar._DM_SEM_LINK_DEFAULT)
+         if "{whats}" not in f] or [ar._DM_SEM_LINK_SEM_GRUPO]
 checa("sem convite, nenhuma frase de {whats} sobra",
       not any("{whats}" in f for f in b_sem), str(b_sem))
 checa("e ainda sobra pelo menos uma frase (o site)", len(b_sem) >= 1, str(b_sem))
@@ -394,7 +430,7 @@ try:
     # "é esse aqui ó: <link>" num post de 5 produtos erra em 4 de 5
     _ctx_lista = {"link": "https://s.shopee.com.br/a", "n_links": 3,
                   "lista": "• a\n• b\n• c", "site": "s.com", "whats": "w"}
-    _b_lista = ar._banco_dm(True, _ctx_lista)
+    _b_lista = _banco_padrao(ar._DM_LISTA_DEFAULT)
     checa("com N>1 o banco é o de LISTA", all("{lista}" in f for f in _b_lista),
           str(_b_lista)[:80])
     checa("nenhuma frase de lista diz 'é esse aqui'",
@@ -409,7 +445,11 @@ try:
     _ctx_um = {"link": "https://s.shopee.com.br/a", "n_links": 1,
                "lista": "• a", "site": "s.com", "whats": "w"}
     checa("com N==1 volta o banco de produto",
-          all("{link}" in f for f in ar._banco_dm(True, _ctx_um)))
+          all("{link}" in f for f in _banco_padrao(ar._DM_PRODUTO_DEFAULT)))
+    # e a ESCOLHA do banco (a fiação) continua sendo testada no efetivo
+    checa("a fiação escolhe o banco de lista quando N>1",
+          ar._banco_dm(True, _ctx_lista) != ar._banco_dm(True, _ctx_um)
+          or bool(os.environ.get("AUTO_RESP_DM_TMPL_LISTA")))
 finally:
     ar.BASE_DIR = _base_real
     ar._LINKS_POR_POST = None

@@ -86,17 +86,36 @@ print("\n── ⚠️⚠️ VARIÁVEL VAZIA CONTA COMO AUSENTE ──")
 checa("variável vazia é preenchida pelo arquivo",
       os.environ.get("ESTAVA_VAZIA") == "do_arquivo")
 
-print("\n── ⚠️ NADA AQUI PODE DERRUBAR UM IMPORT ──")
-# metade do projeto chama isto na primeira linha do módulo
+print("\n── ⚠️ O SEGUNDO CANDIDATO É RELATIVO AO CWD ──")
+# ⚠️ ISTO FEZ O TESTE FALHAR NA VPS (18·2) E PASSAR AQUI (20·0), e a diferença
+# é só que lá existe um `.env` de verdade em ~/jarvis. O carregador tenta
+# `base/.env` e depois `Path(".env")` — o segundo é relativo ao DIRETÓRIO ATUAL,
+# então rodar de dentro do ~/jarvis carrega o .env real mesmo com `base` vazia.
+#
+# Não é defeito: é o que faz `python3 script.py` funcionar quando alguém roda na
+# mão de dentro da pasta, que é o motivo pelo qual todas as 40 cópias têm essa
+# linha. Mas um teste que não isola isso mede a máquina, não o código.
 vazio = Path(tempfile.mkdtemp(prefix="envf_vazio_"))
-checa("sem .env devolve 0, não explode", carregar_env(vazio) == 0)
-ruim = Path(tempfile.mkdtemp(prefix="envf_ruim_"))
-(ruim / ".env").write_bytes(b"\xff\xfe\x00BINARIO\x00")
+_cwd = os.getcwd()
+os.chdir(vazio)                       # isola do .env real da máquina
 try:
-    r = carregar_env(ruim)
-    checa(".env ilegível devolve 0, não explode", r == 0, str(r))
-except Exception as e:
-    checa(".env ilegível devolve 0, não explode", False, f"levantou {e!r}")
+    checa("sem .env em lugar nenhum devolve 0, não explode",
+          carregar_env(vazio) == 0)
+    ruim = Path(tempfile.mkdtemp(prefix="envf_ruim_"))
+    (ruim / ".env").write_bytes(b"\xff\xfe\x00BINARIO\x00")
+    try:
+        r = carregar_env(ruim)
+        checa(".env ilegível devolve 0, não explode", r == 0, str(r))
+    except Exception as e:
+        checa(".env ilegível devolve 0, não explode", False, f"levantou {e!r}")
+    # e a propriedade em si, testada de propósito em vez de sofrida
+    (vazio / ".env").write_text("DO_CWD=achei\n", encoding="utf-8")
+    outra = Path(tempfile.mkdtemp(prefix="envf_outra_"))
+    carregar_env(outra)               # base sem .env → cai no CWD
+    checa("base sem .env cai no .env do diretório atual",
+          os.environ.get("DO_CWD") == "achei")
+finally:
+    os.chdir(_cwd)
 
 print("\n── ⚠️ OS TRÊS MIGRADOS USAM O COMPARTILHADO ──")
 # consertar num lugar só conserta os três; enquanto forem cópias, não
@@ -144,7 +163,7 @@ checa("os três pedidos foram migrados",
       str(sorted({"comentarios.py", "auto_resposta.py",
                   "tiktok_coletor.py"} & set(_copias))))
 
-for d in (tmp, vazio, ruim):
+for d in (tmp, vazio, ruim, outra):
     shutil.rmtree(d, ignore_errors=True)
 print(f"\n{'='*64}\n   {ok} passou · {falhou} falhou\n{'='*64}")
 raise SystemExit(1 if falhou else 0)
