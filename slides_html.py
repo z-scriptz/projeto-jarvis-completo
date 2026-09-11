@@ -407,6 +407,12 @@ body {{ width:{LARG}px; height:{ALT}px; overflow:hidden; font-family:'Corpo',
    sangra pra fora do quadro de propósito — forma cortada pela borda dá
    movimento, forma inteira e centrada dá apostila. */
 .mancha {{ position:absolute; border-radius:50%; }}
+/* ⚠️ o cartão de foto da CAPA CLARA: a foto é conteúdo, não fundo escurecido.
+   `flex:0 0 auto` porque com `flex:1` ela esticava até o rodapé e engolia o
+   respiro — o mesmo defeito que os cartões de duas colunas tiveram. */
+.capafoto {{ position:relative; flex:0 0 auto; width:100%; height:520px;
+             margin-top:34px; border-radius:28px; background:#e8e4db
+             center/cover no-repeat; box-shadow:0 18px 50px rgba(0,0,0,.16); }}
 /* ⚠️ A FOTO É UMA CAMADA, NÃO O `background` DO SLIDE. Como camada ela recebe
    filtro próprio (saturação, contraste, brilho) sem afetar o texto — foto de
    catálogo vem lavada e sem contraste, e é o filtro que tira a cara de
@@ -572,12 +578,35 @@ def _html_capa(plano: dict, total: int) -> str:
     # a logo e o @ agora saem no `_cabecalho`, em TODOS os slides
 
     foto = _fundo(plano, {"n": 1})   # a capa é o slide 1: usa `fundos/01.png`
-    camada = (f'<div class="fotocheia" style="background-image:url({foto})"></div>'
-              f'<div class="fade" style="inset:0;background:linear-gradient('
-              f'180deg,{p["escuro"]}e6 0%,{p["escuro"]}b3 42%,'
-              f'{p["escuro"]}f2 100%)"></div>') if foto else ""
 
-    return f"""<div class="slide" style="background:{p['escuro']};
+    # ⚠️ A CAPA FICOU CLARA E PERDEU O CABEÇALHO (11/09/2026), E QUEM DECIDIU
+    # FOI O DRE, com as duas referências dele na mesa.
+    #
+    # Este arquivo dizia, desde 22/08: *"o cabeçalho é idêntico nos 6 slides —
+    # é a âncora que deixa a composição variar embaixo sem o conjunto virar
+    # seis posts avulsos"*. Aquilo veio de referências que ele mandou em agosto,
+    # e continua valendo PROS SLIDES DE DENTRO, que não mudaram.
+    #
+    # Só que as referências de 10/09 são de CAPAS que estouraram — @rafabri7o
+    # (10,1 mil), @lucureau (4.757), @homemquesabetudo (4.163) — e **nenhuma
+    # tem bloco de marca no topo**; quatro das cinco têm fundo claro. Ele viu a
+    # capa clara renderizada e aprovou: *"100% melhor, realmente ela passa como
+    # conteúdo… a marca tá discreta e ninguém copia, ou seja, é nosso!"*.
+    # E quando as duas referências se contradisseram, ele cortou:
+    # *"a referência mais recente decide, pq é estratégia nova e vem de virais"*.
+    #
+    # 📌 O QUE MUDA NÃO É A COR, É O QUE SAI DE CENA: logo, @ e contador comiam
+    # os 150px superiores e são a primeira coisa que denuncia página comercial.
+    # A marca desce pro rodapé — quem gosta do conteúdo procura quem postou.
+    #
+    # ⚠️ REVERSÍVEL EM UMA LINHA: `CARR_CAPA_TOM=escuro` no .env devolve a capa
+    # de antes, com cabeçalho e tudo. Se o número piorar, é assim que se volta.
+    if os.environ.get("CARR_CAPA_TOM", "claro").strip().lower() == "escuro":
+        camada = (f'<div class="fotocheia" style="background-image:url({foto})"></div>'
+                  f'<div class="fade" style="inset:0;background:linear-gradient('
+                  f'180deg,{p["escuro"]}e6 0%,{p["escuro"]}b3 42%,'
+                  f'{p["escuro"]}f2 100%)"></div>') if foto else ""
+        return f"""<div class="slide" style="background:{p['escuro']};
      color:{p['clarinho']}">
   {camada}
   <div class="mancha" style="width:760px;height:760px;right:-260px;top:-230px;
@@ -591,6 +620,34 @@ def _html_capa(plano: dict, total: int) -> str:
     <div class="pilula" style="background:rgba(255,255,255,.10);
          color:{p['clarinho']};font-size:30px;padding:18px 34px">
       arrasta &rarr;</div>
+  </div>
+</div>"""
+
+    # ── A CAPA CLARA ──────────────────────────────────────────────────────
+    # ⚠️ A FOTO VIRA CARTÃO, NÃO FUNDO ESCURECIDO. No @lucasmagazinetech o
+    # produto é a estrela; baixar o brilho a 62% pra escrever por cima é o
+    # contrário disso. Sem foto, a capa é só tipografia (@rafabri7o).
+    handle = _h.escape((plano.get("handle") or "").strip())
+    cartao = (f'<div class="capafoto" style="background-image:url({foto})"></div>'
+              if foto else "")
+    return f"""<div class="slide" style="background:{p['creme']};
+     color:{p['escuro']}">
+  <div class="mancha" style="width:780px;height:780px;right:-250px;top:-240px;
+       background:{p['acento']};opacity:.10"></div>
+  <div style="flex:1;display:flex;flex-direction:column;
+       justify-content:{'flex-start' if foto else 'center'}">
+    <h1 id="titulo" style="margin:0;font-size:118px;color:{p['escuro']}">
+      {_marcar(hook, p['acento'])}</h1>
+    <div style="margin-top:30px;font-size:38px;line-height:1.32;
+         color:{p['escuro']}a8">{sub}</div>
+  </div>
+  {cartao}
+  <div class="rodape" style="margin-top:{'30px' if foto else '0'}">
+    <div style="font-size:30px;color:{p['escuro']}b0">
+      <b style="color:{p['escuro']}">{handle}</b> &middot; {total} slides</div>
+    <div class="pilula" style="background:transparent;
+         border:3px solid {p['escuro']};color:{p['escuro']};
+         font-size:29px;padding:15px 30px">arrasta &rarr;</div>
   </div>
 </div>"""
 

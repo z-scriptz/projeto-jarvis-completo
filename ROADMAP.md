@@ -724,6 +724,63 @@ cartão).
 
 `teste_capa_estilo.py`: 70 → **85**.
 
+### 🚨 E EU PASSEI A NOITE INTEIRA NO ARQUIVO ERRADO
+
+O Dre rodou a prévia e os carrosséis saíram com a capa antiga. Fui atrás e
+achei isto em `carrossel_render:777`:
+
+```python
+from slides_html import renderizar_slides
+prontos = renderizar_slides(plano, Path(saida))
+if prontos:
+    return prontos          # ← acaba AQUI
+```
+
+**O `capa_html` é chamado 60 linhas DEPOIS desse `return`.** Ele é a rede pra
+quando o navegador falha — nunca o que sai no post. Quatro estilos, rotação,
+afinidade, cor por nicho, 85 asserções: **tudo num caminho morto pro carrossel.**
+
+📌 **COMO EU ERREI:** procurei `capa_html` dentro do `carrossel_render`, achei a
+chamada na linha 820, e tratei **"existe uma chamada"** como **"é chamado"**.
+Nunca olhei o que vinha antes. É a mesma classe que eu cataloguei o dia todo —
+o `comentarios.py` morto 5 dias, o `mitos` em peso 0 — cometida por mim, na
+maior escala da sessão.
+
+⚠️ **A capa que vai ao ar mora em `slides_html.py`** (1.696 linhas, 22/08), o
+sistema de design do carrossel inteiro. Por isso a primeira seção do
+`teste_capa_slides_html.py` não olha design nenhum: ela olha **quem desenha**, e
+falha se a ordem do `return` inverter. É o teste que teria me poupado a noite.
+
+### 🎯 A CONTRADIÇÃO DAS DUAS REFERÊNCIAS — e quem decidiu
+
+O `slides_html` diz, desde 22/08: *"o cabeçalho é idêntico nos 6 slides — é a
+âncora que deixa a composição variar embaixo sem o conjunto virar seis posts
+avulsos"*. Isso veio de **referências do Dre, de agosto**.
+
+As de **10/09** são capas que estouraram — @rafabri7o (10,1 mil), @lucureau
+(4.757), @homemquesabetudo (4.163) — e **nenhuma tem bloco de marca no topo**.
+Ele viu a capa clara e aprovou: *"100% melhor, realmente ela passa como
+conteúdo… a marca tá discreta e ninguém copia, ou seja, é nosso!"*.
+
+Duas referências dele, de dois momentos, discordando. **Não era minha decisão**,
+e ele cortou: *"a referência mais recente decide, pq é estratégia nova e vem de
+virais"*.
+
+**O que foi portado pro `slides_html`:** capa clara com o `creme` do nicho (zero
+cor nova — a paleta já tinha o tom), sem cabeçalho, marca discreta no rodapé,
+foto como **cartão** e não fundo escurecido. O miolo **não mudou**: a regra de
+agosto continua valendo lá, e o teste trava isso.
+
+⚠️ **Reversível em uma linha:** `CARR_CAPA_TOM=escuro` devolve a capa de antes,
+cabeçalho e tudo. Se o número piorar, é assim que se volta.
+
+⚠️ **E uma asserção minha passou pelo motivo errado, de novo:** eu checava
+`"TopShop" not in capa` — mas o cabeçalho emite `Top<em>Shop</em>`, então a
+string literal **nunca** aparece e o teste passaria com o cabeçalho lá. Terceira
+vez no dia testando a forma em vez do fato. Agora checa `class="cabeca"`.
+
+`teste_capa_slides_html.py` (22/22) — novo.
+
 📌 `--todos` gera uma capa de cada estilo com o nome do estilo no arquivo:
 rodar duas vezes sobrescrevia `capa_casa.jpg` e sobrava UMA imagem, com quem
 pediu a comparação achando que tinha as duas.
