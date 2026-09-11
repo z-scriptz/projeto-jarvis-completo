@@ -1,5 +1,26 @@
 {
   "topshopcasa_": [
     "claro"
+  ],
+  "geral": [
+    "claro"
+  ],
+  "casa": [
+    "claro"
+  ],
+  "beleza": [
+    "claro"
+  ],
+  "pet": [
+    "claro"
+  ],
+  "moda": [
+    "claro"
+  ],
+  "topshoppet_": [
+    "claro"
+  ],
+  "topshopbeleza_": [
+    "claro"
   ]
 }

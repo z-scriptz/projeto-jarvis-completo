@@ -232,10 +232,59 @@ AFINIDADE = {
 # os que entram no sorteio livre — os de forma imposta ficam de fora, senão
 # sairiam em carrossel que não tem dois lados
 ESTILOS_LIVRES = ("escuro", "claro")
+
+# ⚠️ E O SORTEIO NÃO PODE ATRAVESSAR O TOM DO MIOLO (11/09). Barrei o caso do
+# nicho escuro e esqueci o inverso: `casa` e `pet` — slides CLAROS — sorteavam
+# capa escura metade das vezes. Capa preta virando creme no primeiro swipe é o
+# mesmo defeito, só que ao contrário.
+#
+# 📌 E ISSO ESTREITA A VARIEDADE DE PROPÓSITO: sobra UM estilo livre por tom.
+# A variedade que o Dre pediu tem que vir de MAIS ESTILOS DO MESMO TOM — não de
+# alternar claro e escuro, que é variedade comprada com incoerência. Os dois de
+# duas colunas já entram por afinidade; o próximo passo é um terceiro estilo
+# claro (o lettering do @olga_lehnerg, ou a foto-em-destaque do
+# @lucasmagazinetech), e aí o sorteio volta a ter de onde escolher.
+LIVRES_POR_TOM = {True: ("claro",), False: ("escuro",)}
 _MEM_ESTILO = BASE_DIR / "shared" / "capa_estilos_recentes.json"
 
 
-def _escolher_estilo(conta: str, formato: str = "") -> str:
+def _slides_sao_claros(nicho: str) -> bool:
+    """O MIOLO do carrossel é claro nesse nicho?
+
+    ⚠️ MEDIDO EM 11/09, E O RESULTADO REESCREVE O PROBLEMA: cinco dos seis
+    nichos já renderizavam os slides CLAROS (`render._cor_fundo`) — só o `tech`
+    é escuro. Ou seja, a capa escura de sempre já brigava com o próprio miolo em
+    CINCO contas: o carrossel abria preto e virava branco no primeiro swipe.
+    Isso é anterior aos estilos novos; eu só fui olhar porque desconfiei de ter
+    criado a inconsistência, e ela já estava lá.
+    Então a capa passa a perguntar ao miolo em vez de decidir sozinha.
+    """
+    try:
+        import render as R
+        return bool(R._cor_fundo(nicho)[0])
+    except Exception:
+        return True          # a maioria é clara; na dúvida, o que combina com 5/6
+
+
+def _fundo_do_nicho(nicho: str) -> str:
+    """A cor de fundo dos slides, em hex — pra capa usar a MESMA.
+
+    ⚠️ ISTO É O QUE FAZ A CAPA E O MIOLO SEREM O MESMO POST. Antes a capa tinha
+    um creme fixo (`#f4f1ea`) e cada nicho tinha o seu tom (`casa` verde-acinza,
+    `beleza` rosado, `pet` amarelo). Capa e slide quase iguais é pior que
+    diferentes: lê como erro de exportação, não como escolha.
+    """
+    try:
+        import render as R
+        claro, rgb = R._cor_fundo(nicho)
+        if claro and isinstance(rgb, (list, tuple)) and len(rgb) >= 3:
+            return "#%02x%02x%02x" % tuple(int(c) for c in rgb[:3])
+    except Exception:
+        pass
+    return "#f4f1ea"
+
+
+def _escolher_estilo(conta: str, formato: str = "", nicho: str = "") -> str:
     """O estilo da capa: por AFINIDADE se o formato tem forma, senão sorteio.
 
     `CARR_ESTILO=claro` no .env força um (pra testar ou pra travar).
@@ -243,6 +292,11 @@ def _escolher_estilo(conta: str, formato: str = "") -> str:
     forcado = os.environ.get("CARR_ESTILO", "").strip().lower()
     if forcado in ESTILOS:
         return forcado
+    # ⚠️ MIOLO ESCURO MANDA MAIS QUE TUDO. Capa clara + slides pretos é um post
+    # que parece dois posts colados. O `tech` é o único nicho escuro, e lá a
+    # capa escura não é falta de variedade: é o post ser um só.
+    if nicho and not _slides_sao_claros(nicho):
+        return "escuro"
     # ⚠️ a afinidade vem ANTES do sorteio: num carrossel de mitos, duas colunas
     # não é preferência, é a estrutura do conteúdo
     afim = AFINIDADE.get((formato or "").strip().lower())
@@ -260,7 +314,9 @@ def _escolher_estilo(conta: str, formato: str = "") -> str:
     except Exception:
         mem = {}
     chave = (conta or "?").lstrip("@").lower()
-    escolhido, recentes = _rodar(list(ESTILOS_LIVRES), mem.get(chave) or [])
+    pool = list(LIVRES_POR_TOM.get(_slides_sao_claros(nicho), ESTILOS_LIVRES)) \
+        if nicho else list(ESTILOS_LIVRES)
+    escolhido, recentes = _rodar(pool, mem.get(chave) or [])
     mem[chave] = recentes
     try:
         _MEM_ESTILO.parent.mkdir(parents=True, exist_ok=True)
@@ -306,7 +362,7 @@ def montar_html(plano: dict) -> str:
     estilo = (capa.get("estilo") or plano.get("estilo") or "").strip().lower()
     if estilo not in ESTILOS:
         estilo = _escolher_estilo(plano.get("handle") or nicho,
-                                  plano.get("formato") or "")
+                                  plano.get("formato") or "", nicho)
     if estilo in ("mito_verdade", "versus"):
         return _html_dois_lados(estilo, hook=hook_cru, sub=sub_cru, total=total,
                                 arrasta=arrasta, handle=handle, cor=cor,
@@ -314,7 +370,7 @@ def montar_html(plano: dict) -> str:
     if estilo == "claro":
         return _html_claro(hook=hook_cru, sub=sub_cru, total=total, arrasta=arrasta,
                            handle=handle, cor=cor, fonte_u=fonte_u,
-                           corpo_u=corpo_u, fundo_u=fundo_u)
+                           corpo_u=corpo_u, fundo_u=fundo_u, nicho=nicho)
 
     return f"""<!doctype html><html><head><meta charset="utf-8"><style>
 @font-face {{ font-family:'Titulo'; src:url('{fonte_u}'); }}
@@ -427,7 +483,7 @@ body {{ width:{LARG}px; height:{ALT}px; overflow:hidden;
 
 
 def _html_claro(hook, sub, total, arrasta, handle, cor,
-                fonte_u, corpo_u, fundo_u) -> str:
+                fonte_u, corpo_u, fundo_u, nicho="") -> str:
     """A capa CLARA — o formato de 4 dos 5 virais que o Dre mandou.
 
     ⚠️ O QUE MUDA NÃO É A COR, É O QUE SAI DE CENA. Comparando os virais com a
@@ -451,6 +507,7 @@ def _html_claro(hook, sub, total, arrasta, handle, cor,
     tem_foto = bool(fundo_u)
     cor_texto = _escurecer(cor)
     cor_tarja = _contraste(cor)
+    fundo_pag = _fundo_do_nicho(nicho)
     # ⚠️ montado FORA da f-string: expressão de f-string não aceita barra
     # invertida no Python < 3.12, e este arquivo roda em três máquinas.
     cartao = (f"<div class=\"cartao\" style=\"background-image:url('{fundo_u}')\">"
@@ -464,7 +521,7 @@ def _html_claro(hook, sub, total, arrasta, handle, cor,
 @font-face {{ font-family:'Corpo'; src:url('{corpo_u}'); }}
 * {{ margin:0; padding:0; box-sizing:border-box; }}
 body {{ width:{LARG}px; height:{ALT}px; overflow:hidden;
-        font-family:'Corpo',sans-serif; background:#f4f1ea; color:#111; }}
+        font-family:'Corpo',sans-serif; background:{fundo_pag}; color:#111; }}
 .palco {{ position:relative; width:100%; height:100%;
           padding:96px 80px 80px; display:flex; flex-direction:column;
           justify-content:flex-start; }}
@@ -597,13 +654,15 @@ def _html_dois_lados(estilo, hook, sub, total, arrasta, handle, cor,
     cor_tarja = _contraste(cor)
     rot_a, rot_b, txt_a, txt_b, foto_a, foto_b = _dois_lados(plano, estilo)
     if estilo == "mito_verdade":
-        fundo_pag, cor_a, cor_b = "#e8f2fb", "#d64545", "#2f9e5f"
+        # o azul fixo virava post de OUTRA marca; o tom do nicho mantém a
+        # identidade e os rótulos coloridos é que dão o contraste
+        fundo_pag, cor_a, cor_b = _fundo_do_nicho(plano.get("nicho", "")), "#d64545", "#2f9e5f"
         titulo_a, titulo_b = _h.escape(rot_a), _h.escape(rot_b)
     else:
         # ⚠️ NÃO é branco puro: o cartão também é branco, e branco sobre
         # branco vira caixa invisível — só a sombra denunciava que havia
         # algo ali. Cinza levíssimo dá o degrau sem virar outra cor.
-        fundo_pag, cor_a, cor_b = "#f2f2f5", "#111111", cor_texto
+        fundo_pag, cor_a, cor_b = _fundo_do_nicho(plano.get("nicho", "")), "#111111", cor_texto
         titulo_a, titulo_b = _h.escape(rot_a), _h.escape(rot_b)
     corpo_a, corpo_b = _h.escape(txt_a), _h.escape(txt_b)
     tem_corpo = bool(txt_a or txt_b)

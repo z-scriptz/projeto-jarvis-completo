@@ -65,7 +65,11 @@ print("\n── os dois estilos existem e são DIFERENTES ──")
 checa("há mais de um estilo", len(C.ESTILOS) >= 2, str(C.ESTILOS))
 checa("o html sai diferente em cada um", claro != escuro)
 checa("o escuro continua escuro (#0d0d0f)", "#0d0d0f" in escuro)
-checa("o claro tem fundo claro", "#f4f1ea" in claro)
+# ⚠️ NÃO CRAVAR A COR: ela deixou de ser um creme fixo e virou a do NICHO
+# (11/09), justamente pra capa e miolo serem o mesmo post. Asserção com hex
+# fixo testaria a versão anterior.
+checa("o claro usa o fundo do nicho", C._fundo_do_nicho("casa") in claro,
+      f'esperava {C._fundo_do_nicho("casa")}')
 
 print("\n── ⚠️ O QUE SAI DE CENA: nenhum dos 5 virais tem bloco de marca ──")
 # aquele bloco comia os 150px superiores de toda capa e é a primeira coisa que
@@ -211,8 +215,13 @@ _vs = C.montar_html({"nicho": "tech", "handle": "@t", "slides": [{}, {}],
 checa("o versus tem o 'vs' no meio", ">vs<" in _vs)
 checa("o mito/verdade NÃO tem símbolo no meio (× lê como multiplicação)",
       'class="meio"' not in _sem_lados)
+# ⚠️ a propriedade é o DEGRAU entre página e cartão, não um hex específico: o
+# cartão é branco, então a página não pode ser branca também — foi assim que o
+# versus saiu com caixas invisíveis, denunciadas só pela sombra.
+_bg_vs = [l for l in _vs.splitlines() if "body {" in l or "background:#" in l]
 checa("⚠️ o cartão não é branco sobre branco no versus",
-      "#f2f2f5" in _vs, "cartão invisível: só a sombra denunciava")
+      "background:#ffffff;" not in _vs.replace(" ", ""),
+      "cartão invisível: só a sombra denunciava")
 
 print("\n── ⚠️ A FOTO É O QUE FALTAVA PRA CHEGAR NA REFERÊNCIA ──")
 # no @homemquesabetudo (4.163 curtidas) a MESMA esponja aparece em MITO e em
@@ -260,6 +269,40 @@ if _lados:
           "slide' e vazio como 'é isso mesmo'")
     checa("o gerador realmente chama isso",
           "**_lados_da_capa(formato, produtos, slides)" in _cb)
+
+print("\n── ⚠️⚠️ A CAPA E O MIOLO TÊM QUE SER O MESMO POST ──")
+# ⚠️ MEDIDO EM 11/09: CINCO dos seis nichos já renderizavam os slides CLAROS
+# (`render._cor_fundo`) — só o `tech` é escuro. Ou seja, a capa escura de sempre
+# já brigava com o próprio miolo em cinco contas: abria preto e virava branco no
+# primeiro swipe. Defeito anterior aos estilos novos; eu só fui olhar porque
+# desconfiei de ter criado a inconsistência, e ela já estava lá.
+_claros = [n for n in C.CORES if C._slides_sao_claros(n)]
+_escuros = [n for n in C.CORES if not C._slides_sao_claros(n)]
+checa("a maioria dos nichos tem miolo claro", len(_claros) >= 4, str(_claros))
+for _n in _claros:
+    checa(f"'{_n}' (miolo claro) nunca recebe capa escura",
+          all(C._escolher_estilo("@" + _n, "", _n) != "escuro" for _ in range(8)))
+for _n in _escuros:
+    checa(f"⚠️ '{_n}' (miolo ESCURO) recebe capa escura, sempre",
+          all(C._escolher_estilo("@" + _n, "", _n) == "escuro" for _ in range(8)))
+    # ⚠️ e o miolo escuro manda MAIS que a afinidade: capa de duas colunas é
+    # clara, e num nicho escuro ela viraria post colado
+    checa(f"'{_n}' escuro ignora a afinidade (mitos não vira capa clara)",
+          C._escolher_estilo("@" + _n, "mitos", _n) == "escuro")
+
+print("\n   ── e o FUNDO da capa é o mesmo dos slides ──")
+# capa e slide quase iguais é pior que diferentes: lê como erro de exportação
+import render as _R
+for _n in _claros:
+    _hex = C._fundo_do_nicho(_n)
+    _rgb = tuple(int(_hex.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4))
+    checa(f"'{_n}': capa {_hex} == miolo {_R._cor_fundo(_n)[1][:3]}",
+          _rgb == tuple(_R._cor_fundo(_n)[1][:3]))
+_html_pet = C.montar_html({"nicho": "pet", "handle": "@p", "slides": [{}],
+                           "capa": {"hook": "oi", "sub": "s", "estilo": "claro"}})
+checa("a capa clara usa o fundo do nicho, não um creme fixo",
+      C._fundo_do_nicho("pet") in _html_pet)
+checa("nicho desconhecido não quebra", bool(C._fundo_do_nicho("nao_existe")))
 
 print("\n── ⚠️ O FORMATO QUE ELE MANDOU ESTAVA DESLIGADO ──")
 # @homemquesabetudo, MITO | VERDADE sobre a esponja: 4.163 curtidas. A

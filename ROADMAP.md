@@ -683,6 +683,47 @@ certa.
 
 `teste_capa_estilo.py`: 33 → **70**.
 
+---
+
+## 🗓️ Dia 2026-09-11 — a capa escura já brigava com o miolo em 5 contas
+
+Fui verificar se eu tinha criado uma inconsistência ao trocar a capa (capa nova,
+slides antigos) e encontrei uma **anterior a mim**:
+
+```
+geral    slides_claros=True    tech  slides_claros=False
+casa     slides_claros=True    beleza/pet/moda  = True
+```
+
+**Cinco dos seis nichos já renderizavam os slides CLAROS** (`render._cor_fundo`).
+Só o `tech` é escuro. Ou seja: a capa `#0d0d0f` de sempre abria **preta** e
+virava **branca no primeiro swipe**, em cinco contas, todo dia. Dois sistemas
+decidindo o tom de forma independente — nenhum deles errado sozinho.
+
+**O conserto:** a capa pergunta ao miolo em vez de decidir sozinha.
+
+| | |
+|---|---|
+| `_slides_sao_claros(nicho)` | miolo escuro **manda mais que tudo**, até que a afinidade (capa de duas colunas é clara; num nicho escuro viraria post colado) |
+| `_fundo_do_nicho(nicho)` | a capa usa a **mesma cor** dos slides — `casa` verde-acinza, `beleza` rosado, `pet` amarelo — em vez de um creme fixo |
+
+⚠️ **E eu barrei só metade na primeira tentativa:** cuidei do nicho escuro e
+esqueci o inverso — `casa` e `pet`, de miolo claro, sorteavam capa escura metade
+das vezes. Capa preta virando creme é o mesmo defeito ao contrário.
+
+📌 **Isso estreita a variedade de propósito: sobra UM estilo livre por tom.** A
+variedade que o Dre pediu tem que vir de **mais estilos do mesmo tom** — não de
+alternar claro e escuro, que é variedade comprada com incoerência. Os dois de
+duas colunas já entram por afinidade; o próximo passo é um terceiro estilo claro
+(o lettering do @olga_lehnerg, ou a foto-em-destaque do @lucasmagazinetech).
+
+⚠️ **Duas asserções minhas caíram — as duas cravavam as cores fixas que eu
+acabara de substituir.** Testar hex literal é testar a versão anterior; passaram
+a testar a propriedade (o fundo é o do nicho · a página não é branca como o
+cartão).
+
+`teste_capa_estilo.py`: 70 → **85**.
+
 📌 `--todos` gera uma capa de cada estilo com o nome do estilo no arquivo:
 rodar duas vezes sobrescrevia `capa_casa.jpg` e sobrava UMA imagem, com quem
 pediu a comparação achando que tinha as duas.
