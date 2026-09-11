@@ -120,11 +120,25 @@ checa("sem a variável, o padrão é a capa CLARA",
 print("\n── ⚠️ A FOTO É CARTÃO, NÃO FUNDO ESCURECIDO ──")
 # no @lucasmagazinetech o produto é a estrela; escurecer pra escrever por cima
 # é o contrário. Sem foto, a capa é só tipografia (@rafabri7o).
-checa("sem foto, nenhum cartão vazio", "capafoto" not in capa)
-checa("a capa clara não usa a camada de véu", "fotocheia" not in capa)
-_com_foto = dict(PLANO)
-_com_foto["capa"] = dict(PLANO["capa"], foto=str(BASE / "teste_capa_slides_html.py"))
-checa("plano com foto não quebra a montagem", bool(SH._html_capa(_com_foto, 5)))
+#
+# ⚠️ ESTE BLOCO MEDIA A MÁQUINA, NÃO O CÓDIGO (21·1 na VPS, 22·0 aqui). Com
+# `foto:""` o `_fundo()` ainda VAI PROCURAR em `fundos/` e nos assets — que
+# existem na VPS e não na minha caixa. O teste então dizia "sem foto" sobre uma
+# capa que tinha foto. Mesmo erro do `teste_envfile`, que achava o `.env` real
+# pelo diretório atual: entrada não controlada é ambiente disfarçado de teste.
+_fundo_real = SH._fundo
+SH._fundo = lambda *a, **k: ""          # agora "sem foto" é sem foto mesmo
+try:
+    _sem = SH._html_capa(PLANO, 5)
+    checa("sem foto, nenhum cartão vazio", "capafoto" not in _sem)
+    checa("a capa clara não usa a camada de véu", "fotocheia" not in _sem)
+    SH._fundo = lambda *a, **k: "data:image/png;base64,AAAA"
+    _com = SH._html_capa(PLANO, 5)
+    checa("COM foto, o cartão aparece", "capafoto" in _com)
+    checa("…e mesmo assim sem véu escurecendo", "fotocheia" not in _com)
+    checa("plano com foto não quebra a montagem", bool(_com))
+finally:
+    SH._fundo = _fundo_real
 
 print("\n── nada disso pode derrubar um post ──")
 checa("plano sem capa nenhuma não quebra",

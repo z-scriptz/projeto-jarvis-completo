@@ -779,7 +779,14 @@ cabeçalho e tudo. Se o número piorar, é assim que se volta.
 string literal **nunca** aparece e o teste passaria com o cabeçalho lá. Terceira
 vez no dia testando a forma em vez do fato. Agora checa `class="cabeca"`.
 
-`teste_capa_slides_html.py` (22/22) — novo.
+`teste_capa_slides_html.py` (24/24) — novo.
+
+⚠️ **E ele deu 22·0 aqui e 21·1 na VPS**, pelo mesmo motivo do `teste_envfile`:
+com `foto:""` o `_fundo()` **ainda procura** em `fundos/` e nos assets — que
+existem na VPS e não na minha caixa. O teste dizia "sem foto" sobre uma capa que
+tinha foto. **Entrada não controlada é ambiente disfarçado de teste.** Agora o
+`_fundo` é substituído nos dois sentidos, e o caso COM foto passou a ser testado
+também (antes só o "sem").
 
 📌 `--todos` gera uma capa de cada estilo com o nome do estilo no arquivo:
 rodar duas vezes sobrescrevia `capa_casa.jpg` e sobrava UMA imagem, com quem
