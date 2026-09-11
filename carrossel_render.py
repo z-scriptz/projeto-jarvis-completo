@@ -821,8 +821,24 @@ def renderizar(plano: dict, saida) -> list:
             capa_pronta = renderizar_capa(plano, Path(saida) / "01.jpg")
             if capa_pronta:
                 log.info("   🎨 capa pelo navegador (HTML/CSS)")
+            else:
+                # ⚠️ o outro jeito de falhar calado: `renderizar_capa` devolve
+                # "" sem levantar exceção (Chromium ausente, timeout, escrita
+                # que não deu). O `except` não pega isso.
+                log.warning("   ⚠️  CAPA NOVA devolveu vazio — saiu a capa "
+                            "antiga. Rode: .venv/bin/python capa_html.py "
+                            "--exemplo casa  pra ver o erro de verdade.")
         except Exception as e:
-            log.debug(f"   capa HTML indisponível: {e}")
+            # ⚠️ ERA `log.debug` E ISSO ESCONDEU O DEFEITO INTEIRO (11/09).
+            # O Dre rodou a prévia e os quatro carrosséis saíram com a capa
+            # ANTIGA — logo no topo, contador 1/8, foto escurecida — e nada no
+            # log dizia por quê. A capa nova é o trabalho de um dia inteiro e
+            # ela caía calada na de sempre.
+            # 📌 Fallback silencioso é pior que erro: o sistema segue
+            # funcionando, entregando a versão velha, e quem olha o log conclui
+            # que está tudo certo. Tem que dar na cara.
+            log.warning(f"   ⚠️  CAPA NOVA FALHOU — saiu a capa antiga. "
+                        f"Motivo: {type(e).__name__}: {str(e)[:200]}")
 
     if capa_pronta:
         telas.append(None)          # o lugar da capa; ela já está em disco
