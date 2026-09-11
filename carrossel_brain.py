@@ -1575,6 +1575,9 @@ def main() -> int:
     p.add_argument("--formato", default="", help=f"força: {', '.join(FORMATOS)}")
     p.add_argument("--render", metavar="PASTA",
                    help="além de montar, renderiza os slides nessa pasta")
+    p.add_argument("--refazer", action="store_true",
+                   help="gera um carrossel NOVO na pasta, sobrescrevendo o que "
+                        "já estava lá (sem isto, --postar publica o que existe)")
     p.add_argument("--postar", action="store_true",
                    help="depois de renderizar, PUBLICA no Instagram (exige --render)")
     p.add_argument("--plano", action="store_true", help="imprime só o JSON")
@@ -1595,6 +1598,54 @@ def main() -> int:
         return 0
 
     pasta = Path(a.render) if a.render else None
+
+    # ⚠️⚠️ APROVAR E PUBLICAR TEM QUE SER O MESMO CARROSSEL (11/09/2026).
+    #
+    # O Dre fez a prévia, olhou os 8 slides no Telegram, aprovou, e rodou
+    # `--render PASTA --postar`. **Foi ao ar um carrossel DIFERENTE** — outro
+    # hook, outros mitos — porque o `montar_plano()` rodava aqui em cima,
+    # incondicionalmente, gerando um plano novo e sobrescrevendo a pasta antes
+    # de publicar. Ele aprovou o A e publicou o B, sem ver.
+    #
+    # 📌 E EU AFIRMEI O CONTRÁRIO PRA ELE: *"já está tudo renderizado; --postar
+    # só publica o que você viu"*. Não era verdade, e eu disse sem conferir.
+    #
+    # ⚠️ O QUE TORNA ISSO GRAVE NÃO É O GASTO DA CHAMADA — é que a prévia
+    # deixa de significar alguma coisa. Um fluxo de aprovação que publica outra
+    # coisa é pior que não ter aprovação: dá confiança sem dar controle.
+    #
+    # Agora: pasta que JÁ TEM slides renderizados + `--postar` = publica
+    # AQUELES. Pra gerar de novo na mesma pasta, `--refazer` (explícito, porque
+    # sobrescrever o que alguém aprovou tem que ser um ato deliberado).
+    if pasta and a.postar and not a.refazer:
+        _jpgs = sorted(pasta.glob("[0-9][0-9].jpg")) if pasta.exists() else []
+        _pj = pasta / "plano.json"
+        if _jpgs and _pj.exists():
+            # ⚠️ O PLANO VEM DO DISCO, NÃO DE UMA GERAÇÃO NOVA. É ele que leva
+            # a legenda, o handle e o link que o `publicar()` usa — reconstruir
+            # daria outro texto pro mesmo JPG, que é meia correção.
+            try:
+                plano = json.loads(_pj.read_text(encoding="utf-8"))
+            except Exception as e:
+                print(f"\n⚠️  plano.json ilegível ({str(e)[:60]}) — não publico "
+                      f"às cegas. Rode com --refazer pra gerar de novo.")
+                return 1
+            print(f"\n📁 publicando os {len(_jpgs)} slide(s) JÁ renderizados "
+                  f"em {pasta}")
+            print(f"   hook: {(plano.get('capa') or {}).get('hook', '')[:70]}")
+            print(f"   (--refazer gera um carrossel NOVO nesta pasta)")
+            print(f"\n📤 publicando em {plano.get('handle') or '(conta do nicho)'}...")
+            r = publicar(plano, pasta, _jpgs)
+            if r.get("sucesso"):
+                print(f"✅ no ar: {r['url']}")
+                return 0
+            print(f"❌ não publicou: {r.get('erro')}")
+            return 1
+        if _jpgs and not _pj.exists():
+            print(f"\n⚠️  {pasta} tem slides mas não tem plano.json — sem ele "
+                  f"não sei a legenda nem a conta.\n   Rode com --refazer.")
+            return 1
+
     plano = montar_plano(a.nicho, a.formato, pasta)
 
     if a.plano:

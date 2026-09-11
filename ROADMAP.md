@@ -781,6 +781,43 @@ vez no dia testando a forma em vez do fato. Agora checa `class="cabeca"`.
 
 `teste_capa_slides_html.py` (24/24) — novo.
 
+### 🚨 A PRÉVIA NÃO SIGNIFICAVA NADA: aprovou o A, publicou o B
+
+**Primeiro carrossel com a capa nova no ar:**
+`instagram.com/p/DdJs_RpFDO1/` — e não é o que ele aprovou.
+
+```
+prévia:    "4 mitos sobre pets que você acreditava"
+publicado: "Seu pet escuta tudo que você ouve?"
+```
+
+O `montar_plano()` rodava no topo do `main()`, **incondicionalmente** — gerava
+um plano novo e sobrescrevia a pasta antes de publicar. `--render PASTA
+--postar` nunca quis dizer "publica esta pasta": quis dizer "gera outro e
+publica".
+
+⚠️ **E EU AFIRMEI O CONTRÁRIO PRA ELE**, com todas as letras: *"já está tudo
+renderizado; `--postar` só publica o que você viu"*. Disse sem conferir. O
+comando certo (`meta_uploader --carrossel pasta/*.jpg`) estava impresso na
+própria saída do script, dois centímetros acima, e eu não li.
+
+📌 **O que torna isso grave não é a chamada gasta — é que a prévia deixa de
+significar alguma coisa.** Fluxo de aprovação que publica outra coisa é pior que
+não ter aprovação nenhuma: dá confiança sem dar controle. E a prévia existe
+justamente porque *"o log do dry-run prova que o encanamento corre, nunca que o
+slide ficou bonito"*.
+
+**O conserto:** pasta com slides + `plano.json` + `--postar` = publica **aqueles**.
+O plano vem do disco (é ele que leva legenda, handle e link — reconstruir daria
+outro texto pro mesmo JPG, que é meia correção). Gerar de novo virou
+`--refazer`, **explícito**, porque sobrescrever o que alguém aprovou tem que ser
+um ato deliberado. Sem `plano.json`, ou com ele ilegível, **recusa** em vez de
+publicar às cegas.
+
+`teste_postar_aprovado.py` (14/14) — novo. A primeira asserção é a ordem: o
+reuso tem que vir **antes** do `montar_plano()`, senão o aprovado já foi
+substituído e publicar a pasta não adianta mais.
+
 ⚠️ **E ele deu 22·0 aqui e 21·1 na VPS**, pelo mesmo motivo do `teste_envfile`:
 com `foto:""` o `_fundo()` **ainda procura** em `fundos/` e nos assets — que
 existem na VPS e não na minha caixa. O teste dizia "sem foto" sobre uma capa que
