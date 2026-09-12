@@ -96,6 +96,33 @@ PALAVRAS_CORPO = int(os.environ.get("CARR_PALAVRAS_CORPO", "38"))
 PALAVRAS_MAX = int(os.environ.get("CARR_PALAVRAS_MAX", "12"))   # legado (PIL)
 COBERTURA = int(os.environ.get("CARR_COBERTURA", "3"))
 
+# ⚠️ COBERTURA É EMPURRÃO, NÃO PORTEIRA (12/09).
+# A versão de porteira mandava na frente TODO formato abaixo de COBERTURA, e
+# entre eles só os empatados no mínimo eram candidatos. Quando o mínimo é único,
+# `candidatos` tem UM elemento — e `random.choices` de um elemento é `return`.
+# Medido na VPS, 200 sorteios por conta:
+#
+#   @topshoppet_      lista 59 · erros 40 · mitos 31 · …   ← ninguém abaixo de 3
+#   @topshoptech_     mitos 200
+#   @topshopcasa_     mitos 200
+#   @topshopmoda_     mitos 200      ← 200/200 não é acaso, é aritmética
+#   @topshopbeauty._  mitos 200
+#   @topshop.__       mitos 200
+#
+# E como a contagem é POR CONTA, as cinco chegam nisso isoladas, no mesmo dia:
+# seis perfis publicando o mesmo formato com o mesmo gancho. É o "robozinho"
+# que ele viu nas respostas, agora no conteúdo.
+#
+# 📌 Cobrir um formato novo é certo; cobrir em TODA conta no MESMO dia é o
+# defeito. Empurrão dá a mesma garantia sem a sincronia — o descoberto sai em
+# ~3 rodadas em vez de 1, e nenhuma conta tem a escolha decidida de antemão.
+COBERTURA_FORCA = float(os.environ.get("CARR_COBERTURA_FORCA", "3"))
+# quanto o que a REDE já publicou HOJE derruba o peso do formato nas contas
+# seguintes. O ciclo publica em sequência (90s entre contas) e o `registrar()`
+# escreve na publicação — então a conta 2 enxerga no ledger o que a conta 1
+# acabou de pôr no ar. Sem arquivo de estado novo.
+REDE_FORCA = float(os.environ.get("CARR_REDE_FORCA", "1.5"))
+
 
 # ══════════════════════════════════════════════════════════════════════════
 # OS FORMATOS
@@ -267,45 +294,81 @@ def _salvamento_por_formato(conta: str) -> dict:
     return {f: (1000.0 * sv / alc) for f, (sv, alc) in somas.items() if alc}
 
 
-def escolher_formato(conta: str = "", nicho: str = "") -> tuple:
-    """Devolve (formato, motivo). O motivo é impresso — decisão que não se
-    explica não se corrige depois."""
+def _formatos_de_hoje() -> dict:
+    """Quantos posts de cada formato a REDE INTEIRA já pôs no ar hoje.
+
+    ⚠️ Sem filtro de conta, de propósito — é justamente o que a conta não
+    enxergava. `_quantos_por_formato` conta a história DELA; esta conta o dia
+    de todo mundo, que é o eixo em que as seis ficaram idênticas."""
+    hoje = time.strftime("%Y-%m-%d")
+    n = {}
+    for r in _ledger():
+        if r.get("data") == hoje:
+            f = r.get("formato")
+            if f:
+                n[f] = n.get(f, 0) + 1
+    return n
+
+
+def _pesos_ajustados(conta: str = "") -> tuple:
+    """Peso final de cada formato, e o porquê de cada fator. Separado da
+    escolha pra que o `--formatos` mostre a conta inteira sem sortear."""
     pesos = {f: p for f, p in _pesos().items() if p > 0}
     if not pesos:
-        return "lista", "todos os pesos zerados no .env — caindo na lista"
+        return {}, {}, {}
 
     feitos = _quantos_por_formato(conta)
-
-    # FASE 1 — cobertura: quem ainda não apareceu o bastante fura a fila
-    faltando = [f for f in pesos if feitos.get(f, 0) < COBERTURA]
-    if faltando:
-        menos = min(feitos.get(f, 0) for f in faltando)
-        candidatos = [f for f in faltando if feitos.get(f, 0) == menos]
-        # entre os igualmente descobertos, o peso ainda manda
-        escolha = random.choices(candidatos,
-                                 weights=[pesos[f] for f in candidatos])[0]
-        return escolha, (f"cobertura: {conta or 'geral'} tem {menos} de "
-                         f"'{escolha}' (alvo {COBERTURA}) — ainda medindo")
-
-    # FASE 2 — inclina a distribuição pelo salvamento medido
     taxas = _salvamento_por_formato(conta)
-    if not taxas:
-        escolha = random.choices(list(pesos), weights=list(pesos.values()))[0]
-        return escolha, "distribuição-alvo (ainda sem salvamento medido)"
+    media = (sum(taxas.values()) / len(taxas)) if taxas else 0.0
+    hoje = _formatos_de_hoje()
 
-    media = sum(taxas.values()) / len(taxas)
-    ajustados = {}
+    ajustados, detalhe = {}, {}
     for f, p in pesos.items():
+        n = feitos.get(f, 0)
+        # 1) COBERTURA como empurrão: quanto mais longe do alvo, maior o
+        #    multiplicador — e ele chega a 1.0 (neutro) quando o formato cobriu.
+        buraco = max(0, COBERTURA - n)
+        cob = 1.0 + COBERTURA_FORCA * (buraco / max(1, COBERTURA))
+        # 2) SALVAMENTO medido, com o teto e o piso que já existiam.
+        # ⚠️ Sem eles, um formato com 2 posts de sorte comeria a distribuição
+        # inteira e a medição pararia de existir — explorar é o que impede o
+        # cérebro de se convencer cedo demais.
         t = taxas.get(f)
-        # ⚠️ TETO E PISO NO AJUSTE. Sem eles, um formato com 2 posts de sorte
-        # comeria a distribuição inteira e a medição pararia de existir —
-        # explorar é o que impede o cérebro de se convencer cedo demais.
-        fator = 1.0 if not t or media <= 0 else max(0.5, min(2.0, t / media))
-        ajustados[f] = max(1, int(round(p * fator)))
+        med = 1.0 if not t or media <= 0 else max(0.5, min(2.0, t / media))
+        # 3) O QUE A REDE JÁ PUBLICOU HOJE pesa menos nas contas seguintes.
+        rede = 1.0 / (1.0 + REDE_FORCA * hoje.get(f, 0))
+        ajustados[f] = max(1, int(round(p * cob * med * rede)))
+        detalhe[f] = {"peso": p, "feitos": n, "cobertura": cob,
+                      "salvamento": med, "rede": rede, "hoje": hoje.get(f, 0),
+                      "taxa": t, "final": ajustados[f]}
+    return ajustados, detalhe, feitos
+
+
+def escolher_formato(conta: str = "", nicho: str = "") -> tuple:
+    """Devolve (formato, motivo). O motivo é impresso — decisão que não se
+    explica não se corrige depois.
+
+    ⚠️ UM SORTEIO SÓ. Antes eram duas fases com a cobertura na frente, e a
+    fase 2 (a que inclina pelo salvamento medido) só rodava quando NENHUM
+    formato estava descoberto — ou seja, em 1 das 6 contas. As três forças
+    agora multiplicam o mesmo peso e disputam o mesmo sorteio."""
+    ajustados, detalhe, feitos = _pesos_ajustados(conta)
+    if not ajustados:
+        return "lista", "todos os pesos zerados no .env — caindo na lista"
+
     escolha = random.choices(list(ajustados), weights=list(ajustados.values()))[0]
-    t = taxas.get(escolha)
-    return escolha, ("salvamento medido: " + (f"{t:.1f}/mil nesta conta"
-                                              if t else "sem dado deste formato"))
+    d = detalhe[escolha]
+    partes = [f"peso {d['peso']}"]
+    if d["cobertura"] > 1.0:
+        partes.append(f"cobertura ×{d['cobertura']:.1f} "
+                      f"({d['feitos']} de {COBERTURA})")
+    if d["salvamento"] != 1.0:
+        partes.append(f"salvamento ×{d['salvamento']:.1f} ({d['taxa']:.1f}/mil)")
+    if d["hoje"]:
+        partes.append(f"já saiu {d['hoje']}× na rede hoje ×{d['rede']:.2f}")
+    total = sum(ajustados.values())
+    partes.append(f"→ {d['final']}/{total} = {100.0 * d['final'] / total:.0f}%")
+    return escolha, " · ".join(partes)
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -1586,15 +1649,37 @@ def main() -> int:
     a = p.parse_args()
 
     if a.formatos:
-        pesos, feitos = _pesos(), _quantos_por_formato("")
-        total = sum(v for v in pesos.values() if v > 0) or 1
-        print(f"{'formato':<14} {'peso':>5} {'alvo':>6} {'feitos':>7}   descrição")
-        print("─" * 92)
-        for nome, cfg in FORMATOS.items():
-            pc = f"{100 * pesos[nome] / total:.0f}%" if pesos[nome] else "—"
-            print(f"{nome:<14} {pesos[nome]:>5} {pc:>6} {feitos.get(nome, 0):>7}   "
-                  f"{cfg['desc'][:44]}")
-        print(f"\ncobertura mínima por conta antes de otimizar: {COBERTURA}")
+        # ⚠️ ESTE RELATÓRIO MOSTRAVA A INTENÇÃO, NÃO O EFEITO (12/09).
+        # Ele somava as seis contas (`_quantos_por_formato("")`) e imprimia o
+        # peso CRU: pro `mitos` dizia "12 → 11%", enquanto a chance real era
+        # 100% em cinco contas. Ninguém olhando isso veria o dia repetido
+        # chegando. Agora é POR CONTA e é a probabilidade DEPOIS dos fatores.
+        contas = [_handle(n) for n in ("geral", "beleza", "tech",
+                                       "casa", "pet", "moda")]
+        hoje = _formatos_de_hoje()
+        print(f"\npesos base: " + " · ".join(f"{n}={p}" for n, p in _pesos().items()))
+        print(f"cobertura alvo {COBERTURA} · empurrão ×{COBERTURA_FORCA} · "
+              f"rede ÷{REDE_FORCA}")
+        print(f"a rede já publicou hoje: " +
+              (" · ".join(f"{f}×{n}" for f, n in hoje.items()) or "nada ainda"))
+        for c in contas:
+            if not c:
+                continue
+            ajust, det, _ = _pesos_ajustados(c)
+            tot = sum(ajust.values()) or 1
+            print(f"\n{c}")
+            print(f"   {'formato':<14} {'feitos':>6} {'cob':>6} {'salv':>6} "
+                  f"{'rede':>6} {'chance':>8}")
+            for f, v in sorted(ajust.items(), key=lambda x: -x[1]):
+                d = det[f]
+                pc = 100.0 * v / tot
+                # ⚠️ 100% numa linha é o defeito de 11/09 voltando: escolha
+                # decidida antes do sorteio, igual nas seis contas.
+                alerta = "  ⚠️ SEM SORTEIO" if pc > 90 else ""
+                print(f"   {f:<14} {d['feitos']:>6} {d['cobertura']:>5.1f}x "
+                      f"{d['salvamento']:>5.1f}x {d['rede']:>5.2f}x "
+                      f"{pc:>7.0f}%{alerta}")
+        print()
         return 0
 
     pasta = Path(a.render) if a.render else None

@@ -859,6 +859,106 @@ plano.** Pasta nova, não por cima — se sair torto, o original continua lá.
 no ar. `DdJs_RpFDO1` (o errado) e `DdMTBQPFJvM` (o aprovado) estão **os dois** no
 feed do @topshoppet_, mesmo tema. Apagar é decisão dele.
 
+---
+
+### 🚨 SEIS CONTAS, UM FORMATO SÓ: a cobertura era porteira (12/09)
+
+As 6 pastas do slot 1530 saíram **todas em `mitos`**, com ganchos gêmeos:
+
+```
+tech    4 mitos que você ainda acredita sobre tecnologia
+beleza  Mitos sobre os pés que você ainda acredita
+moda    Coisas da moda que você acreditava ser verdade
+geral   4 mitos que você ainda acredita sobre sua energia
+```
+
+📌 **Quem segue duas contas vê o mesmo post duas vezes.** É o *"parecendo um
+robozinho"* das respostas, agora no conteúdo — e a causa é a mesma das duas
+vezes: **escolha sem memória do que já saiu**.
+
+**A medição (200 sorteios por conta, na VPS):**
+
+```
+@topshoppet_      lista 59 · erros 40 · mitos 31 · passo 29 · a_d 29 · hist 12
+@topshoptech_     mitos 200
+@topshopcasa_     mitos 200
+@topshopmoda_     mitos 200     ← 200/200 não é acaso, é aritmética
+@topshopbeauty._  mitos 200
+@topshop.__       mitos 200
+```
+
+**A causa:**
+
+```python
+faltando = [f for f in pesos if feitos.get(f, 0) < COBERTURA]
+if faltando:
+    menos = min(feitos.get(f, 0) for f in faltando)
+    candidatos = [f for f in faltando if feitos.get(f, 0) == menos]
+    escolha = random.choices(candidatos, weights=[...])[0]   # ← 1 elemento
+```
+
+Cobertura era **porteira**: quem estava abaixo de 3 furava a fila, e entre eles
+só os empatados no mínimo eram candidatos. **Mínimo único ⇒ `candidatos` tem um
+elemento ⇒ `random.choices` é `return`.** E `_quantos_por_formato` conta **por
+conta**, então as cinco chegam nisso isoladas, no mesmo dia.
+
+⚠️ **E a FASE 2 nunca rodava onde havia descoberto** — ou seja, em 5 das 6
+contas. Todo o `_salvamento_por_formato`, os 215 posts, o cuidado com média
+pooled (*"é ISTO que faz a fase 2 existir um dia"*): não chegavam a influenciar
+escolha nenhuma.
+
+**O conserto: um sorteio só, três fatores multiplicando o mesmo peso.**
+
+| fator | o que faz |
+|---|---|
+| `cobertura` | `1 + FORCA × buraco/COBERTURA` — empurrão, chega a 1.0 quando cobriu |
+| `salvamento` | o de sempre, com piso 0.5 e teto 2.0 |
+| `rede` | `1/(1 + FORCA × publicados_hoje)` — **sem filtro de conta** |
+
+O fator `rede` é a peça nova. O ciclo publica em sequência (90s entre contas) e
+o `registrar()` escreve **na publicação** — então a conta 2 enxerga no ledger o
+que a conta 1 acabou de pôr no ar. **Canal que já existia, e ninguém lia.**
+Medido no teste: 3 `mitos` na rede hoje derrubam a 4ª conta de 23% → 6%.
+
+`teste_rodizio_formato.py` (19/19) — novo. A asserção central é o cenário exato
+da VPS (mitos=1, resto coberto) com a única regra que importa: **nenhum formato
+leva tudo.**
+
+#### ⚠️ DUAS COISAS QUE O CONSERTO DESENTERROU
+
+**O `--formatos` mostrava a intenção, não o efeito.** Ele somava as seis contas
+(`_quantos_por_formato("")`) e imprimia o peso cru: pro `mitos` dizia
+**"12 → 11%"**, quando a chance real era **100% em cinco contas**. Ninguém
+olhando aquele relatório veria o dia repetido chegando. Agora é por conta, com a
+probabilidade DEPOIS dos fatores, e marca `⚠️ SEM SORTEIO` em qualquer linha
+acima de 90%.
+
+**O `comparacao` é um zero permanente — adormecido.** Sem par comparável, o
+`montar_plano` faz `formato, cfg = "lista", FORMATOS["lista"]` e o plano vai pro
+ledger **como `lista`**. O `comparacao` nunca incrementa. Hoje não faz mal
+porque `CARR_PESO_COMPARACAO=0` no `.env` da VPS (**no código o peso é 10**) —
+mas no dia em que ligarem, ele vira o eterno descoberto. Com a porteira, isso
+seria monopólio permanente; com o empurrão, é só um viés. Não consertado:
+registrado, com teste que documenta o risco.
+
+#### ⚠️ EU CORRIGI UMA AFIRMAÇÃO CERTA PARA UMA ERRADA
+
+Eu disse *"as próximas duas rodadas também saem mitos"* — **certo**. Aí li o
+`comparacao: 0` na saída dele, montei uma teoria inteira em cima (o `comparacao`
+monopolizando, a fase 2 inalcançável por causa dele) e me desdisse: *"não vem
+mais mitos, vem comparacao"* — **errado**. O `comparacao` tem peso 0 no `.env`,
+então o `if p > 0` o exclui antes da cobertura olhar: ele nunca foi candidato.
+
+📌 **Desfazer uma leitura certa é pior que a leitura errada original** — ele já
+tinha a informação boa e eu tirei dele. E o que me salvou foi o mesmo de sempre:
+mandar rodar a função pura 200 vezes em vez de argumentar. **Teoria sobre código
+que roda é chute até alguém rodar.**
+
+**A média do salvamento é só dos formatos MEDIDOS.** Com um único formato com
+alcance no ledger, ele *é* a média, `t/media = 1.0` e o fator não inclina nada —
+o primeiro cenário do teste tinha só um e acusou o código de errado. A medição
+só mexe na distribuição com **dois ou mais** formatos medidos.
+
 ⚠️ **E ele deu 22·0 aqui e 21·1 na VPS**, pelo mesmo motivo do `teste_envfile`:
 com `foto:""` o `_fundo()` **ainda procura** em `fundos/` e nos assets — que
 existem na VPS e não na minha caixa. O teste dizia "sem foto" sobre uma capa que
