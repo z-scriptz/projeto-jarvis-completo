@@ -12723,3 +12723,48 @@ provável por código, e o bruto sempre junto: a tabela orienta, não decide.
 **Rodado no repo (sem tokens): 4 contas SEM TOKEN** — o esperado, e confirma que
 não há segredo versionado. Lembrete de que o `contas.json` daqui tem 4 contas e o
 da VPS tem 6: **DIVERGENTE, nunca deployar.**
+
+#### ⚠️⚠️ E A RESPOSTA FOI (#3) — EU DECLAREI O TODO MEDINDO METADE
+
+Rodado na VPS: **`instagram_manage_messages` ✅ nas seis contas**, granular
+batendo com cada `instagram_user_id`. Eu li isso e afirmei pro Dre:
+*"NÃO é App Review — a briga é de horas, não de semanas."*
+
+O log desmentiu na mensagem seguinte:
+
+```
+(#3) Application does not have the capability to make this API call.
+```
+
+📌 **A Meta separa duas camadas que eu tratei como uma:**
+
+| camada | onde se vê | estado aqui |
+|---|---|---|
+| **permissão** — o que o USUÁRIO concedeu ao token | `debug_token` | ✅ concedida |
+| **capability** — o que o APP está aprovado a fazer | App Dashboard | ❌ ausente |
+
+O `(#3)` fala do **aplicativo**, não do token. **Escopo concedido ≠ app
+habilitado.** Meu diagnóstico respondeu com precisão a pergunta que ele fazia
+("o token tem o escopo?") — e essa não era a pergunta toda. Ele saiu com um
+veredito em letras garrafais sobre uma camada que nunca olhou.
+
+⚠️ **E o Dre tinha dito a resposta certa no começo:** *"acho que precisa de uma
+revisão por parte da META, eu tenho o recurso, mas não a autorização"*. Ele
+descreveu exatamente essa separação, com as palavras dele, e eu o "corrigi" com
+um relatório que mediu a metade que confirmava o que eu queria concluir.
+
+**O conserto do diagnóstico:** `_sonda_mensageria()` — `GET
+/<ig>/conversations`, só leitura, não envia nada. Toca a MESMA superfície do
+envio:
+
+* `(#3)` também → o app não tem a mensageria. App Dashboard, não código.
+* responde → a capability existe; a falha do envio é pontual e é nossa.
+
+E o `app_id` (que não é segredo — vai em toda chamada de cliente) passou a ser
+impresso: é ele que leva ao app certo no `developers.facebook.com`, que é onde
+isso se resolve.
+
+📌 **Diagnóstico que responde a pergunta errada com confiança é pior que
+nenhum.** Mesma família do `--formatos` somando as seis contas e do `MORTA` sobre
+consulta que falhou — três vezes na mesma semana, e a minha foi a que veio com
+conclusão em negrito.

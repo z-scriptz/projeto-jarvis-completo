@@ -65,7 +65,15 @@ CODIGOS = {
     102: ("TOKEN", "sessão expirada — renovar o token."),
     10: ("PERMISSAO", "permissão negada — tipicamente falta Advanced Access."),
     200: ("PERMISSAO", "permissão insuficiente pra esta ação."),
-    3: ("PERMISSAO", "método exige uma permissão que o app não tem."),
+    # ⚠️ (#3) É O APP, NÃO O TOKEN — e eu confundi os dois (12/09/2026).
+    # "Application does not have the capability to make this API call."
+    # A Meta separa PERMISSÃO (o que o usuário concedeu ao token, visível no
+    # debug_token) de CAPABILITY/FEATURE (o que o APLICATIVO está aprovado a
+    # fazer, que fica no App Dashboard). Escopo concedido não serve de nada se
+    # o app não tem o recurso habilitado — e eu li só o escopo, vi ✅ nas seis
+    # contas e afirmei pro Dre "não é App Review". O (#3) diz que é do app.
+    3: ("APP", "capability do APP, não escopo do token — produto/feature "
+               "ausente ou sem Advanced Access no App Dashboard."),
     803: ("ALVO", "objeto não encontrado — comment_id errado ou apagado."),
     100: ("ALVO", "parâmetro inválido — comentário velho, ou usuário fora "
                   "da janela de resposta."),
@@ -116,7 +124,27 @@ def _escopos(token: str) -> tuple:
     gran = {}
     for g in d.get("granular_scopes") or []:
         gran[g.get("scope", "")] = g.get("target_ids") or []
-    return list(d.get("scopes") or []), gran, {}
+    return list(d.get("scopes") or []), gran, {}, str(d.get("app_id") or "")
+
+
+def _sonda_mensageria(ig: str, token: str) -> tuple:
+    """A superfície de mensagens EXISTE pra este app? Só leitura — não envia.
+
+    ⚠️ ESTA É A PERGUNTA QUE O ESCOPO NÃO RESPONDE. Ler os escopos diz o que o
+    USUÁRIO concedeu; o `(#3) Application does not have the capability` diz que
+    o APP não está habilitado. São camadas diferentes, e eu tratei como uma só.
+
+    `GET /<ig>/conversations` toca a mesma superfície de mensageria do envio,
+    sem mandar nada pra ninguém:
+      · (#3) aqui também → o app não tem Instagram Messaging. App Dashboard.
+      · responde normal  → a mensageria existe; só a private reply é barrada.
+    """
+    r = AR._get(f"{GRAPH}/{ig}/conversations",
+                {"platform": "instagram", "limit": 1, "access_token": token})
+    e = _erro(r)
+    if not e:
+        return "OK", e
+    return ("SEM CAPABILITY" if e.get("code") == 3 else "OUTRO"), e
 
 
 def main() -> int:
@@ -157,7 +185,12 @@ def main() -> int:
         print(f"   token              presente ({len(token)} car.) ·"
               f" de {conta.get('page_token_env') or 'FACEBOOK_PAGE_TOKEN'}")
 
-        escopos, gran, err = _escopos(token)
+        escopos, gran, err, app_id = _escopos(token)
+        if app_id:
+            # ⚠️ app_id NÃO é segredo (vai em toda chamada de cliente) e é o que
+            # leva direto ao app certo no developers.facebook.com — que é onde
+            # a capability se resolve, não no código.
+            print(f"   app_id             {app_id}")
         if err:
             print("   ⚠️ o debug_token não respondeu:")
             classe = _mostrar_erro(err)
@@ -185,12 +218,27 @@ def main() -> int:
         alvos = gran.get(chave_dm) or []
         tem = chave_dm in escopos and ((not alvos) or ig in [str(a) for a in alvos])
         if tem:
-            print(f"\n   ✅ O ESCOPO DA DM ESTÁ CONCEDIDO PRA ESTA CONTA.")
-            print(f"      Então a falha NÃO é App Review — é outra coisa")
-            print(f"      (janela de resposta, comentário velho, conta sem")
-            print(f"      Página ligada, ou o envio nem está sendo tentado).")
-            print(f"      Rode com --tentar pra ver o erro real do envio.")
-            veredito[handle] = "ESCOPO OK"
+            print(f"\n   ✅ escopo `{chave_dm}` concedido pra esta conta.")
+            # ⚠️ E ISSO NÃO BASTA — foi o erro de leitura de 12/09. O escopo é
+            # o que o USUÁRIO concedeu; falta saber se o APP pode usar.
+            print(f"   ⚠️ mas escopo concedido ≠ app habilitado. Sondando a")
+            print(f"      mensageria (só leitura, não envia nada)…")
+            estado, e = _sonda_mensageria(ig, token)
+            if estado == "OK":
+                print(f"   ✅ a mensageria RESPONDE — o app tem a capability.")
+                print(f"      Se a DM falha, é caso pontual (janela de resposta,")
+                print(f"      comentário velho). Rode --tentar pro erro do envio.")
+                veredito[handle] = "MENSAGERIA OK"
+            elif estado == "SEM CAPABILITY":
+                print(f"   ❌ (#3) A MENSAGERIA NÃO EXISTE PRA ESTE APP.")
+                _mostrar_erro(e, "      ")
+                print(f"      Não é o token — é o aplicativo. Resolve no")
+                print(f"      developers.facebook.com, não aqui.")
+                veredito[handle] = "APP SEM CAPABILITY"
+            else:
+                print(f"   ⚠️ a sonda falhou por outro motivo:")
+                classe = _mostrar_erro(e, "      ")
+                veredito[handle] = f"SONDA {classe}"
         else:
             print(f"\n   ❌ FALTA `{chave_dm}` PRA ESTA CONTA.")
             print(f"      É a permissão que a DM exige. Sem ela, nenhum ajuste")
@@ -236,23 +284,36 @@ def main() -> int:
         print(f"   {h:<24} {v}")
 
     faltam = [h for h, v in veredito.items() if v == "FALTA ESCOPO DM"]
-    okz = [h for h, v in veredito.items() if v in ("ESCOPO OK", "DM FUNCIONA")]
+    semcap = [h for h, v in veredito.items() if v == "APP SEM CAPABILITY"]
+    okz = [h for h, v in veredito.items() if v in ("MENSAGERIA OK", "DM FUNCIONA")]
     print()
-    if faltam and not okz:
-        print(f"   📌 É APP REVIEW. {len(faltam)} conta(s) sem o escopo da DM.")
-        print(f"      Nenhuma linha de código resolve — é pedir Advanced Access")
-        print(f"      pra `instagram_manage_messages` no app que gerou o token.")
-        print(f"      ⚠️ Prazo é da Meta, não nosso. Enquanto isso, o caminho que")
-        print(f"      NÃO depende deles: responder no comentário com o produto")
-        print(f"      nomeado + endereço curto do site.")
-    elif okz and faltam:
-        print(f"   📌 MISTO: {len(okz)} conta(s) com escopo, {len(faltam)} sem.")
-        print(f"      Não é App Review do app inteiro — é concessão por conta.")
+    if semcap:
+        # ⚠️ ESTE É O CASO REAL DE 12/09, e é o que eu tinha descartado cedo
+        # demais: escopo ✅ nas seis, e mesmo assim (#3).
+        print(f"   📌 É O APP, NÃO O TOKEN. {len(semcap)} conta(s) com o escopo")
+        print(f"      concedido e a mensageria recusando com (#3).")
+        print(f"      **Escopo concedido ≠ app habilitado.** O que falta é")
+        print(f"      capability/feature no App Dashboard — produto de")
+        print(f"      mensageria do Instagram, e Advanced Access pra ele.")
+        print(f"      Nenhuma linha de código aqui resolve.")
+        print(f"      ⚠️ Prazo é da Meta, não nosso.")
+        print(f"\n      O caminho que NÃO depende deles, e funciona amanhã:")
+        print(f"      responder no próprio comentário com o produto NOMEADO +")
+        print(f"      endereço curto do site. Converte menos que DM, converte")
+        print(f"      muito mais que silêncio — e hoje é silêncio.")
+    elif faltam and not okz:
+        print(f"   📌 Falta o escopo `instagram_manage_messages` em "
+              f"{len(faltam)} conta(s).")
+        print(f"      Concessão de permissão — refazer o token com o escopo,")
+        print(f"      ou pedir Advanced Access se o app não puder pedi-lo.")
+    elif okz and (faltam or semcap):
+        print(f"   📌 MISTO: {len(okz)} conta(s) com a mensageria de pé.")
         print(f"      Começa ligando a DM só onde já dá: {', '.join(okz)}")
     elif okz:
-        print(f"   📌 NÃO É APP REVIEW — o escopo está lá em {len(okz)} conta(s).")
-        print(f"      A DM falha por outro motivo. Rode com --tentar: o `code`")
-        print(f"      do erro de envio diz qual, e aí é conserto nosso.")
+        print(f"   📌 A mensageria responde em {len(okz)} conta(s) — o app TEM")
+        print(f"      a capability. Se a DM falha, é caso pontual (janela de")
+        print(f"      resposta, comentário velho): conserto nosso, de horas.")
+        print(f"      Rode com --tentar pra ver o `code` do envio.")
     else:
         print(f"   📌 Sem conta com token utilizável — o problema é anterior")
         print(f"      à permissão (contas.json ou .env).")
