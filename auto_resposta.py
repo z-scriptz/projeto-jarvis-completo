@@ -443,13 +443,40 @@ def _item_id(url: str) -> str:
     return f"{m.group(1)}.{m.group(2)}" if m else ""
 
 
+def _chave_link(url: str) -> str:
+    """O link normalizado pra comparação: sem protocolo, sem www, sem barra
+    final, minúsculo. `?sub_id=` FICA — quem tira é o `_chave_link_nua`."""
+    u = (url or "").strip().lower()
+    u = re.sub(r"^https?://", "", u)
+    u = re.sub(r"^www\.", "", u)
+    return u.rstrip("/")
+
+
+def _chave_link_nua(url: str) -> str:
+    """Só o caminho, sem query. É o que sobrevive a `sub_id` diferente."""
+    return _chave_link(url).split("?")[0].split("#")[0]
+
+
 def _carregar_produtos() -> dict:
-    """{item_id: nome} lido do posts_ledger. É ELE que tem o nome — o
-    `publicados.jsonl` só liga shortcode→link."""
+    """Índices de nome de produto, POR VÁRIAS CHAVES.
+
+    ⚠️ EU ESCOLHI UMA CHAVE E ELA NÃO EXISTIA (12/09/2026). Construí a junção
+    só por `item_id` porque o `sub_id` muda por plataforma e casar a URL
+    inteira separaria o mesmo produto em dois. Raciocínio correto sobre dados
+    que eu não tinha olhado: o `--diag-produto` na VPS deu **0% em 72 posts**,
+    com `item_id=(não extraí da URL)` em todos. **Os links publicados são
+    ENCURTADOS** — não tem `i.123.456` pra extrair.
+
+    📌 Os dois lados estavam cheios (1083/1109 posts com link · 498 produtos
+    com nome). Só a chave estava errada. **Junção de uma chave só é aposta;
+    junção que tenta várias e DIZ qual pegou é medição.**
+
+    Devolve {"item": {...}, "link": {...}, "nua": {...}, "slug": {...}}.
+    """
     global _PRODUTO_POR_ITEM
     if _PRODUTO_POR_ITEM is not None:
         return _PRODUTO_POR_ITEM
-    _PRODUTO_POR_ITEM = {}
+    idx = {"item": {}, "link": {}, "nua": {}, "slug": {}}
     try:
         arq = BASE_DIR / "shared" / "posts_ledger.jsonl"
         for ln in arq.read_text(encoding="utf-8", errors="ignore").splitlines():
@@ -460,12 +487,38 @@ def _carregar_produtos() -> dict:
             nome = (r.get("produto") or "").strip()
             if not nome:
                 continue
-            iid = (r.get("item_id") or "").strip() or _item_id(r.get("link", ""))
+            lk = (r.get("link") or "").strip()
+            # o posts_ledger guarda a URL CRUA em `url_shopee`; é dela que o
+            # item_id sai quando sai
+            iid = ((r.get("item_id") or "").strip()
+                   or _item_id(r.get("url_shopee", "")) or _item_id(lk))
             if iid:
-                _PRODUTO_POR_ITEM[iid] = nome
+                idx["item"].setdefault(iid, nome)
+            if lk:
+                idx["link"].setdefault(_chave_link(lk), nome)
+                idx["nua"].setdefault(_chave_link_nua(lk), nome)
+            sl = (r.get("slug") or "").strip()
+            if sl:
+                idx["slug"].setdefault(sl, nome)
     except Exception as e:
         _log(f"   (sem posts_ledger.jsonl: {str(e)[:50]}) — respondo sem nomear")
-    return _PRODUTO_POR_ITEM
+    _PRODUTO_POR_ITEM = idx
+    return idx
+
+
+def _produto_do_link(lk: str) -> tuple:
+    """(nome, qual_chave_pegou). ('', '') quando nenhuma fecha.
+
+    A ordem vai do mais específico pro mais tolerante: `item_id` identifica o
+    produto sem depender da etiqueta; o link nu é o que sobra quando o `sub_id`
+    difere entre a produção e o que foi publicado."""
+    idx = _carregar_produtos()
+    for chave, valor in (("item", _item_id(lk)),
+                         ("link", _chave_link(lk)),
+                         ("nua", _chave_link_nua(lk))):
+        if valor and idx[chave].get(valor):
+            return idx[chave][valor], chave
+    return "", ""
 
 
 def _produtos_do_post(permalink: str) -> list:
@@ -474,9 +527,8 @@ def _produtos_do_post(permalink: str) -> list:
     ⚠️ Devolve lista pelo mesmo motivo do `_links_do_post`: carrossel é vários
     produtos, e escolher um pra chamar de "o produto" seria inventar."""
     nomes, vistos = [], set()
-    tabela = _carregar_produtos()
     for lk in _links_do_post(permalink):
-        n = tabela.get(_item_id(lk), "")
+        n, _ = _produto_do_link(lk)
         if n and n not in vistos:
             vistos.add(n)
             nomes.append(n)
@@ -1001,11 +1053,14 @@ def _diag_produto(contas, limites) -> int:
     """
     print(f"\n{'='*70}\n  DÁ PRA NOMEAR O PRODUTO NO COMENTÁRIO?\n{'='*70}")
     print(f"\n{_atualizar_ledger(forcar=True)}")
-    tabela = _carregar_produtos()
-    print(f"  {len(tabela)} produto(s) com nome no posts_ledger")
+    idx = _carregar_produtos()
+    print(f"  {len(idx['link'])} produto(s) com nome no posts_ledger "
+          f"({len(idx['item'])} com item_id · {len(idx['slug'])} com slug)")
 
     tot = com_link = com_nome = 0
     sem_nome_exemplos = []
+    por_chave = {}          # qual chave fechou a junção
+    hosts_pub = {}          # a FORMA dos links publicados
     for chave, conta in contas.items():
         token = _token_da_conta(conta)
         ig = str(conta.get("instagram_user_id", "")).strip()
@@ -1035,17 +1090,43 @@ def _diag_produto(contas, limites) -> int:
             # então não é ledger velho — é o item_id que não casou entre os dois
             if links and not nomes and len(sem_nome_exemplos) < 5:
                 sem_nome_exemplos.append((perma[-13:], links[0]))
+            for lk in links:
+                _h = _chave_link(lk).split("/")[0]
+                hosts_pub[_h] = hosts_pub.get(_h, 0) + 1
+                _n, _k = _produto_do_link(lk)
+                if _n:
+                    por_chave[_k] = por_chave.get(_k, 0) + 1
 
     print(f"\n{'='*70}")
     pc = (100.0 * com_nome / tot) if tot else 0.0
     print(f"  {tot} post(s) na janela · {com_link} com link · "
           f"**{com_nome} com NOME ({pc:.0f}%)**")
+    if por_chave:
+        print(f"  chave que fechou a junção: "
+              + " · ".join(f"{k}={v}" for k, v in sorted(por_chave.items())))
     if sem_nome_exemplos:
-        print(f"\n  ⚠️ TEM LINK MAS NÃO TEM NOME — o item_id não casou:")
+        # ⚠️ AQUI MORA A LIÇÃO DE 12/09: eu construí a junção por `item_id` e
+        # deu 0% porque os links publicados são ENCURTADOS. Não adianta listar
+        # o que falhou — tem que mostrar a FORMA dos dois lados, senão o
+        # próximo palpite é tão cego quanto o primeiro.
+        print(f"\n  ⚠️ TEM LINK MAS NÃO TEM NOME. As chaves tentadas:")
         for sc, lk in sem_nome_exemplos:
-            print(f"     {sc}  item_id={_item_id(lk) or '(não extraí da URL)'}")
-        print(f"     Se o item_id sai vazio, o link não é da Shopee ou é")
-        print(f"     encurtado — e aí a junção precisa de outra chave.")
+            print(f"     {sc}  item={_item_id(lk) or '—':<16} "
+                  f"link={_chave_link_nua(lk)[:52]}")
+        print(f"\n  ── a FORMA dos links, dos DOIS lados ──")
+        print(f"  publicados.jsonl (o que foi ao ar):")
+        for h, n in sorted(hosts_pub.items(), key=lambda x: -x[1])[:6]:
+            print(f"     {n:>4}×  {h}")
+        _hl = {}
+        for k in idx["link"]:
+            _h = k.split("/")[0]
+            _hl[_h] = _hl.get(_h, 0) + 1
+        print(f"  posts_ledger.jsonl (onde está o nome):")
+        for h, n in sorted(_hl.items(), key=lambda x: -x[1])[:6]:
+            print(f"     {n:>4}×  {h}")
+        print(f"\n  📌 Se os dois hosts forem DIFERENTES, os ledgers guardam")
+        print(f"     formas distintas do mesmo link (um encurtado, outro cru)")
+        print(f"     — e a junção precisa de uma chave que não seja a URL.")
     print()
     if pc >= 50:
         print(f"  📌 Vale ligar: em {pc:.0f}% dos posts a resposta nomeia o")

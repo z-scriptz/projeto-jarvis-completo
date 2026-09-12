@@ -62,9 +62,44 @@ checa("link que não é da Shopee devolve vazio (não inventa)",
 checa("URL vazia não quebra", A._item_id("") == "")
 checa("None não quebra", A._item_id(None) == "")
 
+print("\n── ⚠️⚠️ A JUNÇÃO TENTA VÁRIAS CHAVES (e diz qual pegou) ──")
+# ⚠️ EU CONSTRUÍ ISTO COM UMA CHAVE SÓ E DEU 0% EM 72 POSTS.
+# O raciocínio do item_id estava certo (sub_id muda por plataforma, casar a URL
+# inteira separaria o mesmo produto em dois) — sobre dados que eu não tinha
+# olhado. Os links publicados são ENCURTADOS: não existe `i.123.456` pra
+# extrair. Os dois lados estavam cheios (1083/1109 posts com link · 498
+# produtos com nome); só a chave estava errada.
+#
+# 📌 Junção de uma chave só é aposta. Junção que tenta várias e DIZ qual pegou
+# é medição — e é o que deixa o próximo defeito aparecer em vez de sumir em 0%.
+A._PRODUTO_POR_ITEM = {
+    "item": {"123456.7890123": "Fone TWS"},
+    "link": {"s.shopee.com.br/abc123": "Papete Vizzano Chic e Confortável"},
+    "nua": {"s.shopee.com.br/abc123": "Papete Vizzano Chic e Confortável"},
+    "slug": {},
+}
+checa("casa pelo item_id quando a URL é crua",
+      A._produto_do_link("https://shopee.com.br/x-i.123456.7890123")
+      == ("Fone TWS", "item"))
+checa("⚠️ casa pelo LINK quando é encurtado (o caso real da VPS)",
+      A._produto_do_link("https://s.shopee.com.br/abc123")[1] == "link",
+      str(A._produto_do_link("https://s.shopee.com.br/abc123")))
+checa("⚠️ e ignora o sub_id, que muda por plataforma",
+      A._produto_do_link("https://s.shopee.com.br/abc123?sub_id=reels_x")[0]
+      == "Papete Vizzano Chic e Confortável")
+checa("www e barra final não atrapalham",
+      A._produto_do_link("https://www.s.shopee.com.br/abc123/")[0]
+      == "Papete Vizzano Chic e Confortável")
+checa("⚠️ link desconhecido devolve vazio E chave vazia (não chuta)",
+      A._produto_do_link("https://outro.com/zzz") == ("", ""))
+checa("a chave devolvida diz QUAL fechou (é isso que vira diagnóstico)",
+      A._produto_do_link("https://s.shopee.com.br/abc123?sub_id=x")[1] == "nua")
+
 print("\n── o nome sai do posts_ledger, não do publicados.jsonl ──")
-A._PRODUTO_POR_ITEM = {"123456.7890123": "Papete Vizzano Chic e Confortável",
-                       "9.8": "Bolsa Tiracolo"}
+A._PRODUTO_POR_ITEM = {
+    "item": {"123456.7890123": "Papete Vizzano Chic e Confortável", "9.8": "Bolsa Tiracolo"},
+    "link": {}, "nua": {}, "slug": {},
+}
 A._LINKS_POR_POST = {
     "UMPROD": "https://shopee.com.br/a-i.123456.7890123",
     "DOISPROD": ["https://shopee.com.br/a-i.123456.7890123?sub_id=x",

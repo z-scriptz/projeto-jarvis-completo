@@ -12852,3 +12852,43 @@ Contra **R$ 2.000** que o Dre fez à mão na Shopee Vídeo.
 
 📌 **A máquina foi afinada pra publicar sem quebrar, nunca pra converter** — e
 o canal automatizado é o que não paga.
+
+#### ⚠️⚠️ 0% EM 72 POSTS — ESCOLHI UMA CHAVE QUE NÃO EXISTIA
+
+O `--diag-produto` rodou na VPS e deu **0 com NOME (0%)**, com a causa em todas
+as linhas: `item_id=(não extraí da URL)`.
+
+📌 **O raciocínio do `item_id` estava certo** — o `sub_id` muda por plataforma, e
+casar a URL inteira separaria o mesmo produto em dois. Certo **sobre dados que eu
+não tinha olhado**: os links publicados são **encurtados**, não existe
+`i.123.456` pra extrair. A chave que eu defendi com comentário e teste não
+aparece nos dados nem uma vez.
+
+E os dois lados estavam cheios:
+
+```
+1083 de 1109 publicações com link  (97%)
+ 498 produtos com nome no posts_ledger
+   0 junções
+```
+
+Nada faltava. Só a chave estava errada.
+
+**O conserto:** `_produto_do_link()` tenta em ordem — `item_id` (o mais
+específico), link normalizado, link sem query (sobrevive ao `sub_id`) — e
+devolve **qual chave fechou**. O `--diag-produto` passou a imprimir a contagem
+por chave e, quando nenhuma fecha, a **forma dos links dos dois lados** (hosts,
+com contagem). Se os hosts divergem, os ledgers guardam formas distintas do
+mesmo link e a junção precisa de chave que não seja URL.
+
+📌 **Junção de uma chave só é aposta; junção que tenta várias e diz qual pegou é
+medição.** A diferença aparece justamente quando eu erro — que foi hoje.
+
+⚠️ **E o `--diag-produto` se pagou inteiro aqui.** Sem ele as frases teriam ido
+pro ar e simplesmente nunca sairiam: o `_banco_produto` devolve `[]` sem nome e
+cai no banco de bio, calado. Zero por cento **é indistinguível de funcionando**
+do lado de fora. Foi o mesmo tipo de silêncio do `CAROUSEL 0/28`, pego antes
+desta vez.
+
+`teste_nomear_produto.py` 29 → **35**, com o caso real (link encurtado) como
+asserção nomeada.
