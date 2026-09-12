@@ -12674,3 +12674,52 @@ passou.
   - beleza: IG @topshopbeauty._ · FB TopShop Descontos · YT topshopbeauty
   - tech: IG @topshoptech_ · FB TopShop & Casa · YT @topshoptech
 - **Marcas:** Site `topshopoficial.com.br` · Telegram `@achadinhosrelampagoh`.
+
+---
+
+### 🔎 A DM NÃO SAI: App Review ou configuração? (12/09)
+
+O Dre: *"a DM não funciona... eu tenho o recurso, mas não a autorização... quando
+a pessoa escreve 'EU QUERO' e não recebe o link, ela esquece o post."* E a
+pergunta dele não foi "conserta" — foi **"quanto tempo vai durar a briga?"**.
+
+São dois mundos com custos opostos:
+
+| mundo | custo |
+|---|---|
+| escopo / token / configuração | horas |
+| Advanced Access (App Review da Meta) | semanas, com recusa possível |
+
+⚠️ **E o log não separava os dois.** O `_enviar_dm_ig` faz:
+
+```python
+err = (r.get("error") or {}).get("message") or ""
+_log(f"   ⚠️ DM IG falhou ({err[:100]})")
+```
+
+Só a MENSAGEM, cortada em 100. O que distingue os mundos é o `code` e o
+`error_subcode` — **descartados**. Cinco meses de "a DM não funciona" sem nunca
+guardar o dado que diz por quê.
+
+📌 **Sintoma registrado sem a causa é sintoma que volta.** Mesma classe do
+`comentarios.py` que não lia `.env` e do `--formatos` que somava as seis contas:
+o relatório existia e não respondia a pergunta que importava.
+
+`diag_dm_permissao.py` — novo, **só leitura por padrão**. Lê os escopos reais do
+token via `debug_token` e responde uma coisa: `instagram_manage_messages` está
+concedido **para esta conta**?
+
+⚠️ **`granular_scopes` é a parte que engana.** Ter o escopo não basta — ele diz
+para QUAIS contas vale. Escopo concedido pra outra conta é escopo ausente aqui, e
+um diagnóstico que só olhasse a lista de escopos diria "tem" sobre uma conta que
+não tem.
+
+`--tentar` (opt-in) faz o envio real e imprime o erro **inteiro** — code,
+subcode, type, message, error_user_msg, fbtrace_id — com uma tabela de leitura
+provável por código, e o bruto sempre junto: a tabela orienta, não decide.
+
+⚠️ Nenhum token é impresso, nem pedaço. O relatório nasceu pra ser colado no chat.
+
+**Rodado no repo (sem tokens): 4 contas SEM TOKEN** — o esperado, e confirma que
+não há segredo versionado. Lembrete de que o `contas.json` daqui tem 4 contas e o
+da VPS tem 6: **DIVERGENTE, nunca deployar.**
