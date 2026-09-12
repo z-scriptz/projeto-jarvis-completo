@@ -818,6 +818,47 @@ publicar às cegas.
 reuso tem que vir **antes** do `montar_plano()`, senão o aprovado já foi
 substituído e publicar a pasta não adianta mais.
 
+**✅ CONFIRMADO EM PRODUÇÃO (12/09, 12:22):**
+`instagram.com/p/DdMTBQPFJvM/` — o script imprimiu o hook **antes** de subir, e
+o hook impresso era o aprovado. Primeira vez que prévia e post são a mesma coisa.
+
+```
+📁 publicando os 8 slide(s) JÁ renderizados em pronto_carrossel/pet_mitos_v2
+   hook: 4 mitos sobre seus *bichinhos* que você ainda acredita
+```
+
+📌 **A linha do hook não é enfeite: é o que deixa ele PARAR antes de publicar.**
+Um aviso que não diz *o quê* ("publicando 8 slides") não serve de conferência.
+
+#### ⚠️ TRÊS COISAS QUE SÓ APARECERAM QUANDO ELE RODOU
+
+**1. Eu errei o caminho duas vezes seguidas, do mesmo jeito.**
+Mandei `saidas/carrossel/` (é `pronto_carrossel/`) e `-m agents.carrossel_brain`
+(o `carrossel_brain.py` está na **raiz**; `-m agents.` é o `daemon_maestro`).
+Copiei a forma do serviço sem conferir se valia pro outro arquivo. **Só o `find`
+resolveu, e eu só rodei o `find` depois de dois comandos quebrados na cara dele.**
+→ Comando pra VPS sem `find` antes = chute com cara de instrução.
+
+**2. Pasta antiga guarda RENDER antigo — não só conteúdo antigo.**
+A `previa_pet_mitos` tinha o conteúdo aprovado e a **capa ESCURA**: os JPGs
+foram gerados antes da mudança do `slides_html`. Publicar a pasta aprovada teria
+posto no ar a capa que ele recusou. **O `plano.json` envelhece bem; o `.jpg`
+não.** O conserto é re-renderizar o plano com o código de hoje:
+
+```bash
+D=pronto_carrossel/pet_mitos_v2 && mkdir -p $D && \
+cp pronto_carrossel/previa_pet_mitos/plano.json $D/ && \
+.venv/bin/python carrossel_render.py --plano $D/plano.json --saida $D
+```
+
+`--plano` lê o JSON e só renderiza: **não chama o Gemini e não reescreve o
+plano.** Pasta nova, não por cima — se sair torto, o original continua lá.
+→ **Toda mudança visual invalida os JPGs de todas as pastas pendentes.**
+
+**3. Publicar não substitui.** O Instagram não troca as imagens de um carrossel
+no ar. `DdJs_RpFDO1` (o errado) e `DdMTBQPFJvM` (o aprovado) estão **os dois** no
+feed do @topshoppet_, mesmo tema. Apagar é decisão dele.
+
 ⚠️ **E ele deu 22·0 aqui e 21·1 na VPS**, pelo mesmo motivo do `teste_envfile`:
 com `foto:""` o `_fundo()` **ainda procura** em `fundos/` e nos assets — que
 existem na VPS e não na minha caixa. O teste dizia "sem foto" sobre uma capa que
