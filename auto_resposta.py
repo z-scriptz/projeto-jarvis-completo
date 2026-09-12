@@ -161,6 +161,33 @@ _IG_TMPLS_SEM_DM_DEFAULT = (
     "Vem pro grupo do WhatsApp 💚 o acesso tá no link da bio!")
 _IG_TMPL_SEM_DM = "O link tá na bio 🚀 depois me conta o que achou!"
 
+# ── ⚠️ RESPOSTA QUE NOMEIA O PRODUTO (12/09/2026) ──────────────────────────
+# Com a DM barrada pela capability do app, o comentário é o ÚNICO canal — e
+# comentário do Instagram não deixa link clicável. Então o que dá pra melhorar
+# não é o link: é a **especificidade**.
+#
+#   "o link tá na bio"            → a pessoa tem que lembrar o que viu
+#   "é o Papete Vizzano, tá na bio" → ela procura UMA coisa
+#
+# 📌 Quem comenta já decidiu. Nomear é o que não devolve trabalho pra ela.
+#
+# ⚠️ `{produto}` SÓ É USADO QUANDO O NOME EXISTE DE VERDADE — a junção por
+# item_id devolve [] quando não fecha, e aí o banco antigo assume. Frase que
+# promete o que não chega é o defeito que este arquivo já documenta duas vezes.
+_IG_TMPLS_PRODUTO_DEFAULT = (
+    "É o {produto} 💛 tá no link da bio!|||"
+    "Esse é o {produto} 🛍️ deixei no link da bio pra você|||"
+    "{produto} 👀 tá tudo no link da bio, dá uma olhada|||"
+    "Ahh esse é o {produto} 💛 link na bio que eu deixei lá!|||"
+    "Anota: {produto} 📝 tá no link da bio|||"
+    "É o {produto} mesmo 🚀 link da bio!")
+# carrossel: vários produtos, e apostar num seria errar nos outros
+_IG_TMPLS_PRODUTOS_DEFAULT = (
+    "Tem {n} achadinhos nesse post 💛 todos no link da bio!|||"
+    "São {n} achados 🛍️ deixei todos no link da bio pra você escolher|||"
+    "Esse post tem {n} produtos 👀 tá tudo no link da bio|||"
+    "Todos os {n} estão no link da bio 💛")
+
 # ── MEMÓRIA POR POST ───────────────────────────────────────────────────────
 # ⚠️ ERA `random.choice` PURO, E DÁ PRA CONTAR NOS PRINTS DO DRE (09/09): num
 # Reel só, **6 respostas, 4 frases, e "Bio 🔗 dá uma olhada e me fala" três
@@ -274,19 +301,63 @@ def _banco_ig(dm_ok: bool) -> list:
     return tmpls or [_IG_TMPL_SEM_DM]
 
 
-def _escolhe_ig_tmpl(dm_ok: bool, post: str = "", memoria: dict = None) -> str:
+def _nomear_ligado() -> bool:
+    return os.environ.get("AUTO_RESP_NOMEAR", "1").strip().lower() \
+        in ("1", "true", "sim")
+
+
+def _banco_produto(produtos: list) -> list:
+    """Frases que NOMEIAM o produto. [] quando não há nome — e aí o chamador
+    cai no banco de sempre, sem prometer nada que não tem."""
+    if not produtos or not _nomear_ligado():
+        return []
+    if len(produtos) == 1:
+        raw = os.environ.get("AUTO_RESP_IG_TMPLS_PRODUTO",
+                             _IG_TMPLS_PRODUTO_DEFAULT)
+        # ⚠️ nome gigante vira comentário ilegível; corta na palavra
+        nome = produtos[0]
+        if len(nome) > 42:
+            nome = nome[:42].rsplit(" ", 1)[0].rstrip(" ,-") or nome[:42]
+        ctx = {"produto": nome, "n": "1"}
+    else:
+        raw = os.environ.get("AUTO_RESP_IG_TMPLS_PRODUTOS",
+                             _IG_TMPLS_PRODUTOS_DEFAULT)
+        # ⚠️ `n` é SÓ O NÚMERO. Quando ele vinha como "3 produtos", a frase
+        # "Tem {n} achadinhos" saía "Tem 3 produtos achadinhos". O substantivo
+        # é da frase, não do placeholder — senão cada frase precisa saber o que
+        # a outra já disse.
+        ctx = {"produto": produtos[0], "n": str(len(produtos))}
+    saida = []
+    for t in raw.split("|||"):
+        t = t.strip()
+        if not t or _menciona_dm(t):     # a DM está barrada: não prometer
+            continue
+        try:
+            saida.append(t.format(**ctx))
+        except Exception:
+            continue                     # placeholder errado não derruba a resposta
+    return saida
+
+
+def _escolhe_ig_tmpl(dm_ok: bool, post: str = "", memoria: dict = None,
+                     produtos: list = None) -> str:
     """Sorteia uma resposta SEM repetir o que já foi dito NESTE post.
 
     Sem DM confirmado, só usa as que NÃO prometem direct — prometer o que não
     vai chegar é pior que não responder: a pessoa espera, não recebe, e aprende
     que a conta mente.
+
+    ⚠️ E quando a DM está barrada MAS o nome do produto é conhecido, o banco é
+    outro ainda: nomear é o que sobra de específico quando o link não clica.
     """
-    banco = _banco_ig(dm_ok)
+    banco = (_banco_produto(produtos) if not dm_ok else []) or _banco_ig(dm_ok)
     if memoria is None or not post:
         # sem post identificado não há como ter memória; melhor sortear que
         # travar a resposta
         return random.choice(banco)
-    chave = f"{post}|{'dm' if dm_ok else 'bio'}"
+    # ⚠️ a chave separa os bancos: memória de rotação misturada faz o "já disse
+    # isto neste post" olhar pra frases de outro conjunto e não significar nada
+    chave = f"{post}|{'dm' if dm_ok else ('prod' if produtos else 'bio')}"
     reg = memoria.get(chave) or {}
     escolhida, recentes = _rodar(banco, reg.get("frases") or [])
     memoria[chave] = {"frases": recentes, "ts": int(time.time())}
@@ -340,6 +411,76 @@ def _shortcode(permalink: str) -> str:
     """O código do post na URL. É a chave que liga o comentário ao produto."""
     m = re.search(r"/(?:reel|reels|p|tv)/([^/?#]+)", permalink or "")
     return m.group(1) if m else ""
+
+
+# ── O NOME DO PRODUTO, PRA RESPONDER NO COMENTÁRIO ─────────────────────────
+# ⚠️ POR QUE ISTO EXISTE (12/09/2026)
+# O `diag_dm_permissao` fechou a questão: `(#3) Application does not have the
+# capability` nas SEIS contas. A DM depende de capability do app + App Review da
+# Meta — prazo que não é nosso, e pode ser semanas.
+#
+# Enquanto isso, quem comenta "EU QUERO" não recebe NADA. O Dre: *"quando a
+# pessoa escreve 'EU QUERO' e não recebe o link, ela esquece o post."*
+#
+# 📌 O comentário não deixa link clicável — então o que dá pra melhorar não é o
+# link, é a **especificidade**: "é o Papete Vizzano, tá na bio" faz a pessoa
+# procurar UMA coisa; "o link tá na bio" devolve pra ela o trabalho de lembrar
+# o que viu. Quem pergunta já decidiu; nomear é o que não desiste dela.
+#
+# ⚠️ A JUNÇÃO É POR `item_id`, NÃO POR STRING DE LINK. O mesmo produto sai com
+# `sub_id` diferente por plataforma, então casar a URL inteira falharia calado —
+# e falhar calado aqui significa nomear o produto errado, que é pior que não
+# nomear. O `item_id` é o que sobrevive à etiqueta.
+_PRODUTO_POR_ITEM = None
+
+
+def _item_id(url: str) -> str:
+    """O id do produto dentro da URL da Shopee. Chave estável entre ledgers."""
+    m = re.search(r"i\.(\d+)\.(\d+)", url or "")
+    if m:
+        return f"{m.group(1)}.{m.group(2)}"
+    m = re.search(r"[-_]i\.(\d+)\.(\d+)", url or "")
+    return f"{m.group(1)}.{m.group(2)}" if m else ""
+
+
+def _carregar_produtos() -> dict:
+    """{item_id: nome} lido do posts_ledger. É ELE que tem o nome — o
+    `publicados.jsonl` só liga shortcode→link."""
+    global _PRODUTO_POR_ITEM
+    if _PRODUTO_POR_ITEM is not None:
+        return _PRODUTO_POR_ITEM
+    _PRODUTO_POR_ITEM = {}
+    try:
+        arq = BASE_DIR / "shared" / "posts_ledger.jsonl"
+        for ln in arq.read_text(encoding="utf-8", errors="ignore").splitlines():
+            try:
+                r = json.loads(ln)
+            except Exception:
+                continue
+            nome = (r.get("produto") or "").strip()
+            if not nome:
+                continue
+            iid = (r.get("item_id") or "").strip() or _item_id(r.get("link", ""))
+            if iid:
+                _PRODUTO_POR_ITEM[iid] = nome
+    except Exception as e:
+        _log(f"   (sem posts_ledger.jsonl: {str(e)[:50]}) — respondo sem nomear")
+    return _PRODUTO_POR_ITEM
+
+
+def _produtos_do_post(permalink: str) -> list:
+    """Os NOMES dos produtos daquele post. [] quando a junção não fecha.
+
+    ⚠️ Devolve lista pelo mesmo motivo do `_links_do_post`: carrossel é vários
+    produtos, e escolher um pra chamar de "o produto" seria inventar."""
+    nomes, vistos = [], set()
+    tabela = _carregar_produtos()
+    for lk in _links_do_post(permalink):
+        n = tabela.get(_item_id(lk), "")
+        if n and n not in vistos:
+            vistos.add(n)
+            nomes.append(n)
+    return nomes
 
 
 # ⚠️ O LEDGER ENVELHECE SOZINHO, E ISSO NÃO DAVA SINAL (10/09/2026).
@@ -735,7 +876,11 @@ def _resp_instagram(conta, token, gatilhos, respondidos, limites, teste,
             # 2) resposta pública, sem repetir o que já foi dito NESTE post
             # (quem lê os comentários lê um post inteiro — é aí que a
             # repetição aparece, não entre posts diferentes)
-            msg = _escolhe_ig_tmpl(dm_ok, str(m.get("id") or ""), frases_post)
+            # ⚠️ com a DM barrada, nomear o produto é o que sobra de específico
+            _prods = ([] if dm_ok
+                      else _produtos_do_post(m.get("permalink", "")))
+            msg = _escolhe_ig_tmpl(dm_ok, str(m.get("id") or ""), frases_post,
+                                   _prods)
 
             if teste:
                 # no dry-run mostra QUAL link o DM levaria — é o que distingue
@@ -743,7 +888,11 @@ def _resp_instagram(conta, token, gatilhos, respondidos, limites, teste,
                 _prod = _link_do_post(m.get("permalink", "")) if _dm_ligado() else ""
                 _log(f"   [DRY] IG responderia @{c.get('username')} → {msg}"
                      + (f"  (+DM: {_prod or 'SITE — sem link do produto'})"
-                        if _dm_ligado() else ""))
+                        if _dm_ligado() else "")
+                     # ⚠️ dizer se NOMEOU é o que distingue "melhorou" de
+                     # "continua mandando pra bio" sem abrir o post
+                     + (f"  [nomeou: {_prods[0][:34]}]" if _prods else
+                        "  [sem nome — junção não fechou]"))
                 respondidos[cid] = int(time.time()); feitos += 1
                 if feitos >= limites["max"]:
                     break
@@ -832,6 +981,84 @@ def _resp_facebook(conta, token, gatilhos, respondidos, limites, teste) -> int:
             if feitos >= limites["max"]:
                 break
     return feitos
+
+
+def _diag_produto(contas, limites) -> int:
+    """Em quantos posts a gente consegue NOMEAR o produto no comentário?
+
+    ⚠️ ESTE MODO EXISTE PORQUE A FRASE SÓ VALE SE O NOME VIER (12/09/2026).
+    Com a DM barrada pelo `(#3)` do app, nomear o produto no comentário é o que
+    sobra. Mas a frase "É o {produto}" depende de uma junção de DOIS ledgers:
+
+        publicados.jsonl   shortcode → link
+        posts_ledger.jsonl item_id   → nome
+
+    Se ela cobrir 20%, a mudança não existe na prática — e eu ia descobrir isso
+    DEPOIS de escrever as frases, que foi exatamente o erro do carrossel (dois
+    dias de capa num formato com 0/28 de link).
+
+    📌 A regra da semana: medir a junção antes de confiar nela.
+    """
+    print(f"\n{'='*70}\n  DÁ PRA NOMEAR O PRODUTO NO COMENTÁRIO?\n{'='*70}")
+    print(f"\n{_atualizar_ledger(forcar=True)}")
+    tabela = _carregar_produtos()
+    print(f"  {len(tabela)} produto(s) com nome no posts_ledger")
+
+    tot = com_link = com_nome = 0
+    sem_nome_exemplos = []
+    for chave, conta in contas.items():
+        token = _token_da_conta(conta)
+        ig = str(conta.get("instagram_user_id", "")).strip()
+        if not token or not ig:
+            continue
+        midia = _get(f"{GRAPH}/{ig}/media",
+                     {"fields": "id,timestamp,permalink,media_type",
+                      "limit": limites["midias"], "access_token": token}).get("data", [])
+        recentes = [m for m in midia
+                    if not _velho_demais(m.get("timestamp", ""), limites["horas"])]
+        if not recentes:
+            continue
+        print(f"\n── {conta.get('handle', chave)} ──")
+        for m in recentes[:12]:
+            perma = m.get("permalink", "")
+            links = _links_do_post(perma)
+            nomes = _produtos_do_post(perma)
+            tot += 1
+            com_link += 1 if links else 0
+            com_nome += 1 if nomes else 0
+            marca = "✅" if nomes else ("🔗" if links else "⬜")
+            resumo = (f"{len(nomes)} nome(s): {nomes[0][:40]}" if nomes
+                      else (f"{len(links)} link(s), NENHUM nome" if links
+                            else "sem link no ledger"))
+            print(f"   {marca} {perma[-13:]}  {m.get('media_type', '?'):<14} {resumo}")
+            # ⚠️ o caso link-sem-nome é o interessante: o post ESTÁ no ledger,
+            # então não é ledger velho — é o item_id que não casou entre os dois
+            if links and not nomes and len(sem_nome_exemplos) < 5:
+                sem_nome_exemplos.append((perma[-13:], links[0]))
+
+    print(f"\n{'='*70}")
+    pc = (100.0 * com_nome / tot) if tot else 0.0
+    print(f"  {tot} post(s) na janela · {com_link} com link · "
+          f"**{com_nome} com NOME ({pc:.0f}%)**")
+    if sem_nome_exemplos:
+        print(f"\n  ⚠️ TEM LINK MAS NÃO TEM NOME — o item_id não casou:")
+        for sc, lk in sem_nome_exemplos:
+            print(f"     {sc}  item_id={_item_id(lk) or '(não extraí da URL)'}")
+        print(f"     Se o item_id sai vazio, o link não é da Shopee ou é")
+        print(f"     encurtado — e aí a junção precisa de outra chave.")
+    print()
+    if pc >= 50:
+        print(f"  📌 Vale ligar: em {pc:.0f}% dos posts a resposta nomeia o")
+        print(f"     produto em vez de mandar pra bio no escuro.")
+    elif pc > 0:
+        print(f"  📌 Cobertura BAIXA ({pc:.0f}%). Liga sem prejuízo — sem nome,")
+        print(f"     cai no banco de sempre — mas o ganho é pequeno até a")
+        print(f"     junção melhorar. Olhe os item_id acima antes.")
+    else:
+        print(f"  📌 Cobertura ZERO. A frase que nomeia nunca vai ser usada.")
+        print(f"     Consertar a junção vem ANTES de qualquer frase nova.")
+    print()
+    return 0
 
 
 def _diag_dm(contas, limites) -> int:
@@ -976,6 +1203,12 @@ def main():
         contas = RC.carregar_contas()
     except Exception as e:
         _log(f"❌ não carreguei contas.json: {e}"); return 1
+
+    if "--diag-produto" in sys.argv:
+        return _diag_produto(contas, {
+            "horas": _arg("--horas", int(float(os.environ.get("AUTO_RESP_HORAS", "168")))),
+            "midias": _arg("--midias", int(float(os.environ.get("AUTO_RESP_MIDIAS", "25")))),
+        })
 
     if "--diag-dm" in sys.argv:
         return _diag_dm(contas, {

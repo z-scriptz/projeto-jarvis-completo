@@ -12768,3 +12768,87 @@ isso se resolve.
 nenhum.** Mesma família do `--formatos` somando as seis contas e do `MORTA` sobre
 consulta que falhou — três vezes na mesma semana, e a minha foi a que veio com
 conclusão em negrito.
+
+---
+
+### 💬 COM A DM BARRADA, O COMENTÁRIO TEM QUE NOMEAR (12/09)
+
+`(#3)` confirmado nas seis contas: capability do app, prazo da Meta. Enquanto
+isso, quem comenta "EU QUERO" **não recebe nada** — e é o lead mais quente do
+funil inteiro.
+
+📌 **Comentário do Instagram não deixa link clicável.** Então o que dá pra
+melhorar não é o link, é a **especificidade**:
+
+```
+"o link tá na bio"               → ela tem que lembrar o que viu
+"é o Papete Vizzano, tá na bio"  → ela procura UMA coisa
+```
+
+Quem comenta já decidiu. Nomear é o que não devolve trabalho pra ela.
+
+**A junção é por `item_id`, não por string de link.** O mesmo produto sai com
+`sub_id` diferente por plataforma — casar a URL inteira separaria o mesmo
+produto em dois e falharia calado. E falhar calado aqui significa **nomear o
+produto errado**, que é pior que não nomear.
+
+```
+publicados.jsonl    shortcode → link
+posts_ledger.jsonl  item_id   → nome     ← é ELE que tem o nome
+```
+
+⚠️ **`--diag-produto` NASCEU ANTES DAS FRASES.** A frase só vale se o nome vier;
+se a junção cobrir 20%, a mudança não existe na prática. Descobrir isso depois
+de escrever as frases seria repetir exatamente o erro do carrossel — dois dias
+de capa num formato com 0/28 de link. **Medir a junção antes de confiar nela.**
+
+Sem nome, cai no banco de sempre: **frase que promete o que não chega é o
+defeito que este arquivo já documenta duas vezes**, e a terceira não pode vir do
+conserto.
+
+`teste_nomear_produto.py` (29/29) — novo.
+
+#### ⚠️ DOIS DEFEITOS MEUS, PEGOS NA SAÍDA E NÃO NO CÓDIGO
+
+**`"Tem 3 produtos achadinhos nesse post"`** — o placeholder `{n}` vinha como
+`"3 produtos"` e a frase acrescentava o substantivo. **O substantivo é da frase,
+não do placeholder**, senão cada frase precisa saber o que a outra já disse.
+
+**`"São 3 🛍️"`** — número sem substantivo nenhum.
+
+📌 Os dois passaram por revisão de código e só apareceram quando eu **imprimi as
+frases geradas**. Mesma lição da capa: a asserção dizia que a regra valia, o JPG
+mostrava o que saía. **Texto gerado se lê, não se deduz.**
+
+---
+
+### 🚨 O CEO AGENT MANDOU APAGAR O PIPELINE COM BASE EM CONSULTA QUE FALHOU
+
+`ceo_agent.py 150` abriu com:
+
+```
+(vendas por fonte off: GraphQL erro: ... Params Error) — só produção
+```
+
+e mesmo assim imprimiu **"💀 36 fonte(s) MORTA(s) — muito post, zero venda"**,
+com a Proposta 1 mandando cortar todas. O caminho:
+
+```python
+except Exception as e:
+    return {}                                          # o dado não veio
+vk = vendas.get(_san_fonte(pf), {"vendas": 0, ...})    # {} vira 0 pra todos
+elif n >= min_posts:  vd = "MORTA"                     # e 0 vira MORTA
+```
+
+📌 **Não são 36 fontes mortas — são 36 fontes SEM DADO.** Ausência de medição
+apresentada como medição de zero, com uma recomendação destrutiva em cima.
+Terceira da semana na mesma família (`--formatos` somando as seis contas, meu
+`diag_dm_permissao` lendo só a camada do token). **Sem dado, o veredito tem que
+ser `SEM DADO`.** Registrado; não consertado ainda.
+
+**Os números reais de 150 dias:** 1107 posts · 3 vendas · **R$ 24,89** ·
+alcance médio **226**/post. R$ 0,02 por post. E `CAROUSEL 0/28 com link`.
+Contra **R$ 2.000** que o Dre fez à mão na Shopee Vídeo.
+
+📌 **A máquina foi afinada pra publicar sem quebrar, nunca pra converter** — e
+o canal automatizado é o que não paga.
