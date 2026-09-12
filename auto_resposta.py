@@ -533,9 +533,27 @@ def _enviar_dm_ig(ig: str, comment_id: str, token: str,
     })
     if r.get("message_id") or r.get("recipient_id") or r.get("id"):
         return True
-    err = (r.get("error") or {}).get("message") or ""
-    if err:
-        _log(f"   ⚠️ DM IG falhou ({err[:100]})")
+    # ⚠️ O `code` VAI PRO LOG, NÃO SÓ A MENSAGEM (12/09/2026).
+    # Esta linha guardava `err[:100]` e descartava `code` e `error_subcode` —
+    # e são ELES que separam "falta permissão" (semanas de App Review) de
+    # "token vencido" (minutos) de "comentário velho demais" (conserto nosso).
+    # O Dre passou cinco meses com "a DM não funciona" sem nunca ter o dado que
+    # responde por quê, e chegou a concluir que era App Review. Não era: o
+    # `diag_dm_permissao.py` mostrou `instagram_manage_messages` concedido nas
+    # seis contas.
+    #
+    # 📌 Sintoma registrado sem a causa é sintoma que volta. Custava uma linha.
+    e = r.get("error") or {}
+    if e:
+        _log(f"   ⚠️ DM IG falhou · code={e.get('code')}"
+             + (f" sub={e['error_subcode']}" if e.get("error_subcode") else "")
+             + f" · {(e.get('message') or '')[:120]}"
+             + (f" · {e['error_user_msg'][:80]}" if e.get("error_user_msg") else ""))
+    else:
+        # ⚠️ resposta sem sucesso E sem erro: antes isso sumia calado, e some
+        # exatamente igual a "deu tudo certo" pra quem lê o log depois.
+        _log(f"   ⚠️ DM IG não saiu e a API não disse por quê "
+             f"(resposta: {str(r)[:120]})")
     return False
 
 
