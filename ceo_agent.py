@@ -16,6 +16,12 @@ import time
 from collections import defaultdict
 from pathlib import Path
 
+try:
+    from escopo_jarvis import guarda
+except Exception:       # ⚠️ camada de controle NUNCA derruba o Jarvis
+    def guarda(**_kw):  # noqa: D103
+        return lambda fn: fn
+
 BASE_DIR = Path(__file__).resolve().parent
 LEDGER = BASE_DIR / "shared" / "posts_ledger.jsonl"
 NICHOS = BASE_DIR / "shared" / "nichos_quentes.json"
@@ -212,10 +218,30 @@ def _perfil_da_linha(linha: str) -> str:
     return l.lstrip("@").lower()
 
 
+@guarda(
+    agente="jarvis.ceo",
+    acao="source.disable",
+    # Os alvos reais são só as MORTAS — é o que a política precisa contar.
+    alvos=lambda fontes, executar: sorted(
+        f["fonte"] for f in fontes if f["veredito"] == "MORTA"),
+    # ⚠️ dry-run precisa chegar ao verificador: sem executar, nada é escrito
+    # nos arquivos, e comparar contra a quantidade daria alarme falso.
+    contexto=lambda resultado, intencao: {
+        "alvos": list(intencao.alvos),
+        "executar": bool(intencao.parametros.get("executar", True)),
+    },
+)
 def _podar_fontes(fontes: list, executar: bool) -> list:
     """As fontes MORTAS (≥N posts, 0 venda) são comentadas nos arquivos de perfis
     (o coletor para de puxar delas). REVERSÍVEL: comenta a linha com o motivo, não
-    apaga. executar=False só LISTA os candidatos (dry-run)."""
+    apaga. executar=False só LISTA os candidatos (dry-run).
+
+    ⚠️ PASSA PELA ESCOPO em modo `observe` (politicas/jarvis.ceo.source.disable.yaml):
+    o veredito é registrado num recibo e a poda segue exatamente como antes.
+    Em 14/09/2026 esta função ia comentar 36 fontes porque `_vendas_por_fonte()`
+    devolveu {} numa falha de consulta — a ESCOPO não impede isso ainda, mas
+    registra que a intenção extrapolou a política e prova depois que o
+    resultado ficou INVERIFICAVEL."""
     mortas = {f["fonte"] for f in fontes if f["veredito"] == "MORTA"}
     if not mortas:
         return []

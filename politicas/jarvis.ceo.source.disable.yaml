@@ -1,0 +1,55 @@
+# Contrato de execução do ceo_agent para PODAR FONTES.
+#
+# ⚠️ ESTA POLÍTICA É DO JARVIS, não da biblioteca ESCOPO. Quem decide quantas
+# fontes podem cair de uma vez é o dono da operação, não o fornecedor da
+# camada de controle. Por isso ela mora aqui e não no escopo-runtime.
+#
+# POR QUE ELA EXISTE: em 14/09/2026 o `_analisar_fontes()` carimbou 36 fontes
+# como MORTA porque `_vendas_por_fonte()` devolveu {} numa falha de consulta,
+# e `vendas.get(fonte, {"vendas": 0})` transformou ausência de dado em
+# evidência de zero (ceo_agent.py:192). A poda ia comentar as 36.
+#
+# ⚠️ ORDEM IMPORTA: a primeira regra que casa decide, de cima para baixo.
+# O DENY vem antes do HOLD — se o HOLD (>5) viesse primeiro, ele pegaria
+# também os casos de >50 e o DENY nunca dispararia.
+
+agente: jarvis.ceo
+acao: source.disable
+versao: v1
+autoridade: L2
+
+# ⚠️ `observe` NÃO BLOQUEIA NADA. Registra o veredito e deixa a poda seguir
+# exatamente como hoje. Só vira `enforce` depois de semanas de recibo
+# mostrando que os limites abaixo estão nos lugares certos.
+modo: observe
+
+regras:
+  - id: limite_absoluto
+    se: {campo: quantidade, op: ">", valor: 50}
+    entao: DENY
+    motivo: >-
+      podar mais de 50 fontes de uma vez não é decisão operacional, é
+      incidente. Toda a base de perfis tem essa ordem de grandeza.
+
+  - id: lote_destrutivo
+    se: {campo: quantidade, op: ">", valor: 5}
+    entao: HOLD
+    motivo: >-
+      poda em lote acima de 5 fontes precisa de gente olhando. Foi
+      exatamente assim que 36 caíram por causa de uma consulta que falhou.
+
+padrao: ALLOW
+
+verificacao:
+  verificador: jarvis.fontes
+  tentativas: 3
+  # Os arquivos de perfil são locais: se não deu na 1ª, esperar muito não
+  # ajuda. As esperas curtas cobrem escrita em andamento, não latência de rede.
+  espera_segundos: [0, 2, 10]
+  # Espero que o número de fontes realmente comentadas nos arquivos de perfil
+  # seja igual ao número de alvos que a intenção declarou.
+  #
+  # ⚠️ Em dry-run (`--podar-fontes` sem executar) nada é escrito, e o
+  # verificador sabe disso: ele compara contra 0. Ver `escopo_jarvis.py`.
+  espera:
+    desabilitadas: $quantidade
