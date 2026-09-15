@@ -159,16 +159,26 @@ def _san_fonte(h: str) -> str:
     return re.sub(r"[^a-z0-9]", "", (h or "").lower())[:16]
 
 
-def _vendas_por_fonte(dias: int) -> dict:
+def _vendas_por_fonte(dias: int):
     """{chave_san: {'vendas': n, 'comissao': R$}} lido do conversionReport da Shopee.
-    Best-effort: sem métricas/credencial → {} (o CEO segue sem a parte de venda)."""
+
+    ⚠️ DEVOLVE None QUANDO NÃO CONSEGUIU CONSULTAR. Isso não é preciosismo:
+
+        {}     consultei a Shopee e ninguém vendeu
+        None   NÃO consegui consultar
+
+    Antes os dois casos devolviam {}, e `_analisar_fontes` lia ausência de dado
+    como evidência de zero venda. Em 14/09/2026 isso carimbou 36 fontes como
+    MORTA numa falha de GraphQL; em 15/09 aconteceu de novo e podou 8. Erro de
+    consulta não é evidência de nada — nem de venda, nem de ausência dela."""
     out = defaultdict(lambda: {"vendas": 0, "comissao": 0.0})
     try:
         import metricas_agent as M
         itens = M.puxar_conversoes(dias)
     except Exception as e:
-        print(f"(vendas por fonte off: {str(e)[:70]}) — só produção")
-        return {}
+        print(f"⚠️ vendas por fonte INDISPONÍVEL ({str(e)[:70]}) — "
+              f"nenhum veredito de fonte será emitido")
+        return None
     for it in itens:
         f = M._fonte(it.get("utm", ""))
         if not f:                       # link antigo sem a etiqueta de fonte → ignora
@@ -181,7 +191,12 @@ def _vendas_por_fonte(dias: int) -> dict:
 
 def _analisar_fontes(dias: int) -> list:
     """Cruza produção × venda POR PERFIL-FONTE. Retorna lista ordenada com veredito:
-    VENDE (converteu) · MORTA (≥N posts, 0 venda → poda) · NOVA (pouco dado ainda)."""
+    VENDE (converteu) · MORTA (≥N posts, 0 venda → poda) · NOVA (pouco dado ainda)
+    · SEM_DADO (a consulta de vendas falhou — não dá pra julgar ninguém).
+
+    ⚠️ SEM_DADO existe porque a alternativa era mentir. Quando
+    `_vendas_por_fonte()` não consegue consultar, NENHUMA fonte pode ser
+    chamada de MORTA: não é que elas venderam zero, é que não se sabe."""
     min_posts = int(os.getenv("CEO_PODA_MIN_POSTS", 6))
     # posts por fonte (do ledger; perfil_fonte foi gravado pela produção)
     posts = defaultdict(int)
@@ -193,10 +208,16 @@ def _analisar_fontes(dias: int) -> list:
         posts[pf] += 1
         nicho_de.setdefault(pf, (r.get("nicho") or r.get("nicho_fonte") or "?"))
     vendas = _vendas_por_fonte(dias)
+    # ⚠️ None é "não consegui consultar"; {} é "consultei, ninguém vendeu".
+    venda_conhecida = vendas is not None
+    if not venda_conhecida:
+        vendas = {}
     fontes = []
     for pf, n in posts.items():
         vk = vendas.get(_san_fonte(pf), {"vendas": 0, "comissao": 0.0})
-        if vk["vendas"] > 0:
+        if not venda_conhecida:
+            vd = "SEM_DADO"
+        elif vk["vendas"] > 0:
             vd = "VENDE"
         elif n >= min_posts:
             vd = "MORTA"
@@ -204,7 +225,7 @@ def _analisar_fontes(dias: int) -> list:
             vd = "NOVA"
         fontes.append({"fonte": pf, "nicho": nicho_de.get(pf, "?"), "posts": n,
                        "vendas": vk["vendas"], "comissao": vk["comissao"],
-                       "veredito": vd})
+                       "veredito": vd, "venda_conhecida": venda_conhecida})
     fontes.sort(key=lambda x: (x["comissao"], x["vendas"], x["posts"]), reverse=True)
     return fontes
 
@@ -242,6 +263,14 @@ def _podar_fontes(fontes: list, executar: bool) -> list:
     devolveu {} numa falha de consulta — a ESCOPO não impede isso ainda, mas
     registra que a intenção extrapolou a política e prova depois que o
     resultado ficou INVERIFICAVEL."""
+    # ⛔ NÃO SE PODA NO ESCURO. Se a consulta de vendas não completou, nenhuma
+    # fonte tem veredito confiável — e podar aqui é destruir com base em nada.
+    # Isto é o conserto da causa; a ESCOPO é a rede de segurança, não o conserto.
+    if any(f.get("veredito") == "SEM_DADO" for f in fontes):
+        print("⛔ poda CANCELADA: a consulta de vendas não completou, então "
+              "nenhuma fonte pode ser chamada de MORTA. Rode de novo quando a "
+              "Shopee responder.")
+        return []
     mortas = {f["fonte"] for f in fontes if f["veredito"] == "MORTA"}
     if not mortas:
         return []
@@ -278,6 +307,27 @@ def _render_fontes(fontes: list) -> str:
     vende = [f for f in fontes if f["veredito"] == "VENDE"]
     mortas = [f for f in fontes if f["veredito"] == "MORTA"]
     novas = [f for f in fontes if f["veredito"] == "NOVA"]
+    sem_dado = [f for f in fontes if f["veredito"] == "SEM_DADO"]
+
+    # ⚠️ "Não consegui consultar" tem que aparecer ANTES da lista, não como
+    # nota de rodapé. Relatório que esconde a ausência de dado é pior que
+    # relatório nenhum — quem lê assume que os números foram conferidos.
+    if sem_dado:
+        return "\n".join([
+            "## 🔎 Desempenho por FONTE (perfil de origem)",
+            "",
+            f"⚠️ **A consulta de vendas da Shopee não completou.** Nenhum "
+            f"veredito foi emitido para as {len(sem_dado)} fonte(s) com posts "
+            f"no período.",
+            "",
+            "Isso NÃO quer dizer que elas não venderam — quer dizer que não foi "
+            "possível saber. A poda está bloqueada até a consulta responder.",
+            "",
+            "_(fontes com posts: " + ", ".join(
+                "@" + f["fonte"] for f in sem_dado[:12]) +
+            ("…" if len(sem_dado) > 12 else "") + ")_",
+        ])
+
     for f in fontes[:12]:
         emo = {"VENDE": "✅", "MORTA": "💀", "NOVA": "🌱"}.get(f["veredito"], "•")
         linhas.append(f"- {emo} @{f['fonte']} ({f['nicho']}): {f['posts']} posts · "

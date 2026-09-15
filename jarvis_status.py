@@ -235,13 +235,21 @@ def main():
             vende = [f for f in fontes if f["veredito"] == "VENDE"]
             morta = [f for f in fontes if f["veredito"] == "MORTA"]
             nova = [f for f in fontes if f["veredito"] == "NOVA"]
-            print(f"  {_c(len(vende), 'v')} VENDE · {_c(len(morta), 'r')} MORTA · "
-                  f"{_c(len(nova), 'a')} NOVA (de {len(fontes)} com posts)")
-            for f in vende[:6]:
-                print(f"    {_c('✅', 'v')} @{f['fonte']} ({f['nicho']}): "
-                      f"{f['posts']}p · {f['vendas']}v · {_brl(f['comissao'])}")
-            if morta:
-                print(_c(f"    💀 podar: " + ", ".join('@' + f['fonte'] for f in morta[:8]), "r"))
+            sem_dado = [f for f in fontes if f["veredito"] == "SEM_DADO"]
+            if sem_dado:
+                # ⚠️ Não dá pra mostrar "0 MORTA" quando a verdade é "não
+                # consegui perguntar". Zero parece resultado; não é.
+                print(_c(f"  ⚠️ consulta de vendas INDISPONÍVEL — nenhum "
+                         f"veredito para {len(sem_dado)} fonte(s) com posts", "r"))
+                print("     (a poda fica bloqueada até a Shopee responder)")
+            else:
+                print(f"  {_c(len(vende), 'v')} VENDE · {_c(len(morta), 'r')} MORTA · "
+                      f"{_c(len(nova), 'a')} NOVA (de {len(fontes)} com posts)")
+                for f in vende[:6]:
+                    print(f"    {_c('✅', 'v')} @{f['fonte']} ({f['nicho']}): "
+                          f"{f['posts']}p · {f['vendas']}v · {_brl(f['comissao'])}")
+                if morta:
+                    print(_c(f"    💀 podar: " + ", ".join('@' + f['fonte'] for f in morta[:8]), "r"))
         except Exception as e:
             print(_c(f"  (--full falhou ao cruzar com a Shopee: {str(e)[:60]})", "d"))
     else:
