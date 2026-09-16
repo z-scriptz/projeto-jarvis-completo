@@ -525,6 +525,24 @@ class VerificadorProducao(_Base):
                 f"a régua do renderizador devolveu slug vazio para {nome!r}")
         return slug
 
+    def _contar(self, observado: dict, espera: dict):
+        """⚠️ É ISTO QUE FAZ `2 de 4` VIRAR PARTIAL EM VEZ DE FAILED.
+
+        📌 E repara no que NÃO tem: `incertos`. Aqui a fonte de verdade é o
+        disco local — ou o pacote está lá, ou não está. Não existe alvo sobre o
+        qual o sistema de arquivos "não soube responder": se ele não soubesse,
+        `_consultar` teria levantado e nada disso rodaria.
+
+        Num verificador de Stripe seria diferente: reembolso em `pending` é
+        exatamente um `incerto`, e chamá-lo de falha seria inventar."""
+        from escopo import Contagem
+        return Contagem(
+            pedidos=int(observado.get("pedidos") or 0),
+            confirmados=int(observado.get("produzidos") or 0),
+            falhos=len(observado.get("faltando") or []),
+            incertos=0,
+        )
+
     def _consultar(self, contexto: dict) -> dict:
         alvos = [str(a) for a in (contexto.get("alvos") or [])]
         if not PRONTO_DIR.exists():

@@ -161,15 +161,17 @@ a = ultima_acao(esc)
 estado = esc.estado(a.hash)
 prova = [x for x in esc.livro.ler() if x.kind == "verification"][-1].body["proof"]
 
-vale(estado is Estado.FALHOU,
-     f"⚠️ HOJE ISTO DÁ FAILED, e está tecnicamente certo: a asserção "
-     f"`produzidos == 4` foi contradita pela fonte de verdade. Deu "
-     f"{estado.value}")
+vale(estado is Estado.PARCIAL,
+     f"⚠️ ANTES ISTO DAVA FAILED — tecnicamente certo e operacionalmente "
+     f"falso, porque manda refazer os quatro sendo que dois existem. Agora é "
+     f"PARTIAL. Deu {estado.value}")
+vale(prova["tally"] == {"requested": 4, "confirmed": 2,
+                        "failed": 2, "unknown": 0},
+     f"⚠️ e os NÚMEROS são a verdade; o estado é o resumo deles: "
+     f"{prova.get('tally')}")
 vale(prova["evidence"]["produzidos"] == 2
      and prova["evidence"]["pedidos"] == 4,
-     f"⚠️ MAS A INFORMAÇÃO PARCIAL NÃO SE PERDE: a evidência da prova guarda "
-     f"2 de 4. O que falta é o ESTADO saber representar isso — hoje ele é "
-     f"binário. veio {prova['evidence']}")
+     f"a evidência bruta da fonte continua no recibo: {prova['evidence']}")
 vale(len(prova["evidence"]["confirmados"]) == 2
      and len(prova["evidence"]["faltando"]) == 2,
      f"e nomeia os dois lados: {prova['evidence']}")
@@ -238,6 +240,6 @@ if FALHAS:
         print(f"   · {f}")
     sys.exit(1)
 print(f"✅ {OK}/{OK} asserções")
-print("\n📌 a terceira intenção já entregou o que foi buscar:")
-print("   pedir 4 e sair 2 é um fato que o ESTADO ainda não representa.")
-print("   a evidência guarda; a semântica não. → `Partial Effect`\n")
+print("\n📌 a terceira intenção entregou o que foi buscar, e o buraco fechou:")
+print("   pedir 4 e sair 2 agora é PARTIAL, com 4/2/2/0 no recibo.")
+print("   o estado é o resumo; os números são a verdade.\n")
