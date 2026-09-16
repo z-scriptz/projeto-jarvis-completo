@@ -374,5 +374,24 @@ class VerificadorPerfis(_Base):
                       f"arquivo(s) de perfil")
 
 
+def maturidade(agente: str = "jarvis.ceo", acao: str = "source.disable") -> str:
+    """Esta intenção já conquistou o direito de bloquear?
+
+    📌 Troca "deixa mais uns dias em observe" — que é sentimento e nunca
+    acaba — por um número que responde sozinho."""
+    esc = _construir()
+    if esc is None:
+        return f"🔒 escopo: DESLIGADO ({_motivo_off})"
+    try:
+        from escopo import prontidao, relatorio
+    except ImportError as e:
+        return f"🔒 escopo: sem maturidade nesta versão da lib ({e})"
+    return relatorio(prontidao(esc.livro, agente, acao))
+
+
 if __name__ == "__main__":
+    import sys
     print(resumo())
+    if "--maturidade" in sys.argv:
+        print()
+        print(maturidade())
