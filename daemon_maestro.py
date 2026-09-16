@@ -49,6 +49,21 @@ except Exception:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
     log = logging.getLogger("daemon_maestro")
 
+# ⚠️ A CAMADA DE CONTROLE NUNCA DERRUBA O DAEMON. Sem a ESCOPO instalada,
+# `_guarda` vira decorador que não faz nada e o ciclo roda exatamente igual.
+try:
+    from escopo_jarvis import guarda as _guarda, impressao as _impressao
+except Exception:                       # noqa: BLE001 — proposital
+    def _guarda(**_kw):                 # noqa: D103
+        return lambda fn: fn
+
+    def _impressao(_dados):             # noqa: D103
+        return ""
+
+# Procedência da última carga da fila de produtos: de onde veio, quando, e
+# qual era. ⚠️ Quem sabe a procedência de um dado é quem foi buscá-lo.
+_PROCEDENCIA_FILA: dict = {}
+
 RAIZ = Path(__file__).parent.parent
 PLANS_DIR = RAIZ / "shared" / "content_plans"
 CONFIG_PATH = PLANS_DIR / "agendador_config.json"
@@ -685,6 +700,34 @@ def ciclo_producao(cfg: dict, estado: dict, dry_run: bool) -> dict:
     return resultado
 
 
+def _custo_do_lote(cfg: dict, produtos: list) -> float:
+    """Custo declarado do lote, em reais. 0.0 quando o operador não declarou.
+
+    ⚠️ O VALOR UNITÁRIO É DO OPERADOR, não da biblioteca: quem sabe quanto
+    custa uma geração é quem paga a fatura. `ESCOPO_CUSTO_VIDEO` em reais,
+    `ESCOPO_CUSTO_VIDEO_PREMIUM` para os campeões (Kling 2.1 custa mais).
+
+    ⚠️ E ZERO AQUI SIGNIFICA "NÃO DECLARADO", o que NÃO é a mesma coisa que
+    "de graça" — mas hoje o núcleo não sabe distinguir os dois, porque
+    `Intencao.custo` nasce `0.0`. Está anotado no ROADMAP como defeito achado
+    ao tentar usar o campo pela primeira vez. Enquanto não for consertado,
+    política que decidir por custo pode liberar um lote caro achando que ele
+    é grátis — por isso a política desta ação decide por QUANTIDADE."""
+    unit = float(os.environ.get("ESCOPO_CUSTO_VIDEO", "0") or 0)
+    unit_premium = float(os.environ.get("ESCOPO_CUSTO_VIDEO_PREMIUM",
+                                        str(unit)) or 0)
+    if not (unit or unit_premium):
+        return 0.0
+    minimo = float(cfg.get("producao_premium_comissao_min", 0) or 0)
+    premium_ligado = bool(cfg.get("producao_premium_campeoes"))
+    total = 0.0
+    for p in produtos:
+        eh_premium = (premium_ligado
+                      and float(p.get("comissao_valor", 0) or 0) >= minimo)
+        total += unit_premium if eh_premium else unit
+    return round(total, 2)
+
+
 def _produzir_lote(cfg: dict, estado: dict, quantidade: int) -> int:
     """
     Produz `quantidade` vídeos a partir dos produtos da fila usando o pipeline
@@ -694,20 +737,51 @@ def _produzir_lote(cfg: dict, estado: dict, quantidade: int) -> int:
     postava. Campeões (comissão >= limite) usam premium (Kling 2.1).
     Retorna quantos foram produzidos com sucesso.
     """
-    import os
-    from agents.production_runner_agent import (processar_produto,
-                                                _dir_saida_rodada)
-
     produtos = _carregar_produtos_para_produzir(quantidade, cfg)
     if not produtos:
         log.warning("   ⚠️  Nenhum produto disponível pra produzir")
         return 0
+    return _produzir_produtos(cfg, estado, produtos)["produzidos"]
+
+
+@_guarda(
+    agente="jarvis.producao",
+    acao="video.create",
+    # ⚠️ Os alvos são os PRODUTOS, não a quantidade. Foi por isso que a carga
+    # da fila saiu daqui: a ESCOPO precisa saber O QUE vai ser tocado ANTES de
+    # tocar, e uma função que descobre os próprios alvos lá dentro não tem
+    # como declarar intenção.
+    alvos=lambda cfg, estado, produtos: [p["nome"] for p in produtos],
+    # ⚠️ PRIMEIRA AÇÃO COM CUSTO DECLARADO. `Intencao.custo` existe no núcleo
+    # desde o começo e nunca foi usado — é o gancho do Blast Radius Budget.
+    # O valor unitário é do OPERADOR (ESCOPO_CUSTO_VIDEO, em R$), porque quem
+    # sabe quanto custa uma geração é quem paga a fatura, não a biblioteca.
+    custo=lambda cfg, estado, produtos: _custo_do_lote(cfg, produtos),
+    evidencias=lambda cfg, estado, produtos: {
+        "fila_de_produtos": dict(_PROCEDENCIA_FILA) or
+        {"estado": "UNAVAILABLE", "erro": "a fila nunca foi carregada"}},
+    contexto=lambda resultado, intencao: {
+        "alvos": list(intencao.alvos),
+        "produzidos": (resultado or {}).get("produzidos", 0),
+    },
+)
+def _produzir_produtos(cfg: dict, estado: dict, produtos: list) -> dict:
+    """Produz UM LOTE de produtos declarados. É a costura que a ESCOPO guarda.
+
+    ⚠️ Devolve dicionário e não `int` de propósito: o número sozinho não diz
+    QUAIS entraram na esteira, e sem isso a verificação não tem como conferir
+    alvo por alvo — que é a lição do `VerificadorPerfis` (contador global usado
+    como asserção por ação responde outra pergunta)."""
+    import os
+    from agents.production_runner_agent import (processar_produto,
+                                                _dir_saida_rodada)
 
     # Uma pasta de rodada por lote (mesma convenção do production_runner.main)
     dir_rodada = _dir_saida_rodada()
     max_downloads = int(cfg.get("producao_max_downloads", 10))
 
     produzidos = 0
+    entraram, falharam = [], []
     for p in produtos:
         nome = p["nome"]
         comissao = float(p.get("comissao_valor", 0) or 0)
@@ -733,12 +807,15 @@ def _produzir_lote(cfg: dict, estado: dict, quantidade: int) -> int:
             status = (res or {}).get("status", "")
             if status in ("video_gerado", "recuperado"):
                 produzidos += 1
+                entraram.append(nome)
                 log.info(f"      ✅ '{nome}': {status} → esteira: "
                          f"{res.get('pronto_para_postar') or '?'}")
             else:
+                falharam.append(nome)
                 log.warning(f"      ⚠️  '{nome}': {status or 'sem status'} "
                             f"(não entrou na esteira)")
         except Exception as e:
+            falharam.append(nome)
             log.error(f"      ❌ erro produzindo '{nome}': {e}")
         finally:
             if _fal_anterior is None:
@@ -746,7 +823,11 @@ def _produzir_lote(cfg: dict, estado: dict, quantidade: int) -> int:
             else:
                 os.environ["FAL_MODEL"] = _fal_anterior
 
-    return produzidos
+    # ⚠️ `pedidos` fica no retorno porque `produzidos` sozinho é ambíguo: 2 de
+    # 2 e 2 de 4 são fatos muito diferentes, e o segundo é o caso que a ESCOPO
+    # ainda não sabe representar (ver `Partial Effect` no ROADMAP).
+    return {"produzidos": produzidos, "pedidos": len(produtos),
+            "entraram": entraram, "falharam": falharam}
 
 
 def _estoque_por_conta() -> dict:
@@ -984,7 +1065,16 @@ def _carregar_produtos_para_produzir(quantidade: int, cfg: dict | None = None) -
 
     A lista sai filtrada pelo estoque de cada conta (ver _priorizar_por_estoque).
     """
+    global _PROCEDENCIA_FILA
     cfg = cfg or {}
+    # ⚠️ A procedência começa como INDISPONIVEL e só vira OK quando uma leitura
+    # completa. Esta função tem DOIS `except` que viram `log.warning` e caem
+    # para o `return []` do fim — e daí o chamador lê "nenhum produto
+    # disponível pra produzir", que é indistinguível de "a fila está vazia".
+    # É o bug das 36 fontes, no terceiro arquivo. A ESCOPO não conserta isso;
+    # ela impede que a decisão seja tomada sem o dado, e prova depois.
+    _PROCEDENCIA_FILA = {"estado": "UNAVAILABLE", "fonte": "", "em": time.time(),
+                         "erro": "nenhuma fonte de fila pôde ser lida"}
     # 1) Relatório validado (tem comissão real, ordena por potencial)
     relatorio = PLANS_DIR / "validacao_fila.json"
     if relatorio.exists():
@@ -998,10 +1088,17 @@ def _carregar_produtos_para_produzir(quantidade: int, cfg: dict | None = None) -
                         "comissao_valor": p.get("comissao_valor", 0),
                     })
             if produtos:
+                _PROCEDENCIA_FILA = {
+                    "estado": "OK", "fonte": str(relatorio), "em": time.time(),
+                    "hash": _impressao(sorted(p["nome"] for p in produtos)),
+                    "candidatos": len(produtos)}
                 # mina_ouro já vem primeiro no relatório ordenado
                 return _priorizar_por_estoque(_sem_quarentena(produtos, cfg),
                                              quantidade, cfg)
         except Exception as e:
+            _PROCEDENCIA_FILA = {
+                "estado": "UNAVAILABLE", "fonte": str(relatorio),
+                "em": time.time(), "erro": f"{type(e).__name__}: {str(e)[:120]}"}
             log.warning(f"   ⚠️  erro lendo validacao_fila ({e})")
 
     # 2) Fallback: produtos_fila.json (sem comissão = standard)
@@ -1014,9 +1111,16 @@ def _carregar_produtos_para_produzir(quantidade: int, cfg: dict | None = None) -
                 nome = item.get("produto") if isinstance(item, dict) else item
                 if nome:
                     produtos.append({"nome": nome, "comissao_valor": 0})
+            _PROCEDENCIA_FILA = {
+                "estado": "OK", "fonte": str(fila), "em": time.time(),
+                "hash": _impressao(sorted(p["nome"] for p in produtos)),
+                "candidatos": len(produtos)}
             return _priorizar_por_estoque(_sem_quarentena(produtos, cfg),
                                              quantidade, cfg)
         except Exception as e:
+            _PROCEDENCIA_FILA = {
+                "estado": "UNAVAILABLE", "fonte": str(fila), "em": time.time(),
+                "erro": f"{type(e).__name__}: {str(e)[:120]}"}
             log.warning(f"   ⚠️  erro lendo produtos_fila ({e})")
 
     return []

@@ -36,6 +36,7 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent
 TIKTOK_PERFIS = BASE_DIR / "tiktok_perfis.txt"
 IG_PERFIS = BASE_DIR / "instagram_perfis.txt"
+PRONTO_DIR = BASE_DIR / "pronto_para_postar"
 
 # A marca que `_podar_fontes()` escreve na linha comentada.
 MARCA_PODA = "# PODADO CEO"
@@ -87,6 +88,7 @@ def _construir():
         esc = Escopo(politicas=pol, dados=dados)
         esc.registrar_verificador(VerificadorPerfis())
         esc.registrar_verificador(VerificadorComentario())
+        esc.registrar_verificador(VerificadorProducao())
         for aviso in esc.avisos:
             print(f"⚠️ escopo: {aviso}")
         _escopo = esc
@@ -476,6 +478,74 @@ class VerificadorComentario(_Base):
         return {"publicado": bool((dados or {}).get("id")),
                 "id_lido": (dados or {}).get("id", ""),
                 "id_esperado": rid}
+
+
+class EsteiraIlegivel(Exception):
+    """Não deu para conferir a esteira `pronto_para_postar/`.
+
+    ⚠️ Mesmo motivo de sempre: pasta ausente, sem permissão, ou slug que não
+    dá para calcular — nenhuma dessas coisas é evidência de que o vídeo não
+    foi produzido. Devolver 0 aqui transformaria "não consegui olhar" em
+    "não produziu nada"."""
+
+
+class VerificadorProducao(_Base):
+    """Os pacotes entraram MESMO na esteira, ou só o contador subiu?
+
+    ⚠️ CONFERE ALVO POR ALVO, e nomeia quem faltou. Contar quantas pastas
+    existem em `pronto_para_postar/` e comparar com o pedido seria contador
+    global usado como asserção por ação — o falso positivo que o
+    `VerificadorPerfis` já tomou uma vez: uma rodada anterior bem-sucedida
+    deixa pastas lá, e elas não são desta ação.
+
+    📌 A FONTE DE VERDADE É O DISCO, não o retorno do `processar_produto()`.
+    Ele devolver `status: video_gerado` é o agente dizendo que fez; o pacote
+    estar em `pronto_para_postar/<slug>/video.mp4` é o mundo confirmando."""
+
+    nome = "jarvis.producao"
+
+    @staticmethod
+    def _slug(nome: str) -> str:
+        """O MESMO `_slugify` do renderizador — importado, nunca reescrito.
+
+        ⚠️ E LEVANTA em vez de devolver "". Slug calculado por outra régua não
+        acha pasta nenhuma, e o sintoma seria "não tinha vídeo na esteira" —
+        indistinguível de a produção ter falhado. O `conferir_match` documenta
+        esse risco e mesmo assim devolve ""; aqui não pode."""
+        try:
+            import produzir_tiktok as _PT
+            slug = _PT.H._slugify(nome or "")
+        except Exception as e:            # noqa: BLE001 — proposital
+            raise EsteiraIlegivel(
+                f"não consegui calcular o slug de {nome!r} com a régua do "
+                f"renderizador ({type(e).__name__}: {str(e)[:80]}) — sem ela "
+                f"qualquer busca na esteira acha nada e mente") from e
+        if not slug:
+            raise EsteiraIlegivel(
+                f"a régua do renderizador devolveu slug vazio para {nome!r}")
+        return slug
+
+    def _consultar(self, contexto: dict) -> dict:
+        alvos = [str(a) for a in (contexto.get("alvos") or [])]
+        if not PRONTO_DIR.exists():
+            # ⚠️ Pasta ausente NÃO é "produziu zero". Pode ser volume
+            # desmontado, deploy no lugar errado, permissão.
+            raise EsteiraIlegivel(
+                f"a esteira {PRONTO_DIR} não existe — não dá para conferir se "
+                f"os {len(alvos)} pacote(s) entraram")
+        confirmados, faltando = [], []
+        for nome in alvos:
+            pacote = PRONTO_DIR / self._slug(nome) / "video.mp4"
+            (confirmados if pacote.exists() else faltando).append(nome)
+        return {
+            "produzidos": len(confirmados),
+            "pedidos": len(alvos),
+            # ⚠️ NOMEAR QUEM FALTOU é o que faz o recibo servir para alguma
+            # coisa. "2 de 4" manda alguém procurar; "faltou o produto X"
+            # manda alguém consertar.
+            "faltando": sorted(faltando),
+            "confirmados": sorted(confirmados),
+        }
 
 
 def maturidade(agente: str = "jarvis.ceo", acao: str = "source.disable") -> str:

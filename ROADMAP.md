@@ -12966,3 +12966,42 @@ olha. Um `except Exception` largo em volta de código de leitura transforma
 levam a lugares muito diferentes.
 
 `teste_escopo_jarvis.py` 51 → **56**, com o `rm` na fila como asserção nomeada.
+
+---
+
+### 🔒 ESCOPO: a terceira intenção — `jarvis.producao.video.create` (16/09)
+
+`_produzir_lote()` foi partido em dois: quem **carrega** a fila e quem
+**produz**. A ESCOPO precisa saber O QUE vai ser tocado antes de tocar, e
+função que descobre os próprios alvos lá dentro não tem como declarar intenção.
+Mesma cirurgia do `_responder_comentario`.
+
+**O que essa ação testa que as outras duas não testam:**
+
+```
+volume          60 ciclos/hora, contra 1 poda/dia
+efeito parcial  pedir 4 e sair 2 não é sucesso nem falha
+custo           a primeira ação com dinheiro atrelado
+```
+
+**Evidência:** `fila_de_produtos`, com procedência. `_carregar_produtos_para_
+produzir()` tem **dois** `except` que viram `log.warning` e caem para
+`return []` — e o chamador lê *"nenhum produto disponível pra produzir"*, que é
+indistinguível de *"a fila está vazia"*. ⚠️ **É o bug das 36 fontes, no
+terceiro arquivo do projeto.** Agora falha de leitura vira HOLD com o motivo no
+recibo, em vez de um ciclo que produz zero e parece normal.
+
+**Verificação:** a esteira `pronto_para_postar/<slug>/video.mp4` é a fonte de
+verdade — o `status: video_gerado` é o agente dizendo que fez. Confere alvo por
+alvo e **nomeia quem faltou**, porque *"2 de 4"* manda procurar e *"faltou o
+produto X"* manda consertar.
+
+📌 E o `_slug_do_produto` **levanta** em vez de devolver `""`. O
+`conferir_match.py` documenta esse risco no próprio comentário — *"o sintoma
+seria 'não tinha vídeo na fila', que é indistinguível de ter dado certo"* — e
+mesmo assim devolve `""`. Aqui não pode: régua errada acha pasta nenhuma, e
+achar nada seria lido como não ter produzido.
+
+`teste_producao_guardada.py`, **17 asserções**, verde de primeira. Uma delas
+existe para prender uma LACUNA, não um acerto: o caso `4 pedidos / 2 na
+esteira` dá FAILED, e a asserção diz isso com todas as letras.

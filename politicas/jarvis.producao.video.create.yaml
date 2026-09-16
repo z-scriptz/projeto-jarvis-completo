@@ -1,0 +1,85 @@
+# Contrato de execução do daemon para PRODUZIR VÍDEOS.
+#
+# ⚠️ ESTA É A TERCEIRA INTENÇÃO INSTRUMENTADA, e ela existe para testar o que
+# as outras duas não testam:
+#
+#     volume          60 ciclos/hora, contra 1 poda/dia
+#     efeito parcial  pedir 4 e sair 2 não é sucesso nem falha
+#     custo           a primeira ação com dinheiro atrelado
+#
+# 📌 E ela nasce sabendo que vai expor um buraco. Ver `verificacao.espera`
+# lá embaixo.
+
+agente: jarvis.producao
+acao: video.create
+versao: v1
+autoridade: L1
+
+# ⚠️ `observe` NÃO INTERROMPE NADA. Produção de vídeo é a linha de montagem do
+# Jarvis inteiro; uma camada nova bloqueando isso no primeiro dia seria
+# exatamente o que a ESCOPO promete não fazer.
+modo: observe
+
+# ⚠️ A EVIDÊNCIA SEM A QUAL ESTA AÇÃO NÃO PODE SER JULGADA.
+#
+# `_carregar_produtos_para_produzir()` tem DOIS `except` que viram
+# `log.warning` e caem para `return []`. O chamador lê "nenhum produto
+# disponível pra produzir" — que é indistinguível de "a fila está vazia".
+# É o bug das 36 fontes, no terceiro arquivo do projeto.
+#
+# 📌 Com esta evidência declarada, uma falha de leitura vira HOLD com o motivo
+# escrito no recibo, em vez de um ciclo que produz zero e parece normal.
+evidencias:
+  - id: fila_de_produtos
+    descricao: fila de produtos validados (validacao_fila.json ou produtos_fila.json)
+    exige_procedencia: true
+
+# ⚠️ AS REGRAS DECIDEM POR QUANTIDADE, E NÃO POR CUSTO — de propósito.
+#
+# `Intencao.custo` nasce `0.0` no núcleo, e hoje "não declarado" é
+# indistinguível de "de graça". Uma regra `custo > 50 → HOLD` liberaria um lote
+# caro em qualquer máquina onde o operador esqueceu de declarar o valor
+# unitário. É a doença da casa, dentro do campo que existe justamente para
+# medir risco financeiro.
+#
+# O custo É declarado na intenção e vai para o recibo — só não decide nada
+# ainda. Quando o núcleo souber dizer "não declarado", a regra entra aqui.
+regras:
+  - id: lote_absurdo
+    se: {campo: quantidade, op: ">", valor: 20}
+    entao: DENY
+    motivo: >-
+      produzir mais de 20 vídeos numa tacada não é reposição de esteira, é
+      config errada ou laço. O teto diário do Jarvis inteiro é menor que isso.
+
+  - id: lote_grande
+    se: {campo: quantidade, op: ">", valor: 8}
+    entao: HOLD
+    motivo: >-
+      lote acima de 8 vídeos queima crédito de IA de verdade (Gemini,
+      ElevenLabs, fal.ai) e merece gente olhando antes.
+
+padrao: ALLOW
+
+verificacao:
+  verificador: jarvis.producao
+  tentativas: 3
+  # A esteira é disco local: se não apareceu na 1ª, esperar muito não ajuda.
+  # As esperas curtas cobrem escrita em andamento, não latência de rede.
+  espera_segundos: [0, 5, 20]
+  # ⚠️ AQUI ESTÁ O BURACO QUE ESTA INTENÇÃO EXISTE PARA EXPOR.
+  #
+  # `produzidos: $quantidade` significa "todos os pedidos entraram na esteira".
+  # Pedir 4 e sair 2 dá FAILED — e FAILED está tecnicamente certo (a asserção
+  # foi contradita pela fonte de verdade), mas perde a informação de que DOIS
+  # funcionaram.
+  #
+  # 📌 A informação NÃO se perde no recibo: o verificador devolve
+  # `confirmados`, `faltando` e `pedidos`, e isso fica na evidência da prova.
+  # O que falta é o ESTADO saber representar isso — hoje ele é binário.
+  #
+  # Essa é a lacuna `Partial Effect` do ROADMAP, e ela vale para reembolso em
+  # lote, desativação de contas, disparo de e-mail, provisionamento. Vídeo é só
+  # o primeiro caso barato de vê-la acontecer.
+  espera:
+    produzidos: $quantidade
