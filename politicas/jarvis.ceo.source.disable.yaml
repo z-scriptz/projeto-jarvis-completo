@@ -63,10 +63,14 @@ verificacao:
   # Os arquivos de perfil são locais: se não deu na 1ª, esperar muito não
   # ajuda. As esperas curtas cobrem escrita em andamento, não latência de rede.
   espera_segundos: [0, 2, 10]
-  # Espero que o número de fontes realmente comentadas nos arquivos de perfil
-  # seja igual ao número de alvos que a intenção declarou.
+  # ⚠️ CONFIRMA OS ALVOS DESTA AÇÃO, um por um — não o total de podas do dia.
   #
-  # ⚠️ Em dry-run (`--podar-fontes` sem executar) nada é escrito, e o
-  # verificador sabe disso: ele compara contra 0. Ver `escopo_jarvis.py`.
+  # A primeira versão comparava com um contador global de linhas marcadas
+  # hoje, e isso produziria falso positivo: uma poda bem-sucedida às 10h
+  # deixaria 5 marcas, e uma RECUSA às 11h (0 alvos, espera 0) seria acusada
+  # de ter falhado por causa das marcas da rodada anterior.
+  #
+  # Em dry-run nada é escrito, e o verificador sabe disso: ele espera 0
+  # confirmados. Ver `escopo_jarvis.VerificadorPerfis`.
   espera:
-    desabilitadas: $quantidade
+    confirmados: $quantidade

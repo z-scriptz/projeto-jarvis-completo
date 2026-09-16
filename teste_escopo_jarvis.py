@@ -276,6 +276,63 @@ else:
          f"{a2.corpo['veredito']['regra']!r}")
 
 
+    # ── 5c · recusa depois de poda bem-sucedida não pode dar FAILED ───────
+    secao("5c · ⚠️ falso positivo: contador global vs alvos desta ação")
+
+    pfp = tmp / "f.txt"
+    pfp.write_text("\n".join(f"@morta_{i:02d} #pet" for i in range(10)) + "\n",
+                   encoding="utf-8")
+    ej = montar("caso_f", pfp)
+    cf = redecorar(ej)
+    cf.TIKTOK_PERFIS, cf.IG_PERFIS = pfp, tmp / "nada.txt"
+
+    # 1ª rodada: poda 5 com sucesso → ficam 5 marcas de hoje nos arquivos
+    cf._podar_fontes(fontes_falsas(5, n_vivas=0), executar=True)
+    esc = drenar(ej)
+    a_ok = ultima_acao(esc)
+    vale(esc.estado(a_ok.hash) is Estado.VERIFICADO,
+         f"a poda de 5 deveria VERIFICAR, deu {esc.estado(a_ok.hash).value}")
+    vale(pfp.read_text(encoding="utf-8").count("PODADO CEO") == 5,
+         "5 linhas marcadas hoje")
+
+    # 2ª rodada: a consulta cai e a poda se recusa — 0 alvos
+    sem = [{"fonte": f"morta_{i:02d}", "posts": 8, "vendas": 0, "comissao": 0.0,
+            "veredito": "SEM_DADO", "venda_conhecida": False} for i in range(10)]
+    try:
+        cf._podar_fontes(sem, executar=True)
+    except cf.PodaSemEvidencia:
+        pass
+    esc = drenar(ej)
+    a_rec = ultima_acao(esc)
+
+    vale(a_rec.hash != a_ok.hash, "é um recibo novo, não o anterior")
+    vale(esc.estado(a_rec.hash) is not Estado.FALHOU,
+         f"⚠️ A ASSERÇÃO QUE IMPORTA: uma RECUSA que não encostou em nada não "
+         f"pode ser acusada de ter falhado por causa das 5 marcas da rodada "
+         f"anterior. Deu {esc.estado(a_rec.hash).value}")
+    vale(esc.estado(a_rec.hash) is Estado.VERIFICADO,
+         "verificar a recusa prova que ela foi limpa — nada vazou")
+    vale(pfp.read_text(encoding="utf-8").count("PODADO CEO") == 5,
+         "⚠️ a recusa não pode ter marcado mais nada")
+
+    # e uma poda que só aplicou parte dos alvos tem que dar FAILED
+    pparc = tmp / "g.txt"
+    pparc.write_text("@morta_00 #pet\n@morta_01 #pet\n", encoding="utf-8")
+    ej = montar("caso_g", pparc)
+    cg = redecorar(ej)
+    cg.TIKTOK_PERFIS, cg.IG_PERFIS = pparc, tmp / "nada.txt"
+    cg._podar_fontes(fontes_falsas(4, n_vivas=0), executar=True)
+    esc = drenar(ej)
+    a_p = ultima_acao(esc)
+    vale(esc.estado(a_p.hash) is Estado.FALHOU,
+         f"4 pedidas e só 2 existentes tem que dar FAILED, "
+         f"deu {esc.estado(a_p.hash).value}")
+    prova_p = [r for r in esc.livro.ler()
+               if r.tipo == "verificacao"][-1].corpo["prova"]
+    vale("morta_02" in prova_p["motivo"],
+         f"o motivo tem que NOMEAR quem não foi podada: {prova_p['motivo']!r}")
+
+
 # ── 6 · a camada avisa quando cai ─────────────────────────────────────────
 secao("6 · camada desligada tem que gritar (uma vez, não toda hora)")
 

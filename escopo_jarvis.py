@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import functools
 import os
+import re
 import time
 from pathlib import Path
 
@@ -280,46 +281,81 @@ class VerificadorPerfis(_Base):
 
     nome = "jarvis.fontes"
 
+    @staticmethod
+    def _handle(linha: str) -> str:
+        """O @handle de uma linha, podada ou não. '' se a linha não for perfil."""
+        l = linha.strip().lstrip("#").strip()
+        if not l:
+            return ""
+        return re.split(r"[\s#]", l)[0].lstrip("@").lower()
+
     def _consultar(self, contexto: dict) -> dict:
+        """⚠️ CONFERE OS ALVOS DESTA AÇÃO, não o total de podas do dia.
+
+        A primeira versão contava quantas linhas tinham a marca de hoje e
+        comparava com a quantidade da intenção. Parece a mesma coisa e não é:
+
+            10h  poda 5 fontes com sucesso       → 5 marcas de hoje
+            11h  a consulta cai e a poda RECUSA  → intenção com 0 alvos
+                 o contador global diz 5, a espera diz 0  →  FALHOU
+
+        Uma recusa que não encostou em nada seria reportada como ação que
+        falhou. **Contador global usado como asserção por ação** é medição que
+        parece certa e responde outra pergunta."""
         marca = f"{MARCA_PODA} {time.strftime('%Y-%m-%d')}:"
-        achados, lidos = 0, 0
+        alvos = [str(a).lstrip("@").lower()
+                 for a in (contexto.get("alvos") or [])]
+        podados_hoje, lidos = set(), 0
         for arq in (TIKTOK_PERFIS, IG_PERFIS):
             if not arq.exists():
                 continue                          # arquivo ausente é normal
             texto = arq.read_text(encoding="utf-8")   # deixa a exceção subir
             lidos += 1
-            achados += sum(1 for l in texto.splitlines() if marca in l)
+            for linha in texto.splitlines():
+                if marca in linha:
+                    h = self._handle(linha)
+                    if h:
+                        podados_hoje.add(h)
         if lidos == 0:
             raise PerfisIlegiveis(
                 f"nenhum arquivo de perfil encontrado em {BASE_DIR} "
                 f"({TIKTOK_PERFIS.name}, {IG_PERFIS.name}) — "
                 f"sem fonte de verdade não há o que provar")
-        return {"desabilitadas": achados,
+        faltando = sorted(set(alvos) - podados_hoje)
+        return {"alvos": len(alvos),
+                "confirmados": len(alvos) - len(faltando),
+                "faltando": faltando[:20],
                 "executar": bool(contexto.get("executar", True)),
                 "arquivos_lidos": lidos}
 
     def _conferir(self, observado: dict, espera: dict) -> tuple:
         """⚠️ DRY-RUN MUDA O QUE SE ESPERA, NÃO O QUE SE VERIFICA.
 
-        `--podar-fontes` sem executar não escreve nada nos arquivos. Comparar
-        contra `$quantidade` nesse caso daria FALHOU numa execução que se
-        comportou perfeitamente — e alarme falso treina gente a ignorar
-        alarme."""
-        esperado = espera.get("desabilitadas", 0)
+        `--podar-fontes` sem executar não escreve nada nos arquivos. Cobrar
+        confirmação nesse caso daria FALHOU numa execução que se comportou
+        perfeitamente — e alarme falso treina gente a ignorar alarme."""
+        alvos = observado["alvos"]
+        confirmados = observado["confirmados"]
+
         if not observado.get("executar", True):
-            if observado["desabilitadas"] == 0:
-                return True, (f"dry-run: nada foi escrito nos arquivos de "
-                              f"perfil, como esperado (a intenção declarava "
-                              f"{esperado})")
+            if confirmados == 0:
+                return True, (f"dry-run: nenhum dos {alvos} alvo(s) foi "
+                              f"escrito nos arquivos, como esperado")
             return False, (f"dry-run NÃO deveria alterar nada, mas "
-                           f"{observado['desabilitadas']} linha(s) aparecem "
-                           f"podadas hoje")
-        if observado["desabilitadas"] != esperado:
-            return False, (f"a intenção declarava {esperado} fonte(s), mas os "
-                           f"arquivos de perfil mostram "
-                           f"{observado['desabilitadas']} podada(s) hoje")
-        return True, (f"{esperado} fonte(s) confirmada(s) comentada(s) em "
-                      f"{observado['arquivos_lidos']} arquivo(s) de perfil")
+                           f"{confirmados} alvo(s) aparecem podados hoje")
+
+        if alvos == 0:
+            # Ação sem alvo — recusa, ou nada a fazer. Verificar isso não é
+            # perda de tempo: prova que a recusa foi limpa, que nada vazou.
+            return True, "nenhum alvo declarado — nada aconteceu, como devia"
+
+        if confirmados != alvos:
+            return False, (f"a intenção declarava {alvos} fonte(s), mas "
+                           f"{alvos - confirmados} não aparece(m) comentada(s) "
+                           f"hoje: {', '.join(observado['faltando']) or '—'}")
+        return True, (f"{confirmados} de {alvos} fonte(s) confirmada(s) "
+                      f"comentada(s) em {observado['arquivos_lidos']} "
+                      f"arquivo(s) de perfil")
 
 
 if __name__ == "__main__":
