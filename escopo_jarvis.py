@@ -126,6 +126,98 @@ def processar_verificacoes() -> list:
     return esc.processar_verificacoes() if esc else []
 
 
+def _alerta_telegram(msg: str) -> bool:
+    """Mesmo canal de admin dos outros alertas. Best-effort, nunca quebra."""
+    tok = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+    chat = (os.environ.get("TELEGRAM_ALERT_CHAT_ID")
+            or os.environ.get("TELEGRAM_CHAT_ID") or "").strip()
+    if not tok or not chat:
+        return False
+    try:
+        import requests
+        requests.post(f"https://api.telegram.org/bot{tok}/sendMessage", timeout=15,
+                      json={"chat_id": chat, "text": msg, "parse_mode": "HTML"})
+        return True
+    except Exception:
+        return False
+
+
+_ARQ_ESTADO = None
+_ESTADO_MEMORIA: dict = {}
+_LEMBRETE_SEGUNDOS = 24 * 3600
+
+
+def _arq_estado() -> Path:
+    global _ARQ_ESTADO
+    if _ARQ_ESTADO is None:
+        base = Path(os.environ.get("ESCOPO_DADOS") or (BASE_DIR / "escopo_dados"))
+        _ARQ_ESTADO = base / "camada.json"
+    return _ARQ_ESTADO
+
+
+def _ler_estado() -> dict:
+    try:
+        import json
+        return json.loads(_arq_estado().read_text(encoding="utf-8"))
+    except Exception:
+        return dict(_ESTADO_MEMORIA)
+
+
+def _gravar_estado(d: dict) -> None:
+    global _ESTADO_MEMORIA
+    _ESTADO_MEMORIA = dict(d)
+    try:
+        import json
+        arq = _arq_estado()
+        arq.parent.mkdir(parents=True, exist_ok=True)
+        arq.write_text(json.dumps(d), encoding="utf-8")
+    except Exception:
+        pass        # sem disco, a dedup vive só na memória do processo
+
+
+def checar_camada(avisar: bool = True) -> tuple:
+    """(ok, mensagem). Avisa no Telegram quando o estado MUDA.
+
+    ⚠️ ISTO EXISTE POR CAUSA DE UM CASO REAL, e é requisito de produto, não
+    conveniência: em 15/09/2026 a poda de fontes rodou com a consulta de
+    vendas fora do ar e desabilitou 8 fontes sem dado — e a ESCOPO estava
+    desligada por um `~/.ssh/config` faltando, então não existe recibo.
+
+    📌 Camada de controle que depende de instalação manual não protege nada:
+    na hora que importa, ela está desligada e ninguém sabe. Ligada por padrão
+    e **barulhenta quando cai** é o comportamento correto.
+
+    Anti-spam: avisa na virada de estado, e no máximo uma vez por dia
+    enquanto continuar fora — daemon que reinicia não vira enxurrada."""
+    ok = ativo()
+    motivo = "" if ok else por_que_desligado()
+    anterior = _ler_estado()
+    era = anterior.get("ativo")
+    ultimo = float(anterior.get("avisado_em") or 0)
+    agora_ts = time.time()
+
+    mudou = era is not None and bool(era) != ok
+    primeira = era is None
+    lembrete = (not ok) and (agora_ts - ultimo) > _LEMBRETE_SEGUNDOS
+
+    if ok:
+        msg = "🔒 ESCOPO ligada — ações de agente passam por contrato."
+    else:
+        msg = ("⚠️ <b>ESCOPO DESLIGADA</b>\n"
+               f"motivo: <code>{motivo}</code>\n\n"
+               "Enquanto isso, nenhuma ação de agente gera recibo — inclusive "
+               "a poda de fontes.\n\n"
+               "<code>/root/jarvis/.venv/bin/pip install -e /root/escopo-runtime</code>")
+
+    # Na primeira vez só avisa se estiver FORA — "está tudo bem" não é notícia.
+    deve = avisar and (mudou or lembrete or (primeira and not ok))
+    if deve and _alerta_telegram(msg):
+        _gravar_estado({"ativo": ok, "avisado_em": agora_ts})
+    else:
+        _gravar_estado({"ativo": ok, "avisado_em": ultimo})
+    return ok, msg
+
+
 def resumo() -> str:
     """Estado da camada, para o `--status` e para olhar de vez em quando."""
     esc = _construir()

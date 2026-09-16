@@ -1687,6 +1687,18 @@ def main():
                         help="roda só a descoberta de grupos (manual, ignora horário)")
     args = parser.parse_args()
 
+    # ⚠️ A CAMADA DE CONTROLE TEM QUE SER BARULHENTA QUANDO CAI. Em 15/09/2026
+    # a poda de fontes rodou sem dado de venda e a ESCOPO estava desligada por
+    # um `~/.ssh/config` faltando — sem recibo, sem aviso, ninguém soube.
+    # Camada que só protege quando alguém lembra de instalar não protege nada.
+    try:
+        import escopo_jarvis
+        _ok, _msg = escopo_jarvis.checar_camada()
+        log.info("🔒 ESCOPO ativa" if _ok
+                 else f"⚠️ ESCOPO DESLIGADA: {escopo_jarvis.por_que_desligado()}")
+    except Exception as e:                  # nunca impede o daemon de subir
+        log.warning(f"⚠️ não consegui checar a camada ESCOPO: {e}")
+
     if args.status:
         mostrar_status()
         return 0

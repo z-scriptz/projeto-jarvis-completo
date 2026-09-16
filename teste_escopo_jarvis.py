@@ -213,6 +213,49 @@ else:
     integra, problemas = esc.integro()
     vale(integra, f"a cadeia deveria estar íntegra: {problemas}")
 
+# ── 6 · a camada avisa quando cai ─────────────────────────────────────────
+secao("6 · camada desligada tem que gritar (uma vez, não toda hora)")
+
+for m in list(sys.modules):
+    if m == "escopo_jarvis":
+        del sys.modules[m]
+os.environ["ESCOPO_ATIVO"] = "0"
+os.environ["ESCOPO_DADOS"] = str(tmp / "camada")
+import escopo_jarvis as ej6                                       # noqa: E402
+
+enviadas = []
+ej6._alerta_telegram = lambda msg: (enviadas.append(msg), True)[1]
+
+ok, msg = ej6.checar_camada()
+vale(ok is False, "com ESCOPO_ATIVO=0 a camada está fora")
+vale(len(enviadas) == 1, f"a primeira checagem com a camada FORA tem que "
+                        f"avisar, enviou {len(enviadas)}")
+vale("DESLIGADA" in enviadas[0], "o aviso tem que dizer que está desligada")
+vale("ESCOPO_ATIVO" in enviadas[0],
+     f"tem que dizer o MOTIVO, não só que caiu: {enviadas[0]!r}")
+
+ej6.checar_camada()
+ej6.checar_camada()
+vale(len(enviadas) == 1,
+     f"⚠️ anti-spam: continuar fora não pode gerar aviso novo "
+     f"(daemon reinicia). Enviou {len(enviadas)}")
+
+# a virada para ligada é notícia
+ej6._tentou = False
+ej6._escopo = None
+os.environ["ESCOPO_ATIVO"] = "1"
+os.environ["ESCOPO_POLITICAS"] = str(BASE / "politicas")
+ok, _ = ej6.checar_camada()
+if TEM_LIB:
+    vale(ok is True, "com a lib instalada e ESCOPO_ATIVO=1 ela deveria subir")
+    vale(len(enviadas) == 2, "a virada FORA→DENTRO é notícia e deve avisar")
+    vale("ligada" in enviadas[1].lower(), "o segundo aviso é o de recuperação")
+
+# e quem só quer consultar não dispara aviso nenhum
+antes = len(enviadas)
+ej6.checar_camada(avisar=False)
+vale(len(enviadas) == antes, "checar_camada(avisar=False) não pode enviar nada")
+
 shutil.rmtree(tmp, ignore_errors=True)
 print("\n" + "─" * 70)
 if FALHAS:
