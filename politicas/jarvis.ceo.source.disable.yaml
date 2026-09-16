@@ -39,6 +39,13 @@ modo: observe
 evidencias:
   - id: vendas_por_fonte
     descricao: consulta de vendas da Shopee por perfil-fonte (conversionReport)
+    # ⚠️ Não basta dizer "tenho o dado": tem que dizer DE ONDE veio e QUAL era
+    # (hash). Sem isso o recibo afirma em vez de provar, e daqui a seis meses
+    # ninguém responde qual estado do mundo produziu o veredito.
+    #
+    # 📌 O ledger guarda a impressão digital e a referência, nunca o dado —
+    # prova integridade sem virar vazamento.
+    exige_procedencia: true
 
 regras:
   - id: limite_absoluto

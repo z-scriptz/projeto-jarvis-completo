@@ -15,6 +15,7 @@ import os
 import shutil
 import sys
 import tempfile
+import time as _tempo
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parent
@@ -113,12 +114,28 @@ else:
         ceo_agent.IG_PERFIS = ausente
         return ej
 
-    def redecorar(ej):
+    def carimbar(mod, disponivel: bool = True):
+        """Simula o carimbo de procedência que `_vendas_por_fonte()` deixa.
+
+        ⚠️ Sem isto os cenários "com dado" dão HOLD — e está CERTO: o contrato
+        exige procedência, e lista montada à mão não traz `fonte` nem `hash`.
+        O teste precisa carimbar porque, em produção, quem carimba é quem foi
+        buscar o dado."""
+        mod._PROCEDENCIA_VENDAS = ({
+            "estado": "OK", "fonte": "shopee.conversionReport",
+            "em": _tempo.time(), "hash": "sha256:" + "ab" * 32,
+        } if disponivel else {
+            "estado": "UNAVAILABLE", "fonte": "shopee.conversionReport",
+            "em": _tempo.time(), "erro": "RuntimeError: GraphQL erro [11001]",
+        })
+        return mod
+
+    def redecorar(ej, disponivel: bool = True):
         """Reaplica o decorador — `ceo_agent` já foi importado com o fallback."""
         import importlib
         importlib.reload(ceo_agent)
         ceo_agent.guarda = ej.guarda
-        return ceo_agent
+        return carimbar(ceo_agent, disponivel)
 
     def drenar(ej, vezes: int = 4):
         """Adianta a fila para não esperar as esperas reais (0s, 2s, 10s)."""
@@ -153,6 +170,17 @@ else:
     vale(esc.estado(a.hash) is Estado.VERIFICADO,
          f"3 pedidas e 3 comentadas deveria dar VERIFIED, "
          f"deu {esc.estado(a.hash).value}")
+
+    # ⚠️ A PROCEDÊNCIA PRECISA CHEGAR AO RECIBO — é a diferença entre o livro
+    # AFIRMAR que tinha o dado e PROVAR qual dado era.
+    ev = a.corpo["intencao"]["evidencias"]["vendas_por_fonte"]
+    vale(ev.get("fonte") == "shopee.conversionReport",
+         f"o recibo tem que dizer DE ONDE veio a evidência: {ev}")
+    vale(str(ev.get("hash", "")).startswith("sha256:"),
+         f"e QUAL era (impressão digital): {ev}")
+    vale(ev.get("em"), "e QUANDO foi coletada")
+    vale(a.corpo["intencao"].get("id"),
+         "o recibo tem que carregar o intent_id, senão nada liga tentativas")
 
     # ── 3 · o incidente: 36 fontes → HOLD, mas observe não impede ─────────
     secao("3 · 🔥 o incidente das 36, com a política real")
@@ -228,7 +256,7 @@ else:
     pev.write_text("\n".join(f"@morta_{i:02d} #pet" for i in range(36)) + "\n",
                    encoding="utf-8")
     ej = montar("caso_e", pev)
-    ce = redecorar(ej)
+    ce = redecorar(ej, disponivel=False)
     ce.TIKTOK_PERFIS, ce.IG_PERFIS = pev, tmp / "nada.txt"
 
     # o cenário real de 16/09: a consulta de vendas caiu
@@ -267,6 +295,7 @@ else:
          "a guarda interna do _podar_fontes continua cancelando a poda")
 
     # e com evidência, a decisão volta a ser sobre o TAMANHO do lote
+    carimbar(ce, disponivel=True)          # a Shopee respondeu desta vez
     com_dado = [{**f, "veredito": "MORTA", "venda_conhecida": True}
                 for f in sem_dado]
     ce._podar_fontes(com_dado, executar=True)

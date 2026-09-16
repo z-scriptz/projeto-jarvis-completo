@@ -17,10 +17,19 @@ from collections import defaultdict
 from pathlib import Path
 
 try:
-    from escopo_jarvis import guarda
+    from escopo_jarvis import guarda, impressao
 except Exception:       # ⚠️ camada de controle NUNCA derruba o Jarvis
     def guarda(**_kw):  # noqa: D103
         return lambda fn: fn
+
+    def impressao(_dados):  # noqa: D103
+        return ""
+
+# Procedência da última consulta de vendas: de onde veio, quando, e qual era.
+# ⚠️ Quem sabe a procedência de um dado é quem foi buscá-lo. Inferir isso
+# depois, olhando o resultado, é adivinhar — e adivinhar sobre evidência é o
+# defeito que este projeto inteiro persegue.
+_PROCEDENCIA_VENDAS: dict = {}
 
 BASE_DIR = Path(__file__).resolve().parent
 LEDGER = BASE_DIR / "shared" / "posts_ledger.jsonl"
@@ -171,11 +180,18 @@ def _vendas_por_fonte(dias: int):
     como evidência de zero venda. Em 14/09/2026 isso carimbou 36 fontes como
     MORTA numa falha de GraphQL; em 15/09 aconteceu de novo e podou 8. Erro de
     consulta não é evidência de nada — nem de venda, nem de ausência dela."""
+    global _PROCEDENCIA_VENDAS
     out = defaultdict(lambda: {"vendas": 0, "comissao": 0.0})
     try:
         import metricas_agent as M
         itens = M.puxar_conversoes(dias)
     except Exception as e:
+        _PROCEDENCIA_VENDAS = {
+            "estado": "UNAVAILABLE",
+            "fonte": "shopee.conversionReport",
+            "em": time.time(),
+            "erro": f"{type(e).__name__}: {str(e)[:120]}",
+        }
         print(f"⚠️ vendas por fonte INDISPONÍVEL ({str(e)[:70]}) — "
               f"nenhum veredito de fonte será emitido")
         return None
@@ -185,8 +201,19 @@ def _vendas_por_fonte(dias: int):
             continue
         out[f]["vendas"] += 1
         out[f]["comissao"] += float(it.get("comissao") or 0)
-    return {k: {"vendas": v["vendas"], "comissao": round(v["comissao"], 2)}
-            for k, v in out.items()}
+    resultado = {k: {"vendas": v["vendas"], "comissao": round(v["comissao"], 2)}
+                 for k, v in out.items()}
+    # ⚠️ O HASH É DO DADO QUE DECIDIU, não do dado "mais ou menos parecido".
+    # É ele que responde, daqui a seis meses, qual estado do mundo produziu
+    # o veredito — coisa que "evidência: OK" nunca responde.
+    _PROCEDENCIA_VENDAS = {
+        "estado": "OK",
+        "fonte": "shopee.conversionReport",
+        "em": time.time(),
+        "hash": impressao(resultado),
+        "fontes_com_venda": len(resultado),
+    }
+    return resultado
 
 
 def _analisar_fontes(dias: int) -> list:
@@ -239,6 +266,24 @@ def _perfil_da_linha(linha: str) -> str:
     return l.lstrip("@").lower()
 
 
+def _evidencia_vendas(fontes: list) -> dict:
+    """O estado da evidência `vendas_por_fonte`, com procedência quando existe.
+
+    ⚠️ A PROCEDÊNCIA VEM DE QUEM FOI BUSCAR O DADO (`_vendas_por_fonte`), não
+    de inferência sobre a lista de fontes. Quem sabe de onde um dado veio é
+    quem o buscou; deduzir isso depois, olhando o resultado, é adivinhar — e
+    adivinhar sobre evidência é o defeito que este projeto persegue.
+
+    📌 Quando ninguém consultou nesta execução (alguém chamou `_podar_fontes`
+    com uma lista montada à mão), o registro está vazio e sobra só o estado
+    inferido de `venda_conhecida`. Isso é seguro: sem `fonte` e `hash`, o
+    `exige_procedencia` do contrato segura a ação. Fail-closed."""
+    if _PROCEDENCIA_VENDAS:
+        return dict(_PROCEDENCIA_VENDAS)
+    return {"estado": ("OK" if all(f.get("venda_conhecida") for f in fontes)
+                       else "UNAVAILABLE")}
+
+
 class PodaSemEvidencia(Exception):
     """A poda se recusou a rodar porque faltava a evidência que ela exige.
 
@@ -260,14 +305,8 @@ class PodaSemEvidencia(Exception):
         "alvos": list(intencao.alvos),
         "executar": bool(intencao.parametros.get("executar", True)),
     },
-    # A evidência que o contrato exige. Sem ela o veredito é HOLD, e o recibo
-    # passa a provar TAMBÉM por que a ação não aconteceu — que era a coisa
-    # mais importante do dia 16/09 e não estava no livro.
-    # (lista vazia → OK: não há fonte nenhuma para julgar)
     evidencias=lambda fontes, executar: {
-        "vendas_por_fonte": ("OK" if all(f.get("venda_conhecida")
-                                         for f in fontes) else "UNAVAILABLE"),
-    },
+        "vendas_por_fonte": _evidencia_vendas(fontes)},
 )
 def _podar_fontes(fontes: list, executar: bool) -> list:
     """As fontes MORTAS (≥N posts, 0 venda) são comentadas nos arquivos de perfis

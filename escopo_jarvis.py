@@ -270,6 +270,22 @@ try:
 except ImportError:                               # sem a lib, nada disso roda
     _Base = object
 
+try:
+    from escopo import impressao
+except ImportError:
+    import hashlib
+    import json as _json
+
+    def impressao(dados) -> str:
+        """Cópia local, byte-a-byte igual à da biblioteca.
+
+        ⚠️ Existe para o Jarvis conseguir carimbar procedência mesmo com a
+        ESCOPO desinstalada — a mesma regra de sempre: a camada ausente não
+        pode mudar o comportamento da aplicação."""
+        return "sha256:" + hashlib.sha256(
+            _json.dumps(dados, sort_keys=True, ensure_ascii=False,
+                        separators=(",", ":")).encode("utf-8")).hexdigest()
+
 
 class VerificadorPerfis(_Base):
     """Conta quantas linhas foram comentadas com a marca de poda de HOJE.
