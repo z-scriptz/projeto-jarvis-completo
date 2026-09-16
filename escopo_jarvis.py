@@ -145,6 +145,9 @@ def _alerta_telegram(msg: str) -> bool:
 _ARQ_ESTADO = None
 _ESTADO_MEMORIA: dict = {}
 _LEMBRETE_SEGUNDOS = 24 * 3600
+# Acima disto, a fila parada deixa de ser "esperando a espera crescente" e
+# passa a ser "ninguém está processando". O ciclo do daemon é bem mais curto.
+LIMITE_FILA_PARADA = float(os.environ.get("ESCOPO_LIMITE_FILA", 2 * 3600))
 
 
 def _arq_estado() -> Path:
@@ -239,6 +242,21 @@ def resumo() -> str:
     if esc.falhas_de_escrituracao:
         linhas.append(f"   ⚠️ {len(esc.falhas_de_escrituracao)} recibo(s) "
                       f"perdido(s) por falha de escrita")
+
+    # ⚠️ FILA VELHA = NINGUÉM DRENANDO, e esse é o pior estado possível desta
+    # camada: tudo fica PENDENTE, o que parece "ainda conferindo" e é
+    # "ninguém vai conferir". Aconteceu de verdade em 16/09/2026 — a
+    # integração agendava verificação e nada chamava processar_verificacoes().
+    pendentes = esc.fila.pendentes()
+    if pendentes:
+        idade = esc.fila.idade_da_mais_antiga()
+        marca = "⚠️" if idade > LIMITE_FILA_PARADA else "·"
+        linhas.append(f"   {marca} {len(pendentes)} verificação(ões) na fila, "
+                      f"a mais antiga há {idade / 60:.0f} min")
+        if idade > LIMITE_FILA_PARADA:
+            linhas.append("      ninguém está drenando a fila — o daemon "
+                          "chama escopo_jarvis.processar_verificacoes() "
+                          "a cada ciclo")
     return "\n".join(linhas)
 
 

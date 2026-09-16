@@ -1524,6 +1524,29 @@ def rodar_um_ciclo(cfg: dict, estado: dict, hist: dict, dry_run: bool,
         except Exception as e:
             log.warning(f"   ⚠️  ciclo do carrossel pulado: {str(e)[:100]}")
 
+    # 5) ESCOPO — drena a fila de verificação
+    #
+    # ⚠️ SEM ISTO A CAMADA FICA PELA METADE, e do jeito pior: a ação é
+    # registrada, a verificação é AGENDADA, e nada nunca a executa. Todo
+    # recibo fica PENDING para sempre — o que parece "ainda conferindo" e na
+    # verdade é "ninguém vai conferir". Um sistema que promete provar
+    # resultado e só enfileira promessas é pior que um que não promete nada.
+    #
+    # 📌 Nasce aqui, no arquivo versionado, pelo mesmo motivo do carrossel
+    # logo acima: chamada injetada no destino do deploy tem data de validade.
+    try:
+        import escopo_jarvis
+        provas = escopo_jarvis.processar_verificacoes()
+        if provas:
+            for p in provas:
+                estado_p = p.corpo["prova"]["estado"]
+                emo = {"VERIFIED": "✅", "FAILED": "❌",
+                       "UNVERIFIABLE": "🟡"}.get(estado_p, "•")
+                log.info(f"   🔒 {emo} {estado_p}: "
+                         f"{p.corpo['prova'].get('motivo', '')[:110]}")
+    except Exception as e:
+        log.warning(f"   ⚠️  fila da ESCOPO não drenou: {str(e)[:100]}")
+
     return resumo
 
 
