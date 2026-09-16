@@ -903,13 +903,36 @@ def main():
     # PODAR FONTES sob demanda: comenta as fontes MORTAS nos arquivos de perfis.
     if "--podar-fontes" in argv:
         fontes = _analisar_fontes(dias)
+
+        # ⚠️ O MESMO BUG, UMA CAMADA ACIMA — apareceu em produção em 16/09.
+        # `_podar_fontes()` devolve [] em DOIS casos completamente diferentes:
+        #
+        #     [] porque não havia nada pra podar      → está tudo bem
+        #     [] porque a rodada foi CANCELADA        → não se sabe de nada
+        #
+        # Lendo só a lista vazia, o chamador imprimia "✅ nenhuma fonte MORTA
+        # (todas vendem...)" — uma afirmação sobre o mundo que ele não tinha
+        # como fazer. É a mesma confusão de `_vendas_por_fonte()`, de novo:
+        # ausência de resultado virando evidência de bom estado.
+        #
+        # 📌 Por isso a checagem vem ANTES da chamada e o código de saída é
+        # diferente de zero: quem roda isso num script precisa saber que o
+        # trabalho não foi feito.
+        if any(f.get("veredito") == "SEM_DADO" for f in fontes):
+            print("⛔ poda CANCELADA: a consulta de vendas não completou.")
+            print("   ⚠️ isso NÃO quer dizer que não há fonte morta — quer "
+                  "dizer que não dá pra saber quais são.")
+            print("   Rode de novo quando a Shopee responder.")
+            return 1
+
         podados = _podar_fontes(fontes, executar=True)
         if podados:
             print(f"💀 {len(podados)} fonte(s) podada(s) (comentadas, reversível): "
                   + ", ".join("@" + p for p in podados))
         else:
-            print("✅ nenhuma fonte MORTA pra podar (todas vendem ou ainda têm poucos "
-                  "posts). Rode o relatório pra ver o desempenho por fonte.")
+            print(f"✅ nenhuma fonte MORTA entre as {len(fontes)} fonte(s) com "
+                  f"posts — todas venderam ou ainda têm poucos posts. "
+                  f"(consulta de vendas OK)")
         return 0
 
     a = _analisar(dias)

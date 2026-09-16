@@ -121,6 +121,49 @@ C._vendas_por_fonte = lambda dias: {}
 md_ok = C._render_fontes(C._analisar_fontes(30))
 vale("MORTA" in md_ok, "com dado, o relatório volta ao normal")
 
+# ── 4b · o CHAMADOR não pode mentir sobre a lista vazia ───────────────────
+secao("4b · [] por cancelamento ≠ [] por não haver nada")
+
+import contextlib                                                 # noqa: E402
+import io                                                         # noqa: E402
+
+
+def rodar_podar():
+    """Roda `ceo_agent --podar-fontes` capturando saída e código de retorno."""
+    buf = io.StringIO()
+    argv_antes = sys.argv
+    sys.argv = ["ceo_agent.py", "150", "--podar-fontes"]
+    try:
+        with contextlib.redirect_stdout(buf):
+            codigo = C.main()
+    finally:
+        sys.argv = argv_antes
+    return codigo, buf.getvalue()
+
+
+C._vendas_por_fonte = lambda dias: None
+codigo, saida = rodar_podar()
+vale(codigo == 1,
+     f"⚠️ cancelamento tem que sair com código != 0 — script que checa "
+     f"exit code precisa saber que o trabalho não foi feito. Veio {codigo}")
+vale("CANCELADA" in saida, "tem que dizer que cancelou")
+vale("não dá pra saber" in saida,
+     "⚠️ tem que dizer que NÃO SABE, não que está tudo bem")
+vale("todas vendem" not in saida and "nenhuma fonte MORTA" not in saida,
+     f"⚠️ A ASSERÇÃO QUE IMPORTA: não pode afirmar nada sobre as fontes "
+     f"quando não há dado. Saída: {saida!r}")
+
+# com dado e sem nada a podar, a mensagem otimista é legítima
+perfis.write_text("\n".join(f"@fonte_{i:02d} #pet" for i in range(10)) + "\n",
+                  encoding="utf-8")
+C._vendas_por_fonte = lambda dias: {
+    f"fonte{i:02d}": {"vendas": 1, "comissao": 1.0} for i in range(10)}
+codigo, saida = rodar_podar()
+vale(codigo == 0, f"com dado e nada a podar, sai 0 — veio {codigo}")
+vale("nenhuma fonte MORTA" in saida,
+     f"com dado, a mensagem otimista é legítima: {saida!r}")
+
+
 # ── 5 · despodar devolve a rodada errada ──────────────────────────────────
 secao("5 · despodar")
 
