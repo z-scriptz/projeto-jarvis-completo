@@ -13005,3 +13005,53 @@ achar nada seria lido como não ter produzido.
 `teste_producao_guardada.py`, **17 asserções**, verde de primeira. Uma delas
 existe para prender uma LACUNA, não um acerto: o caso `4 pedidos / 2 na
 esteira` dá FAILED, e a asserção diz isso com todas as letras.
+
+---
+
+### 🔥 A LIÇÃO DE 16/09 PELA TERCEIRA VEZ, E DESSA VEZ FUI EU (17/09)
+
+`--maturidade` na manhã seguinte:
+
+```
+📋 jarvis.producao.video.create
+   execuções    0
+```
+
+Zero. Com o daemon rodando **a cada minuto, a noite inteira**, e o log
+repetindo `⚠️ Nenhum produto disponível pra produzir`.
+
+A causa estava em `_produzir_lote`, escrita por mim no dia anterior:
+
+```python
+produtos = _carregar_produtos_para_produzir(quantidade, cfg)
+if not produtos:
+    return 0                 # ← ANTES da função guardada
+```
+
+📌 **É exatamente o defeito do `ceo_agent` de 16/09**: a checagem morava no
+chamador, a função guardada nunca era invocada, e a recusa sumia do livro.
+Consertado lá com `PodaSemEvidencia`, repetido aqui **um dia depois**.
+
+⚠️ **E aqui era pior, porque este é o caminho DOMINANTE.**
+`_carregar_produtos_para_produzir` devolve `[]` tanto com a fila vazia quanto
+com a **leitura falhando** — e a evidência `fila_de_produtos`, declarada no
+contrato justamente para isso, **nunca chegava a ser avaliada**. Contrato que
+não é alcançado é contrato decorativo.
+
+**O conserto não é "sempre escrever recibo".** A distinção que decide não é
+vazia × cheia:
+
+```
+li a fila e não há nada elegível   → não-fazer legítimo, sem recibo
+NÃO CONSEGUI LER a fila            → HOLD no livro, com o motivo
+```
+
+⚠️ Recibo a cada minuto encheria o livro com **1440 "nada aconteceu" por dia**,
+e `Livro.ler()` é O(n) sob trava. **Silêncio sobre não-fazer legítimo é
+honesto; silêncio sobre cegueira, não.**
+
+📌 E a diferença entre os dois só existe porque a procedência foi gravada
+(`_PROCEDENCIA_FILA`). Sem ela, as duas situações seriam a mesma lista vazia —
+que é a frase do projeto inteiro.
+
+`teste_producao_guardada.py` 18 → **23**.

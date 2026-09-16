@@ -52,13 +52,17 @@ except Exception:
 # ⚠️ A CAMADA DE CONTROLE NUNCA DERRUBA O DAEMON. Sem a ESCOPO instalada,
 # `_guarda` vira decorador que não faz nada e o ciclo roda exatamente igual.
 try:
-    from escopo_jarvis import guarda as _guarda, impressao as _impressao
+    from escopo_jarvis import (SemEfeito as _SemEfeito, guarda as _guarda,
+                               impressao as _impressao)
 except Exception:                       # noqa: BLE001 — proposital
     def _guarda(**_kw):                 # noqa: D103
         return lambda fn: fn
 
     def _impressao(_dados):             # noqa: D103
         return ""
+
+    class _SemEfeito(Exception):        # noqa: D101
+        pass
 
 # Procedência da última carga da fila de produtos: de onde veio, quando, e
 # qual era. ⚠️ Quem sabe a procedência de um dado é quem foi buscá-lo.
@@ -693,11 +697,25 @@ def ciclo_producao(cfg: dict, estado: dict, dry_run: bool) -> dict:
         _salvar_estado(estado)
         log.info(f"   ✅ {produzidos} vídeo(s) produzido(s) "
                  f"(total hoje: {estado['videos_hoje']})")
+    except SemProdutos as e:
+        # ⚠️ RECUSA DECLARADA, NÃO FALHA — e por isso vem ANTES do `except
+        # Exception`. O recibo já registrou o HOLD por falta de evidência; o
+        # ciclo segue normalmente e o próximo minuto tenta de novo.
+        log.warning(f"   ⛔ produção adiada: {e}")
+        resultado["motivo"] = "fila_ilegivel"
     except Exception as e:
         log.error(f"   ❌ Produção falhou: {e}")
         resultado["erro"] = str(e)
 
     return resultado
+
+
+class SemProdutos(_SemEfeito):
+    """A produção se recusou a rodar porque a fila não pôde ser lida.
+
+    ⚠️ É exceção e não `return 0` porque zero produzido significa duas coisas
+    incompatíveis — "não havia nada elegível" e "eu não consegui olhar" — e
+    confundir as duas é o defeito que este projeto inteiro persegue."""
 
 
 def _custo_do_lote(cfg: dict, produtos: list):
@@ -740,9 +758,38 @@ def _produzir_lote(cfg: dict, estado: dict, quantidade: int) -> int:
     Retorna quantos foram produzidos com sucesso.
     """
     produtos = _carregar_produtos_para_produzir(quantidade, cfg)
-    if not produtos:
-        log.warning("   ⚠️  Nenhum produto disponível pra produzir")
+    fila_ok = (_PROCEDENCIA_FILA.get("estado") == "OK")
+
+    # ⚠️ AQUI MORAVA UM `if not produtos: return 0`, E ELE MATAVA A GUARDA.
+    #
+    # 📌 É A LIÇÃO DE 16/09 PELA TERCEIRA VEZ. No `ceo_agent` a checagem morava
+    # no chamador, a função guardada nunca era invocada, e **a recusa sumia do
+    # livro**. Consertado lá, repetido aqui um dia depois, por mim.
+    #
+    # E aqui era pior, porque este é o caminho DOMINANTE em produção: o log
+    # mostrou "Nenhum produto disponível" a cada minuto, a noite inteira, com
+    # ZERO recibo. O contrato declara a evidência `fila_de_produtos` justamente
+    # porque `_carregar_produtos_para_produzir` devolve `[]` tanto quando a
+    # fila está vazia quanto quando a LEITURA FALHOU — e o portão de evidência
+    # nunca chegava a rodar. Contrato que não é alcançado é contrato decorativo.
+    #
+    # ⚠️ E A DISTINÇÃO QUE DECIDE NÃO É "VAZIA" × "CHEIA", é:
+    #
+    #     li a fila e não há nada elegível   → não-fazer legítimo, sem recibo
+    #     NÃO CONSEGUI LER a fila            → tem que virar HOLD no livro
+    #
+    # Sem isso, escrever recibo a cada minuto encheria o livro com 1440
+    # "nada aconteceu" por dia — e `Livro.ler()` é O(n) sob trava. Silêncio
+    # sobre não-fazer legítimo é honesto; silêncio sobre cegueira, não.
+    if not produtos and fila_ok:
+        # INFO e não WARNING: fila lida, nada elegível, é operação normal.
+        log.info("   ℹ️  fila lida, nenhum produto elegível agora")
         return 0
+    if not produtos:
+        log.warning(f"   ⚠️  a fila de produtos NÃO pôde ser lida "
+                    f"({_PROCEDENCIA_FILA.get('erro', 'motivo não registrado')})"
+                    f" — isso vai para a ESCOPO como falta de evidência, não "
+                    f"como 'não há produtos'")
     return _produzir_produtos(cfg, estado, produtos)["produzidos"]
 
 
@@ -774,6 +821,18 @@ def _produzir_produtos(cfg: dict, estado: dict, produtos: list) -> dict:
     QUAIS entraram na esteira, e sem isso a verificação não tem como conferir
     alvo por alvo — que é a lição do `VerificadorPerfis` (contador global usado
     como asserção por ação responde outra pergunta)."""
+    # ⚠️ LISTA VAZIA AQUI SÓ ACONTECE QUANDO A FILA NÃO PÔDE SER LIDA — o
+    # chamador já filtrou o caso legítimo. Levanta `SemEfeito` para que o
+    # recibo registre `ATTEMPTED_NO_EFFECT`: a função foi chamada, o veredito
+    # (HOLD por falta de evidência) está no livro, e nenhum vídeo foi tocado.
+    #
+    # 📌 `SemProdutos` herda de `SemEfeito` pelo mesmo motivo que
+    # `PodaSemEvidencia`: só quem escreveu a função sabe, de dentro, que ela
+    # se absteve. De fora, exceção é indistinguível de "quebrou no meio".
+    if not produtos:
+        raise SemProdutos(
+            "a fila de produtos não pôde ser lida — produzir agora seria "
+            "produzir no escuro")
     import os
     from agents.production_runner_agent import (processar_produto,
                                                 _dir_saida_rodada)

@@ -106,6 +106,13 @@ PROC_OK = {"estado": "OK", "fonte": "validacao_fila.json", "em": 1_700_000_000.0
            "hash": "sha256:" + "ab" * 32}
 
 
+from escopo import SemEfeito as _SemEfeitoBase                     # noqa: E402
+
+
+class SemProdutosTeste(_SemEfeitoBase):
+    """Igual ao `SemProdutos` do daemon: abstenção declarada de dentro."""
+
+
 def guardada(produtos, sai_certo=True, procedencia=None):
     """Monta a função guardada como o daemon monta, sem importar o daemon."""
     @ej.guarda(
@@ -120,6 +127,10 @@ def guardada(produtos, sai_certo=True, procedencia=None):
             "produzidos": (resultado or {}).get("produzidos", 0)},
     )
     def _produzir(produtos):
+        if not produtos:
+            # ⚠️ Igual ao `_produzir_produtos` real: lista vazia aqui só chega
+            # quando a fila não pôde ser lida, e isso é abstenção declarada.
+            raise SemProdutosTeste("a fila não pôde ser lida")
         nomes = [p["nome"] for p in produtos]
         feitos = nomes if sai_certo else nomes[:len(nomes) // 2]
         produzir_de_verdade(feitos)
@@ -214,6 +225,62 @@ v = ultima_acao(esc).body["verdict"]
 vale(v["decision"] == "DENY" and v["rule"] == "lote_absurdo",
      f"⚠️ 25 vídeos é config errada ou laço, e o DENY tem que vir ANTES do "
      f"HOLD na ordem do arquivo. veio {v['decision']}/{v['rule']}")
+
+# ── 4b · 🔥 o caminho DOMINANTE em produção não pode ser invisível ────────
+secao("4b · 🔥 fila vazia × fila ilegível — só uma pode ser silêncio")
+
+# 📌 ACHADO EM PRODUÇÃO EM 17/09, uma noite depois de instrumentar. O
+# `--maturidade` dizia `video.create: 0 execuções` com o daemon rodando a cada
+# minuto a noite inteira. Causa: `_produzir_lote` tinha
+#
+#     if not produtos: return 0
+#
+# ANTES da função guardada. É a lição de 16/09 pela terceira vez — no
+# `ceo_agent` a checagem morava no chamador e **a recusa sumia do livro**.
+# Consertado lá, repetido aqui um dia depois.
+#
+# ⚠️ E aqui era pior: este é o caminho dominante. `_carregar_produtos_para_
+# produzir` devolve `[]` tanto com a fila vazia quanto com a LEITURA FALHANDO,
+# e o portão de evidência — escrito justamente para isso — nunca era alcançado.
+
+# Um `daemon_maestro` de mentira é caro de montar; o que importa é a REGRA, e
+# ela cabe numa reprodução direta das duas chamadas.
+def lote(produtos, fila_ok):
+    """Reproduz o `_produzir_lote` consertado: quem decide é a PROCEDÊNCIA."""
+    if not produtos and fila_ok:
+        return "silencio"                # não-fazer legítimo, sem recibo
+    return guardada(produtos, procedencia=(
+        PROC_OK if fila_ok else
+        {"estado": "UNAVAILABLE", "fonte": "validacao_fila.json",
+         "em": 1_700_000_000.0, "erro": "JSONDecodeError: linha 4"}))
+
+
+antes_de = len([r for r in ej._construir().livro.ler() if r.kind == "action"])
+vale(lote([], fila_ok=True) == "silencio",
+     "fila LIDA e sem produto elegível é operação normal")
+depois_de = len([r for r in ej._construir().livro.ler() if r.kind == "action"])
+vale(antes_de == depois_de,
+     "⚠️ e não escreve recibo: 1440 'nada aconteceu' por dia encheriam o livro, "
+     "e `ler()` é O(n) sob trava. Silêncio sobre não-fazer legítimo é honesto")
+
+# ⚠️ A exceção SOBE até o chamador, como no `ciclo_producao` real — recusa
+# declarada não pode se parecer com "produziu zero".
+recusou = None
+try:
+    lote([], fila_ok=False)
+except SemProdutosTeste as e:
+    recusou = e
+vale(recusou is not None,
+     "a produção tem que se recusar LEVANTANDO, nunca devolvendo 0")
+
+esc = drenar(1)
+a = ultima_acao(esc)
+vale(a.body["verdict"]["rule"] == "evidencia_indisponivel",
+     f"⚠️ MAS FILA ILEGÍVEL TEM QUE CHEGAR AO LIVRO como falta de evidência — "
+     f"passou a noite de 16/09 invisível. veio {a.body['verdict']['rule']!r}")
+vale(a.body["execution"]["effect"] == "ATTEMPTED_NO_EFFECT",
+     f"⚠️ e nenhum vídeo foi tocado: a função foi chamada e declarou abstenção "
+     f"por `SemEfeito`. veio {a.body['execution'].get('effect')!r}")
 
 # ── 5 · a régua do slug tem que levantar, nunca devolver "" ───────────────
 secao("5 · ⚠️ slug incalculável é INVERIFICAVEL, não 'não produziu'")
