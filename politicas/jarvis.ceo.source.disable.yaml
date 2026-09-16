@@ -23,6 +23,23 @@ autoridade: L2
 # mostrando que os limites abaixo estão nos lugares certos.
 modo: observe
 
+# ⚠️ A EVIDÊNCIA SEM A QUAL ESTA AÇÃO NÃO PODE SER JULGADA.
+#
+# É a generalização do bug que apareceu duas vezes num dia só: em 14/09 o
+# veredito MORTA foi emitido sem dado de venda; em 16/09, um nível acima, a
+# lista vazia foi lida como "está tudo bem". Os dois são o mesmo erro —
+# **agir sem ter a evidência que a decisão exigia**.
+#
+# 📌 Sem ela o veredito é HOLD, e não DENY, porque a diferença importa:
+#
+#     DENY   eu sei o bastante, e a ação é proibida
+#     HOLD   não tenho evidência suficiente para permitir AGORA
+#
+# HOLD é reavaliável. Quando a Shopee responder, a mesma intenção passa.
+evidencias:
+  - id: vendas_por_fonte
+    descricao: consulta de vendas da Shopee por perfil-fonte (conversionReport)
+
 regras:
   - id: limite_absoluto
     se: {campo: quantidade, op: ">", valor: 50}

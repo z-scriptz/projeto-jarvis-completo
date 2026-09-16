@@ -38,9 +38,17 @@ def secao(t):
 
 
 def fontes_falsas(n_mortas: int, n_vivas: int = 2) -> list:
-    f = [{"fonte": f"morta_{i:02d}", "posts": 8, "vendas": 0, "veredito": "MORTA"}
+    """Fontes com a consulta de vendas OK — `venda_conhecida=True`.
+
+    ⚠️ Esse campo NÃO é decoração: o contrato exige a evidência
+    `vendas_por_fonte`, e o portão trata "não declarada" como "não tenho".
+    Fixture sem ele produz HOLD por falta de evidência — que foi exatamente
+    o que aconteceu quando este campo foi esquecido aqui."""
+    f = [{"fonte": f"morta_{i:02d}", "posts": 8, "vendas": 0, "comissao": 0.0,
+          "veredito": "MORTA", "venda_conhecida": True}
          for i in range(n_mortas)]
-    f += [{"fonte": f"viva_{i:02d}", "posts": 9, "vendas": 2, "veredito": "VENDE"}
+    f += [{"fonte": f"viva_{i:02d}", "posts": 9, "vendas": 2, "comissao": 9.9,
+           "veredito": "VENDE", "venda_conhecida": True}
           for i in range(n_vivas)]
     return f
 
@@ -212,6 +220,47 @@ else:
 
     integra, problemas = esc.integro()
     vale(integra, f"a cadeia deveria estar íntegra: {problemas}")
+
+    # ── 5b · sem evidência, o recibo prova por que NÃO aconteceu ──────────
+    secao("5b · 🔥 evidence contract: o livro registra a recusa")
+
+    pev = tmp / "e.txt"
+    pev.write_text("\n".join(f"@morta_{i:02d} #pet" for i in range(36)) + "\n",
+                   encoding="utf-8")
+    ej = montar("caso_e", pev)
+    ce = redecorar(ej)
+    ce.TIKTOK_PERFIS, ce.IG_PERFIS = pev, tmp / "nada.txt"
+
+    # o cenário real de 16/09: a consulta de vendas caiu
+    sem_dado = [{"fonte": f"morta_{i:02d}", "posts": 8, "vendas": 0,
+                 "comissao": 0.0, "veredito": "SEM_DADO",
+                 "venda_conhecida": False} for i in range(36)]
+    ce._podar_fontes(sem_dado, executar=True)
+    esc = drenar(ej)
+    a = ultima_acao(esc)
+    v = a.corpo["veredito"]
+
+    vale(v["decisao"] == "HOLD",
+         f"⚠️ sem a evidência exigida, HOLD — veio {v['decisao']}")
+    vale(v["regra"] == "evidencia_indisponivel",
+         f"⚠️ e o recibo tem que dizer que foi FALTA DE EVIDÊNCIA, não "
+         f"tamanho de lote. Veio regra={v['regra']!r}")
+    vale("vendas_por_fonte" in v["motivo"],
+         f"tem que nomear qual evidência faltou: {v['motivo']!r}")
+    vale(v["decisao"] != "DENY",
+         "não é DENY: a consulta pode voltar e a mesma intenção passa")
+    vale(pev.read_text(encoding="utf-8").count("PODADO CEO") == 0,
+         "a guarda interna do _podar_fontes continua cancelando a poda")
+
+    # e com evidência, a decisão volta a ser sobre o TAMANHO do lote
+    com_dado = [{**f, "veredito": "MORTA", "venda_conhecida": True}
+                for f in sem_dado]
+    ce._podar_fontes(com_dado, executar=True)
+    a2 = ultima_acao(esc)
+    vale(a2.corpo["veredito"]["regra"] == "lote_destrutivo",
+         f"com evidência, quem decide é a regra de lote — veio "
+         f"{a2.corpo['veredito']['regra']!r}")
+
 
 # ── 6 · a camada avisa quando cai ─────────────────────────────────────────
 secao("6 · camada desligada tem que gritar (uma vez, não toda hora)")

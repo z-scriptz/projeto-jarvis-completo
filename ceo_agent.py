@@ -251,6 +251,14 @@ def _perfil_da_linha(linha: str) -> str:
         "alvos": list(intencao.alvos),
         "executar": bool(intencao.parametros.get("executar", True)),
     },
+    # A evidência que o contrato exige. Sem ela o veredito é HOLD, e o recibo
+    # passa a provar TAMBÉM por que a ação não aconteceu — que era a coisa
+    # mais importante do dia 16/09 e não estava no livro.
+    # (lista vazia → OK: não há fonte nenhuma para julgar)
+    evidencias=lambda fontes, executar: {
+        "vendas_por_fonte": ("OK" if all(f.get("venda_conhecida")
+                                         for f in fontes) else "UNAVAILABLE"),
+    },
 )
 def _podar_fontes(fontes: list, executar: bool) -> list:
     """As fontes MORTAS (≥N posts, 0 venda) são comentadas nos arquivos de perfis
