@@ -199,8 +199,11 @@ else:
          f"36 > 5 deveria ser HOLD, veio {a.body['verdict']['decision']}")
     vale(a.body["verdict"]["rule"] == "lote_destrutivo",
          "deveria citar a regra `lote_destrutivo`")
-    vale(a.body["execution"]["executed"] is True,
+    vale(a.body["execution"]["invoked"] is True,
          "⚠️ observe REGISTRA que extrapolou, não impede")
+    vale(a.body["execution"]["effect"] == "UNKNOWN",
+         "⚠️ e o recibo da AÇÃO não afirma efeito: quem prova que as 36 foram "
+         "mesmo comentadas é o recibo de verificação, depois")
     vale(esc.estado(a.hash) is Estado.VERIFICADO,
          f"as 36 foram mesmo comentadas → VERIFIED, "
          f"deu {esc.estado(a.hash).value}")
@@ -281,6 +284,18 @@ else:
          and "PodaSemEvidencia" in a.body["execution"]["error"],
          f"⚠️ o recibo tem que registrar a recusa, veio "
          f"{a.body['execution'].get('error')!r}")
+
+    # ⚠️ O SEGUNDO DEFEITO DO MESMO RECIBO, achado em 16/09 lendo o livro de
+    # produção: ele dizia `executed: true` numa poda que não podou nada. A
+    # função tinha sido chamada, e o campo juntava isso com "aconteceu".
+    vale(a.body["execution"]["invoked"] is True,
+         "a função FOI chamada — é assim que a recusa chega ao livro")
+    vale(a.body["execution"]["effect"] == "ATTEMPTED_NO_EFFECT",
+         f"⚠️ e NENHUMA fonte foi tocada. `PodaSemEvidencia` herda de "
+         f"`SemEfeito` justamente para poder declarar isso de dentro — veio "
+         f"{a.body['execution'].get('effect')!r}")
+    vale("executed" not in a.body["execution"],
+         "o campo ambíguo tem que ter sumido do schema")
 
     vale(v["decision"] == "HOLD",
          f"⚠️ sem a evidência exigida, HOLD — veio {v['decision']}")

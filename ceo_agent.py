@@ -17,13 +17,16 @@ from collections import defaultdict
 from pathlib import Path
 
 try:
-    from escopo_jarvis import guarda, impressao
+    from escopo_jarvis import SemEfeito, guarda, impressao
 except Exception:       # ⚠️ camada de controle NUNCA derruba o Jarvis
     def guarda(**_kw):  # noqa: D103
         return lambda fn: fn
 
     def impressao(_dados):  # noqa: D103
         return ""
+
+    class SemEfeito(Exception):  # noqa: D101
+        pass
 
 # Procedência da última consulta de vendas: de onde veio, quando, e qual era.
 # ⚠️ Quem sabe a procedência de um dado é quem foi buscá-lo. Inferir isso
@@ -284,13 +287,26 @@ def _evidencia_vendas(fontes: list) -> dict:
                        else "UNAVAILABLE")}
 
 
-class PodaSemEvidencia(Exception):
+class PodaSemEvidencia(SemEfeito):
     """A poda se recusou a rodar porque faltava a evidência que ela exige.
 
     ⚠️ É exceção, e não `return []`, porque lista vazia significa duas coisas
     incompatíveis — "não havia nada pra podar" e "eu não consegui decidir" — e
     confundir as duas foi o bug que este projeto inteiro existe para combater.
-    Exceção não se parece com resultado."""
+    Exceção não se parece com resultado.
+
+    ⚠️ E HERDA DE `SemEfeito` PARA CONSERTAR UM RECIBO QUE MENTIA. Antes disso
+    o livro gravava, quando a poda se recusava a rodar:
+
+        {"error": "PodaSemEvidencia: ...", "executed": true, "return": null}
+
+    Nenhuma fonte tinha sido tocada. `executed: true` dizia só que a FUNÇÃO
+    havia sido chamada, mas quem lê um recibo não lê isso — lê "aconteceu".
+
+    De fora, a ESCOPO não tem como distinguir esta exceção de uma que estourou
+    no meio da poda, já com metade das fontes comentadas. Quem sabe é quem
+    escreveu a função. Herdar de `SemEfeito` é esta função declarando, de
+    dentro, que se absteve — e o recibo passa a dizer ATTEMPTED_NO_EFFECT."""
 
 
 @guarda(

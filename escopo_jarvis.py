@@ -45,6 +45,17 @@ _tentou = False
 _motivo_off = ""
 
 
+try:
+    from escopo import SemEfeito
+except Exception:       # noqa: BLE001 — a camada nunca derruba o Jarvis
+    # ⚠️ SEM A BIBLIOTECA, ISTO PRECISA CONTINUAR SENDO UMA EXCEÇÃO DE VERDADE.
+    # O `PodaSemEvidencia` herda daqui; se este nome virasse `None` ou sumisse,
+    # o `ceo_agent` nem importaria. Fallback que quebra o import é pior que
+    # biblioteca ausente.
+    class SemEfeito(Exception):                      # type: ignore[no-redef]
+        """Marcador local: a função foi chamada e de propósito não fez nada."""
+
+
 class PerfisIlegiveis(Exception):
     """Não deu para ler os arquivos de perfil para conferir a poda.
 
