@@ -75,6 +75,7 @@ def _construir():
         dados = Path(os.environ.get("ESCOPO_DADOS") or (BASE_DIR / "escopo_dados"))
         esc = Escopo(politicas=pol, dados=dados)
         esc.registrar_verificador(VerificadorPerfis())
+        esc.registrar_verificador(VerificadorComentario())
         for aviso in esc.avisos:
             print(f"⚠️ escopo: {aviso}")
         _escopo = esc
@@ -372,6 +373,54 @@ class VerificadorPerfis(_Base):
         return True, (f"{confirmados} de {alvos} fonte(s) confirmada(s) "
                       f"comentada(s) em {observado['arquivos_lidos']} "
                       f"arquivo(s) de perfil")
+
+
+class RespostaIlegivel(Exception):
+    """Não deu para ler a resposta de volta na API do Meta."""
+
+
+def _buscar_no_graph(resposta_id: str, token: str) -> dict:
+    """GET simples no Graph. Separado para o teste poder trocar."""
+    import urllib.parse
+    import urllib.request
+    url = ("https://graph.facebook.com/v21.0/" + urllib.parse.quote(resposta_id)
+           + "?" + urllib.parse.urlencode({"fields": "id,text",
+                                           "access_token": token}))
+    with urllib.request.urlopen(url, timeout=20) as r:
+        import json as _j
+        return _j.loads(r.read().decode("utf-8"))
+
+
+class VerificadorComentario(_Base):
+    """A resposta apareceu mesmo no post, ou a API só disse que sim?
+
+    ⚠️ O TOKEN É RESOLVIDO AQUI DENTRO, NUNCA VEM DO CONTEXTO.
+    O contexto de verificação é gravado na fila em disco e no recibo. Uma
+    credencial ali seria vazamento produzido pela própria camada que existe
+    para tornar as coisas auditáveis. O contexto carrega só o id da resposta
+    e a conta."""
+
+    nome = "jarvis.comentario"
+
+    def __init__(self, buscar=None):
+        self.buscar = buscar or _buscar_no_graph
+
+    def _consultar(self, contexto: dict) -> dict:
+        rid = str(contexto.get("resposta_id") or "").strip()
+        if not rid:
+            # A API não devolveu id: não há o que ir ler. Isso não é "falhou",
+            # é "não dá para conferir" — a distinção de sempre.
+            raise RespostaIlegivel(
+                "a API não devolveu id da resposta; não há o que verificar")
+        token = (os.environ.get("FACEBOOK_PAGE_TOKEN", "")
+                 or os.environ.get("META_ACCESS_TOKEN", "")).strip()
+        if not token:
+            raise RespostaIlegivel(
+                "sem token no ambiente para reler a resposta no Graph")
+        dados = self.buscar(rid, token)       # deixa a exceção subir
+        return {"publicado": bool((dados or {}).get("id")),
+                "id_lido": (dados or {}).get("id", ""),
+                "id_esperado": rid}
 
 
 def maturidade(agente: str = "jarvis.ceo", acao: str = "source.disable") -> str:

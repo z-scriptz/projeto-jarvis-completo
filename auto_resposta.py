@@ -23,6 +23,15 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 GRAPH = "https://graph.facebook.com/v21.0"
+
+try:
+    from escopo_jarvis import guarda, impressao as _impressao
+except Exception:       # ⚠️ camada de controle NUNCA derruba o Jarvis
+    def guarda(**_kw):  # noqa: D103
+        return lambda fn: fn
+
+    def _impressao(_d):  # noqa: D103
+        return ""
 STORE_DIR = BASE_DIR / "shared" / "engajamento"
 RESPONDIDOS = STORE_DIR / "respondidos.json"
 
@@ -750,13 +759,59 @@ def _enviar_dm_ig(ig: str, comment_id: str, token: str,
     return False
 
 
+class MemoriaIlegivel(Exception):
+    """O arquivo de respondidos EXISTE e não pôde ser lido.
+
+    ⚠️ Isto não é o mesmo que "ainda não respondi ninguém", e a diferença é
+    cara: tratar memória ilegível como memória vazia faz o Jarvis responder
+    de novo TODO MUNDO dos últimos 7 dias. Isso é spam em cima de gente real,
+    e o que se perde não é dado — é a conta.
+
+    📌 É o mesmo defeito das 36 fontes, pela terceira vez e em outro arquivo:
+    ausência de dado lida como evidência. O `_salvar_respondidos()` logo
+    abaixo já documenta esse risco no lado da ESCRITA desde 04/08; o lado da
+    LEITURA continuou cego até 16/09."""
+
+
+# Procedência da memória: de onde veio, quando, e qual era.
+_PROCEDENCIA_MEMORIA: dict = {}
+
+
 def _carregar_respondidos() -> dict:
+    """A memória de quem já foi respondido, com procedência.
+
+    Devolve {} em DOIS casos legítimos — arquivo inexistente (primeira
+    execução) e arquivo vazio — e levanta quando existe e não dá para ler."""
+    global _PROCEDENCIA_MEMORIA
+    fonte = str(RESPONDIDOS)
+    if not RESPONDIDOS.exists():
+        _PROCEDENCIA_MEMORIA = {
+            "estado": "OK", "fonte": fonte, "em": time.time(),
+            "hash": _impressao({}), "nota": "primeira execução, sem arquivo",
+        }
+        return {}
     try:
         d = json.loads(RESPONDIDOS.read_text(encoding="utf-8"))
-        corte = time.time() - 7 * 86400        # TTL 7 dias (limpa o histórico velho)
-        return {k: v for k, v in d.items() if isinstance(v, (int, float)) and v >= corte}
-    except Exception:
-        return {}
+        if not isinstance(d, dict):
+            raise ValueError(f"esperava um objeto, veio {type(d).__name__}")
+    except Exception as e:
+        _PROCEDENCIA_MEMORIA = {
+            "estado": "UNAVAILABLE", "fonte": fonte, "em": time.time(),
+            "erro": f"{type(e).__name__}: {str(e)[:120]}",
+        }
+        raise MemoriaIlegivel(
+            f"{RESPONDIDOS.name} existe mas não pôde ser lido "
+            f"({type(e).__name__}: {str(e)[:80]}). Responder agora seria "
+            f"responder todo mundo de novo.") from e
+
+    corte = time.time() - 7 * 86400        # TTL 7 dias (limpa o histórico velho)
+    vivos = {k: v for k, v in d.items()
+             if isinstance(v, (int, float)) and v >= corte}
+    _PROCEDENCIA_MEMORIA = {
+        "estado": "OK", "fonte": fonte, "em": time.time(),
+        "hash": _impressao(sorted(vivos)), "lembrados": len(vivos),
+    }
+    return vivos
 
 
 def _salvar_respondidos(d: dict) -> None:
@@ -777,6 +832,36 @@ def _salvar_respondidos(d: dict) -> None:
         os.replace(tmp, RESPONDIDOS)
     except Exception:
         pass
+
+
+@guarda(
+    agente="jarvis.resposta",
+    acao="comment.reply",
+    alvos=lambda comentario, mensagem, token, rede: [comentario],
+    # ⚠️ O TOKEN NÃO PODE ENTRAR NO RECIBO. O recibo vai pro disco e existe
+    # justamente pra ser lido por gente — credencial em texto ali é vazamento,
+    # não auditoria. A ESCOPO já omite por nome, mas declarar é o mecanismo.
+    nao_registrar=["token"],
+    evidencias=lambda comentario, mensagem, token, rede: {
+        "memoria_respondidos": dict(_PROCEDENCIA_MEMORIA) or
+        {"estado": "UNAVAILABLE", "erro": "memória nunca foi carregada"}},
+    contexto=lambda resultado, intencao: {
+        "alvos": list(intencao.alvos),
+        "resposta_id": (resultado or {}).get("id", ""),
+        "rede": intencao.parametros.get("rede", ""),
+        "conta": intencao.parametros.get("conta", ""),
+    },
+)
+def _responder_comentario(comentario: str, mensagem: str, token: str,
+                          rede: str, conta: str = "") -> dict:
+    """Publica UMA resposta a UM comentário. É a costura que a ESCOPO guarda.
+
+    ⚠️ Extraída do meio do laço de propósito: ação que mexe no mundo precisa
+    de um nome e de uma fronteira para poder ter contrato. Chamada solta no
+    meio de um `for` não tem onde a política encostar."""
+    caminho = "replies" if rede == "instagram" else "comments"
+    return _post(f"{GRAPH}/{comentario}/{caminho}",
+                 {"message": mensagem, "access_token": token})
 
 
 def _token_da_conta(conta: dict) -> str:
@@ -949,7 +1034,9 @@ def _resp_instagram(conta, token, gatilhos, respondidos, limites, teste,
                 if feitos >= limites["max"]:
                     break
                 continue
-            r = _post(f"{GRAPH}/{cid}/replies", {"message": msg, "access_token": token})
+            r = _responder_comentario(comentario=cid, mensagem=msg, token=token,
+                                      rede="instagram",
+                                      conta=str(conta.get("handle", "")))
             if r.get("id"):
                 _log(f"   💬 IG respondeu @{c.get('username')} ({conta.get('handle')})"
                      + (" +DM" if dm_ok else ""))
@@ -1019,7 +1106,9 @@ def _resp_facebook(conta, token, gatilhos, respondidos, limites, teste) -> int:
                 if feitos >= limites["max"]:
                     break
                 continue
-            r = _post(f"{GRAPH}/{cid}/comments", {"message": msg, "access_token": token})
+            r = _responder_comentario(comentario=cid, mensagem=msg, token=token,
+                                      rede="facebook",
+                                      conta=str(conta.get("handle", "")))
             if r.get("id"):
                 _log(f"   💬 FB respondeu ({conta.get('handle') or page})")
                 respondidos[cid] = int(time.time()); feitos += 1

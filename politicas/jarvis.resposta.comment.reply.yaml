@@ -1,0 +1,51 @@
+# Contrato de execução da resposta a comentário.
+#
+# ⚠️ A SEGUNDA INTENÇÃO INSTRUMENTADA, e ela existe para responder uma
+# pergunta que o projeto ainda não tinha feito: **este desenho serve para uma
+# ação que não é `source.disable`?** Contrato que só serve ao caso que o
+# inspirou não é infraestrutura — é um `if` com YAML.
+#
+# O que este caso tem de diferente do outro:
+#   · roda dezenas de vezes por dia, não uma vez por semana
+#   · toca gente de verdade (comentário público), não arquivo de configuração
+#   · o estrago não é dado perdido, é SPAM — e conta restringida
+#   · a evidência não é uma consulta externa, é a memória local do processo
+
+agente: jarvis.resposta
+acao: comment.reply
+versao: v1
+autoridade: L1
+modo: observe
+
+# ⚠️ A EVIDÊNCIA AQUI É A MEMÓRIA DE QUEM JÁ FOI RESPONDIDO.
+#
+# `_carregar_respondidos()` devolvia {} tanto para "ninguém foi respondido"
+# quanto para "não consegui ler o arquivo". Com memória ilegível lida como
+# vazia, o Jarvis responde de novo TODO MUNDO dos últimos 7 dias — spam em
+# cima de gente real, e conta restringida.
+#
+# É o mesmo defeito das 36 fontes, pela terceira vez, em outro arquivo.
+#
+# 📌 `frescor_maximo_segundos: 900` porque memória carregada há muito tempo
+# não reflete o que outra rodada do cron já respondeu. Memória velha aqui é
+# quase tão perigosa quanto memória ausente.
+evidencias:
+  - id: memoria_respondidos
+    descricao: memória local de quem já foi respondido nos últimos 7 dias
+    exige_procedencia: true
+    frescor_maximo_segundos: 900
+
+# Uma resposta por chamada — a cardinalidade não é o risco aqui, a REPETIÇÃO
+# é. Por isso não há regra de lote: o que segura esta ação é a evidência.
+padrao: ALLOW
+
+verificacao:
+  verificador: jarvis.comentario
+  tentativas: 3
+  # O Graph às vezes demora a tornar a resposta legível por leitura.
+  espera_segundos: [2, 15, 60]
+  # ⚠️ "A API devolveu um id" é o agente dizendo que publicou. Isto aqui é ir
+  # LER a resposta de volta e confirmar que ela existe no post — que é a
+  # diferença entre observabilidade e prova.
+  espera:
+    publicado: true
