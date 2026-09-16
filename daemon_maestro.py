@@ -700,24 +700,26 @@ def ciclo_producao(cfg: dict, estado: dict, dry_run: bool) -> dict:
     return resultado
 
 
-def _custo_do_lote(cfg: dict, produtos: list) -> float:
+def _custo_do_lote(cfg: dict, produtos: list):
     """Custo declarado do lote, em reais. 0.0 quando o operador não declarou.
 
     ⚠️ O VALOR UNITÁRIO É DO OPERADOR, não da biblioteca: quem sabe quanto
     custa uma geração é quem paga a fatura. `ESCOPO_CUSTO_VIDEO` em reais,
     `ESCOPO_CUSTO_VIDEO_PREMIUM` para os campeões (Kling 2.1 custa mais).
 
-    ⚠️ E ZERO AQUI SIGNIFICA "NÃO DECLARADO", o que NÃO é a mesma coisa que
-    "de graça" — mas hoje o núcleo não sabe distinguir os dois, porque
-    `Intencao.custo` nasce `0.0`. Está anotado no ROADMAP como defeito achado
-    ao tentar usar o campo pela primeira vez. Enquanto não for consertado,
-    política que decidir por custo pode liberar um lote caro achando que ele
-    é grátis — por isso a política desta ação decide por QUANTIDADE."""
-    unit = float(os.environ.get("ESCOPO_CUSTO_VIDEO", "0") or 0)
-    unit_premium = float(os.environ.get("ESCOPO_CUSTO_VIDEO_PREMIUM",
-                                        str(unit)) or 0)
-    if not (unit or unit_premium):
-        return 0.0
+    ⚠️ DEVOLVE `None` — E NÃO `0.0` — QUANDO NINGUÉM DECLAROU O VALOR.
+    Escrever `0.0` aqui repetiria, um nível acima, exatamente o defeito que o
+    núcleo acabou de consertar: "não sei quanto custa" virando "é de graça".
+    Uma política de custo leria zero e liberaria o lote caro.
+
+    📌 `None` chega ao recibo como `null`, e uma regra que decida por custo
+    SEGURA em vez de liberar. Ausência com nome próprio."""
+    bruto_unit = os.environ.get("ESCOPO_CUSTO_VIDEO", "").strip()
+    bruto_prem = os.environ.get("ESCOPO_CUSTO_VIDEO_PREMIUM", "").strip()
+    if not (bruto_unit or bruto_prem):
+        return None
+    unit = float(bruto_unit or 0)
+    unit_premium = float(bruto_prem or bruto_unit or 0)
     minimo = float(cfg.get("producao_premium_comissao_min", 0) or 0)
     premium_ligado = bool(cfg.get("producao_premium_campeoes"))
     total = 0.0

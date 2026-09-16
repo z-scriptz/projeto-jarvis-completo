@@ -34,16 +34,23 @@ evidencias:
     descricao: fila de produtos validados (validacao_fila.json ou produtos_fila.json)
     exige_procedencia: true
 
-# ⚠️ AS REGRAS DECIDEM POR QUANTIDADE, E NÃO POR CUSTO — de propósito.
+# ⚠️ AS REGRAS DECIDEM POR QUANTIDADE, E NÃO POR CUSTO — e o motivo MUDOU.
 #
-# `Intencao.custo` nasce `0.0` no núcleo, e hoje "não declarado" é
-# indistinguível de "de graça". Uma regra `custo > 50 → HOLD` liberaria um lote
-# caro em qualquer máquina onde o operador esqueceu de declarar o valor
-# unitário. É a doença da casa, dentro do campo que existe justamente para
-# medir risco financeiro.
+# Era: `Intencao.custo` nascia `0.0` e "não declarado" era indistinguível de
+# "de graça", então uma regra `custo > 50 → HOLD` liberaria um lote caro em
+# toda máquina onde o operador esquecesse de declarar o valor unitário.
 #
-# O custo É declarado na intenção e vai para o recibo — só não decide nada
-# ainda. Quando o núcleo souber dizer "não declarado", a regra entra aqui.
+# ✅ Isso foi consertado no núcleo em 16/09: custo não declarado é `null`, e
+# uma regra que decida por custo SEGURA em vez de liberar por omissão.
+#
+# ⚠️ O QUE FALTA AGORA É DO OPERADOR, não do código: enquanto
+# `ESCOPO_CUSTO_VIDEO` não estiver no `.env` da VPS, o custo desta ação vai ao
+# recibo como `null` — e ligar a regra faria TODA produção virar HOLD, o que
+# em `observe` não quebra nada mas afoga o sinal de maturidade.
+#
+# 📌 A regra entra aqui no dia em que o valor unitário for declarado. Até lá o
+# recibo diz honestamente que não sabe quanto custou, que é melhor que dizer
+# zero.
 regras:
   - id: lote_absurdo
     se: {campo: quantidade, op: ">", valor: 20}

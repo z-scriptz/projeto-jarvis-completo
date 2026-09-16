@@ -147,9 +147,11 @@ vale(a.body["verdict"]["decision"] == "ALLOW",
 vale(esc.estado(a.hash) is Estado.VERIFICADO,
      f"os 4 pacotes existem no disco → VERIFIED, deu "
      f"{esc.estado(a.hash).value}")
-vale(a.body["intent"]["cost"] == 10.0,
-     f"⚠️ PRIMEIRA AÇÃO COM CUSTO NO RECIBO: 4 × 2.5 = 10.0, veio "
-     f"{a.body['intent'].get('cost')!r}")
+vale(a.body["intent"]["cost"] == {"amount": 10.0, "currency": "BRL",
+                                 "kind": "estimated"},
+     f"⚠️ PRIMEIRA AÇÃO COM CUSTO NO RECIBO, e ele se declara ESTIMATIVA: no "
+     f"instante da intenção a produção ainda não rodou, então custo real nem "
+     f"existe. veio {a.body['intent'].get('cost')!r}")
 
 # ── 2 · o teste que existe para expor a lacuna ────────────────────────────
 secao("2 · ⚠️ 4 pedidos, 2 na esteira — nem sucesso nem falha")
