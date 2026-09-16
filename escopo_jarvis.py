@@ -139,6 +139,50 @@ def processar_verificacoes() -> list:
     return esc.processar_verificacoes() if esc else []
 
 
+def reconciliar(avisar: bool = True) -> dict:
+    """Recoloca na fila o que o livro sabe que falta conferir.
+
+    ⚠️ CHAMADA A CADA CICLO, ANTES DE DRENAR. `escopo_dados/fila.json` é um
+    arquivo num diretório que já foi apagado à mão uma vez (16/09) enquanto o
+    daemon rodava. Sem isto, a fila volta vazia e a ESCOPO passa a dizer "não
+    há nada pendente" quando a verdade é "perdi a lista" — o defeito que este
+    projeto inteiro persegue, no próprio projeto.
+
+    📌 Em dia normal isto não faz nada e não custa nada: o livro e a fila
+    concordam, o relatório vem com `recuperados: []` e ninguém é avisado."""
+    esc = _construir()
+    if esc is None:
+        return {}
+    try:
+        rel = esc.reconciliar()
+    except Exception as e:                        # noqa: BLE001 — proposital
+        # Reconciliação é manutenção: falhar aqui não pode parar o ciclo.
+        print(f"⚠️ escopo: reconciliar falhou: {type(e).__name__}: {e}")
+        return {}
+
+    n = len(rel.get("recuperados") or [])
+    perdidas = len(rel.get("sem_plano") or [])
+    if n:
+        print(f"🔒 escopo: {n} verificação(ões) recuperada(s) do livro — a "
+              f"fila tinha perdido")
+    if avisar and n:
+        _alerta_telegram(
+            f"🔒 ESCOPO: {n} verificação(ões) pendente(s) foram recuperadas do "
+            f"livro-razão porque a fila as tinha perdido.\n\n"
+            f"A fila é uma projeção e foi reconstruída — nenhuma evidência se "
+            f"perdeu. Mas o arquivo `escopo_dados/fila.json` sumiu ou voltou "
+            f"atrás, e vale olhar por quê.")
+    if perdidas:
+        # ⚠️ ISSO NÃO SE RESOLVE SOZINHO e não pode virar rotina silenciosa:
+        # são recibos gravados antes de o plano existir. O livro diz que estão
+        # PENDENTES e não diz quem ia conferir — a verificação está perdida de
+        # verdade. Dizer isso alto é melhor que fingir que a fila está limpa.
+        print(f"⚠️ escopo: {perdidas} ação(ões) antiga(s) sem plano de "
+              f"verificação no recibo — não dá para reconstruir, e elas "
+              f"ficam PENDENTES para sempre")
+    return rel
+
+
 def _alerta_telegram(msg: str) -> bool:
     """Mesmo canal de admin dos outros alertas. Best-effort, nunca quebra."""
     tok = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()

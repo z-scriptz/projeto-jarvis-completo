@@ -376,6 +376,38 @@ else:
     vale("morta_02" in prova_p["reason"],
          f"o motivo tem que NOMEAR quem não foi podada: {prova_p['reason']!r}")
 
+    # ── 5d · a fila do Jarvis é projeção, e `rm` nela não apaga pendência ─
+    secao("5d · ⚠️ apagar escopo_dados/fila.json não apaga o que falta conferir")
+
+    # 📌 Cenário REAL de 16/09: um `rm -rf escopo_dados/` embaixo do daemon
+    # rodando. A fila voltava vazia e a camada dizia "nada pendente".
+    pq = tmp / "q.txt"
+    pq.write_text("\n".join(f"@morta_{i:02d} #pet" for i in range(3)) + "\n",
+                  encoding="utf-8")
+    ej = montar("caso_fila", pq)
+    cq = redecorar(ej)
+    cq.TIKTOK_PERFIS, cq.IG_PERFIS = pq, tmp / "nada.txt"
+    cq._podar_fontes(fontes_falsas(3, n_vivas=0), executar=True)
+
+    esc = ej._construir()
+    vale(len(esc.fila.pendentes()) == 1, "a poda agendou 1 verificação")
+    acao_q = ultima_acao(esc)
+    vale(acao_q.body["verification"]["verifier"] == "jarvis.fontes",
+         f"⚠️ o recibo tem que dizer quem confere — é o que permite "
+         f"reconstruir. veio {acao_q.body['verification'].get('verifier')!r}")
+
+    esc.fila.caminho.unlink()                 # o `rm` do dia 16
+    vale(esc.fila.pendentes() == [], "com o arquivo fora, a fila está vazia")
+
+    rel_q = ej.reconciliar(avisar=False)
+    vale(rel_q["recuperados"] == [acao_q.hash],
+         f"⚠️ o livro sabe o que a fila esqueceu: {rel_q!r}")
+
+    drenar(ej)
+    vale(esc.estado(acao_q.hash) is Estado.VERIFICADO,
+         f"e a fila reconstruída confere de verdade, "
+         f"deu {esc.estado(acao_q.hash).value}")
+
 
 # ── 6 · a camada avisa quando cai ─────────────────────────────────────────
 secao("6 · camada desligada tem que gritar (uma vez, não toda hora)")

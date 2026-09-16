@@ -12940,3 +12940,29 @@ copiei `escopo_jarvis.py` e `ceo_agent.py` e esqueci `teste_escopo_jarvis.py`;
 o teste quebrou com `KeyError: 'executed'` — que parecia bug do código novo e
 era só arquivo velho. Teste desatualizado não avisa que está desatualizado:
 ele acusa o código.
+
+---
+
+### 🔒 ESCOPO: a fila virou projeção do livro, e o log estava quebrado (16/09)
+
+**A fila de verificação deixou de ser estado insubstituível.** `escopo_dados/
+fila.json` é um arquivo, e num `rm -rf escopo_dados/` com o daemon rodando ele
+some — e antes disso a camada voltava dizendo *"nada pendente"* quando a
+verdade era *"perdi a lista"*. O recibo da ação agora carrega o plano inteiro
+(quem confere, contra o quê, quantas tentativas), então `reconciliar()` deriva
+a fila do livro. O daemon chama antes de drenar, a cada ciclo. Em dia normal
+não faz nada.
+
+**🐞 E o passo 5 do ciclo estava quebrado desde a migração de idioma.** Ele lia
+`p.corpo["prova"]["estado"]`; o schema serializado virou inglês em 17/09 e o
+campo passou a ser `p.body["proof"]["state"]`. Resultado: `AttributeError`
+engolido pelo `except`, e **todo resultado de verificação virava a linha
+`⚠️ fila da ESCOPO não drenou`**.
+
+📌 A evidência nunca se perdeu — os recibos foram gravados certinho pelo
+`processar()`. Quem se perdeu foi o log, que é justamente por onde a gente
+olha. Um `except Exception` largo em volta de código de leitura transforma
+"schema mudou" em "parece que o serviço está com problema", e as duas frases
+levam a lugares muito diferentes.
+
+`teste_escopo_jarvis.py` 51 → **56**, com o `rm` na fila como asserção nomeada.

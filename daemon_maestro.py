@@ -1536,14 +1536,27 @@ def rodar_um_ciclo(cfg: dict, estado: dict, hist: dict, dry_run: bool,
     # logo acima: chamada injetada no destino do deploy tem data de validade.
     try:
         import escopo_jarvis
+        # ⚠️ RECONCILIAR VEM ANTES DE DRENAR. `escopo_dados/fila.json` é um
+        # arquivo, e em 16/09 um `rm -rf escopo_dados/` apagou o diretório com
+        # o daemon rodando. Sem isto a fila volta VAZIA e a camada passa a
+        # dizer "não há nada pendente" quando a verdade é "perdi a lista" — o
+        # mesmo defeito das 36 fontes, agora dentro da peça que o combate.
+        # Em dia normal não faz nada: livro e fila concordam.
+        escopo_jarvis.reconciliar()
         provas = escopo_jarvis.processar_verificacoes()
         if provas:
             for p in provas:
-                estado_p = p.corpo["prova"]["estado"]
+                # ⚠️ `body`/`proof`/`state`, não `corpo`/`prova`/`estado`. O
+                # schema serializado virou inglês na migração de 17/09 (ver
+                # escopo/nucleo.py) e ESTA linha ficou para trás: ela levantava
+                # AttributeError, o `except` engolia, e todo resultado de
+                # verificação virava a linha "fila da ESCOPO não drenou".
+                # A evidência nunca se perdeu — quem se perdeu foi o log.
+                estado_p = p.body["proof"]["state"]
                 emo = {"VERIFIED": "✅", "FAILED": "❌",
                        "UNVERIFIABLE": "🟡"}.get(estado_p, "•")
                 log.info(f"   🔒 {emo} {estado_p}: "
-                         f"{p.corpo['prova'].get('motivo', '')[:110]}")
+                         f"{p.body['proof'].get('reason', '')[:110]}")
     except Exception as e:
         log.warning(f"   ⚠️  fila da ESCOPO não drenou: {str(e)[:100]}")
 
