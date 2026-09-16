@@ -93,9 +93,15 @@ C.TIKTOK_PERFIS = perfis
 C.IG_PERFIS = tmp / "nao_existe.txt"
 
 C._vendas_por_fonte = lambda dias: None
-podados = C._podar_fontes(C._analisar_fontes(30), executar=True)
-vale(podados == [],
-     f"⛔ com SEM_DADO a poda tem que ser CANCELADA, podou {podados}")
+levantou = None
+try:
+    C._podar_fontes(C._analisar_fontes(30), executar=True)
+except C.PodaSemEvidencia as e:
+    levantou = e
+vale(levantou is not None,
+     "⛔ com SEM_DADO a poda tem que LEVANTAR, não devolver []")
+vale("não completou" in str(levantou),
+     f"a exceção tem que dizer o motivo: {levantou!r}")
 vale("PODADO CEO" not in perfis.read_text(encoding="utf-8"),
      "⚠️ nenhum arquivo pode ter sido tocado")
 

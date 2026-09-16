@@ -239,6 +239,15 @@ def _perfil_da_linha(linha: str) -> str:
     return l.lstrip("@").lower()
 
 
+class PodaSemEvidencia(Exception):
+    """A poda se recusou a rodar porque faltava a evidência que ela exige.
+
+    ⚠️ É exceção, e não `return []`, porque lista vazia significa duas coisas
+    incompatíveis — "não havia nada pra podar" e "eu não consegui decidir" — e
+    confundir as duas foi o bug que este projeto inteiro existe para combater.
+    Exceção não se parece com resultado."""
+
+
 @guarda(
     agente="jarvis.ceo",
     acao="source.disable",
@@ -274,11 +283,19 @@ def _podar_fontes(fontes: list, executar: bool) -> list:
     # ⛔ NÃO SE PODA NO ESCURO. Se a consulta de vendas não completou, nenhuma
     # fonte tem veredito confiável — e podar aqui é destruir com base em nada.
     # Isto é o conserto da causa; a ESCOPO é a rede de segurança, não o conserto.
+    #
+    # ⚠️ LEVANTA, NÃO DEVOLVE []. Aprendido em produção em 16/09: quando a
+    # recusa era um `return []`, o chamador não conseguia distinguir "cancelei"
+    # de "não havia nada" — e quando eu movi a checagem PRA ANTES da chamada,
+    # a função guardada deixou de ser chamada e **a recusa sumiu do livro**.
+    #
+    # 📌 Exceção resolve as duas coisas de uma vez: o chamador não tem como
+    # confundir, e o decorator registra o recibo (com o veredito HOLD do
+    # portão de evidência) antes de a exceção subir.
     if any(f.get("veredito") == "SEM_DADO" for f in fontes):
-        print("⛔ poda CANCELADA: a consulta de vendas não completou, então "
-              "nenhuma fonte pode ser chamada de MORTA. Rode de novo quando a "
-              "Shopee responder.")
-        return []
+        raise PodaSemEvidencia(
+            "a consulta de vendas não completou — nenhuma fonte pode ser "
+            "chamada de MORTA")
     mortas = {f["fonte"] for f in fontes if f["veredito"] == "MORTA"}
     if not mortas:
         return []
@@ -923,17 +940,25 @@ def main():
         # como fazer. É a mesma confusão de `_vendas_por_fonte()`, de novo:
         # ausência de resultado virando evidência de bom estado.
         #
-        # 📌 Por isso a checagem vem ANTES da chamada e o código de saída é
-        # diferente de zero: quem roda isso num script precisa saber que o
-        # trabalho não foi feito.
-        if any(f.get("veredito") == "SEM_DADO" for f in fontes):
-            print("⛔ poda CANCELADA: a consulta de vendas não completou.")
+        # ⚠️ A CHECAGEM NÃO PODE VIR ANTES DA CHAMADA. Tentei isso em 16/09 e
+        # o efeito colateral foi apagar a recusa do livro: sem chamar a função
+        # guardada, o decorator nunca roda e não existe recibo. O evento mais
+        # importante do dia — "me recusei a agir por falta de evidência" —
+        # simplesmente sumia.
+        #
+        # 📌 A recusa acontece DENTRO da função guardada, levanta, o recibo é
+        # gravado com o veredito HOLD do portão de evidência, e só então a
+        # exceção chega aqui. Código de saída != 0 porque quem roda isso num
+        # script precisa saber que o trabalho não foi feito.
+        try:
+            podados = _podar_fontes(fontes, executar=True)
+        except PodaSemEvidencia as e:
+            print(f"⛔ poda CANCELADA: {e}")
             print("   ⚠️ isso NÃO quer dizer que não há fonte morta — quer "
                   "dizer que não dá pra saber quais são.")
             print("   Rode de novo quando a Shopee responder.")
             return 1
 
-        podados = _podar_fontes(fontes, executar=True)
         if podados:
             print(f"💀 {len(podados)} fonte(s) podada(s) (comentadas, reversível): "
                   + ", ".join("@" + p for p in podados))

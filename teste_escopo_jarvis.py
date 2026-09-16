@@ -235,10 +235,24 @@ else:
     sem_dado = [{"fonte": f"morta_{i:02d}", "posts": 8, "vendas": 0,
                  "comissao": 0.0, "veredito": "SEM_DADO",
                  "venda_conhecida": False} for i in range(36)]
-    ce._podar_fontes(sem_dado, executar=True)
+    recusou = None
+    try:
+        ce._podar_fontes(sem_dado, executar=True)
+    except ce.PodaSemEvidencia as e:
+        recusou = e
+    vale(recusou is not None, "a poda tem que se recusar levantando")
+
     esc = drenar(ej)
     a = ultima_acao(esc)
     v = a.corpo["veredito"]
+
+    # ⚠️ A ASSERÇÃO QUE PEGOU O DEFEITO DE PRODUÇÃO DE 16/09: a recusa PRECISA
+    # estar no livro. Quando a checagem morava no chamador, a função guardada
+    # nunca era invocada e o evento mais importante do dia sumia do ledger.
+    vale(a.corpo["execucao"]["erro"] is not None
+         and "PodaSemEvidencia" in a.corpo["execucao"]["erro"],
+         f"⚠️ o recibo tem que registrar a recusa, veio "
+         f"{a.corpo['execucao'].get('erro')!r}")
 
     vale(v["decisao"] == "HOLD",
          f"⚠️ sem a evidência exigida, HOLD — veio {v['decisao']}")
