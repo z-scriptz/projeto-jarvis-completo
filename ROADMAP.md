@@ -12892,3 +12892,51 @@ desta vez.
 
 `teste_nomear_produto.py` 29 → **35**, com o caso real (link encurtado) como
 asserção nomeada.
+
+---
+
+### 🚨 EU MANDEI O ARQUIVO PRO LUGAR ERRADO, E O `conferir.py` JÁ SABIA (16/09)
+
+O bloco de deploy que eu escrevi dizia:
+
+```bash
+git show FETCH_HEAD:ceo_agent.py > agents/ceo_agent.py
+```
+
+**`ceo_agent.py` mora na raiz.** Está escrito, literalmente, em `conferir.py:80`:
+
+```python
+SO_NA_RAIZ = {"ceo_agent.py", "produzir_tiktok.py", "tiktok_coletor.py", ...}
+```
+
+O que aconteceu: criei uma cópia sombra em `agents/` que nenhum import alcança,
+deixei a raiz com a versão velha, e o `systemctl restart jarvis` subiu o daemon
+**rodando o código antigo**. O deploy "deu certo" — `git pull` ok, `pip install`
+ok, serviço `active (running)` — e não entregou nada.
+
+**Quem pegou foi o teste**, e só porque a asserção era nova e específica:
+
+```
+❌ veio 'UNKNOWN'   (esperado ATTEMPTED_NO_EFFECT)
+```
+
+Repare no formato da falha: 50 de 51 asserções passaram, porque a **biblioteca**
+tinha sido atualizada de verdade. Só a asserção que depende do `ceo_agent`
+falhou. O teste desenhou o mapa do que chegou e do que não chegou.
+
+📌 **Este é o MESMO defeito de 25/08**, quando editávamos `daemon_maestro.py` na
+raiz enquanto o serviço rodava `agents/daemon_maestro.py` e a postagem
+balanceada ficou dias travada. O `conferir.py` foi escrito naquele dia, com
+esse defeito no cabeçalho, **e eu não rodei antes de escrever o bloco de
+deploy.** Ferramenta que existe e não é consultada é igual a ferramenta que não
+existe.
+
+⚠️ **A regra, agora com um número de linha:** todo bloco de deploy que eu
+escrever consulta `MAPA_DOC` e `SO_NA_RAIZ` em `conferir.py` ANTES de escolher o
+destino. Não é "conferir depois" — é olhar o mapa antes de dizer o caminho.
+
+⚠️ **E o teste vai junto com o código.** No deploy anterior do mesmo dia eu
+copiei `escopo_jarvis.py` e `ceo_agent.py` e esqueci `teste_escopo_jarvis.py`;
+o teste quebrou com `KeyError: 'executed'` — que parecia bug do código novo e
+era só arquivo velho. Teste desatualizado não avisa que está desatualizado:
+ele acusa o código.
