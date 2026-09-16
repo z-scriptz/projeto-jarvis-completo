@@ -151,7 +151,7 @@ else:
         return esc
 
     def ultima_acao(esc):
-        return [r for r in esc.livro.ler() if r.tipo == "acao"][-1]
+        return [r for r in esc.livro.ler() if r.kind == "action"][-1]
 
     # ── 2 · poda pequena → ALLOW + VERIFIED ───────────────────────────────
     p = tmp / "a.txt"
@@ -163,9 +163,9 @@ else:
     ca._podar_fontes(fontes_falsas(3), executar=True)
     esc = drenar(ej)
     a = ultima_acao(esc)
-    vale(a.corpo["veredito"]["decisao"] == "ALLOW",
-         f"3 fontes deveria ser ALLOW, veio {a.corpo['veredito']['decisao']}")
-    vale(len(a.corpo["intencao"]["alvos"]) == 3,
+    vale(a.body["verdict"]["decision"] == "ALLOW",
+         f"3 fontes deveria ser ALLOW, veio {a.body['verdict']['decision']}")
+    vale(len(a.body["intent"]["targets"]) == 3,
          "só as MORTAS entram como alvo — as VENDE não")
     vale(esc.estado(a.hash) is Estado.VERIFICADO,
          f"3 pedidas e 3 comentadas deveria dar VERIFIED, "
@@ -173,13 +173,13 @@ else:
 
     # ⚠️ A PROCEDÊNCIA PRECISA CHEGAR AO RECIBO — é a diferença entre o livro
     # AFIRMAR que tinha o dado e PROVAR qual dado era.
-    ev = a.corpo["intencao"]["evidencias"]["vendas_por_fonte"]
-    vale(ev.get("fonte") == "shopee.conversionReport",
+    ev = a.body["intent"]["evidence"]["vendas_por_fonte"]
+    vale(ev.get("source") == "shopee.conversionReport",
          f"o recibo tem que dizer DE ONDE veio a evidência: {ev}")
     vale(str(ev.get("hash", "")).startswith("sha256:"),
          f"e QUAL era (impressão digital): {ev}")
-    vale(ev.get("em"), "e QUANDO foi coletada")
-    vale(a.corpo["intencao"].get("id"),
+    vale(ev.get("at"), "e QUANDO foi coletada")
+    vale(a.body["intent"].get("id"),
          "o recibo tem que carregar o intent_id, senão nada liga tentativas")
 
     # ── 3 · o incidente: 36 fontes → HOLD, mas observe não impede ─────────
@@ -195,11 +195,11 @@ else:
     esc = drenar(ej)
     a = ultima_acao(esc)
     vale(len(podados) == 36, "em observe a poda acontece igual — 36 podadas")
-    vale(a.corpo["veredito"]["decisao"] == "HOLD",
-         f"36 > 5 deveria ser HOLD, veio {a.corpo['veredito']['decisao']}")
-    vale(a.corpo["veredito"]["regra"] == "lote_destrutivo",
+    vale(a.body["verdict"]["decision"] == "HOLD",
+         f"36 > 5 deveria ser HOLD, veio {a.body['verdict']['decision']}")
+    vale(a.body["verdict"]["rule"] == "lote_destrutivo",
          "deveria citar a regra `lote_destrutivo`")
-    vale(a.corpo["execucao"]["executou"] is True,
+    vale(a.body["execution"]["executed"] is True,
          "⚠️ observe REGISTRA que extrapolou, não impede")
     vale(esc.estado(a.hash) is Estado.VERIFICADO,
          f"as 36 foram mesmo comentadas → VERIFIED, "
@@ -223,9 +223,9 @@ else:
          f"⚠️ dry-run correto tem que dar VERIFIED, não FAILED — alarme falso "
          f"treina gente a ignorar alarme. Deu {esc.estado(a.hash).value}")
     prova = [r for r in esc.livro.ler()
-             if r.tipo == "verificacao"][-1].corpo["prova"]
-    vale("dry-run" in prova["motivo"],
-         f"o motivo deveria dizer que era dry-run: {prova['motivo']!r}")
+             if r.kind == "verification"][-1].body["proof"]
+    vale("dry-run" in prova["reason"],
+         f"o motivo deveria dizer que era dry-run: {prova['reason']!r}")
 
     # ── 5 · fonte de verdade ilegível → INVERIFICAVEL ─────────────────────
     secao("5 · sem arquivo de perfil para conferir")
@@ -242,9 +242,9 @@ else:
          f"⚠️ A LINHA QUE IMPORTA: sem fonte de verdade → UNVERIFIABLE, "
          f"nunca VERIFIED nem FAILED. Deu {estado.value}")
     prova = [r for r in esc.livro.ler()
-             if r.tipo == "verificacao"][-1].corpo["prova"]
-    vale(prova["evidencia"].get("tipo") == "PerfisIlegiveis",
-         f"a evidência deveria nomear o erro: {prova['evidencia']}")
+             if r.kind == "verification"][-1].body["proof"]
+    vale(prova["evidence"].get("type") == "PerfisIlegiveis",
+         f"a evidência deveria nomear o erro: {prova['evidence']}")
 
     integra, problemas = esc.integro()
     vale(integra, f"a cadeia deveria estar íntegra: {problemas}")
@@ -272,24 +272,24 @@ else:
 
     esc = drenar(ej)
     a = ultima_acao(esc)
-    v = a.corpo["veredito"]
+    v = a.body["verdict"]
 
     # ⚠️ A ASSERÇÃO QUE PEGOU O DEFEITO DE PRODUÇÃO DE 16/09: a recusa PRECISA
     # estar no livro. Quando a checagem morava no chamador, a função guardada
     # nunca era invocada e o evento mais importante do dia sumia do ledger.
-    vale(a.corpo["execucao"]["erro"] is not None
-         and "PodaSemEvidencia" in a.corpo["execucao"]["erro"],
+    vale(a.body["execution"]["error"] is not None
+         and "PodaSemEvidencia" in a.body["execution"]["error"],
          f"⚠️ o recibo tem que registrar a recusa, veio "
-         f"{a.corpo['execucao'].get('erro')!r}")
+         f"{a.body['execution'].get('error')!r}")
 
-    vale(v["decisao"] == "HOLD",
-         f"⚠️ sem a evidência exigida, HOLD — veio {v['decisao']}")
-    vale(v["regra"] == "evidencia_indisponivel",
+    vale(v["decision"] == "HOLD",
+         f"⚠️ sem a evidência exigida, HOLD — veio {v['decision']}")
+    vale(v["rule"] == "evidencia_indisponivel",
          f"⚠️ e o recibo tem que dizer que foi FALTA DE EVIDÊNCIA, não "
-         f"tamanho de lote. Veio regra={v['regra']!r}")
-    vale("vendas_por_fonte" in v["motivo"],
-         f"tem que nomear qual evidência faltou: {v['motivo']!r}")
-    vale(v["decisao"] != "DENY",
+         f"tamanho de lote. Veio regra={v['rule']!r}")
+    vale("vendas_por_fonte" in v["reason"],
+         f"tem que nomear qual evidência faltou: {v['reason']!r}")
+    vale(v["decision"] != "DENY",
          "não é DENY: a consulta pode voltar e a mesma intenção passa")
     vale(pev.read_text(encoding="utf-8").count("PODADO CEO") == 0,
          "a guarda interna do _podar_fontes continua cancelando a poda")
@@ -300,9 +300,9 @@ else:
                 for f in sem_dado]
     ce._podar_fontes(com_dado, executar=True)
     a2 = ultima_acao(esc)
-    vale(a2.corpo["veredito"]["regra"] == "lote_destrutivo",
+    vale(a2.body["verdict"]["rule"] == "lote_destrutivo",
          f"com evidência, quem decide é a regra de lote — veio "
-         f"{a2.corpo['veredito']['regra']!r}")
+         f"{a2.body['verdict']['rule']!r}")
 
 
     # ── 5c · recusa depois de poda bem-sucedida não pode dar FAILED ───────
@@ -357,9 +357,9 @@ else:
          f"4 pedidas e só 2 existentes tem que dar FAILED, "
          f"deu {esc.estado(a_p.hash).value}")
     prova_p = [r for r in esc.livro.ler()
-               if r.tipo == "verificacao"][-1].corpo["prova"]
-    vale("morta_02" in prova_p["motivo"],
-         f"o motivo tem que NOMEAR quem não foi podada: {prova_p['motivo']!r}")
+               if r.kind == "verification"][-1].body["proof"]
+    vale("morta_02" in prova_p["reason"],
+         f"o motivo tem que NOMEAR quem não foi podada: {prova_p['reason']!r}")
 
 
 # ── 6 · a camada avisa quando cai ─────────────────────────────────────────

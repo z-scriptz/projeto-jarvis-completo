@@ -229,10 +229,10 @@ def resumo() -> str:
     if esc is None:
         return f"🔒 escopo: DESLIGADO ({_motivo_off})"
     recibos = esc.livro.ler()
-    acoes = [r for r in recibos if r.tipo == "acao"]
+    acoes = [r for r in recibos if r.kind == "action"]
     integra, problemas = esc.integro()
     from collections import Counter
-    decisoes = Counter(r.corpo["veredito"]["decisao"] for r in acoes)
+    decisoes = Counter(r.body["verdict"]["decision"] for r in acoes)
     estados = Counter(esc.estado(r.hash).value for r in acoes)
     linhas = [
         f"🔒 escopo: {len(acoes)} ação(ões) registrada(s)",

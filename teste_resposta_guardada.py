@@ -137,7 +137,7 @@ else:
         return esc
 
     def ultima(esc):
-        return [r for r in esc.livro.ler() if r.tipo == "acao"][-1]
+        return [r for r in esc.livro.ler() if r.kind == "action"][-1]
 
     # memória boa + resposta publicada → ALLOW + VERIFIED
     ej, esc = montar("ok")
@@ -146,12 +146,12 @@ else:
                             rede="instagram", conta="@topshoppet")
     drenar(ej, esc)
     a = ultima(esc)
-    vale(a.corpo["veredito"]["decisao"] == "ALLOW",
-         f"com memória boa, ALLOW — veio {a.corpo['veredito']['decisao']}")
+    vale(a.body["verdict"]["decision"] == "ALLOW",
+         f"com memória boa, ALLOW — veio {a.body['verdict']['decision']}")
     vale(esc.estado(a.hash) is Estado.VERIFICADO,
          f"e a resposta relida no Graph confirma → VERIFIED, deu "
          f"{esc.estado(a.hash).value}")
-    vale(a.corpo["intencao"]["agente"] == "jarvis.resposta",
+    vale(a.body["intent"]["agent"] == "jarvis.resposta",
          "é outro agente, não o jarvis.ceo")
 
     # ⚠️ o token não pode estar em lugar nenhum do que foi para o disco
@@ -171,12 +171,12 @@ else:
     A._responder_comentario(comentario="c_43", mensagem="oi!", token="t",
                             rede="instagram", conta="@x")
     a = ultima(esc)
-    v = a.corpo["veredito"]
-    vale(v["decisao"] == "HOLD",
-         f"⚠️ sem memória confiável, HOLD — veio {v['decisao']}")
-    vale(v["regra"] == "evidencia_indisponivel", "pela falta de evidência")
-    vale("memoria_respondidos" in v["motivo"],
-         f"nomeando a evidência que faltou: {v['motivo'][:80]!r}")
+    v = a.body["verdict"]
+    vale(v["decision"] == "HOLD",
+         f"⚠️ sem memória confiável, HOLD — veio {v['decision']}")
+    vale(v["rule"] == "evidencia_indisponivel", "pela falta de evidência")
+    vale("memoria_respondidos" in v["reason"],
+         f"nomeando a evidência que faltou: {v['reason'][:80]!r}")
 
     # ── 4 · a API disse que publicou, mas não publicou ────────────────────
     secao("4 · 'a API devolveu id' ≠ 'a resposta está no post'")
@@ -190,9 +190,9 @@ else:
          f"⚠️ A API devolveu id e a releitura não achou nada → FAILED. "
          f"Deu {esc.estado(a.hash).value}")
     prova = [r for r in esc.livro.ler()
-             if r.tipo == "verificacao"][-1].corpo["prova"]
-    vale("publicado" in prova["motivo"],
-         f"o motivo diz o que não bateu: {prova['motivo']!r}")
+             if r.kind == "verification"][-1].body["proof"]
+    vale("publicado" in prova["reason"],
+         f"o motivo diz o que não bateu: {prova['reason']!r}")
 
     integra, probs = esc.integro()
     vale(integra, f"a cadeia tem que fechar: {probs}")
