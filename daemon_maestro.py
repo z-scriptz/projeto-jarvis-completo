@@ -812,6 +812,12 @@ def _produzir_lote(cfg: dict, estado: dict, quantidade: int) -> int:
     contexto=lambda resultado, intencao: {
         "alvos": list(intencao.alvos),
         "produzidos": (resultado or {}).get("produzidos", 0),
+        # ⚠️ O que a verificação vai conferir: o caminho que o PRODUTOR disse
+        # ter criado, não um slug recalculado a partir do nome.
+        "artefatos": dict((resultado or {}).get("artefatos") or {}),
+        # ⚠️ Falha que o PRODUTOR declarou. É afirmação do agente — aceita
+        # só para o lado do fracasso, onde não há incentivo para mentir.
+        "falharam": list((resultado or {}).get("falharam") or []),
     },
 )
 def _produzir_produtos(cfg: dict, estado: dict, produtos: list) -> dict:
@@ -843,6 +849,9 @@ def _produzir_produtos(cfg: dict, estado: dict, produtos: list) -> dict:
 
     produzidos = 0
     entraram, falharam = [], []
+    # ⚠️ {nome do produto: caminho que o produtor DISSE ter criado}. Ver o
+    # comentário sobre Effect Binding no retorno desta função.
+    artefatos = {}
     for p in produtos:
         nome = p["nome"]
         comissao = float(p.get("comissao_valor", 0) or 0)
@@ -869,6 +878,11 @@ def _produzir_produtos(cfg: dict, estado: dict, produtos: list) -> dict:
             if status in ("video_gerado", "recuperado"):
                 produzidos += 1
                 entraram.append(nome)
+                # ⚠️ O CAMINHO VEM DE QUEM CRIOU, e isso é o conserto de um
+                # erro que esta mesma função cometeu ontem com o `media_id`.
+                caminho = (res or {}).get("pronto_para_postar") or ""
+                if caminho:
+                    artefatos[nome] = str(caminho)
                 log.info(f"      ✅ '{nome}': {status} → esteira: "
                          f"{res.get('pronto_para_postar') or '?'}")
             else:
@@ -885,10 +899,24 @@ def _produzir_produtos(cfg: dict, estado: dict, produtos: list) -> dict:
                 os.environ["FAL_MODEL"] = _fal_anterior
 
     # ⚠️ `pedidos` fica no retorno porque `produzidos` sozinho é ambíguo: 2 de
-    # 2 e 2 de 4 são fatos muito diferentes, e o segundo é o caso que a ESCOPO
-    # ainda não sabe representar (ver `Partial Effect` no ROADMAP).
+    # 2 e 2 de 4 são fatos muito diferentes.
+    #
+    # ⚠️ E `artefatos` É O CONSERTO DE UM DEFEITO PEGO EM PRODUÇÃO (17/09).
+    #
+    # A primeira versão devolvia só os NOMES, e o verificador redescobria a
+    # pasta calculando `slug(nome)`. Isso é **consultar a fonte certa sobre a
+    # entidade errada** — uma forma de inventar certeza que o projeto ainda
+    # não tinha enfrentado. Régua ligeiramente diferente, pasta não encontrada,
+    # e um vídeo que EXISTE vira FAILED no livro-razão.
+    #
+    # 📌 A regra que sai disso: **o verificador tem que provar o efeito da
+    # MESMA entidade que a ação criou — nunca redescobri-la depois.** Quem
+    # criou o artefato sabe onde ele está; quem verifica não deveria adivinhar.
+    # É a mesma lição do `media_id` do carrossel, um dia antes, nesta mesma
+    # função, e eu não apliquei aqui.
     return {"produzidos": produzidos, "pedidos": len(produtos),
-            "entraram": entraram, "falharam": falharam}
+            "entraram": entraram, "falharam": falharam,
+            "artefatos": artefatos}
 
 
 def _estoque_por_conta() -> dict:

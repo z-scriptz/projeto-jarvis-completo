@@ -529,33 +529,75 @@ class VerificadorProducao(_Base):
     def _contar(self, observado: dict, espera: dict):
         """⚠️ É ISTO QUE FAZ `2 de 4` VIRAR PARTIAL EM VEZ DE FAILED.
 
-        📌 E repara no que NÃO tem: `incertos`. Aqui a fonte de verdade é o
-        disco local — ou o pacote está lá, ou não está. Não existe alvo sobre o
-        qual o sistema de arquivos "não soube responder": se ele não soubesse,
-        `_consultar` teria levantado e nada disso rodaria.
+        📌 E O `incertos` APARECEU DEPOIS, vindo da realidade. A versão
+        original dizia, com todas as letras, que aqui ele não existia: "a fonte
+        é o disco local, ou o pacote está lá ou não está". Estava errado — o
+        alvo sobre o qual o produtor não devolveu caminho é exatamente um
+        incerto, e chamá-lo de falha foi o que encheu o livro de FAILED em
+        17/09.
 
-        Num verificador de Stripe seria diferente: reembolso em `pending` é
-        exatamente um `incerto`, e chamá-lo de falha seria inventar."""
+        ⚠️ O comentário antigo previa o caso certo no lugar errado: dizia que
+        num verificador de Stripe o `pending` seria o incerto. Era verdade — e
+        também havia um aqui, mais perto, que eu não vi."""
         from escopo import Contagem
         return Contagem(
             pedidos=int(observado.get("pedidos") or 0),
             confirmados=int(observado.get("produzidos") or 0),
             falhos=len(observado.get("faltando") or []),
-            incertos=0,
+            incertos=len(observado.get("sem_referencia") or []),
         )
 
     def _consultar(self, contexto: dict) -> dict:
+        """⚠️ CONFERE O CAMINHO QUE O PRODUTOR DISSE TER CRIADO.
+
+        📌 DEFEITO PEGO EM PRODUÇÃO (17/09): a primeira versão recalculava
+        `slug(nome_do_produto)` para adivinhar a pasta. Régua ligeiramente
+        diferente da de quem criou → pasta não encontrada → **um vídeo que
+        EXISTE vira FAILED no livro-razão**, permanentemente.
+
+        ⚠️ É UMA FORMA NOVA DE INVENTAR CERTEZA, e o projeto ainda não a tinha
+        enfrentado: *consultar a fonte certa sobre a entidade errada*. O disco
+        respondeu a verdade — sobre uma pasta que não era a do efeito.
+
+        A regra que sai daí: **prove o efeito da MESMA entidade que a ação
+        criou; não tente redescobri-la depois.**"""
         alvos = [str(a) for a in (contexto.get("alvos") or [])]
+        artefatos = dict(contexto.get("artefatos") or {})
+        # ⚠️ O QUE O PRODUTOR DECLAROU TER FALHADO.
+        #
+        # Isto é o agente afirmando — e normalmente a ESCOPO não aceita
+        # afirmação do agente. A exceção é para o lado do FRACASSO: quem diz
+        # "tentei e não consegui" está se incriminando, não se elogiando, e
+        # não há incentivo para mentir nessa direção. Tratar isso como
+        # "não sei" jogaria fora informação que o produtor tinha.
+        #
+        # 📌 Mas fica REGISTRADO como declarado, não como conferido — porque
+        # sem caminho não houve conferência nenhuma.
+        declarou_falha = {str(x) for x in (contexto.get("falharam") or [])}
         if not PRONTO_DIR.exists():
             # ⚠️ Pasta ausente NÃO é "produziu zero". Pode ser volume
             # desmontado, deploy no lugar errado, permissão.
             raise EsteiraIlegivel(
                 f"a esteira {PRONTO_DIR} não existe — não dá para conferir se "
                 f"os {len(alvos)} pacote(s) entraram")
-        confirmados, faltando = [], []
+        confirmados, faltando, sem_referencia = [], [], []
         for nome in alvos:
-            pacote = PRONTO_DIR / self._slug(nome) / "video.mp4"
-            (confirmados if pacote.exists() else faltando).append(nome)
+            caminho = str(artefatos.get(nome) or "").strip()
+            if not caminho:
+                if nome in declarou_falha:
+                    # O produtor sabe que este não saiu, e disse.
+                    faltando.append(nome)
+                else:
+                    # ⚠️ INCERTO, NÃO FALHA. Ninguém disse onde está nem que
+                    # falhou. Adivinhar a pasta aqui foi exatamente o defeito
+                    # que este bloco conserta.
+                    sem_referencia.append(nome)
+                continue
+            pasta = Path(caminho)
+            if not pasta.is_absolute():
+                pasta = BASE_DIR / pasta
+            alvo = pasta / "video.mp4" if pasta.suffix == "" else pasta
+            (confirmados if alvo.exists() else faltando).append(nome)
         return {
             "produzidos": len(confirmados),
             "pedidos": len(alvos),
@@ -564,6 +606,10 @@ class VerificadorProducao(_Base):
             # manda alguém consertar.
             "faltando": sorted(faltando),
             "confirmados": sorted(confirmados),
+            "sem_referencia": sorted(sem_referencia),
+            # ⚠️ Quais dos `faltando` são declaração do produtor e não
+            # conferência no disco. Quem audita precisa saber a diferença.
+            "falha_declarada": sorted(declarou_falha & set(faltando)),
         }
 
 

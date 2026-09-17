@@ -124,7 +124,9 @@ def guardada(produtos, sai_certo=True, procedencia=None):
                                      else PROC_OK)},
         contexto=lambda resultado, intencao: {
             "alvos": list(intencao.alvos),
-            "produzidos": (resultado or {}).get("produzidos", 0)},
+            "produzidos": (resultado or {}).get("produzidos", 0),
+            "artefatos": dict((resultado or {}).get("artefatos") or {}),
+            "falharam": list((resultado or {}).get("falharam") or [])},
     )
     def _produzir(produtos):
         if not produtos:
@@ -134,9 +136,13 @@ def guardada(produtos, sai_certo=True, procedencia=None):
         nomes = [p["nome"] for p in produtos]
         feitos = nomes if sai_certo else nomes[:len(nomes) // 2]
         produzir_de_verdade(feitos)
+        # ⚠️ O PRODUTOR DIZ ONDE PÔS. Ver `Effect Binding` no ROADMAP: o
+        # verificador prova o efeito DESTA execução, não redescobre a pasta.
         return {"produzidos": len(feitos), "pedidos": len(nomes),
                 "entraram": feitos,
-                "falharam": [n for n in nomes if n not in feitos]}
+                "falharam": [n for n in nomes if n not in feitos],
+                "artefatos": {n: str(esteira / SlugSimples._slugify(n))
+                              for n in feitos}}
 
     return _produzir(produtos=produtos)
 
@@ -182,6 +188,10 @@ vale(prova["tally"] == {"requested": 4, "confirmed": 2,
                         "failed": 2, "unknown": 0},
      f"⚠️ e os NÚMEROS são a verdade; o estado é o resumo deles: "
      f"{prova.get('tally')}")
+vale(len(prova["evidence"]["falha_declarada"]) == 2,
+     f"⚠️ e o recibo separa o que foi CONFERIDO no disco do que o PRODUTOR "
+     f"declarou ter falhado — quem audita precisa saber qual é qual: "
+     f"{prova['evidence'].get('falha_declarada')}")
 vale(prova["evidence"]["produzidos"] == 2
      and prova["evidence"]["pedidos"] == 4,
      f"a evidência bruta da fonte continua no recibo: {prova['evidence']}")
@@ -282,21 +292,53 @@ vale(a.body["execution"]["effect"] == "ATTEMPTED_NO_EFFECT",
      f"⚠️ e nenhum vídeo foi tocado: a função foi chamada e declarou abstenção "
      f"por `SemEfeito`. veio {a.body['execution'].get('effect')!r}")
 
-# ── 5 · a régua do slug tem que levantar, nunca devolver "" ───────────────
-secao("5 · ⚠️ slug incalculável é INVERIFICAVEL, não 'não produziu'")
+# ── 5 · 🔥 O DEFEITO DE 17/09, PEGO EM PRODUÇÃO ──────────────────────────
+secao("5 · 🔥 sem referência do artefato → INCERTO, nunca falha")
 
-instalar_slug(funciona=False)                    # o renderizador some
-guardada(prods(2, inicio=70))
+# 📌 A primeira versão redescobria a pasta calculando `slug(nome_do_produto)`.
+# Em produção isso encheu o livro de FAILED: o disco respondeu a verdade —
+# sobre uma pasta que não era a do efeito.
+#
+# ⚠️ É UMA FORMA NOVA DE INVENTAR CERTEZA: consultar a fonte certa sobre a
+# ENTIDADE ERRADA. Nem `_consultar` levantou, nem a fonte mentiu. O binding
+# é que estava quebrado, e o resultado foi um FAILED permanente no
+# livro-razão sobre um vídeo que existia.
+
+r = guardada(prods(2, inicio=70))
 esc = drenar()
 a = ultima_acao(esc)
-vale(esc.estado(a.hash) is Estado.INVERIFICAVEL,
-     f"⚠️ sem a régua do renderizador, QUALQUER busca na esteira acha nada — "
-     f"e 'achei nada' seria lido como 'não produziu'. Tem que ser "
-     f"UNVERIFIABLE, deu {esc.estado(a.hash).value}")
+vale(esc.estado(a.hash) is Estado.VERIFICADO,
+     f"com o caminho vindo do produtor, os dois confirmam — deu "
+     f"{esc.estado(a.hash).value}")
+
+# e agora o caso que ANTES virava FAILED: produtor não disse onde pôs
+@ej.guarda(
+    agente="jarvis.producao", acao="video.create",
+    alvos=lambda produtos: [p["nome"] for p in produtos],
+    evidencias=lambda produtos: {"fila_de_produtos": dict(PROC_OK)},
+    contexto=lambda resultado, intencao: {
+        "alvos": list(intencao.alvos),
+        "produzidos": (resultado or {}).get("produzidos", 0),
+        "artefatos": {}},          # ← o produtor não devolveu caminho nenhum
+)
+def _sem_referencia(produtos):
+    produzir_de_verdade([p["nome"] for p in produtos])   # os vídeos EXISTEM
+    return {"produzidos": len(produtos), "pedidos": len(produtos)}
+
+
+_sem_referencia(produtos=prods(2, inicio=80))
+esc = drenar()
+a = ultima_acao(esc)
 prova = [x for x in esc.livro.ler() if x.kind == "verification"][-1].body["proof"]
-vale("slug" in prova["reason"],
-     f"e o motivo tem que dizer que foi a régua: {prova['reason'][:80]!r}")
-instalar_slug(True)
+vale(esc.estado(a.hash) is Estado.INVERIFICAVEL,
+     f"⚠️ A ASSERÇÃO QUE O LIVRO DE PRODUÇÃO PEDIU: sem referência do "
+     f"artefato é `não consigo provar`, NUNCA `não aconteceu`. Os vídeos "
+     f"estão no disco. Deu {esc.estado(a.hash).value}")
+vale(prova["tally"] == {"requested": 2, "confirmed": 0, "failed": 0,
+                        "unknown": 2},
+     f"e os dois vão para `unknown`, não para `failed`: {prova.get('tally')}")
+vale(len(prova["evidence"]["sem_referencia"]) == 2,
+     f"nomeando quem ficou sem referência: {prova['evidence']}")
 
 integra, probs = esc.integro()
 vale(integra, f"a cadeia tem que fechar no fim de tudo: {probs}")

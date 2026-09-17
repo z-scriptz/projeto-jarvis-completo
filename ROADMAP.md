@@ -13103,3 +13103,74 @@ exercitada com demora real — uma peça inteira construída e nunca testada.
 `teste_carrossel_guardado.py`, **14 asserções**. A da seção 3 é a que eu
 mostraria para alguém de fora: o agente reporta 6 de 6 publicados, sem uma
 falha, e o recibo diz **FAILED** porque a Meta não tem nenhum desses posts.
+
+---
+
+### 🔥 CONSULTAR A FONTE CERTA SOBRE A ENTIDADE ERRADA (17/09)
+
+**Uma forma nova de inventar certeza, e a ESCOPO a produziu sozinha.**
+
+De madrugada, em produção: **8 VERIFIED e ~14 FAILED**. Os FAILED diziam
+`0 de 1 confirmado(s); 1 a fonte diz que NÃO aconteceu`, e o `faltando`
+listava nomes humanos de produto:
+
+```
+['Tábua de Corte em L para Bancada e Pia', 'VESTIDO FEMININO LONGO']
+['Caderno de Discos Stitch']
+```
+
+Enquanto a esteira tem **379 pacotes**, com nomes assim:
+
+```
+yesop_escorredor_de_louças_rosa_2_andare
+água_de_colônia_beé_bebê_suave_100ml_bab
+```
+
+**A causa:** o `VerificadorProducao` redescobria a pasta calculando
+`slug(nome_do_produto)`. O `_produzir_produtos` recebia de volta o caminho
+real (`res["pronto_para_postar"]`) e **jogava fora**.
+
+⚠️ Repare no que NÃO aconteceu: `_consultar` não levantou, a fonte não mentiu,
+o disco respondeu a verdade. **O binding é que estava quebrado** — e um vídeo
+que existe virou `FAILED` permanente no livro-razão.
+
+> **Prove o efeito da MESMA entidade que a ação criou. Não tente
+> redescobri-la depois.**
+
+📌 **É a lição do `media_id` do carrossel, um dia antes, na mesma função, e eu
+não apliquei aqui.** O produtor sempre soube onde pôs; quem verifica estava
+adivinhando.
+
+E ela generaliza inteira:
+
+```
+Stripe     refund_id
+Meta       media_id
+arquivo    caminho do artefato
+pedido     order_id
+usuário    user_id
+```
+
+### 📌 E o `incertos` estava previsto no lugar errado
+
+O comentário original do `_contar` dizia, com todas as letras, que ali não
+existia incerteza: *"a fonte é o disco local — ou o pacote está lá, ou não
+está"*. E previa o caso certo longe: *"num verificador de Stripe seria
+diferente: `pending` é exatamente um incerto"*.
+
+Estava certo sobre a Stripe e errado sobre si mesmo. **Alvo sem referência de
+artefato é um incerto** — e chamá-lo de falha foi o que encheu o livro.
+
+### ⚖️ A exceção que a afirmação do agente ganhou, e por quê
+
+`falharam` — o produtor dizendo "tentei e não saiu" — é aceito como **falho**,
+não como incerto. É afirmação do agente, que a ESCOPO normalmente recusa, e a
+exceção tem regra:
+
+> aceita-se a palavra do agente para o lado do FRACASSO, nunca do sucesso:
+> quem se incrimina não tem incentivo para mentir.
+
+⚠️ Mas fica gravado como `falha_declarada` no recibo, separado do que foi
+**conferido no disco**. Quem audita precisa saber qual é qual.
+
+`teste_producao_guardada.py` 23 → **26**.
