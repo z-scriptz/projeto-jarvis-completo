@@ -870,7 +870,16 @@ def postar_instagram_carrossel(imagens: list, legenda: str = "") -> dict:
     link = _buscar_permalink(media_id, "permalink", tok,
                              f"https://www.instagram.com/p/{media_id}")
     log.info(f"   ✅ Carrossel publicado [{quem}] — {link}")
-    return {"sucesso": True, "url": link}
+    # ⚠️ O `media_id` PASSA A SAIR DAQUI, e não é detalhe.
+    #
+    # A `url` acima pode ser FABRICADA: quando `_buscar_permalink` falha, o
+    # fallback monta `instagram.com/p/{media_id}` — uma URL que parece
+    # permalink e nunca foi confirmada por ninguém. Verificar contra ela seria
+    # conferir a afirmação contra ela mesma.
+    #
+    # 📌 O `media_id` é o que o Graph entende, e é com ele que a ESCOPO vai
+    # perguntar à Meta se o post existe. Ver `VerificadorCarrossel`.
+    return {"sucesso": True, "url": link, "media_id": media_id}
 
 
 # ══════════════════════════════════════════════════════════════════════════

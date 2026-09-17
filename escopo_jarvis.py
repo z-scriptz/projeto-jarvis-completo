@@ -89,6 +89,7 @@ def _construir():
         esc.registrar_verificador(VerificadorPerfis())
         esc.registrar_verificador(VerificadorComentario())
         esc.registrar_verificador(VerificadorProducao())
+        esc.registrar_verificador(VerificadorCarrossel())
         for aviso in esc.avisos:
             print(f"⚠️ escopo: {aviso}")
         _escopo = esc
@@ -564,6 +565,105 @@ class VerificadorProducao(_Base):
             "faltando": sorted(faltando),
             "confirmados": sorted(confirmados),
         }
+
+
+def _buscar_midia(media_id: str, token: str) -> dict:
+    """GET de uma mídia no Graph. Separado para o teste poder trocar."""
+    import urllib.parse
+    import urllib.request
+    url = ("https://graph.facebook.com/v21.0/" + urllib.parse.quote(media_id)
+           + "?" + urllib.parse.urlencode(
+               {"fields": "id,permalink,media_type", "access_token": token}))
+    with urllib.request.urlopen(url, timeout=20) as r:
+        import json as _j
+        return _j.loads(r.read().decode("utf-8"))
+
+
+class GraphIndisponivel(Exception):
+    """Não deu para perguntar à Meta se o post existe.
+
+    ⚠️ Sem token, rede fora, 500 da Meta — nenhuma dessas coisas é evidência de
+    que o carrossel não foi publicado. Devolver "não achei" aqui transformaria
+    "não consegui olhar" em "não está no ar", e alguém republicaria em seis
+    contas reais."""
+
+
+class VerificadorCarrossel(_Base):
+    """O carrossel está no ar, ou a API só disse que sim?
+
+    ⚠️ ESTE É O VERIFICADOR QUE MAIS SE PARECE COM O PRODUTO. O agendador
+    decide pelo `r.get("ok")` — que é o agente afirmando. O que prova é o
+    `media_id` existir no Graph da Meta, que é a fonte de verdade e é pública:
+    o post está lá para as pessoas, ou não está.
+
+    ⚠️ E CONFERE PELO `media_id`, NUNCA PELA URL. Quando `_buscar_permalink`
+    falha, o `meta_uploader` fabrica `instagram.com/p/{media_id}` como
+    fallback — uma URL que parece permalink e nunca foi confirmada. Verificar
+    contra ela seria conferir a afirmação contra ela mesma.
+
+    📌 O TOKEN É RESOLVIDO AQUI DENTRO, nunca vem do contexto: o contexto vai
+    para o disco, na fila e no recibo."""
+
+    nome = "jarvis.carrossel"
+
+    def __init__(self, buscar=None):
+        self.buscar = buscar or _buscar_midia
+
+    def _consultar(self, contexto: dict) -> dict:
+        alvos = [str(a) for a in (contexto.get("alvos") or [])]
+        midias = dict(contexto.get("midias") or {})
+        if contexto.get("dry_run"):
+            # ⚠️ Em dry-run nada foi publicado, e isso é o resultado CERTO —
+            # mas não há o que conferir no Graph. INVERIFICAVEL é honesto;
+            # dizer VERIFIED seria afirmar sobre um post que não existe.
+            raise GraphIndisponivel(
+                "dry-run: nada foi publicado, não há mídia para conferir")
+        token = (os.environ.get("FACEBOOK_PAGE_TOKEN", "")
+                 or os.environ.get("META_ACCESS_TOKEN", "")).strip()
+        if not token:
+            raise GraphIndisponivel(
+                "sem token no ambiente para perguntar à Meta se os posts "
+                "estão no ar")
+
+        no_ar, sem_midia, nao_deu = [], [], {}
+        for conta in alvos:
+            mid = str(midias.get(conta) or "").strip()
+            if not mid:
+                # ⚠️ Sem `media_id`, ou a publicação falhou (e o agendador já
+                # sabe disso) ou o uploader não devolveu o id. Nos DOIS casos
+                # não há post confirmado — vai para `sem_midia`, e quem separa
+                # falha de incerteza é o `_contar` lá embaixo.
+                sem_midia.append(conta)
+                continue
+            try:
+                dados = self.buscar(mid, token)
+            except Exception as e:      # noqa: BLE001 — proposital
+                # ⚠️ A CONSULTA FALHOU PARA ESTA CONTA. Isso NÃO é "o post não
+                # está no ar" — é "não consegui olhar". As outras contas
+                # continuam sendo conferidas: uma conta cega não pode apagar a
+                # evidência das cinco que responderam.
+                nao_deu[conta] = f"{type(e).__name__}: {str(e)[:80]}"
+                continue
+            if str((dados or {}).get("id") or "") == mid:
+                no_ar.append(conta)
+            else:
+                sem_midia.append(conta)
+        return {"no_ar": sorted(no_ar), "sem_midia": sorted(sem_midia),
+                "nao_deu": nao_deu, "pedidos": len(alvos)}
+
+    def _contar(self, observado: dict, espera: dict):
+        """⚠️ TRÊS DESTINOS, E O TERCEIRO É O QUE IMPORTA.
+
+        `nao_deu` são as contas que o Graph não respondeu. Somá-las a
+        `sem_midia` daria um número redondo e mentiroso: uma conta que não
+        respondeu não é uma conta cujo post não saiu."""
+        from escopo import Contagem
+        return Contagem(
+            pedidos=int(observado.get("pedidos") or 0),
+            confirmados=len(observado.get("no_ar") or []),
+            falhos=len(observado.get("sem_midia") or []),
+            incertos=len(observado.get("nao_deu") or {}),
+        )
 
 
 def maturidade(agente: str = "jarvis.ceo", acao: str = "source.disable") -> str:

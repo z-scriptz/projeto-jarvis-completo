@@ -13055,3 +13055,51 @@ honesto; silêncio sobre cegueira, não.**
 que é a frase do projeto inteiro.
 
 `teste_producao_guardada.py` 18 → **23**.
+
+---
+
+### 🔒 ESCOPO: a quarta intenção — `jarvis.carrossel.post.publish` (17/09)
+
+**A primeira com plateia.** As três anteriores mexem em arquivo no disco da
+VPS; esta publica em seis perfis reais do Instagram, com link de afiliado.
+Errar aqui não é perder um recibo — é aparecer errado para as pessoas.
+
+📌 **E é a ESCOPO em uma frase.** O `ciclo()` decidia assim:
+
+```python
+(feitos if r.get("ok") else falhas).append(nicho)
+```
+
+`r.get("ok")` é **o agente dizendo que publicou**. O que prova é o `media_id`
+existir no Graph da Meta. O log já dizia `🎠 slot 15:30: 5 publicado(s) · 1 sem
+sair: moda` — uma contagem parcial calculada e jogada fora numa linha de texto,
+meses antes de existir um estado para representá-la.
+
+**A evidência tem consequência que as pessoas veem.** `_hist()` fazia:
+
+```python
+except Exception: return {}
+```
+
+`_devido()` decide se o slot já saiu hoje olhando esse histórico. Ilegível →
+`{}` → `h not in feitos` é verdade → **o slot é publicado de novo, nas seis
+contas**. É o bug das 36 fontes com público.
+
+**O `media_id` deixou de ser descartado**, e o motivo é fino: a `url` pode ser
+FABRICADA. Quando `_buscar_permalink` falha, o `meta_uploader` monta
+`instagram.com/p/{media_id}` como fallback — uma URL que parece permalink e
+nunca foi confirmada. Verificar contra ela seria conferir a afirmação contra
+ela mesma.
+
+**Três destinos na contagem, e o terceiro é o que importa:** conta cujo Graph
+não respondeu vai para `incertos`, nunca para `falhos`. Uma conta cega não pode
+apagar a evidência das cinco que responderam.
+
+⚠️ **E é o primeiro contrato em que a espera crescente tem razão de verdade**
+(`[30, 300, 1800]`): a esteira de vídeo é disco local, mas a Meta tem indexação
+própria e 500 temporário. É a primeira vez que a fila deferida vai ser
+exercitada com demora real — uma peça inteira construída e nunca testada.
+
+`teste_carrossel_guardado.py`, **14 asserções**. A da seção 3 é a que eu
+mostraria para alguém de fora: o agente reporta 6 de 6 publicados, sem uma
+falha, e o recibo diz **FAILED** porque a Meta não tem nenhum desses posts.

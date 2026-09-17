@@ -1,0 +1,71 @@
+# Contrato de execução do carrossel_agendador para PUBLICAR nas contas.
+#
+# ⚠️ ESTA É A QUARTA INTENÇÃO, E A PRIMEIRA COM PLATEIA.
+#
+# As três anteriores mexem em arquivo no disco da VPS. Esta publica em seis
+# perfis reais do Instagram, com link de afiliado, e o efeito é visível para
+# qualquer pessoa. Errar aqui não é perder um recibo — é aparecer errado.
+#
+# 📌 E é a que mais se parece com o produto: o agendador decide pelo
+# `r.get("ok")`, que é **o agente afirmando que publicou**. O que prova é o
+# `media_id` existir no Graph. Essa diferença é a ESCOPO inteira, e aqui ela
+# tem público.
+
+agente: jarvis.carrossel
+acao: post.publish
+versao: v1
+autoridade: L2
+
+# ⚠️ `observe`. Publicação é o coração da operação; camada nova bloqueando isso
+# no primeiro dia seria exatamente o que a ESCOPO promete não fazer.
+modo: observe
+
+# ⚠️ A EVIDÊNCIA SEM A QUAL ISTO NÃO PODE SER JULGADO — e aqui ela tem
+# consequência que as pessoas veem.
+#
+# `_devido()` decide se o slot já saiu hoje olhando o histórico. O `_hist()`
+# devolvia `{}` em qualquer falha de leitura, e `{}` faz `h not in feitos` ser
+# verdade: **o slot é publicado de novo, nas seis contas.**
+#
+# É o bug das 36 fontes com plateia. Sem esta evidência declarada, republicar
+# por cegueira seria indistinguível de publicar pela primeira vez.
+evidencias:
+  - id: historico_do_carrossel
+    descricao: histórico de slots já publicados hoje (carrossel_historico.json)
+    exige_procedencia: true
+
+regras:
+  # ⚠️ O DENY VEM ANTES, como sempre: a primeira regra que casa decide.
+  - id: contas_demais
+    se: {campo: quantidade, op: ">", valor: 10}
+    entao: DENY
+    motivo: >-
+      publicar em mais de 10 contas numa tacada não é slot de carrossel, é
+      laço ou config errada. A operação inteira tem seis perfis.
+
+  - id: slot_grande
+    se: {campo: quantidade, op: ">", valor: 6}
+    entao: HOLD
+    motivo: >-
+      acima de seis contas o slot passou do inventário conhecido — vale gente
+      olhando antes de publicar em perfil que ninguém esperava.
+
+padrao: ALLOW
+
+verificacao:
+  verificador: jarvis.carrossel
+  # ⚠️ TRÊS TENTATIVAS COM ESPERA LONGA, e isto é diferente dos outros
+  # contratos. A esteira de vídeo é disco local: se não apareceu na hora, não
+  # aparece mais. Aqui a fonte é a API da Meta, que tem indexação própria e
+  # 500 temporário — a mídia pode demorar a responder mesmo já estando no ar.
+  #
+  # 📌 É o primeiro contrato em que a espera crescente tem razão de verdade, e
+  # é a primeira vez que a fila deferida vai ser exercitada com demora real.
+  tentativas: 3
+  espera_segundos: [30, 300, 1800]
+  # ⚠️ `espera` fica vazia de propósito: quem decide é o `_contar` do
+  # verificador, que devolve pedidos/confirmados/falhos/incertos e deixa o
+  # estado ser DERIVADO dos números. Slot com 5 de 6 é PARTIAL, e PARTIAL é o
+  # que de fato acontece aqui — o log já dizia `5 publicado(s) · 1 sem sair`
+  # muito antes de existir um estado para isso.
+  espera: {}

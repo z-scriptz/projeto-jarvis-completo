@@ -43,6 +43,17 @@ import argparse
 from datetime import datetime, date
 from pathlib import Path
 
+# ⚠️ A CAMADA DE CONTROLE NUNCA DERRUBA O AGENDADOR. Sem a ESCOPO instalada,
+# `_guarda` é um decorador que não faz nada e o carrossel sai como sempre saiu.
+try:
+    from escopo_jarvis import guarda as _guarda, impressao as _impressao
+except Exception:                       # noqa: BLE001 — proposital
+    def _guarda(**_kw):                 # noqa: D103
+        return lambda fn: fn
+
+    def _impressao(_dados):             # noqa: D103
+        return ""
+
 BASE_DIR = Path(__file__).resolve().parent
 HIST = BASE_DIR / "shared" / "carrossel_historico.json"
 PRONTO = BASE_DIR / "pronto_carrossel"
@@ -117,10 +128,43 @@ def _contas(cfg: dict) -> list:
         return ["geral"]
 
 
+# Procedência da última leitura do histórico. ⚠️ Quem sabe a procedência de um
+# dado é quem foi buscá-lo — inferir depois, olhando o resultado, é adivinhar.
+_PROCEDENCIA_HIST: dict = {}
+
+
 def _hist() -> dict:
+    """O histórico do carrossel, com procedência.
+
+    ⚠️ O `except: return {}` DAQUI TEM PLATEIA. `_devido()` decide se o slot já
+    saiu hoje olhando `hist["por_dia"][hoje]`. Histórico ilegível vira `{}`,
+    `h not in feitos` passa a ser verdade, e o slot é publicado **de novo** —
+    em seis contas reais do Instagram.
+
+    📌 É o bug das 36 fontes com público: ausência de dado lida como "ainda
+    não aconteceu". O `return {}` continua aqui porque o agendador não pode
+    quebrar; o que muda é que agora ele DIZ que não conseguiu ler, e a ESCOPO
+    segura a publicação em vez de deixá-la acontecer no escuro."""
+    global _PROCEDENCIA_HIST
+    if not HIST.exists():
+        _PROCEDENCIA_HIST = {
+            "estado": "OK", "fonte": str(HIST), "em": time.time(),
+            "hash": _impressao({}), "nota": "primeira execução, sem arquivo"}
+        return {}
     try:
-        return json.loads(HIST.read_text(encoding="utf-8"))
-    except Exception:
+        h = json.loads(HIST.read_text(encoding="utf-8"))
+        if not isinstance(h, dict):
+            raise ValueError(f"esperava objeto, veio {type(h).__name__}")
+        _PROCEDENCIA_HIST = {
+            "estado": "OK", "fonte": str(HIST), "em": time.time(),
+            "hash": _impressao(sorted((h.get("por_dia") or {}).keys()))}
+        return h
+    except Exception as e:
+        _PROCEDENCIA_HIST = {
+            "estado": "UNAVAILABLE", "fonte": str(HIST), "em": time.time(),
+            "erro": f"{type(e).__name__}: {str(e)[:120]}"}
+        log.warning(f"   ⚠️  histórico do carrossel ilegível ({str(e)[:80]}) — "
+                    f"a ESCOPO vai segurar a publicação")
         return {}
 
 
@@ -303,9 +347,63 @@ def publicar_um(nicho: str, cfg: dict = None, dry_run: bool = False,
         return {"ok": False, "motivo": "publish"}
     if r.get("sucesso"):
         log.info(f"   ✅ carrossel no ar [{nicho}] {r['url']}")
-        return {"ok": True, "url": r["url"]}
+        # ⚠️ O `media_id` sobe junto: é com ele que a verificação pergunta à
+        # Meta se o post existe. A `url` pode ter sido fabricada pelo fallback
+        # do permalink — ver `meta_uploader.postar_instagram_carrossel`.
+        return {"ok": True, "url": r["url"], "media_id": r.get("media_id", "")}
     log.warning(f"   ⚠️  {nicho}: {str(r.get('erro'))[:140]}")
     return {"ok": False, "motivo": "recusado"}
+
+
+@_guarda(
+    agente="jarvis.carrossel",
+    acao="post.publish",
+    # Os alvos são as CONTAS — cada uma é um perfil real, com público.
+    alvos=lambda contas, cfg, dry_run, horario: list(contas),
+    # ⚠️ A EVIDÊNCIA SEM A QUAL ISTO NÃO PODE SER JULGADO: o histórico é o que
+    # diz se este slot já saiu hoje. Ilegível, `_devido()` acha que não saiu e
+    # publica de novo nas seis contas.
+    evidencias=lambda contas, cfg, dry_run, horario: {
+        "historico_do_carrossel": dict(_PROCEDENCIA_HIST) or
+        {"estado": "UNAVAILABLE", "erro": "o histórico nunca foi carregado"}},
+    contexto=lambda resultado, intencao: {
+        "alvos": list(intencao.alvos),
+        # ⚠️ {conta: media_id} — o que a verificação vai levar ao Graph.
+        # `url` NÃO entra: ela pode ter sido fabricada pelo fallback do
+        # permalink, e conferir contra ela seria conferir a afirmação contra
+        # ela mesma.
+        "midias": dict((resultado or {}).get("midias") or {}),
+        "dry_run": bool((resultado or {}).get("dry_run")),
+    },
+)
+def _publicar_contas(contas: list, cfg: dict, dry_run: bool,
+                     horario: str) -> dict:
+    """Publica o carrossel do slot em cada conta. É a costura que a ESCOPO guarda.
+
+    ⚠️ EXTRAÍDA DO MEIO DO `ciclo()` de propósito, pelo mesmo motivo do
+    `_responder_comentario` e do `_produzir_produtos`: ação que mexe no mundo
+    precisa de um nome e de uma fronteira para poder ter contrato.
+
+    📌 E devolve `midias` além de `feitos`, porque `r.get("ok")` é **o agente
+    dizendo que publicou**. O que prova é o `media_id` existir no Graph — essa
+    diferença é o produto inteiro, e aqui ela tem público: o post está no ar
+    para as pessoas, ou não está."""
+    feitos, falhas, midias = [], [], {}
+    for nicho in contas:
+        r = publicar_um(nicho, cfg, dry_run, horario)
+        if r.get("ok"):
+            feitos.append(nicho)
+            if r.get("media_id"):
+                midias[nicho] = r["media_id"]
+        else:
+            falhas.append(nicho)
+        # ⚠️ RESPIRO ENTRE CONTAS, pelo mesmo motivo do Reel: seis contas
+        # publicando no mesmo minuto, todo dia, é um padrão mais evidente que
+        # o horário cravado.
+        if not dry_run and nicho != contas[-1]:
+            time.sleep(float(cfg.get("carrossel_intervalo_seg", 90)))
+    return {"feitos": feitos, "falhas": falhas, "midias": midias,
+            "dry_run": bool(dry_run)}
 
 
 def ciclo(cfg: dict, dry_run: bool = False) -> dict:
@@ -321,15 +419,8 @@ def ciclo(cfg: dict, dry_run: bool = False) -> dict:
     log.info("─" * 60)
     log.info(f"🎠 CICLO CARROSSEL — slot {horario} · {len(contas)} conta(s)")
 
-    feitos, falhas = [], []
-    for nicho in contas:
-        r = publicar_um(nicho, cfg, dry_run, horario)
-        (feitos if r.get("ok") else falhas).append(nicho)
-        # ⚠️ RESPIRO ENTRE CONTAS, pelo mesmo motivo do Reel: seis contas
-        # publicando no mesmo minuto, todo dia, é um padrão mais evidente que
-        # o horário cravado.
-        if not dry_run and nicho != contas[-1]:
-            time.sleep(float(cfg.get("carrossel_intervalo_seg", 90)))
+    saida = _publicar_contas(contas, cfg, dry_run, horario)
+    feitos, falhas = saida["feitos"], saida["falhas"]
 
     if not dry_run:
         dia = date.today().isoformat()
