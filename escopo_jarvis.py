@@ -377,17 +377,31 @@ class VerificadorPerfis(_Base):
         Uma recusa que não encostou em nada seria reportada como ação que
         falhou. **Contador global usado como asserção por ação** é medição que
         parece certa e responde outra pergunta."""
-        marca = f"{MARCA_PODA} {time.strftime('%Y-%m-%d')}:"
+        hoje = time.strftime("%Y-%m-%d")
+        marca = f"{MARCA_PODA} {hoje}:"
+        # ⚠️ A MARCA DESTA EXECUÇÃO, e é ela que torna o Effect Binding
+        # possível aqui. `podados_hoje` é o placar do DIA — usar isso como
+        # "efeito desta ação" faria a poda da tarde reivindicar o que a da
+        # manhã fez, e o diff acusaria `OVER_EFFECT` em cima de trabalho
+        # legítimo de outra execução.
+        run_id = str(contexto.get("run_id") or "")
+        marca_run = f"{MARCA_PODA} {hoje} #{run_id}:" if run_id else None
         alvos = [str(a).lstrip("@").lower()
                  for a in (contexto.get("alvos") or [])]
-        podados_hoje, lidos = set(), 0
+        podados_hoje, podados_run, lidos = set(), set(), 0
         for arq in (TIKTOK_PERFIS, IG_PERFIS):
             if not arq.exists():
                 continue                          # arquivo ausente é normal
             texto = arq.read_text(encoding="utf-8")   # deixa a exceção subir
             lidos += 1
             for linha in texto.splitlines():
-                if marca in linha:
+                if marca_run and marca_run in linha:
+                    h = self._handle(linha)
+                    if h:
+                        podados_run.add(h)
+                # ⚠️ O placar do dia continua sendo coletado, mas SÓ para o
+                # caminho legado do `_conferir`. Ele nunca alimenta o diff.
+                if marca in linha or (marca_run and marca_run in linha):
                     h = self._handle(linha)
                     if h:
                         podados_hoje.add(h)
@@ -396,12 +410,43 @@ class VerificadorPerfis(_Base):
                 f"nenhum arquivo de perfil encontrado em {BASE_DIR} "
                 f"({TIKTOK_PERFIS.name}, {IG_PERFIS.name}) — "
                 f"sem fonte de verdade não há o que provar")
-        faltando = sorted(set(alvos) - podados_hoje)
+        # 📌 Com binding, a conferência passa a ser sobre ESTA execução. Sem
+        # ele (recibo antigo, código antes do deploy), cai no placar do dia —
+        # que é o comportamento de antes, preservado de propósito para a
+        # transição não gerar FALHOU falso.
+        vistos = podados_run if run_id else podados_hoje
+        faltando = sorted(set(alvos) - vistos)
         return {"alvos": len(alvos),
                 "confirmados": len(alvos) - len(faltando),
                 "faltando": faltando[:20],
                 "executar": bool(contexto.get("executar", True)),
-                "arquivos_lidos": lidos}
+                "arquivos_lidos": lidos,
+                "run_id": run_id,
+                # ⚠️ TUDO que esta execução marcou, não só o que foi pedido.
+                # É aqui que o excesso aparece: se a poda tocou uma fonte que
+                # não estava autorizada, ela está nesta lista e em nenhuma
+                # outra.
+                "podados_desta_execucao": sorted(podados_run)}
+
+    def _efeito_observado(self, observado: dict, contexto: dict):
+        """O que ESTA execução de fato podou, para comparar com o autorizado.
+
+        ⚠️ SEM `run_id`, NÃO HÁ BINDING — e aí a resposta honesta é "não sei".
+
+        Marca escrita antes deste selo existir não pode virar evidência da
+        ação de hoje. Devolver o placar do dia aqui seria atribuir a esta
+        execução o trabalho de outra: `MATCH` falso quando bate por acaso,
+        `OVER_EFFECT` falso quando não bate. **Preferir UNKNOWN a inventar
+        associação.**
+
+        📌 Com `run_id`, a enumeração é honestamente `complete`: os arquivos
+        de perfil foram lidos inteiros, e tudo que leva este selo está na
+        lista. Não há página escondida."""
+        if not observado.get("run_id"):
+            # Enumeração vazia e declarada PARCIAL: o comparador devolve
+            # DESCONHECIDA em vez de afirmar ausência. Ver `comparar_efeito`.
+            return {"fontes": []}, "partial"
+        return {"fontes": list(observado["podados_desta_execucao"])}, "complete"
 
     def _conferir(self, observado: dict, espera: dict) -> tuple:
         """⚠️ DRY-RUN MUDA O QUE SE ESPERA, NÃO O QUE SE VERIFICA.

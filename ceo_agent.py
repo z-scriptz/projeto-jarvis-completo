@@ -320,11 +320,22 @@ class PodaSemEvidencia(SemEfeito):
     contexto=lambda resultado, intencao: {
         "alvos": list(intencao.alvos),
         "executar": bool(intencao.parametros.get("executar", True)),
+        # ⚠️ O EFEITO AUTORIZADO VEM DA INTENÇÃO, NUNCA DO RESULTADO.
+        #
+        # `intencao.alvos` é o que a política deixou passar. `resultado` é o
+        # que a função DIZ que fez — e comparar o que ela diz com o que ela
+        # fez é a função conferindo a si mesma, que não prova nada.
+        #
+        # 📌 Normalizado igual ao verificador (sem @, minúsculo) para que a
+        # comparação seja entre a mesma coisa dos dois lados.
+        "efeito_autorizado": {
+            "fontes": sorted(str(a).lstrip("@").lower()
+                             for a in intencao.alvos)},
     },
     evidencias=lambda fontes, executar: {
         "vendas_por_fonte": _evidencia_vendas(fontes)},
 )
-def _podar_fontes(fontes: list, executar: bool) -> list:
+def _podar_fontes(fontes: list, executar: bool, run_id: str = "") -> list:
     """As fontes MORTAS (≥N posts, 0 venda) são comentadas nos arquivos de perfis
     (o coletor para de puxar delas). REVERSÍVEL: comenta a linha com o motivo, não
     apaga. executar=False só LISTA os candidatos (dry-run).
@@ -351,6 +362,15 @@ def _podar_fontes(fontes: list, executar: bool) -> list:
         raise PodaSemEvidencia(
             "a consulta de vendas não completou — nenhuma fonte pode ser "
             "chamada de MORTA")
+    # ⚠️ `run_id` VEM DA ESCOPO, e esta função nunca o calcula.
+    #
+    # Ele identifica ESTA execução — não esta intenção. Duas podas do mesmo
+    # conjunto de fontes, de manhã e à tarde, são a mesma INTENÇÃO e execuções
+    # DIFERENTES; sem ele, a verificação da tarde olharia o placar do dia e
+    # reivindicaria o que a manhã fez.
+    #
+    # 📌 E é opt-in: a ESCOPO só preenche porque este parâmetro está declarado
+    # aqui. Sem ele, nada muda — nem aqui, nem em ninguém.
     mortas = {f["fonte"] for f in fontes if f["veredito"] == "MORTA"}
     if not mortas:
         return []
@@ -366,7 +386,15 @@ def _podar_fontes(fontes: list, executar: bool) -> list:
             h = _perfil_da_linha(l)
             if h and h in mortas:
                 d = detalhe.get(h, {})
-                linhas[i] = (f"# {l.strip()}   # PODADO CEO {hoje}: "
+                # ⚠️ A MARCA CARREGA A IDENTIDADE DA EXECUÇÃO. É isso, e só
+                # isso, que permite ao verificador perguntar "o que ESTA poda
+                # fez?" em vez de "o que foi podado hoje?".
+                #
+                # Marca sem `#run_...` é de antes deste binding existir, e o
+                # verificador NUNCA a atribui a uma execução — prefere dizer
+                # que não sabe a inventar associação.
+                selo = f" #{run_id}" if run_id else ""
+                linhas[i] = (f"# {l.strip()}   # PODADO CEO {hoje}{selo}: "
                              f"{d.get('posts', '?')} posts, 0 vendas em vários dias")
                 podados.append(h)
                 mudou = True
