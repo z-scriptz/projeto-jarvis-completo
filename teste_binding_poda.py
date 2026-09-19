@@ -1,9 +1,21 @@
 # -*- coding: utf-8 -*-
 """As quatro invariantes do Effect Binding do `source.disable`."""
-import sys, tempfile, shutil, time
+import shutil
+import sys
+import tempfile
+import time
 from pathlib import Path
-sys.path.insert(0, "/home/user/projeto-jarvis-completo")
-sys.path.insert(0, "/home/user/escopo-runtime")
+
+# 🐞 A primeira versão deste arquivo tinha DOIS caminhos absolutos da máquina
+# de desenvolvimento cravados aqui. Na VPS eles não existem, o `sys.path`
+# ganhou duas entradas mortas, e o teste morreu com `No module named 'escopo'`
+# — parecendo problema de instalação quando era o teste apontando para o
+# nada.
+#
+# 📌 Os outros testes do Jarvis não inserem caminho nenhum: contam com o
+# `escopo` instalado e com o diretório de trabalho para achar o
+# `escopo_jarvis`. Este faz igual.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import escopo_jarvis as ej
 from escopo import Relacao
