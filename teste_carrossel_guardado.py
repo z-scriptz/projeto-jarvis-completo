@@ -46,7 +46,7 @@ os.environ["ESCOPO_POLITICAS"] = str(BASE / "politicas")
 os.environ["FACEBOOK_PAGE_TOKEN"] = "tok_de_teste"
 
 import escopo_jarvis as ej                                         # noqa: E402
-from escopo import Estado                                          # noqa: E402
+from actrova import Estado                                         # noqa: E402
 
 CONTAS = ["geral", "beleza", "casa", "tech", "pet", "moda"]
 

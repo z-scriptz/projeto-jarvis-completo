@@ -48,7 +48,7 @@ os.environ["ESCOPO_DADOS"] = str(tmp / "dados")
 os.environ["ESCOPO_POLITICAS"] = str(BASE / "politicas")
 
 import escopo_jarvis as ej                                        # noqa: E402
-from escopo import Estado                                         # noqa: E402
+from actrova import Estado                                        # noqa: E402
 
 # A esteira de mentira: PRONTO_DIR aponta para o tmp, e cada "produção"
 # bem-sucedida cria a pasta com o video.mp4 dentro.
@@ -106,7 +106,7 @@ PROC_OK = {"estado": "OK", "fonte": "validacao_fila.json", "em": 1_700_000_000.0
            "hash": "sha256:" + "ab" * 32}
 
 
-from escopo import SemEfeito as _SemEfeitoBase                     # noqa: E402
+from actrova import SemEfeito as _SemEfeitoBase                    # noqa: E402
 
 
 class SemProdutosTeste(_SemEfeitoBase):

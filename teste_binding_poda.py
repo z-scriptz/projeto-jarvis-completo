@@ -18,7 +18,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import escopo_jarvis as ej
-from escopo import Relacao
+from actrova import Relacao
 
 tmp = Path(tempfile.mkdtemp())
 tik = tmp / "perfis_tiktok.txt"; ig = tmp / "perfis_ig.txt"

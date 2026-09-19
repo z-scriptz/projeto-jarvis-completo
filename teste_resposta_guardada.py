@@ -88,15 +88,15 @@ vale(A._PROCEDENCIA_MEMORIA.get("erro"), "com o erro que impediu a leitura")
 secao("2 · a resposta a comentário passa por contrato")
 
 try:
-    import escopo                                                  # noqa: F401
+    import actrova                                                 # noqa: F401
     TEM_LIB = True
 except ImportError:
     TEM_LIB = False
 
 if not TEM_LIB:
-    print("   ⚠️ biblioteca `escopo` não instalada — testes 2-4 pulados")
+    print("   ⚠️ biblioteca `actrova` não instalada — testes 2-4 pulados")
 else:
-    from escopo import Estado
+    from actrova import Estado
 
     def montar(nome, memoria_ok=True, publica=True):
         for m in list(sys.modules):

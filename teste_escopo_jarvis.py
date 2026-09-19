@@ -84,18 +84,18 @@ vale(perfis.read_text(encoding="utf-8").count("PODADO CEO") == 3,
 secao("2 · com a ESCOPO ligada")
 
 try:
-    import escopo                                                 # noqa: F401
+    import actrova                                                # noqa: F401
     TEM_LIB = True
 except ImportError:
     TEM_LIB = False
 
 if not TEM_LIB:
-    print("   ⚠️ biblioteca `escopo` não instalada neste ambiente.")
+    print("   ⚠️ biblioteca `actrova` não instalada neste ambiente.")
     print("      pip install -e /root/escopo-runtime")
     print("      (os testes 2-5 foram pulados — o teste 1 é o que protege "
           "a produção)")
 else:
-    from escopo import Estado
+    from actrova import Estado
 
     def montar(nome: str, arquivo_perfis: Path | None):
         """Um Escopo limpo por cenário, com a política REAL do repositório."""

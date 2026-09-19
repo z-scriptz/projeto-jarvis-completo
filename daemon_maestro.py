@@ -1741,7 +1741,7 @@ def rodar_um_ciclo(cfg: dict, estado: dict, hist: dict, dry_run: bool,
             for p in provas:
                 # ⚠️ `body`/`proof`/`state`, não `corpo`/`prova`/`estado`. O
                 # schema serializado virou inglês na migração de 17/09 (ver
-                # escopo/nucleo.py) e ESTA linha ficou para trás: ela levantava
+                # actrova/nucleo.py) e ESTA linha ficou para trás: ela levantava
                 # AttributeError, o `except` engolia, e todo resultado de
                 # verificação virava a linha "fila da ESCOPO não drenou".
                 # A evidência nunca se perdeu — quem se perdeu foi o log.

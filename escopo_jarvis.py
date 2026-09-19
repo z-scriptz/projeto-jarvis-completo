@@ -47,7 +47,7 @@ _motivo_off = ""
 
 
 try:
-    from escopo import SemEfeito
+    from actrova import SemEfeito
 except Exception:       # noqa: BLE001 — a camada nunca derruba o Jarvis
     # ⚠️ SEM A BIBLIOTECA, ISTO PRECISA CONTINUAR SENDO UMA EXCEÇÃO DE VERDADE.
     # O `PodaSemEvidencia` herda daqui; se este nome virasse `None` ou sumisse,
@@ -77,7 +77,7 @@ def _construir():
         _motivo_off = "desligado por ESCOPO_ATIVO"
         return None
     try:
-        from escopo import Escopo
+        from actrova import Escopo
     except ImportError as e:
         _motivo_off = (f"biblioteca não instalada ({e}) — "
                        f"pip install -e /root/escopo-runtime")
@@ -325,12 +325,12 @@ def resumo() -> str:
 # ---------------------------------------------------------------------------
 
 try:
-    from escopo.verificacao import Verificador as _Base
+    from actrova.verificacao import Verificador as _Base
 except ImportError:                               # sem a lib, nada disso roda
     _Base = object
 
 try:
-    from escopo import impressao
+    from actrova import impressao
 except ImportError:
     import hashlib
     import json as _json
@@ -584,7 +584,7 @@ class VerificadorProducao(_Base):
         ⚠️ O comentário antigo previa o caso certo no lugar errado: dizia que
         num verificador de Stripe o `pending` seria o incerto. Era verdade — e
         também havia um aqui, mais perto, que eu não vi."""
-        from escopo import Contagem
+        from actrova import Contagem
         return Contagem(
             pedidos=int(observado.get("pedidos") or 0),
             confirmados=int(observado.get("produzidos") or 0),
@@ -748,7 +748,7 @@ class VerificadorCarrossel(_Base):
         `nao_deu` são as contas que o Graph não respondeu. Somá-las a
         `sem_midia` daria um número redondo e mentiroso: uma conta que não
         respondeu não é uma conta cujo post não saiu."""
-        from escopo import Contagem
+        from actrova import Contagem
         return Contagem(
             pedidos=int(observado.get("pedidos") or 0),
             confirmados=len(observado.get("no_ar") or []),
@@ -766,7 +766,7 @@ def maturidade(agente: str = "jarvis.ceo", acao: str = "source.disable") -> str:
     if esc is None:
         return f"🔒 escopo: DESLIGADO ({_motivo_off})"
     try:
-        from escopo import prontidao, relatorio
+        from actrova import prontidao, relatorio
     except ImportError as e:
         return f"🔒 escopo: sem maturidade nesta versão da lib ({e})"
     return relatorio(prontidao(esc.livro, agente, acao))
