@@ -152,7 +152,25 @@ print("\n   ── ⚠️⚠️ HANDLE QUE NÃO RESOLVE NÃO PODE CAIR EM 'geral
 checa("handle desconhecido → nicho vazio, não 'geral'",
       comentarios._nicho_da_conta("@conta_que_nao_existe") == "")
 _b_desc = comentarios._banco("instagram", "reel", "@conta_que_nao_existe")
-checa("e o banco dele é só o universal", len(_b_desc) == len(_uni), str(len(_b_desc)))
+# 🔥 ISTO MEDIA COMPRIMENTO E AFIRMAVA PERTINÊNCIA — `len(_b_desc) == len(_uni)`.
+#
+# ⚠️ Passava aqui e FALHAVA na VPS, com o MESMO `comentarios.py` (hash idêntico
+# conferido nos dois lados). A diferença é `_dm_responde()`: com
+# `AUTO_RESPONDER` e `AUTO_RESP_DM` ligados, o banco ganha as 10 iscas de DM —
+# comportamento legítimo, sem relação nenhuma com nicho.
+#
+# 📌 O que este teste quer provar é "nenhuma frase de NICHO vazou para um handle
+# que não resolve". Comprimento era um procurador disso, e procurador quebra
+# quando outra coisa entra na conta. A asserção agora é sobre o conjunto, que é
+# o que ela sempre quis dizer — e não depende de quem roda nem de onde.
+_de_nicho = {f for frases in comentarios._IG_REEL_POR_NICHO.values()
+             for f in frases}
+_vazou = sorted(set(_b_desc) & _de_nicho)
+checa("e nenhuma frase de NICHO vazou para ele", not _vazou,
+      f"vazaram {len(_vazou)}: {str(_vazou)[:90]}")
+checa("⚠️ e o universal continua inteiro lá dentro",
+      set(_uni) <= set(_b_desc),
+      f"sumiram: {sorted(set(_uni) - set(_b_desc))}")
 checa("⚠️ sem 'canto da casa'", not any(CASA in f for f in _b_desc))
 checa("⚠️ sem 'produto que viraliza'", not any(GADGET in f for f in _b_desc))
 checa("conta vazia também não vira 'geral'", comentarios._nicho_da_conta("") == "")
