@@ -522,6 +522,15 @@ class VerificadorComentario(_Base):
     # seria o defeito que o `refund.amount_matches` do Stripe cometeu.
     cobertura = {"comment.reply_readable_by_id"}
 
+    # ⚠️ CHAVES QUE EXISTEM PARA O RECIBO, não para a decisão.
+    #
+    # Os dois lados da comparação ficam no payload de propósito: quem audita
+    # precisa ver o que foi pedido e o que voltou, não só o veredito. Mas a
+    # declaração é obrigatória — sem ela o `caca_afirmacao.py` aponta as duas,
+    # e é assim que deve ser: campo sem leitor e sem declaração é campo que
+    # alguém esqueceu de comparar.
+    registro_apenas = {"id_lido", "id_esperado"}
+
     def __init__(self, buscar=None):
         self.buscar = buscar or _buscar_no_graph
 
@@ -538,8 +547,21 @@ class VerificadorComentario(_Base):
             raise RespostaIlegivel(
                 "sem token no ambiente para reler a resposta no Graph")
         dados = self.buscar(rid, token)       # deixa a exceção subir
-        return {"publicado": bool((dados or {}).get("id")),
-                "id_lido": (dados or {}).get("id", ""),
+        lido = str((dados or {}).get("id") or "")
+        # 🔥 COMPARA, em vez de contar com a verdade do `bool`.
+        #
+        # A versão anterior fazia `publicado: bool(dados["id"])` e guardava
+        # `id_lido`/`id_esperado` no payload — os DOIS lados da comparação, na
+        # mão, e nenhum leitor. O `caca_afirmacao.py` achou isso porque as duas
+        # chaves não apareciam em mais lugar nenhum do repo.
+        #
+        # ⚠️ A afirmação se chama `comment.reply_readable_by_id`. Ela diz
+        # "legível PELO ID" — e o id não era conferido. Se o Graph devolvesse
+        # outro comentário, ou um edge com id diferente, passava como
+        # publicado. O `VerificadorCarrossel`, neste mesmo arquivo, sempre fez
+        # certo: `str(dados.get("id") or "") == mid`.
+        return {"publicado": lido == rid,
+                "id_lido": lido,
                 "id_esperado": rid}
 
 

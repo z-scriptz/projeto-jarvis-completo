@@ -72,8 +72,24 @@ def usos_de_texto(caminhos) -> dict:
                 arv = ast.parse(p.read_text(encoding="utf-8", errors="replace"))
             except SyntaxError:
                 continue
+            # 🔥 AS PRÓPRIAS DECLARAÇÕES NÃO CONTAM COMO LEITURA, e descobrir
+            # isso custou um susto: ao escrever `registro_apenas = {"id_lido",
+            # "id_esperado"}` a ferramenta parou de apontar as duas chaves — e
+            # não foi o filtro que absolveu, foi o CONTADOR, que passou a ver
+            # duas ocorrências da string e concluiu "alguém lê".
+            #
+            # ⚠️ É o defeito que esta ferramenta caça, dentro dela: menção
+            # contada como leitura. A declaração teria virado um perdão
+            # automático para qualquer chave, bastando escrever o nome.
+            ignorar = set()
             for no in ast.walk(arv):
-                if isinstance(no, ast.Constant) and isinstance(no.value, str):
+                if isinstance(no, ast.Assign) and any(
+                        isinstance(t, ast.Name) and t.id == "registro_apenas"
+                        for t in no.targets):
+                    ignorar.update(id(x) for x in ast.walk(no))
+            for no in ast.walk(arv):
+                if (isinstance(no, ast.Constant) and isinstance(no.value, str)
+                        and id(no) not in ignorar):
                     soma(no.value)
         else:
             texto = p.read_text(encoding="utf-8", errors="replace")
@@ -81,6 +97,31 @@ def usos_de_texto(caminhos) -> dict:
                 for pedaco in linha.replace(":", " ").split():
                     soma(pedaco.strip("\"'-"))
     return contagem
+
+
+def registro_apenas(cls: ast.ClassDef) -> set:
+    """As chaves que a classe DECLARA existirem só para o recibo.
+
+    ⚠️ ISTO PRECISOU EXISTIR NO PRIMEIRO USO DA FERRAMENTA. Nem toda chave sem
+    leitor é evidência jogada fora: `id_lido` e `id_esperado` entram na decisão
+    por variável local e ficam no payload porque **quem audita o recibo quer
+    ver os dois lados da comparação**. Isso é trilha, não desperdício.
+
+    📌 E a saída é a regra da casa aplicada à própria ferramenta: silêncio
+    continua suspeito, e só a DECLARAÇÃO absolve. Quem quer a chave no recibo
+    escreve o nome dela aqui e assume; quem esqueceu de comparar não escreve
+    nada e continua aparecendo na lista.
+    """
+    for no in cls.body:
+        if not isinstance(no, ast.Assign):
+            continue
+        nomes = [t.id for t in no.targets if isinstance(t, ast.Name)]
+        if "registro_apenas" not in nomes:
+            continue
+        if isinstance(no.value, (ast.Set, ast.List, ast.Tuple)):
+            return {e.value for e in no.value.elts
+                    if isinstance(e, ast.Constant) and isinstance(e.value, str)}
+    return set()
 
 
 def caçar(alvo: Path, universo) -> list:
@@ -91,12 +132,15 @@ def caçar(alvo: Path, universo) -> list:
     for cls in ast.walk(arv):
         if not isinstance(cls, ast.ClassDef):
             continue
+        declaradas = registro_apenas(cls)
         for fn in cls.body:
             if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
             if "consultar" not in fn.name and "observ" not in fn.name:
                 continue
             for chave, linha in chaves_devolvidas(fn).items():
+                if chave in declaradas:
+                    continue        # assumida como trilha de auditoria
                 # 1 uso = a própria construção. 2+ = alguém lê.
                 if usos.get(chave, 0) <= 1:
                     mortas.append((cls.name, fn.name, chave, linha))
