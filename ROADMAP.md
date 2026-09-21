@@ -13260,3 +13260,70 @@ levanta `ContratoInvalido` em chave desconhecida. Subir os YAMLs primeiro
 É a mesma regra do rename: **pip antes dos arquivos.**
 
 `teste_escopo_jarvis.py` **56/56**.
+
+### 🐞 O conferidor dizia "não existe na VPS" sobre arquivo que existia
+
+O deploy da cobertura pegou isso de graça. O `conferir.py` reportou os
+quatro `politicas/*.yaml` como AUSENTE enquanto o daemon os carregava, com
+as afirmações novas lidas de dentro deles.
+
+**A busca nunca tentava o caminho do repo.** `copias_na_vps` tentava
+`MAPA_DOC`, `SO_NA_RAIZ`, o cabeçalho declarado, o basename nas
+`PASTAS_BUSCA` e o basename na raiz — e nunca `politicas/x.yaml` em
+`politicas/x.yaml`. Para arquivo de raiz funcionava **por acidente**, porque
+basename e caminho de repo coincidem: foi por isso que o `escopo_jarvis.py`
+passou limpo no MESMO deploy e os YAMLs não.
+
+O `declarado` também não salvaria: o regex do cabeçalho é `[\w./-]+\.py`,
+então arquivo que não é Python nunca declara caminho nenhum.
+
+Placar depois do conserto: **ausente 30 → 25, em dia 110 → 115.**
+
+#### 🔥 O quinto arquivo era a fonte da marca
+
+Cinco saíram de AUSENTE, não quatro. O quinto é
+`assets/topshop-fonte.woff2` — e ele estava na VPS, batendo com o repo.
+Nenhum dano. Mas repare no que o bug **impedia**:
+
+> `AUSENTE` curto-circuita ANTES da comparação de conteúdo. O arquivo nunca
+> chegava a ser lido.
+
+Se a fonte da VPS tivesse divergido da do repo — versão antiga, upload
+truncado, qualquer coisa — o conferidor teria dito **"não existe na VPS"**
+em vez de **"DIVERGENTE"**. É a fonte que renderiza capa, carrossel e hook
+de todo post: uma divergência ali sai em TODA peça publicada, e a ferramenta
+era estruturalmente incapaz de reportá-la, porque nunca passava de localizar.
+
+#### E a frase também era mentira, não só a busca
+
+Consertar a busca não conserta o que ela afirma. A busca sabe que procurou e
+não achou; ela não vistoriou a VPS. Agora diz o que sabe:
+
+```
+• assets/marca/topshop-principal.svg
+  não achado nos 14 lugares procurados
+  procurei em: assets/marca/topshop-principal.svg · agents/… · …
+```
+
+📌 Por isso `locais_possiveis` saiu de dentro de `copias_na_vps`: quem
+reporta a ausência precisa da lista de onde se procurou, e antes ela era
+jogada fora dentro da função. **Afirmação sobre o mundo × resultado de uma
+procura limitada** — a mesma distinção que a camada inteira existe para
+manter, cometida na ferramenta que confere o deploy dela.
+
+A lição do `daemon_maestro` continua com asserção: o caminho do repo entra
+DEPOIS do `MAPA_DOC`, então `agents/` (a viva, 58 KB) vem antes da raiz (a
+morta, 44 KB).
+
+### 📍 Estado do livro depois do deploy
+
+```
+502 recibos · 251 verificações · cadeia ✅ fecha
+com COBERTURA: 0 de 251
+última verificação: 2026-09-21T06:29:19Z
+```
+
+**Zero é o número certo.** O livro é append-only: recibo velho não ganha
+campo retroativo, e não deveria — reescrever o passado é o oposto do que a
+cadeia serve para provar. Os 251 antigos ficam sem cobertura para sempre. O
+primeiro com lacuna nomeada nasce na próxima ação verificada de verdade.
