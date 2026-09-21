@@ -13447,3 +13447,98 @@ A terceira é nova, de hoje, e saiu do `conferir.py`.
 ⚠️ E o que a caça NÃO cobre, para ninguém ler silêncio como aprovação: chave
 lida por `.get()` montado em runtime, e comparação feita com a régua errada —
 ler os dois lados e comparar mal passa batido por qualquer um dos scanners.
+
+---
+
+## 🗓️ Dia 2026-09-21 (c) — o primeiro recibo real com lacuna nomeada
+
+Ciclo natural, ninguém provocou nada. Recibo #504, carrossel das 15:45:
+
+```
+RECIBO     #504  72b67be787eb   (verificação)
+AÇÃO       43f4952a3765
+ESTADO     PARTIAL
+MOTIVO     5 de 6 confirmado(s) contra a fonte de verdade;
+           1 a fonte diz que NÃO aconteceu
+CONTAGEM   pedidos 6 · confirmados 5 · falhos 1 · incertos 0
+COBERTURA  PARTIAL
+  ⚠️ SEM COBERTURA  `post.visible_to_anonymous_visitor`
+                    ninguém sabe avaliar isso, e não foi por falta de tentar
+EVIDÊNCIA  {"nao_deu":{},"no_ar":["beleza","casa","geral","pet","tech"],
+            "pedidos":6,"sem_midia":["moda"]}
+```
+
+A arquitetura saiu do papel: `afirmacoes_exigidas` → `cobertura` → recibo →
+livro, ponta a ponta, em produção, com a cadeia fechando depois
+(504 recibos · 252 verificações · ✅).
+
+**O recibo diz duas coisas ao mesmo tempo, e as duas são verdade:** cinco
+posts estão comprovadamente no ar, e sobre *um desconhecido conseguir abrir
+o link* ninguém neste sistema sabe responder. Antes, a segunda frase não
+existia em lugar nenhum.
+
+### ⚠️ E ele é mais velho que o conserto da tarde
+
+15:45 é ANTES do restart das 16:19. Então este recibo foi escrito pelo
+código que ainda não distinguia as duas derrotas — e `moda` saiu em
+`falhos`, com a frase *"a fonte diz que NÃO aconteceu"*.
+
+📌 Só que a fonte pode não ter dito nada: sem `media_id`, ou a Meta recusou
+com motivo, ou o publish ficou em aberto. O recibo afirma recusa sobre um
+caso que talvez seja dúvida. **O primeiro recibo com cobertura também é a
+melhor demonstração do buraco que o conserto de hoje fecha** — o próximo
+ciclo de carrossel produz um com a coluna `incertos` valendo.
+
+### 🔥 Três sondas minhas seguidas que não sondavam nada
+
+No meio deste deploy eu escrevi três verificações e afirmei sobre cada uma
+mais do que ela observava:
+
+| sonda | o que eu disse que provava | o que provava |
+|---|---|---|
+| `import meta_uploader` | qual módulo o daemon usa | qual módulo **eu** pedi |
+| `journalctl -n 400` | se a camada subiu | se a linha estava nas últimas 400 de **13.466** |
+| `getattr(esc,'verificadores',{})` | quantos verificadores há | que o atributo tem outro nome |
+
+As três voltaram **vazias ou negativas**, e eu quase li as três como fato
+sobre o mundo — o defeito exato que o produto inteiro persegue, cometido
+pela pessoa que estava construindo a defesa contra ele, três vezes em uma
+tarde.
+
+> **Sonda que não pode voltar negativa não está sondando.**
+
+⚠️ E o detalhe que assusta: as três só foram desmascaradas porque a resposta
+pareceu estranha e eu insisti. Se `verificadores: []` fosse plausível, tinha
+virado achado. **A vigilância pegou; ela não ia pegar sempre.** É por isso
+que a regra vale mais que a atenção — e por isso `caca_afirmacao.py` existe.
+
+### O que o deploy exigiu, e por que passou a exigir
+
+A regra nova, depois do susto do `conferir.py`: prova de deploy não é
+`scp` terminar sem erro. É
+
+```
+hash do arquivo ANTES  →  hash DEPOIS  →  testes NAQUELA máquina
+→  serviço carregou  →  processo continua vivo 60s depois (MESMO PID)
+```
+
+Pagou na primeira aplicação, quatro vezes:
+
+```
+agents/meta_uploader.py   existia e é importável — escrever só na raiz
+                          deixaria o conserto do publish fora do caminho
+                          que publica de verdade
+
+teste_comentario          falhava na VPS desde que a DM foi ligada, e
+                          ninguém sabia porque ninguém rodava lá
+
+a asserção dele           media comprimento e afirmava pertinência
+                          (`len(banco) == len(universal)`)
+
+caca_afirmacao            varria 11.989 arquivos lá contra 288 aqui — o
+                          `.venv` inteiro — e imprimia o MESMO ✅
+```
+
+📌 O `PID igual` é a parte que mais importa no fim: `is-active` continuaria
+dizendo `active` se o daemon tivesse morrido e o systemd o ressuscitado.
+Mesmo PID depois de 60s é o que prova que **este** processo sobreviveu.
