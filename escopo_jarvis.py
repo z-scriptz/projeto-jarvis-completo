@@ -365,6 +365,25 @@ class VerificadorPerfis(_Base):
     # fora do alcance — em vez de ninguém notar que ela nunca foi checada.
     cobertura = {"source.prune_mark_written"}
 
+    # ⚠️ TRILHA DE RECIBO, não entrada de decisão — e a distinção custou uma
+    # reversão. Eu tinha feito `arquivos_nao_lidos` virar INCERTEZA: arquivo
+    # de perfil ausente, alvos faltantes contados como "não deu para olhar".
+    #
+    # 🔥 O `teste_escopo_jarvis` 5c reprovou, e estava certo. Numa instalação
+    # que só usa TikTok, `instagram_perfis.txt` não existe e nunca vai
+    # existir — toda poda viraria PARCIAL para sempre, que é o "alarme falso
+    # treina gente a ignorar alarme" contra o qual este arquivo avisa em
+    # outro ponto.
+    #
+    # 📌 E o caso REALMENTE cego já estava tratado: arquivo presente e
+    # ilegível faz o `read_text` levantar, e a exceção vira INVERIFICAVEL.
+    # `exists()` falso é indistinguível de "esta máquina não usa essa
+    # plataforma", e fingir que dá para distinguir seria inventar certeza.
+    #
+    # Fica no payload porque num recibo FALHOU importa saber que só um dos
+    # dois arquivos estava lá.
+    registro_apenas = {"arquivos_nao_lidos"}
+
     @staticmethod
     def _handle(linha: str) -> str:
         """O @handle de uma linha, podada ou não. '' se a linha não for perfil."""
@@ -398,9 +417,18 @@ class VerificadorPerfis(_Base):
         alvos = [str(a).lstrip("@").lower()
                  for a in (contexto.get("alvos") or [])]
         podados_hoje, podados_run, lidos = set(), set(), 0
+        # ⚠️ OS ARQUIVOS QUE NÃO DERAM PARA LER. Antes isto era um `continue`
+        # mudo, e a consequência aparecia lá embaixo: alvo que morava no
+        # arquivo ausente caía em `faltando` e virava FALHOU — "não consegui
+        # olhar" reportado como "a poda não aconteceu".
+        #
+        # 📌 O `lidos == 0` já levantava certo. O caso PARCIAL — um arquivo de
+        # dois — era o que escapava, e é o mais provável dos dois.
+        nao_lidos = []
         for arq in (TIKTOK_PERFIS, IG_PERFIS):
             if not arq.exists():
-                continue                          # arquivo ausente é normal
+                nao_lidos.append(arq.name)
+                continue
             texto = arq.read_text(encoding="utf-8")   # deixa a exceção subir
             lidos += 1
             for linha in texto.splitlines():
@@ -430,6 +458,10 @@ class VerificadorPerfis(_Base):
                 "faltando": faltando[:20],
                 "executar": bool(contexto.get("executar", True)),
                 "arquivos_lidos": lidos,
+                # ⚠️ É isto que separa "não podou" de "não deu para olhar".
+                # Com arquivo faltando, quem está em `faltando` pode
+                # perfeitamente estar podado no arquivo que não abriu.
+                "arquivos_nao_lidos": sorted(nao_lidos),
                 "run_id": run_id,
                 # ⚠️ TUDO que esta execução marcou, não só o que foi pedido.
                 # É aqui que o excesso aparece: se a poda tocou uma fonte que
@@ -595,6 +627,12 @@ class VerificadorProducao(_Base):
     # que o contrato exige e ninguém sustenta.
     cobertura = {"production.artifact_exists_at_declared_path"}
 
+    # ⚠️ `ilegiveis` entra na decisão pela lista `sem_referencia`, que o
+    # `_contar` lê. O dicionário em si fica no recibo para nomear a CAUSA:
+    # "o produtor não disse onde pôs" e "o disco não deixou olhar" contam
+    # igual e pedem conserto em lugares diferentes.
+    registro_apenas = {"ilegiveis"}
+
     @staticmethod
     def _slug(nome: str) -> str:
         """O MESMO `_slugify` do renderizador — importado, nunca reescrito.
@@ -671,6 +709,11 @@ class VerificadorProducao(_Base):
                 f"a esteira {PRONTO_DIR} não existe — não dá para conferir se "
                 f"os {len(alvos)} pacote(s) entraram")
         confirmados, faltando, sem_referencia = [], [], []
+        # ⚠️ Por que estes ficam separados dos outros `sem_referencia`: os dois
+        # contam como incertos, mas a causa é diferente e quem audita precisa
+        # saber qual. "o produtor não disse onde pôs" pede conserto no
+        # produtor; "o disco não deixou olhar" pede conserto na máquina.
+        ilegiveis: dict = {}
         for nome in alvos:
             caminho = str(artefatos.get(nome) or "").strip()
             if not caminho:
@@ -687,7 +730,25 @@ class VerificadorProducao(_Base):
             if not pasta.is_absolute():
                 pasta = BASE_DIR / pasta
             alvo = pasta / "video.mp4" if pasta.suffix == "" else pasta
-            (confirmados if alvo.exists() else faltando).append(nome)
+            # 🔥 `Path.exists()` DEVOLVE False EM QUALQUER OSError — permissão
+            # negada, volume desmontado, caminho longo demais. O vídeo pode
+            # estar lá. A versão anterior mandava tudo isso para `faltando`,
+            # que é falha declarada.
+            #
+            # 📌 E a docstring do `EsteiraIlegivel`, neste mesmo arquivo, já
+            # dizia a regra: "devolver 0 aqui transformaria 'não consegui
+            # olhar' em 'não produziu nada'". O princípio estava escrito na
+            # classe e violado na folha.
+            try:
+                existe = alvo.stat() is not None
+            except FileNotFoundError:
+                existe = False              # olhei, e não está lá. Isso é falha.
+            except OSError as e:            # noqa: BLE001 — proposital
+                # Não olhei. Não é falha, e não pode virar uma.
+                sem_referencia.append(nome)
+                ilegiveis[nome] = f"{type(e).__name__}: {str(e)[:60]}"
+                continue
+            (confirmados if existe else faltando).append(nome)
         return {
             "produzidos": len(confirmados),
             "pedidos": len(alvos),
@@ -697,6 +758,10 @@ class VerificadorProducao(_Base):
             "faltando": sorted(faltando),
             "confirmados": sorted(confirmados),
             "sem_referencia": sorted(sem_referencia),
+            # ⚠️ Quais dos `sem_referencia` são disco que não deixou olhar, e
+            # não produtor calado. Já entram em `incertos` pela lista acima;
+            # isto é para o recibo nomear a causa.
+            "ilegiveis": dict(sorted(ilegiveis.items())),
             # ⚠️ Quais dos `faltando` são declaração do produtor e não
             # conferência no disco. Quem audita precisa saber a diferença.
             "falha_declarada": sorted(declarou_falha & set(faltando)),
@@ -767,15 +832,30 @@ class VerificadorCarrossel(_Base):
                 "sem token no ambiente para perguntar à Meta se os posts "
                 "estão no ar")
 
+        # ⚠️ AS CONTAS CUJO PUBLISH FICOU EM ABERTO, ditas pelo agendador: a
+        # resposta da Meta se perdeu e a releitura da conta não resolveu.
+        em_aberto = {str(c) for c in (contexto.get("incertas") or [])}
         no_ar, sem_midia, nao_deu = [], [], {}
         for conta in alvos:
             mid = str(midias.get(conta) or "").strip()
             if not mid:
-                # ⚠️ Sem `media_id`, ou a publicação falhou (e o agendador já
-                # sabe disso) ou o uploader não devolveu o id. Nos DOIS casos
-                # não há post confirmado — vai para `sem_midia`, e quem separa
-                # falha de incerteza é o `_contar` lá embaixo.
-                sem_midia.append(conta)
+                # 🔥 SEM `media_id` HÁ DUAS HISTÓRIAS, e a versão anterior
+                # mandava as duas para `sem_midia`, que vira `falhos`.
+                #
+                #   a Meta recusou com motivo      → não há post. É falha.
+                #   a resposta do publish sumiu    → PODE haver post no ar,
+                #                                    e ninguém sabe qual id
+                #
+                # O comentário antigo dizia "nos DOIS casos não há post
+                # confirmado" — e estava certo sobre *não confirmado*. Só que
+                # não confirmado não é o mesmo que falhou, e esta é a camada
+                # cujo trabalho inteiro é não juntar as duas coisas.
+                if conta in em_aberto:
+                    nao_deu[conta] = ("publish sem resposta: pode haver post "
+                                      "no ar, e sem media_id não dá para "
+                                      "perguntar à Meta qual é")
+                else:
+                    sem_midia.append(conta)
                 continue
             try:
                 dados = self.buscar(mid, token)
