@@ -694,18 +694,96 @@ def _esperar_container(container_id: str, tok: str, tentativas: int,
     return f"timeout esperando processar (container {container_id})"
 
 
+def _midias_recentes(ig: str, tok: str, n: int = 5) -> tuple:
+    """(ids mais recentes da conta, a leitura funcionou?).
+
+    ⚠️ O SEGUNDO ELEMENTO É O QUE IMPORTA. Um conjunto vazio pode ser "a conta
+    não tem post" ou "não consegui ler" — e essas duas coisas levam a decisões
+    opostas lá embaixo. Devolver só o conjunto obrigaria quem chama a adivinhar.
+    """
+    try:
+        d = _req().get(f"{GRAPH}/{ig}/media",
+                       params={"fields": "id", "limit": n,
+                               "access_token": tok},
+                       timeout=30).json() or {}
+    except Exception:
+        return set(), False
+    if d.get("error"):
+        return set(), False
+    return ({str(m.get("id")) for m in (d.get("data") or []) if m.get("id")},
+            True)
+
+
 def _publicar_container(ig: str, creation_id: str, tok: str) -> tuple:
-    """POST /{ig}/media_publish. Devolve (media_id, erro)."""
+    """POST /{ig}/media_publish. Devolve (media_id, erro, incerto).
+
+    🔥 POR QUE ISTO TEM TRÊS SAÍDAS E NÃO DUAS. A versão anterior fazia:
+
+        except Exception as e:
+            return "", f"exceção publicando: {e}"
+
+    Um POST que dá timeout é o caso ambíguo clássico: **a Meta pode ter
+    processado.** O cliente só parou de esperar a resposta. Tratar isso como
+    "não publicou" é observação limitada virando afirmação sobre o mundo — a
+    mesma família do `conferir.py` dizendo "não existe na VPS" porque não achou
+    onde procurou.
+
+    📌 E aqui a incerteza TEM COMO SER RESOLVIDA, então resolver é obrigação,
+    não luxo: a conta é fotografada ANTES do publish e relida depois. Id novo
+    que não estava na foto é o post. Isso é melhor que casar por legenda —
+    legenda repetida existe, id novo não.
+
+    ⚠️ Só se afirma que NÃO publicou quando as duas leituras funcionaram e
+    nenhum id novo apareceu. Se a foto de antes falhou, não há linha de base, e
+    a resposta honesta é `incerto=True`: sem ela, a retentativa decide no
+    escuro e o livro registra falha sobre um post que pode estar no ar.
+    """
+    antes, leu_antes = _midias_recentes(ig, tok)
     try:
         d = _req().post(f"{GRAPH}/{ig}/media_publish",
                         data={"creation_id": creation_id, "access_token": tok},
                         timeout=60).json()
     except Exception as e:
-        return "", f"exceção publicando: {e}"
+        # ── A RESPOSTA SE PERDEU. O publish pode ter acontecido. ──────────
+        mid, leu_depois = _resolver_publicacao(ig, tok, antes, leu_antes)
+        if mid:
+            log.warning(f"   ⚠️  a resposta do publish se perdeu ({str(e)[:60]}), "
+                        f"mas o post ESTÁ no ar — {mid}")
+            return mid, "", False
+        if leu_antes and leu_depois:
+            # As duas fotos vieram e nada novo nasceu: aí sim, não publicou.
+            return "", f"publish não chegou à Meta ({str(e)[:120]})", False
+        return "", (f"a resposta do publish se perdeu ({str(e)[:120]}) e não "
+                    f"deu para reler a conta — NÃO SE SABE se o post saiu"), True
     mid = d.get("id")
     if mid:
-        return mid, ""
-    return "", ((d.get("error") or {}).get("message") or str(d)[:200])
+        return mid, "", False
+    # Resposta veio e a Meta recusou com motivo: isso é negativa de verdade.
+    return "", ((d.get("error") or {}).get("message") or str(d)[:200]), False
+
+
+def _resolver_publicacao(ig: str, tok: str, antes: set,
+                         leu_antes: bool) -> tuple:
+    """(media_id novo ou "", a releitura funcionou?).
+
+    ⚠️ SEM LINHA DE BASE NÃO SE RESOLVE NADA. Se a foto de antes falhou,
+    qualquer id que apareça agora pode ser de um post de ontem — e devolvê-lo
+    seria pior que a dúvida: o verificador iria ao Graph confirmar um post
+    que existe e concluir que ESTA ação o criou.
+    """
+    if not leu_antes:
+        return "", False
+    ok_alguma = False
+    for _ in range(6):
+        time.sleep(5)
+        agora, ok = _midias_recentes(ig, tok)
+        ok_alguma = ok_alguma or ok
+        if not ok:
+            continue
+        novos = agora - antes
+        if novos:
+            return sorted(novos)[0], True
+    return "", ok_alguma
 
 
 def postar_instagram_story(arquivo: str) -> dict:
@@ -775,9 +853,14 @@ def postar_instagram_story(arquivo: str) -> dict:
         if err:
             return {"sucesso": False, "erro": err}
 
-    media_id, err = _publicar_container(ig, cid, tok)
+    media_id, err, incerto = _publicar_container(ig, cid, tok)
     if not media_id:
-        return {"sucesso": False, "erro": f"publish do story recusado: {err}"}
+        # ⚠️ `incerto` SOBE JUNTO e não é detalhe: "a Meta recusou" e "não sei
+        # se saiu" levam a decisões opostas. A primeira pede nova tentativa; a
+        # segunda pede alguém olhar antes de republicar.
+        return {"sucesso": False, "incerto": incerto,
+                "erro": (f"publish do story INCERTO: {err}" if incerto
+                         else f"publish do story recusado: {err}")}
     log.info(f"   ✅ Story publicado [{quem}] — {media_id}")
     # Story não tem permalink público (some em 24h); devolve o id de referência
     return {"sucesso": True, "url": f"story:{media_id}", "media_id": media_id}
@@ -853,9 +936,14 @@ def postar_instagram_carrossel(imagens: list, legenda: str = "") -> dict:
         return {"sucesso": False, "erro": err}
 
     # ── 3. Publica ───────────────────────────────────────────────────────
-    media_id, err = _publicar_container(ig, pai, tok)
+    media_id, err, incerto = _publicar_container(ig, pai, tok)
     if not media_id:
-        return {"sucesso": False, "erro": f"publish do carrossel recusado: {err}"}
+        # ⚠️ Ver a nota igual no story: incerteza não é recusa. Aqui ela tem
+        # público — seis contas com gente olhando — e republicar no escuro é
+        # o post duplicado que ninguém vai saber explicar.
+        return {"sucesso": False, "incerto": incerto,
+                "erro": (f"publish do carrossel INCERTO: {err}" if incerto
+                         else f"publish do carrossel recusado: {err}")}
 
     if _engajar_ligado():
         # ⚠️ formato="carrossel": este post entrega CONTEÚDO, não um produto.

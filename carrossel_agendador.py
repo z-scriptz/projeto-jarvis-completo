@@ -351,6 +351,18 @@ def publicar_um(nicho: str, cfg: dict = None, dry_run: bool = False,
         # Meta se o post existe. A `url` pode ter sido fabricada pelo fallback
         # do permalink — ver `meta_uploader.postar_instagram_carrossel`.
         return {"ok": True, "url": r["url"], "media_id": r.get("media_id", "")}
+    # ⚠️ DUAS DERROTAS DIFERENTES, E ELAS NÃO PODEM SAIR COM O MESMO NOME.
+    #
+    # `recusado`  a Meta respondeu e disse não. O post não existe.
+    # `incerto`   a resposta do publish se perdeu e a releitura da conta não
+    #             resolveu. O post pode estar no ar.
+    #
+    # 📌 Chamar os dois de "recusado" é o que fazia o livro registrar FALHA
+    # sobre algo que podia estar publicado — e deixava a decisão de
+    # republicar sendo tomada no escuro.
+    if r.get("incerto"):
+        log.error(f"   ❓ {nicho}: INCERTO — {str(r.get('erro'))[:140]}")
+        return {"ok": False, "motivo": "incerto"}
     log.warning(f"   ⚠️  {nicho}: {str(r.get('erro'))[:140]}")
     return {"ok": False, "motivo": "recusado"}
 
@@ -373,6 +385,11 @@ def publicar_um(nicho: str, cfg: dict = None, dry_run: bool = False,
         # permalink, e conferir contra ela seria conferir a afirmação contra
         # ela mesma.
         "midias": dict((resultado or {}).get("midias") or {}),
+        # ⚠️ AS CONTAS CUJO PUBLISH FICOU EM ABERTO. Sem `media_id` e sem
+        # negativa da Meta: a resposta se perdeu e a releitura da conta não
+        # resolveu. Vão para `incertos` no verificador, nunca para `falhos` —
+        # "não sei se saiu" não é "não saiu".
+        "incertas": list((resultado or {}).get("incertas") or []),
         "dry_run": bool((resultado or {}).get("dry_run")),
     },
 )
@@ -388,13 +405,19 @@ def _publicar_contas(contas: list, cfg: dict, dry_run: bool,
     dizendo que publicou**. O que prova é o `media_id` existir no Graph — essa
     diferença é o produto inteiro, e aqui ela tem público: o post está no ar
     para as pessoas, ou não está."""
-    feitos, falhas, midias = [], [], {}
+    feitos, falhas, midias, incertas = [], [], {}, []
     for nicho in contas:
         r = publicar_um(nicho, cfg, dry_run, horario)
         if r.get("ok"):
             feitos.append(nicho)
             if r.get("media_id"):
                 midias[nicho] = r["media_id"]
+        elif r.get("motivo") == "incerto":
+            # ⚠️ NÃO ENTRA EM `falhas`. A conta não publicou comprovadamente e
+            # também não falhou comprovadamente — some das duas listas e vai
+            # para a sua, que é a única honesta. Quem verifica precisa desta
+            # separação para não contar incerteza como fracasso.
+            incertas.append(nicho)
         else:
             falhas.append(nicho)
         # ⚠️ RESPIRO ENTRE CONTAS, pelo mesmo motivo do Reel: seis contas
@@ -403,7 +426,7 @@ def _publicar_contas(contas: list, cfg: dict, dry_run: bool,
         if not dry_run and nicho != contas[-1]:
             time.sleep(float(cfg.get("carrossel_intervalo_seg", 90)))
     return {"feitos": feitos, "falhas": falhas, "midias": midias,
-            "dry_run": bool(dry_run)}
+            "incertas": incertas, "dry_run": bool(dry_run)}
 
 
 def ciclo(cfg: dict, dry_run: bool = False) -> dict:
