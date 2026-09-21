@@ -13327,3 +13327,123 @@ com COBERTURA: 0 de 251
 campo retroativo, e não deveria — reescrever o passado é o oposto do que a
 cadeia serve para provar. Os 251 antigos ficam sem cobertura para sempre. O
 primeiro com lacuna nomeada nasce na próxima ação verificada de verdade.
+
+---
+
+## 🗓️ Dia 2026-09-21 (b) — a caça: onde mais o bug está
+
+Os dois defeitos do dia — o comentário que descarta o texto, o conferidor que
+afirma sobre o mundo a partir de uma busca limitada — têm a mesma forma:
+
+```
+observação limitada  →  inferência  →  afirmação mais forte que a observação
+```
+
+Varri o repo atrás dela. Cinco achados, e os três primeiros são dentro da
+própria camada que existe para impedir isto.
+
+### 1 · 🔥 `escopo_jarvis.py:541` — evidência coletada e jogada fora
+
+```python
+return {"publicado": bool((dados or {}).get("id")),
+        "id_lido":    (dados or {}).get("id", ""),
+        "id_esperado": rid}
+```
+
+`id_lido` e `id_esperado` aparecem SÓ nesta linha. Nada lê. O Graph devolve o
+id, o verificador guarda os dois lados da comparação no payload, e decide por
+`bool(id)` — se a API devolvesse o id de OUTRO comentário, isso passa.
+
+📌 A afirmação se chama `comment.reply_readable_by_id`. Ela literalmente diz
+"legível PELO ID", e o id nunca é conferido.
+
+⚠️ E o `VerificadorCarrossel`, no MESMO arquivo, faz certo:
+`if str(dados.get("id") or "") == mid`. Mesmo autor, mesma régua disponível,
+dia diferente.
+
+📌 Isto virou ferramenta: `caca_afirmacao.py` acha chave que entra no dict de
+observação e não tem leitor em nenhum `.py` nem em nenhum `politicas/*.yaml`.
+Achou estas duas e mais nenhuma.
+
+### 2 · `VerificadorPerfis` — um arquivo ilegível vira alvo não podado
+
+```python
+for arq in (TIKTOK_PERFIS, IG_PERFIS):
+    if not arq.exists():
+        continue                      # arquivo ausente é normal
+```
+
+Se o arquivo do TikTok some e a ação podou fontes do TikTok, esses alvos caem
+em `faltando` → `confirmados != alvos` → **FALHOU**.
+
+⚠️ A informação para não errar já está coletada: `lidos` sabe que leu 1 de 2.
+O `lidos == 0` levanta `PerfisIlegiveis` corretamente; o caso PARCIAL cai no
+FALHOU. É "não consegui olhar" virando "não aconteceu", com o dado na mão.
+
+### 3 · `VerificadorProducao` — `Path.exists()` é False por falta de permissão
+
+```python
+(confirmados if alvo.exists() else faltando).append(nome)
+```
+
+`exists()` devolve False em qualquer `OSError` — volume desmontado, permissão,
+caminho longo demais. O vídeo pode estar lá.
+
+📌 A docstring do `EsteiraIlegivel`, no mesmo arquivo, diz exatamente:
+*"Devolver 0 aqui transformaria 'não consegui olhar' em 'não produziu nada'"*.
+**O princípio está escrito na classe e violado na folha.**
+
+### 4 · 🔥🔥 `meta_uploader.py:697` — timeout no publish vira "não publicou"
+
+```python
+def _publicar_container(ig, creation_id, tok) -> tuple:
+    try:
+        d = _req().post(f"{GRAPH}/{ig}/media_publish", ..., timeout=60).json()
+    except Exception as e:
+        return "", f"exceção publicando: {e}"
+```
+
+Um POST que dá timeout é o caso ambíguo clássico: **o servidor pode ter
+processado.** O cliente só parou de esperar. Isso vira
+`{"sucesso": False}` e o sistema passa a acreditar que nada foi publicado.
+
+Três consequências, em ordem de dor:
+
+```
+o post pode estar NO AR enquanto o livro diz que falhou
+a retentativa POSTA DE NOVO
+o carrossel fica sem media_id, e o verificador nunca confere
+```
+
+⚠️ Este é o único dos cinco com custo externo visível: post duplicado no
+perfil do cliente.
+
+### 5 · `VerificadorCarrossel` — sem `media_id` cai em `falhos`
+
+```python
+if not mid:
+    sem_midia.append(conta)      # → Contagem(falhos=...)
+```
+
+O comentário ali diz *"nos DOIS casos não há post confirmado"* — e está certo
+sobre "não confirmado". Só que **não confirmado ≠ falhou**. O caso "o uploader
+não devolveu id" é um INCERTO, e o verificador já tem a gaveta certa
+(`nao_deu` → `incertos`), usada para o Graph que não respondeu.
+
+📌 E o 4 alimenta o 5: o uploader colapsa timeout em falha, o verificador
+colapsa ausência de id em falha. **Duas camadas, o mesmo colapso, e a segunda
+é a camada cujo trabalho inteiro é não fazer isso.**
+
+### As três frases que o padrão já produziu
+
+```
+sem evidência              →  desconhecido
+sem caminho de falsificação →  sem afirmação
+escopo de busca            ≠  estado do mundo
+```
+
+A terceira é nova, de hoje, e saiu do `conferir.py`.
+
+⚠️ E o que a caça NÃO cobre, para ninguém ler silêncio como aprovação: chave
+lida por `.get()` montado em runtime, e comparação feita com a régua errada —
+ler os dois lados e comparar mal passa batido por qualquer um dos scanners.
