@@ -13542,3 +13542,48 @@ caca_afirmacao            varria 11.989 arquivos lá contra 288 aqui — o
 📌 O `PID igual` é a parte que mais importa no fim: `is-active` continuaria
 dizendo `active` se o daemon tivesse morrido e o systemd o ressuscitado.
 Mesmo PID depois de 60s é o que prova que **este** processo sobreviveu.
+
+### 🔧 `boto3` faltava no venv do daemon — descoberto hoje, não na quarta
+
+O `ensaio_quarta.py` rodava limpo aqui e **parava no preflight na VPS**:
+`boto3` ausente, saída 2. O ensaio se recusou a rodar em vez de fingir que
+passou, que é o comportamento certo — mas ninguém tinha rodado ele lá.
+
+⚠️ Esse é o venv do daemon, e `botocore` pina faixas de `urllib3`, que o
+Jarvis usa via `requests`. Instalar às cegas podia trocar o `urllib3` de
+produção. Então: `pip install --dry-run` antes, `pip freeze` diff depois.
+
+```
+Requirement already satisfied: urllib3!=2.2.0,<3,>=1.25.4 ... (2.7.0)
+Would install boto3 botocore jmespath s3transfer
+
+diff antes/depois:  só linhas `>`, nenhuma `<`  →  puramente aditivo
+requests 2.34.2 · urllib3 2.7.0  (intocados)
+```
+
+📌 Registrado aqui porque **isto não está no git**: quem montar essa VPS de
+novo precisa de `boto3` no venv, e o motivo é o `worker_ecommerce.py`.
+
+### ⚠️ E o instrumento me traiu mais duas vezes no mesmo deploy
+
+```
+tail -6    "são as últimas 6 linhas, então o ensaio parou aí"
+```
+
+A conclusão estava certa e o mecanismo não: o `❌ falta boto3` saiu em
+**stderr**, que não tem buffer, e apareceu no TOPO do `tail -40`. A linha
+estava na saída o tempo todo — `2>&1 | tail` ordena por descarga de buffer,
+não por cronologia.
+
+```
+teste_stripe   "PULADO"
+```
+
+Continua pulado por falta do pacote, e continua dizendo isso em vez de somar
+um verde. **Pulado não é aprovado** — se isso aparecer numa CI e alguém ler
+como "passou", repetiu o bug do projeto.
+
+🔥 Somando o dia: **cinco** instrumentos meus afirmaram mais do que
+observavam (`import` do módulo errado, `journalctl -n 400`, `getattr` de
+atributo inexistente, `tail -6`, e o `caca_afirmacao` duas vezes). Nenhum
+deles era desatenção pontual — é a forma default de escrever verificação.
