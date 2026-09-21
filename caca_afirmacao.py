@@ -37,6 +37,18 @@ from pathlib import Path
 BASE = Path(__file__).resolve().parent
 
 
+# ⚠️ Pastas que não são código deste projeto. Um arquivo aqui dentro citando
+# `"id_lido"` por acaso absolveria a chave — e a ferramenta imprimiria o mesmo
+# ✅ de sempre, sem nada indicando que a busca tinha mudado de tamanho.
+FORA = ("__pycache__", ".venv", "site-packages", "node_modules", ".git",
+        ".backup_", "venv", "escopo_dados", ".mypy_cache", ".pytest_cache")
+
+
+def _do_projeto(p: Path) -> bool:
+    return not any(parte in FORA or parte.startswith(".backup_")
+                   for parte in p.parts)
+
+
 def chaves_devolvidas(fn: ast.FunctionDef) -> dict:
     """{chave: linha} de todo dict literal devolvido por esta função.
 
@@ -154,11 +166,26 @@ def principal(argv) -> int:
         return 2
 
     universo = sorted(
-        [p for p in BASE.rglob("*.py") if "__pycache__" not in str(p)]
+        [p for p in BASE.rglob("*.py") if _do_projeto(p)]
         + [p for p in (BASE / "politicas").glob("*.yaml")])
 
     print(f"\n🔎 evidência morta em {alvo.name}")
-    print(f"   procurando leitores em {len(universo)} arquivo(s)\n")
+    print(f"   procurando leitores em {len(universo)} arquivo(s) do projeto\n")
+
+    # ⚠️ UM UNIVERSO GRANDE DEMAIS ABSOLVE TUDO, E EM SILÊNCIO. Na primeira
+    # rodada na VPS isto varreu 11.989 arquivos contra 288 aqui — o `.venv`
+    # inteiro e as pastas de backup entraram. Como "leitor" é só a string
+    # aparecendo em algum lugar, qualquer chave seria perdoada por uma
+    # coincidência dentro de uma biblioteca, e o ✅ sairia idêntico.
+    #
+    # 📌 O número acima existe para ser OLHADO. Ele fora da faixa esperada não
+    # é detalhe cosmético: é a diferença entre "procurei onde importa" e
+    # "procurei em tudo e achei qualquer coisa".
+    if len(universo) > 2000:
+        print(f"   ⚠️ {len(universo)} arquivos é muito para este projeto. O")
+        print(f"      filtro de pastas provavelmente não pegou algo, e um")
+        print(f"      universo inflado ABSOLVE por coincidência. Confira o")
+        print(f"      `_do_projeto` antes de acreditar no resultado.\n")
 
     mortas = caçar(alvo, universo)
     if not mortas:

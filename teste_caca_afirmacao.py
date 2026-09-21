@@ -149,6 +149,42 @@ vale(m == [],
      f"      Está escrito no módulo, e agora tem um teste que prova o limite\n"
      f"      em vez de só afirmá-lo. Veio {m}")
 
+# ── 7 · 🔥 universo inflado absolve por coincidência ──────────────────────
+secao("7 · 🔥 o .venv não é leitor de nada")
+
+alvo = tmp / "alvo.py"
+alvo.write_text('''
+class V:
+    def _consultar(self, ctx):
+        return {"publicado": True, "id_lido": "x"}
+''', encoding="utf-8")
+base_leitor = tmp / "leitores.py"
+base_leitor.write_text('def _base(o):\n    return o["publicado"]\n',
+                       encoding="utf-8")
+
+# uma biblioteca qualquer que menciona a chave por acaso
+venv = tmp / ".venv" / "lib" / "site-packages" / "biblioteca"
+venv.mkdir(parents=True)
+intruso = venv / "qualquer.py"
+intruso.write_text('CAMPOS = ["id_lido", "outra_coisa"]\n', encoding="utf-8")
+
+so_projeto = C.caçar(alvo, [alvo, base_leitor])
+com_venv = C.caçar(alvo, [alvo, base_leitor, intruso])
+
+vale([x[2] for x in so_projeto] == ["id_lido"],
+     f"no universo do projeto, `id_lido` continua apontada: "
+     f"{[x[2] for x in so_projeto]}")
+vale([x[2] for x in com_venv] == [],
+     f"🔥 E COM O .venv NO UNIVERSO ELA SOME — absolvida por uma lista de\n"
+     f"      strings dentro de uma biblioteca que nunca leu nada. Na VPS a\n"
+     f"      ferramenta varreu 11.989 arquivos contra 288 aqui, e imprimiu o\n"
+     f"      MESMO ✅. Veio {[x[2] for x in com_venv]}")
+
+vale(not C._do_projeto(intruso) and C._do_projeto(alvo),
+     f"📌 é o `_do_projeto` que separa os dois, e é por isso que o número de\n"
+     f"      arquivos é impresso: universo fora da faixa é sinal de que a\n"
+     f"      busca mudou de tamanho sem ninguém pedir")
+
 shutil.rmtree(tmp, ignore_errors=True)
 
 print("\n" + "─" * 70)
@@ -157,6 +193,6 @@ if FALHAS:
     sys.exit(1)
 print(f"✅ {OK}/{OK} asserções\n")
 print("📌 Uma ferramenta que nunca aponta nada é indistinguível de uma")
-print("   ferramenta quebrada. Estes seis casos são o caminho de")
+print("   ferramenta quebrada. Estes sete casos são o caminho de")
 print("   falsificação dela — inclusive o 6, que existe para deixar")
-print("   escrito o que ela deixa passar.\n")
+print("   escrito o que ela deixa passar, e o 7, que veio da VPS.\n")
