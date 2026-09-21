@@ -90,3 +90,11 @@ verificacao:
   # o primeiro caso barato de vê-la acontecer.
   espera:
     produzidos: $quantidade
+
+  # ⚠️ Ver AFIRMACOES.md. A segunda ninguém cobre, de propósito.
+  afirmacoes_exigidas:
+    - production.artifact_exists_at_declared_path
+    # 🔥 Existir um `video.mp4` no caminho declarado NÃO prova que ele abre,
+    # que tem o produto certo dentro, nem que dura o esperado. Um arquivo de
+    # zero byte passaria na primeira e falharia nesta.
+    - production.artifact_is_playable

@@ -81,3 +81,17 @@ verificacao:
   # confirmados. Ver `escopo_jarvis.VerificadorPerfis`.
   espera:
     confirmados: $quantidade
+
+  # ⚠️ O QUE ESTA AÇÃO EXIGE QUE ALGUÉM SUSTENTE. Ver AFIRMACOES.md.
+  #
+  # 📌 Mora no CONTRATO e não no verificador: o verificador declara o que
+  # SABE avaliar, e a diferença entre as duas listas é a lacuna que aparece
+  # no recibo. Se a mesma pessoa escrevesse as duas, elas bateriam por
+  # construção e a lacuna nunca apareceria.
+  afirmacoes_exigidas:
+    - source.prune_mark_written
+    # 🔥 NINGUÉM COBRE ESTA, e ela fica aqui por isso. Comentar a linha no
+    # arquivo de perfil não prova que o coletor parou de coletar da fonte —
+    # e é essa a consequência que importa. O recibo vai dizer sozinho que
+    # ela ficou fora do alcance.
+    - source.collector_stopped_reading

@@ -356,6 +356,15 @@ class VerificadorPerfis(_Base):
 
     nome = "jarvis.fontes"
 
+    # ⚠️ O QUE ESTE VERIFICADOR SABE AVALIAR — capacidade, não campos lidos.
+    #
+    # 📌 E repare no que NÃO está aqui: `source.collector_stopped_reading`. Ler
+    # os arquivos de perfil prova que a LINHA foi comentada; não prova que o
+    # coletor parou de coletar daquela fonte, que é a consequência que
+    # importa. O contrato exige as duas, e o recibo vai nomear a que ficou
+    # fora do alcance — em vez de ninguém notar que ela nunca foi checada.
+    cobertura = {"source.prune_mark_written"}
+
     @staticmethod
     def _handle(linha: str) -> str:
         """O @handle de uma linha, podada ou não. '' se a linha não for perfil."""
@@ -505,6 +514,14 @@ class VerificadorComentario(_Base):
 
     nome = "jarvis.comentario"
 
+    # ⚠️ UMA SÓ, e a que falta é a mais importante.
+    #
+    # 🔥 O `_consultar` pede `fields=id,text` ao Graph e decide por
+    # `bool(dados["id"])`. O texto CHEGA e é descartado — então não dá para
+    # sustentar `comment.reply_content_matches`. Declará-la aqui sem comparar
+    # seria o defeito que o `refund.amount_matches` do Stripe cometeu.
+    cobertura = {"comment.reply_readable_by_id"}
+
     def __init__(self, buscar=None):
         self.buscar = buscar or _buscar_no_graph
 
@@ -549,6 +566,12 @@ class VerificadorProducao(_Base):
     estar em `pronto_para_postar/<slug>/video.mp4` é o mundo confirmando."""
 
     nome = "jarvis.producao"
+
+    # ⚠️ `Path.exists()` prova que o arquivo está lá. Não prova que ele abre,
+    # que tem o produto certo dentro, nem que dura o esperado — um `video.mp4`
+    # de zero byte passa nesta e falharia em `production.artifact_is_playable`,
+    # que o contrato exige e ninguém sustenta.
+    cobertura = {"production.artifact_exists_at_declared_path"}
 
     @staticmethod
     def _slug(nome: str) -> str:
@@ -696,6 +719,12 @@ class VerificadorCarrossel(_Base):
     para o disco, na fila e no recibo."""
 
     nome = "jarvis.carrossel"
+
+    # ⚠️ Ler a mídia pelo id COM O TOKEN DA PÁGINA não é um desconhecido
+    # abrindo o link. `post.visible_to_anonymous_visitor` exigiria uma
+    # requisição sem credencial nenhuma — outro degrau de independência, e
+    # ninguém o sustenta hoje.
+    cobertura = {"post.media_readable_by_id"}
 
     def __init__(self, buscar=None):
         self.buscar = buscar or _buscar_midia

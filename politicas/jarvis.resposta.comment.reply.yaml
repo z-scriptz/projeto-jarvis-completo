@@ -49,3 +49,12 @@ verificacao:
   # diferença entre observabilidade e prova.
   espera:
     publicado: true
+
+  # ⚠️ Ver AFIRMACOES.md. A segunda ninguém cobre, de propósito.
+  afirmacoes_exigidas:
+    - comment.reply_readable_by_id
+    # 🔥 O `_consultar` pede `fields=id,text` ao Graph e decide por
+    # `bool(dados["id"])`. O texto chega e é DESCARTADO — então não dá para
+    # afirmar que o que foi publicado é o que foi enviado. Exigir aqui é o
+    # que faz o livro registrar essa lacuna em vez de ninguém notar.
+    - comment.reply_content_matches

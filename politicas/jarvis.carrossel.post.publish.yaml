@@ -69,3 +69,11 @@ verificacao:
   # que de fato acontece aqui — o log já dizia `5 publicado(s) · 1 sem sair`
   # muito antes de existir um estado para isso.
   espera: {}
+
+  # ⚠️ Ver AFIRMACOES.md. A segunda ninguém cobre, de propósito.
+  afirmacoes_exigidas:
+    - post.media_readable_by_id
+    # 🔥 Ler a mídia pelo id COM O TOKEN DA PÁGINA não é o mesmo que um
+    # desconhecido abrir o link. A primeira é SAME_SOURCE_REREAD; esta seria
+    # INDEPENDENT_SOURCE, e hoje não existe quem a avalie.
+    - post.visible_to_anonymous_visitor
