@@ -132,20 +132,23 @@ def cabecalho_de_caminho(dados: bytes) -> str:
     return ""
 
 
-def copias_na_vps(nome_repo: str, declarado: str) -> list:
-    """Todos os lugares onde este arquivo existe na VPS, mais provável primeiro.
+def locais_possiveis(nome_repo: str, declarado: str) -> list:
+    """Onde este arquivo PODERIA estar na VPS, mais provável primeiro.
 
-    Devolve lista porque a VPS TEM duplicata divergente: daemon_maestro.py
-    existe na raiz (44 KB, morto) e em agents/ (58 KB, o que o daemon importa).
-    Esconder isso escolhendo uma é como a gente edita a errada.
+    ⚠️ Separado de `copias_na_vps` de propósito. Quando nada é achado, quem
+    reporta precisa poder dizer ONDE procurou: "não existe na VPS" é uma
+    afirmação sobre o mundo, e o que a busca de fato sabe é "procurei nestes
+    lugares e não estava em nenhum". Confundir as duas é o defeito que esta
+    casa inteira persegue — e este script cometeu ele em 21/09, dizendo que
+    os quatro `politicas/*.yaml` não existiam enquanto o daemon os carregava.
     """
     base = Path(nome_repo).name
-    achados, vistos = [], set()
+    cands, vistos = [], set()
 
     def junta(p: Path):
-        if p.exists() and p.is_file() and str(p) not in vistos:
+        if str(p) not in vistos:
             vistos.add(str(p))
-            achados.append(p)
+            cands.append(p)
 
     if base in MAPA_DOC:
         junta(Path(MAPA_DOC[base]))
@@ -153,10 +156,30 @@ def copias_na_vps(nome_repo: str, declarado: str) -> list:
         junta(Path(base))
     if declarado:
         junta(Path(declarado))
+    # 🔥 O CAMINHO DO REPO — o candidato mais óbvio, e o que faltava. Sem ele,
+    # todo arquivo que mora em subpasta e não está no MAPA_DOC saía como
+    # AUSENTE, porque a busca só tentava o basename na raiz e nas
+    # PASTAS_BUSCA. Para arquivo de raiz coincide com `base` e o dedup absorve.
+    #
+    # 📌 E vem DEPOIS do MAPA_DOC de propósito: `daemon_maestro.py` tem
+    # caminho de repo na raiz (a cópia morta) e mapeamento pra `agents/` (a
+    # viva). O mapa continua mandando; isto só acrescenta um candidato.
+    junta(Path(nome_repo))
     for pasta in PASTAS_BUSCA:
         junta(Path(pasta) / base)
     junta(Path(base))
-    return achados
+    return cands
+
+
+def copias_na_vps(nome_repo: str, declarado: str) -> list:
+    """Todos os lugares onde este arquivo existe na VPS, mais provável primeiro.
+
+    Devolve lista porque a VPS TEM duplicata divergente: daemon_maestro.py
+    existe na raiz (44 KB, morto) e em agents/ (58 KB, o que o daemon importa).
+    Esconder isso escolhendo uma é como a gente edita a errada.
+    """
+    return [p for p in locais_possiveis(nome_repo, declarado)
+            if p.exists() and p.is_file()]
 
 
 def historico_do_caminho(ref: str, caminho: str, limite: int = 60) -> list:
@@ -295,7 +318,17 @@ def main():
         copias = copias_na_vps(caminho_repo, declarado)
 
         if not copias:
-            grupos["AUSENTE"].append((caminho_repo, "não existe na VPS", ""))
+            # ⚠️ O QUE ESTA LINHA PODE AFIRMAR. A busca não achou; ela não
+            # vistoriou a VPS inteira. Dizer "não existe na VPS" é relatar
+            # como fato do mundo o que é resultado de uma procura limitada —
+            # e foi exatamente assim que este script reportou como ausentes
+            # quatro arquivos que estavam no disco e carregando no daemon.
+            onde = locais_possiveis(caminho_repo, declarado)
+            grupos["AUSENTE"].append(
+                (caminho_repo,
+                 f"não achado nos {len(onde)} lugares procurados",
+                 "procurei em: " + " · ".join(str(p) for p in onde[:4])
+                 + (" · …" if len(onde) > 4 else "")))
             continue
 
         estados = []
