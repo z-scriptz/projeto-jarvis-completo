@@ -13174,3 +13174,89 @@ exceção tem regra:
 **conferido no disco**. Quem audita precisa saber qual é qual.
 
 `teste_producao_guardada.py` 23 → **26**.
+
+---
+
+## 🗓️ Dia 2026-09-21 — as quatro lacunas que ninguém via, agora nomeadas
+
+A camada sabia dizer se a ação deu certo. Não sabia dizer **o que ela nunca
+conferiu** — e essas duas coisas saíam idênticas do livro.
+
+### O eixo que faltava: cobertura é capacidade, não resultado
+
+`Cobertura` / `Alcance` — `UNDECLARED · COMPLETE · PARTIAL · NONE` — é
+calculada **antes** do `_consultar`, não depois. Não é nota de prova, é
+declaração de alcance: *isto aqui, ninguém sabe avaliar.*
+
+E os três nunca podem colapsar num só:
+
+```
+SEM COBERTURA    buraco de produto   — ninguém escreveu quem avalia
+INVERIFICAVEL    infra               — caiu, tenta de novo
+FAILED           incidente           — a ação deu errado
+```
+
+Juntar os três é como o Jarvis já errou antes: `status: "erro"` cobrindo
+"a API caiu", "não tem nada" e "deu ruim" com a mesma string.
+
+### 🔥 As duas listas moram em arquivos diferentes DE PROPÓSITO
+
+```
+politicas/*.yaml     afirmacoes_exigidas   o que a AÇÃO exige que alguém sustente
+escopo_jarvis.py     cobertura             o que o VERIFICADOR sabe avaliar
+```
+
+**A diferença entre elas é a lacuna, e é ela que o recibo nomeia.** Se a
+mesma lista morasse nos dois lados, bateria por construção e a lacuna nunca
+apareceria — que é exatamente como ela ficou invisível até hoje.
+
+### As quatro, e por que cada uma dói
+
+| ação | exige e ninguém cobre | o que se prova hoje |
+|---|---|---|
+| `ceo.source.disable` | `source.collector_stopped_reading` | a linha foi comentada no arquivo de perfil |
+| `resposta.comment.reply` | `comment.reply_content_matches` | o id volta do Graph |
+| `producao.video.create` | `production.artifact_is_playable` | `Path.exists()` no caminho declarado |
+| `carrossel.post.publish` | `post.visible_to_anonymous_visitor` | a mídia lê pelo id, **com o token da página** |
+
+⚠️ **Nenhuma é bug novo.** As quatro já estavam descobertas antes deste
+commit. O que mudou é que agora **aparecem**.
+
+📌 A do comentário é a mais constrangedora: o `_consultar` pede
+`fields=id,text` ao Graph, **o texto chega**, e a decisão é
+`bool(dados["id"])`. O dado para comparar está na mão e é jogado fora — o
+mesmo defeito do `refund.amount_matches` da Stripe, que foi declarado e
+nunca comparado.
+
+📌 E a do carrossel é um degrau de **independência**, não de leitura: ler com
+o token da página é `SAME_SOURCE_REREAD`. Um desconhecido abrindo o link
+seria `INDEPENDENT_SOURCE`. São perguntas diferentes.
+
+### Conferido num prune REAL do `ceo_agent`, não em fixture
+
+```
+RECIBO     #2  e52d80f00708   (verificação)
+ESTADO     VERIFIED
+MOTIVO     3 de 3 fonte(s) confirmada(s) comentada(s) em 1 arquivo(s) de perfil
+EFEITO×AUT MATCH   (enumeração complete)
+COBERTURA  PARTIAL
+  ⚠️ SEM COBERTURA  `source.collector_stopped_reading` — ninguém sabe avaliar isso
+```
+
+O recibo sai **VERIFIED e PARTIAL ao mesmo tempo**, e está certo nos dois: a
+poda aconteceu, e a consequência que importa continua sem testemunha.
+
+### ⚠️ ORDEM DE DEPLOY — a biblioteca ANTES dos YAMLs
+
+`afirmacoes_exigidas` é chave nova sob `verificacao`, e o loader antigo
+levanta `ContratoInvalido` em chave desconhecida. Subir os YAMLs primeiro
+**para todo carregamento de contrato no daemon**.
+
+```
+1º  actrova (escopo-runtime) na VPS     8972a2b
+2º  politicas/*.yaml + escopo_jarvis.py
+```
+
+É a mesma regra do rename: **pip antes dos arquivos.**
+
+`teste_escopo_jarvis.py` **56/56**.
