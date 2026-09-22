@@ -97,13 +97,35 @@ if not TEM_LIB:
 else:
     from actrova import Estado
 
-    def montar(nome: str, arquivo_perfis: Path | None):
-        """Um Escopo limpo por cenário, com a política REAL do repositório."""
+    def montar(nome: str, arquivo_perfis: Path | None, modo: str | None = None):
+        """Um Escopo limpo por cenário, com a política REAL do repositório.
+
+        ⚠️ `modo` FIXA O MODO DA POLÍTICA DE PODA, e precisou existir em
+        22/09: até então os cenários liam o diretório de políticas do repo
+        e herdavam o `modo` que estivesse lá. No dia em que
+        `source.disable` virou `enforce`, o cenário 3 — que testa de
+        propósito o comportamento em `observe` — passou a ser BLOQUEADO e
+        quebrou com um traceback.
+
+        📌 O teste estava certo em usar a política real (é o que prova que
+        ela é carregável e coerente) e errado em depender do modo dela sem
+        dizer. Quem exercita comportamento fixa o modo; quem quer saber o
+        modo de produção pergunta explicitamente — ver o cenário 7."""
         for m in list(sys.modules):
             if m in {"escopo_jarvis"}:
                 del sys.modules[m]
+        politicas = BASE / "politicas"
+        if modo:
+            politicas = tmp / f"{nome}_pol"
+            politicas.mkdir(parents=True, exist_ok=True)
+            for y in (BASE / "politicas").glob("*.yaml"):
+                t = y.read_text(encoding="utf-8")
+                if y.name == "jarvis.ceo.source.disable.yaml":
+                    t = t.replace("\nmodo: observe\n", f"\nmodo: {modo}\n")
+                    t = t.replace("\nmodo: enforce\n", f"\nmodo: {modo}\n")
+                (politicas / y.name).write_text(t, encoding="utf-8")
         os.environ["ESCOPO_ATIVO"] = "1"
-        os.environ["ESCOPO_POLITICAS"] = str(BASE / "politicas")
+        os.environ["ESCOPO_POLITICAS"] = str(politicas)
         os.environ["ESCOPO_DADOS"] = str(tmp / nome)
         import escopo_jarvis as ej
         ausente = tmp / f"{nome}_nao_existe.txt"
@@ -157,7 +179,7 @@ else:
     p = tmp / "a.txt"
     p.write_text("\n".join(f"@morta_{i:02d} #pet" for i in range(3)) + "\n",
                  encoding="utf-8")
-    ej = montar("caso_a", p)
+    ej = montar("caso_a", p, modo="observe")
     ca = redecorar(ej)
     ca.TIKTOK_PERFIS, ca.IG_PERFIS = p, tmp / "nada.txt"
     ca._podar_fontes(fontes_falsas(3), executar=True)
@@ -188,7 +210,7 @@ else:
     p36 = tmp / "b.txt"
     p36.write_text("\n".join(f"@morta_{i:02d} #pet" for i in range(36)) + "\n",
                    encoding="utf-8")
-    ej = montar("caso_b", p36)
+    ej = montar("caso_b", p36, modo="observe")
     cb = redecorar(ej)
     cb.TIKTOK_PERFIS, cb.IG_PERFIS = p36, tmp / "nada.txt"
     podados = cb._podar_fontes(fontes_falsas(36), executar=True)
@@ -214,7 +236,7 @@ else:
     pdry = tmp / "c.txt"
     pdry.write_text("\n".join(f"@morta_{i:02d} #pet" for i in range(9)) + "\n",
                     encoding="utf-8")
-    ej = montar("caso_c", pdry)
+    ej = montar("caso_c", pdry, modo="observe")
     cc = redecorar(ej)
     cc.TIKTOK_PERFIS, cc.IG_PERFIS = pdry, tmp / "nada.txt"
     cc._podar_fontes(fontes_falsas(9), executar=False)
@@ -233,7 +255,7 @@ else:
     # ── 5 · fonte de verdade ilegível → INVERIFICAVEL ─────────────────────
     secao("5 · sem arquivo de perfil para conferir")
 
-    ej = montar("caso_d", None)          # nenhum arquivo existe
+    ej = montar("caso_d", None, modo="observe")          # nenhum arquivo existe
     cd = redecorar(ej)
     cd.TIKTOK_PERFIS = tmp / "sumiu.txt"
     cd.IG_PERFIS = tmp / "sumiu2.txt"
@@ -258,7 +280,7 @@ else:
     pev = tmp / "e.txt"
     pev.write_text("\n".join(f"@morta_{i:02d} #pet" for i in range(36)) + "\n",
                    encoding="utf-8")
-    ej = montar("caso_e", pev)
+    ej = montar("caso_e", pev, modo="observe")
     ce = redecorar(ej, disponivel=False)
     ce.TIKTOK_PERFIS, ce.IG_PERFIS = pev, tmp / "nada.txt"
 
@@ -326,7 +348,7 @@ else:
     pfp = tmp / "f.txt"
     pfp.write_text("\n".join(f"@morta_{i:02d} #pet" for i in range(10)) + "\n",
                    encoding="utf-8")
-    ej = montar("caso_f", pfp)
+    ej = montar("caso_f", pfp, modo="observe")
     cf = redecorar(ej)
     cf.TIKTOK_PERFIS, cf.IG_PERFIS = pfp, tmp / "nada.txt"
 
@@ -362,7 +384,7 @@ else:
     # e uma poda que só aplicou parte dos alvos tem que dar FAILED
     pparc = tmp / "g.txt"
     pparc.write_text("@morta_00 #pet\n@morta_01 #pet\n", encoding="utf-8")
-    ej = montar("caso_g", pparc)
+    ej = montar("caso_g", pparc, modo="observe")
     cg = redecorar(ej)
     cg.TIKTOK_PERFIS, cg.IG_PERFIS = pparc, tmp / "nada.txt"
     cg._podar_fontes(fontes_falsas(4, n_vivas=0), executar=True)
@@ -384,7 +406,7 @@ else:
     pq = tmp / "q.txt"
     pq.write_text("\n".join(f"@morta_{i:02d} #pet" for i in range(3)) + "\n",
                   encoding="utf-8")
-    ej = montar("caso_fila", pq)
+    ej = montar("caso_fila", pq, modo="observe")
     cq = redecorar(ej)
     cq.TIKTOK_PERFIS, cq.IG_PERFIS = pq, tmp / "nada.txt"
     cq._podar_fontes(fontes_falsas(3, n_vivas=0), executar=True)
@@ -451,6 +473,38 @@ if TEM_LIB:
 antes = len(enviadas)
 ej6.checar_camada(avisar=False)
 vale(len(enviadas) == antes, "checar_camada(avisar=False) não pode enviar nada")
+
+# ── 7 · 🔥 o modo de PRODUÇÃO, perguntado de propósito ────────────────────
+secao("7 · 🔥 em que modo as políticas reais estão AGORA")
+
+# ⚠️ Os cenários acima fixam o modo para exercitar comportamento. Este NÃO
+# fixa: ele pergunta o que está no repositório, e é a única asserção deste
+# arquivo que quebra de propósito quando alguém muda um contrato.
+#
+# 📌 Sem ela, `source.disable` voltar para `observe` — por reversão, por
+# merge, por alguém destravando e esquecendo — passaria despercebido: todos
+# os outros testes continuariam verdes, porque todos fixam o próprio modo.
+# Um enforcement que se desliga em silêncio é pior que nunca ter sido ligado.
+if TEM_LIB:
+    from actrova.contrato import carregar as _carregar
+
+    modos = {y.stem: _carregar(y).modo.value
+             for y in sorted((BASE / "politicas").glob("*.yaml"))}
+    for nome, m in modos.items():
+        print(f"      {nome:<36} {m}")
+
+    vale(modos.get("jarvis.ceo.source.disable") == "enforce",
+         f"🔥 `source.disable` É A PRIMEIRA AÇÃO QUE A CAMADA IMPEDE, desde\n"
+         f"      22/09. Se esta linha falhar, ou alguém reverteu de propósito\n"
+         f"      — e então atualize aqui, dizendo por quê — ou o enforcement\n"
+         f"      se desligou sozinho, que é o caso grave.\n"
+         f"      Veio {modos.get('jarvis.ceo.source.disable')!r}")
+    vale(all(m == "observe" for n, m in modos.items()
+             if n != "jarvis.ceo.source.disable"),
+         f"⚠️ E AS OUTRAS TRÊS CONTINUAM EM `observe`, de propósito: carrossel\n"
+         f"      e resposta têm efeito PÚBLICO e irreversível, produção gasta\n"
+         f"      dinheiro. Ligar todas de uma vez seria a pressa que este\n"
+         f"      projeto inteiro existe para não ter. {modos}")
 
 shutil.rmtree(tmp, ignore_errors=True)
 print("\n" + "─" * 70)

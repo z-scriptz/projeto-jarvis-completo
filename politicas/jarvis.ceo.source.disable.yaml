@@ -18,10 +18,38 @@ acao: source.disable
 versao: v1
 autoridade: L2
 
-# ⚠️ `observe` NÃO BLOQUEIA NADA. Registra o veredito e deixa a poda seguir
-# exatamente como hoje. Só vira `enforce` depois de semanas de recibo
-# mostrando que os limites abaixo estão nos lugares certos.
-modo: observe
+# 🔥 `enforce` DESDE 22/09/2026 — e esta é a PRIMEIRA ação deste projeto que
+# a camada de fato IMPEDE, em vez de só registrar.
+#
+# ⚠️ A ORDEM QUE ISTO EXIGIU, e ela não é negociável:
+#
+#   1. quem CHAMA aprende a tratar `AcaoBloqueada`
+#   2. só então o contrato vira `enforce`
+#
+# Inverter é a camada derrubando a aplicação que ela protege. E ia acontecer:
+# o `ceo_agent` tinha DOIS pontos de chamada, um com `except
+# PodaSemEvidencia` (que não pega bloqueio) e outro — o automático, do
+# relatório diário — **sem `try` nenhum**. Um bloqueio de 6 fontes mataria a
+# geração do relatório inteiro, incluindo as partes que não têm nada a ver
+# com poda.
+#
+# 📌 POR QUE ESTA AÇÃO FOI A PRIMEIRA, e não outra:
+#
+#   efeito local      comenta uma linha num arquivo de texto
+#   reversível        `despodar.py` descomenta
+#   é a ação que      as 36 fontes de 14/09 são a razão de a camada existir
+#   originou tudo
+#   custo do erro     nosso, não de cliente
+#
+# ⚠️ `observe` continua sendo o padrão certo para começar em QUALQUER lugar
+# novo: semanas de recibo mostram onde o limite deve ficar antes de alguém
+# deixar ele bloquear. Esta ação já teve essas semanas.
+#
+# 🔓 Freio de mão, sem deploy e sem editar este arquivo:
+#     ESCOPO_ENFORCEMENT=0 ESCOPO_ENFORCEMENT_MOTIVO="INC-xxxx, liberado por…"
+#   O recibo guarda as DUAS coisas: que a política decidiu barrar, e que
+#   alguém escolheu não aplicar — com a justificativa, ou com a falta dela.
+modo: enforce
 
 # ⚠️ A EVIDÊNCIA SEM A QUAL ESTA AÇÃO NÃO PODE SER JULGADA.
 #

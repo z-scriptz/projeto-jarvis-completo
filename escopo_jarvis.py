@@ -57,6 +57,24 @@ except Exception:       # noqa: BLE001 — a camada nunca derruba o Jarvis
         """Marcador local: a função foi chamada e de propósito não fez nada."""
 
 
+try:
+    from actrova import AcaoBloqueada
+except Exception:       # noqa: BLE001 — mesma regra
+    # 🔥 REEXPORTADO AQUI DE PROPÓSITO, e o motivo é prático: quem precisa
+    # tratar o bloqueio é o `ceo_agent`, e ele não deve importar `actrova`
+    # direto — todo o risco da integração está concentrado NESTE arquivo.
+    #
+    # ⚠️ Sem a biblioteca, este nome precisa existir e ser inerte: um
+    # `except AcaoBloqueada` no ceo_agent tem que compilar e nunca disparar,
+    # porque sem camada não há bloqueio nenhum. Herdar de `Exception` e não
+    # ser levantado por ninguém faz exatamente isso.
+    class AcaoBloqueada(Exception):                  # type: ignore[no-redef]
+        """Marcador local: sem a camada instalada, isto nunca é levantado."""
+
+        veredito = None
+        intencao = None
+
+
 class PerfisIlegiveis(Exception):
     """Não deu para ler os arquivos de perfil para conferir a poda.
 

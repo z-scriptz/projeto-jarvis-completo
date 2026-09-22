@@ -17,7 +17,7 @@ from collections import defaultdict
 from pathlib import Path
 
 try:
-    from escopo_jarvis import SemEfeito, guarda, impressao
+    from escopo_jarvis import AcaoBloqueada, SemEfeito, guarda, impressao
 except Exception:       # ⚠️ camada de controle NUNCA derruba o Jarvis
     def guarda(**_kw):  # noqa: D103
         return lambda fn: fn
@@ -27,6 +27,14 @@ except Exception:       # ⚠️ camada de controle NUNCA derruba o Jarvis
 
     class SemEfeito(Exception):  # noqa: D101
         pass
+
+    # ⚠️ Precisa existir mesmo sem a camada, senão o `except AcaoBloqueada`
+    # lá embaixo vira NameError no dia em que a biblioteca faltar — e aí a
+    # camada de controle derruba o Jarvis pela ausência dela, que é o
+    # contrário do que esta cláusula inteira existe para garantir.
+    class AcaoBloqueada(Exception):  # noqa: D101
+        veredito = None
+        intencao = None
 
 # Procedência da última consulta de vendas: de onde veio, quando, e qual era.
 # ⚠️ Quem sabe a procedência de um dado é quem foi buscá-lo. Inferir isso
@@ -1041,6 +1049,30 @@ def main():
                   "dizer que não dá pra saber quais são.")
             print("   Rode de novo quando a Shopee responder.")
             return 1
+        except AcaoBloqueada as e:
+            # 🔥 A POLÍTICA BARROU, E ISSO É A CAMADA FUNCIONANDO.
+            #
+            # ⚠️ Este `except` precisou existir ANTES de o contrato virar
+            # `enforce`: sem ele a exceção subia e quebrava a geração do
+            # relatório inteiro. Camada de controle que derruba a aplicação
+            # que ela protege é pior que camada nenhuma — e ligar o
+            # enforcement sem preparar quem chama seria exatamente isso.
+            #
+            # 📌 Código 2, e não 1: `1` já significa "não dá para saber
+            # quais fontes estão mortas". Aqui a gente SABE quais são, e a
+            # política decidiu que essa quantidade precisa de gente. São
+            # motivos diferentes para não podar, e quem roda isso num script
+            # precisa poder distinguir.
+            v = getattr(e, "veredito", None)
+            print(f"🛑 poda BLOQUEADA pela política: {e}")
+            if v is not None:
+                print(f"   regra    {v.regra}")
+                print(f"   decisão  {v.decisao.value}")
+            print("   ⚠️ as fontes continuam ativas, e nada foi escrito.")
+            print("   Para liberar: rode com menos alvos, ajuste a política, "
+                  "ou\n   ESCOPO_ENFORCEMENT=0 com "
+                  "ESCOPO_ENFORCEMENT_MOTIVO='...' (fica no recibo).")
+            return 2
 
         if podados:
             print(f"💀 {len(podados)} fonte(s) podada(s) (comentadas, reversível): "
@@ -1076,7 +1108,36 @@ def main():
     bloco_fontes = _render_fontes(fontes)
     if bloco_fontes:
         if os.getenv("CEO_PODA_AUTO", "0").strip().lower() in ("1", "true", "sim"):
-            podados = _podar_fontes(fontes, executar=True)
+            # 🔥 ESTE PONTO NÃO TINHA `try` NENHUM, e é o que roda sozinho.
+            #
+            # ⚠️ Com o contrato em `enforce`, uma poda acima do limite levanta
+            # `AcaoBloqueada` — e sem este bloco a exceção subia daqui e
+            # derrubava a geração do RELATÓRIO INTEIRO do CEO. Um bloqueio de
+            # 6 fontes faria o Dre perder o relatório do dia, incluindo as
+            # partes que não têm nada a ver com poda.
+            #
+            # 📌 O `PodaSemEvidencia` entra junto pelo mesmo motivo: ele
+            # também podia subir daqui, e a única razão de nunca ter
+            # derrubado nada é que o caminho automático raramente rodava com
+            # a consulta falhando.
+            try:
+                podados = _podar_fontes(fontes, executar=True)
+            except AcaoBloqueada as e:
+                podados = []
+                v = getattr(e, "veredito", None)
+                bloco_fontes += (
+                    f"\n\n**🛑 Poda automática BLOQUEADA pela política"
+                    + (f" (regra `{v.regra}`, {v.decisao.value})" if v else "")
+                    + f":** {e}\n\n"
+                    f"As fontes continuam ativas e nada foi escrito. Isto é a "
+                    f"camada funcionando — a poda em lote acima do limite "
+                    f"precisa de gente olhando.")
+            except PodaSemEvidencia as e:
+                podados = []
+                bloco_fontes += (
+                    f"\n\n**⛔ Poda automática CANCELADA:** {e}\n\n"
+                    f"⚠️ Isso NÃO quer dizer que não há fonte morta — quer "
+                    f"dizer que não dá para saber quais são.")
             if podados:
                 bloco_fontes += ("\n\n**✂️ Poda automática (CEO_PODA_AUTO):** "
                                  + ", ".join("@" + p for p in podados) + " — comentadas.")
