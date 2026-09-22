@@ -13587,3 +13587,92 @@ como "passou", repetiu o bug do projeto.
 observavam (`import` do módulo errado, `journalctl -n 400`, `getattr` de
 atributo inexistente, `tail -6`, e o `caca_afirmacao` duas vezes). Nenhum
 deles era desatenção pontual — é a forma default de escrever verificação.
+
+---
+
+## 🗓️ Dia 2026-09-22 — a esteira parou, e o livro contou com nome e hora
+
+Quatro produções falharam entre 00:24 e 00:43. O livro registrou as quatro,
+cada uma com o nome do produto:
+
+```
+#508  Caixa Organizadora Rattan          FAILED
+#510  Gloss Labial SACE LADY             FAILED
+#512  Elefante Musical Interativo        FAILED
+#514  Blush Compacto Beauty Red Mocha    FAILED
+```
+
+⚠️ **NÃO É BUG DO CÓDIGO.** É o estado de configuração da máquina, e está
+aqui para ficar registrado, não para ser consertado às pressas.
+
+### O caminho de produção tem três etapas, e morre na primeira
+
+```
+1  autopilot        coleta o asset          ❌ para aqui
+2  visual_audit     o asset combina?        Gemini Vision, best-effort
+3  narrated         roteiro + render        Gemini camada 1, cai em template
+```
+
+📌 O `asset_autopilot_agent` diz no próprio cabeçalho: **"NUNCA chama
+Gemini"**. As fontes dele são Sheets (não implementado), `--url` direta,
+og:image de página de produto, Pexels e Pixabay. O `production_runner` chama
+com `--produto NOME` e mais nada — então sobram Pexels e Pixabay.
+
+### 🔥 E as duas chaves grátis nunca existiram
+
+```
+❌ PEXELS_API_KEY   AUSENTE do .env
+❌ PIXABAY_API_KEY  AUSENTE do .env
+✅ GEMINI_API_KEY   no .env, sem crédito na conta
+```
+
+A frase precisa não é *"ele tenta as fontes grátis e não dá certo"*. É **"não
+há fonte grátis configurada para ele tentar"** — o autopilot sai com
+`exit 1, 0s` e `Downloads: 0 OK / 0 falhas`. Zero falhas porque zero
+tentativas.
+
+**A decisão é do Dre, e as duas opções são independentes:**
+
+```
+Gemini (fal/Kling)   o caminho pretendido — gerar, não coletar. Custa.
+Pexels + Pixabay     chaves GRÁTIS, minutos. Dá à máquina um caminho hoje.
+```
+
+📌 Enquanto nenhum dos dois existir, `moda=0/6` e `pet=0/6` não sobem, e o
+déficit vai continuar aparecendo todo ciclo — o log já diz isso sozinho:
+*"déficit que não cai entre ciclos é sinal de produto escolhido que FALHA na
+produção, não de fila vazia"*.
+
+### ✅ E o que a camada provou nessa noite
+
+```
+514 recibos · 257 verificações · 6 com COBERTURA · cadeia fecha
+```
+
+O carrossel das 23:46 (#506) saiu **VERIFIED, 6 de 6**, com `moda` no ar — a
+mesma conta que falhara no #504. `incertos 0`, e isso é o resultado CERTO:
+nenhuma ambiguidade aconteceu, então o conserto do publish não tinha no que
+disparar.
+
+🔥 **E os quatro FAILED saíram com `COBERTURA PARCIAL` mesmo sem nada ter
+sido produzido** — `production.artifact_is_playable` continua sem quem
+avalie. É a primeira vez que dá para ver o eixo funcionando num FAILED real:
+**cobertura é capacidade declarada, calculada ANTES da consulta.** Ela não
+encolhe nem cresce com o resultado.
+
+E `ilegiveis: {}` nos quatro: o conserto do `OSError` de ontem não disparou.
+Não é disco, não é permissão. A camada mostrou que o problema não é a camada.
+
+### ⚠️ E um erro meu, que custou noites de produção
+
+Eu li `sem PEXELS_API_KEY` como causa raiz, fui contradito, e **retratei sem
+verificar** — aceitei a contradição como evidência em vez de ir ler o código
+que decide. A leitura original estava certa: o autopilot não conhece Gemini,
+está escrito no cabeçalho dele.
+
+O custo foi real: nem os R$200 entraram (e não resolveriam a etapa 1), nem as
+duas chaves grátis (que resolvem), porque a causa errada ficou de pé.
+
+> **Abandonar uma afirmação correta sem falsificá-la é o mesmo defeito que
+> sustentar uma afirmação errada sem prová-la.** As duas trocam evidência por
+> confiança — só que em direções opostas.
