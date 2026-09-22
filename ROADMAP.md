@@ -13676,3 +13676,104 @@ duas chaves grátis (que resolvem), porque a causa errada ficou de pé.
 > **Abandonar uma afirmação correta sem falsificá-la é o mesmo defeito que
 > sustentar uma afirmação errada sem prová-la.** As duas trocam evidência por
 > confiança — só que em direções opostas.
+
+---
+
+## 🛑 22/09 — `enforce` LIGADO. A camada passou a IMPEDIR.
+
+`politicas/jarvis.ceo.source.disable.yaml` está em `modo: enforce` na VPS.
+É a primeira vez, em todo o projeto, que uma ação é **barrada** em vez de
+apenas registrada.
+
+```
+jarvis.ceo.source.disable        enforce   ← a poda acima de 5 é BARRADA
+jarvis.carrossel.post.publish    observe
+jarvis.producao.video.create     observe
+jarvis.resposta.comment.reply    observe
+```
+
+### Por que esta ação foi a primeira
+
+```
+efeito LOCAL        comenta uma linha num arquivo de texto
+REVERSÍVEL          `despodar.py` descomenta
+originou a camada   as 36 fontes de 14/09
+custo do erro       nosso, não de cliente
+```
+
+⚠️ As outras três seguem em `observe` **de propósito**: carrossel e resposta
+têm efeito PÚBLICO e irreversível, produção gasta dinheiro. Ligar todas de
+uma vez seria a pressa que este projeto existe para não ter.
+
+### 🔥 O que quase aconteceu, e é o motivo de não ter ligado antes
+
+O `ceo_agent` tinha dois pontos de chamada de `_podar_fontes`:
+
+```
+:1037   try/except PodaSemEvidencia   ← não pega AcaoBloqueada
+:1079   sem try/except NENHUM         ← o automático, do relatório diário
+```
+
+Com o contrato em `enforce`, um bloqueio de 6 fontes levantaria
+`AcaoBloqueada`, a exceção subiria do ponto automático, e **a geração do
+relatório inteiro do CEO morreria junto** — alcance, produção e resultados,
+que não têm nada a ver com poda.
+
+> **Camada de controle que derruba a aplicação que ela protege é pior que
+> camada nenhuma.** Ligar enforcement sem preparar quem chama seria
+> exatamente isso, no nosso sistema, com a nossa ferramenta.
+
+A ordem virou regra escrita no YAML:
+
+```
+1. quem CHAMA aprende a tratar o bloqueio
+2. só então o contrato vira enforce
+```
+
+### O que muda na prática, hoje
+
+```
+poda de até 5 fontes     acontece igual
+poda de 6+               BARRADA. Vira aviso no relatório do CEO.
+poda de 51+              BARRADA por DENY, não por HOLD
+```
+
+📌 E isso produz informação nova: se a esteira tentar podar 6+ com
+frequência, o relatório passa a mostrar. Antes, ela podava e ninguém via.
+
+### 🔓 O freio de mão, e o susto que ele deu
+
+```bash
+ESCOPO_ENFORCEMENT=0 ESCOPO_ENFORCEMENT_MOTIVO="INC-xxxx, liberado por…"
+```
+
+⚠️ **Ele foi acionado sem querer logo depois do deploy** — o bloco de
+rollback foi rodado como se fosse a próxima etapa. Por dez minutos o
+contrato dizia `enforce` e o runtime devolvia tudo para `observe`.
+
+E o motivo entrou literal: `"destravado por Dre em <data>, motivo X"`. Isso
+iria para dentro de **todo recibo** — uma justificativa que parece
+justificativa e não diz nada, que é pior que a ausência dela.
+
+📌 Desfeito, e o estado conferido: `override: False`, `modo: enforce`.
+
+🔥 **E a sonda que eu escrevi para conferir isso não provava o que eu disse
+que provava**: ela rodou num processo novo, lendo o ambiente do SHELL — que
+nunca teve a variável. `esc.override` daria `False` ali mesmo com o daemon
+travado. O ambiente do processo mora em `/proc/<PID>/environ`, e é o único
+lugar que responde *"o que ESTE processo tem"*.
+
+Sexta vez no dia que um instrumento meu afirmou mais do que observou.
+
+### ⚠️ O que continua NÃO sendo verdade
+
+```
+"a Actrova bloqueia estorno indevido em tempo real"       ← NÃO
+"enforce rodou em produção num cliente"                    ← NÃO
+"enforce barrou uma ação de verdade"                       ← AINDA NÃO
+```
+
+O contrato está em `enforce` e o caminho está exercitado em teste. **Nenhum
+bloqueio real aconteceu ainda** — ele acontece quando a esteira tentar podar
+6+ fontes. Até lá, a frase honesta é *"ligado, e esperando o primeiro
+caso"*, nunca *"comprovado em produção"*.
