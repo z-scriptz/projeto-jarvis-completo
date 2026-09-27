@@ -102,8 +102,15 @@ def handle_abrir_programa(cmd: Comando) -> Resultado:
         "chrome": "chrome.exe",
         "explorer": "explorer.exe",
     }
-    exe = PROGRAMAS.get(cmd.alvo.lower(), cmd.alvo)
-    subprocess.Popen(exe, shell=True)
+    # 🔒 bandit B602 (27/09): o alvo vinha do comando — e o `chat_agent` manda
+    # o MODELO de IA emitir `abrir_programa` com um alvo. Com `shell=True` e o
+    # alvo cru para o que não estivesse na lista, texto gerado (ou injetado
+    # numa conversa) virava comando de sistema: `notepad & <qualquer coisa>`.
+    # Agora só abre o que está na lista, e sem shell.
+    exe = PROGRAMAS.get(cmd.alvo.lower())
+    if exe is None:
+        return Resultado(False, f"❌ programa fora da lista permitida: {sorted(PROGRAMAS)}", cmd.acao)
+    subprocess.Popen([exe])  # nosec B603
     time.sleep(2)
     return Resultado(True, f"🖥️ Programa aberto: {exe}", cmd.acao)
 

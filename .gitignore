@@ -75,3 +75,7 @@ shared/fundos_recentes.json
 
 # ESCOPO: recibos e fila de verificação são dados de execução, não código
 escopo_dados/
+
+# ===== DOCUMENTOS DE CLIENTE (nunca vão pro Git; o CI também barra) =====
+dados_reais/
+execucoes/

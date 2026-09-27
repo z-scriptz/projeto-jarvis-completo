@@ -62,7 +62,8 @@ _AVISADO = False    # o primeiro erro basta pra diagnosticar
 
 
 def _digestao(caminho) -> str:
-    return hashlib.sha1(Path(caminho).read_bytes()).hexdigest()
+    # 🔒 bandit B324 (revisado): não é segurança — impressão digital do arquivo para deduplicar.
+    return hashlib.sha1(Path(caminho).read_bytes()).hexdigest()  # nosec B324
 
 
 def _cache() -> dict:

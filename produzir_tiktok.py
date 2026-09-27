@@ -163,7 +163,8 @@ def _id_video(slug: str) -> str:
     import os as _os
     import time as _t
     semente = f"{slug}|{_t.time_ns()}|{_os.getpid()}|{_os.urandom(8).hex()}"
-    return "v" + hashlib.sha1(semente.encode("utf-8")).hexdigest()[:9]
+    # 🔒 bandit B324 (revisado): não é segurança — id curto e estável a partir de uma semente.
+    return "v" + hashlib.sha1(semente.encode("utf-8")).hexdigest()[:9]  # nosec B324
 
 
 def _subids(canal: str, nicho: str, nome: str, fonte: str = "",

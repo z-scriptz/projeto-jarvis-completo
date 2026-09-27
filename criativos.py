@@ -89,7 +89,8 @@ def baixar_fonte() -> bool:
     try:
         FONTE_TTF.parent.mkdir(parents=True, exist_ok=True)
         req = urllib.request.Request(FONTE_URL, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=30) as r:
+        # 🔒 bandit B310 (revisado): FONTE_URL é constante, https.
+        with urllib.request.urlopen(req, timeout=30) as r:  # nosec B310
             FONTE_TTF.write_bytes(r.read())
         print(f"   ⬇️  fonte da marca baixada: {FONTE_TTF}")
         return True

@@ -477,7 +477,8 @@ def main():
     p.add_argument("--foto", help="a foto que já temos (referência de identidade)")
     p.add_argument("--fila", type=int,
                    help="índice em produtos_fila.json — tira nome E foto de lá")
-    p.add_argument("--saida", default="/tmp/coleta_fontes")
+    # 🔒 bandit B108 (revisado): só o padrão de uma ferramenta de linha de comando; troca-se pelo argumento.
+    p.add_argument("--saida", default="/tmp/coleta_fontes")  # nosec B108
     p.add_argument("--simular", action="store_true",
                    help="roda só a política de identidade, sem rede")
     p.add_argument("--seco", action="store_true",

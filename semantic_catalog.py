@@ -174,7 +174,8 @@ def _id_unico(item: dict) -> str:
     # sem id da fonte → usa hash da url (estável)
     import hashlib
     url = str(item.get("url", ""))
-    return f"{fonte}:{hashlib.md5(url.encode()).hexdigest()[:12]}"
+    # 🔒 bandit B324 (revisado): não é segurança — chave de catálogo a partir da URL.
+    return f"{fonte}:{hashlib.md5(url.encode()).hexdigest()[:12]}"  # nosec B324
 
 
 # =================================================================

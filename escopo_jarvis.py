@@ -545,10 +545,13 @@ def _buscar_no_graph(resposta_id: str, token: str) -> dict:
     """GET simples no Graph. Separado para o teste poder trocar."""
     import urllib.parse
     import urllib.request
-    url = ("https://graph.facebook.com/v21.0/" + urllib.parse.quote(resposta_id)
+    url = ("https://graph.facebook.com/v21.0/" + urllib.parse.quote(resposta_id, safe="")
            + "?" + urllib.parse.urlencode({"fields": "id,text",
                                            "access_token": token}))
-    with urllib.request.urlopen(url, timeout=20) as r:
+    # 🔒 bandit B310 (revisado): base https fixa; o id vai como UM segmento
+    # (`safe=""`: `/` e `..` não andam pela API — defesa extra, porque o id
+    # devolvido já é comparado com o pedido).
+    with urllib.request.urlopen(url, timeout=20) as r:  # nosec B310
         import json as _j
         return _j.loads(r.read().decode("utf-8"))
 
@@ -790,10 +793,13 @@ def _buscar_midia(media_id: str, token: str) -> dict:
     """GET de uma mídia no Graph. Separado para o teste poder trocar."""
     import urllib.parse
     import urllib.request
-    url = ("https://graph.facebook.com/v21.0/" + urllib.parse.quote(media_id)
+    url = ("https://graph.facebook.com/v21.0/" + urllib.parse.quote(media_id, safe="")
            + "?" + urllib.parse.urlencode(
                {"fields": "id,permalink,media_type", "access_token": token}))
-    with urllib.request.urlopen(url, timeout=20) as r:
+    # 🔒 bandit B310 (revisado): base https fixa; o id vai como UM segmento
+    # (`safe=""`: `/` e `..` não andam pela API — defesa extra, porque o id
+    # devolvido já é comparado com o pedido).
+    with urllib.request.urlopen(url, timeout=20) as r:  # nosec B310
         import json as _j
         return _j.loads(r.read().decode("utf-8"))
 

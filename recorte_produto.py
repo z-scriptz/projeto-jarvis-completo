@@ -163,12 +163,14 @@ def main():
     p.add_argument("--recortar", help="foto: só recorta")
     p.add_argument("--saida", default="")
     p.add_argument("--produto", default="", help="ajuda o Vision a julgar")
-    p.add_argument("--pasta", default="/tmp/recorte")
+    # 🔒 bandit B108 (revisado): só o padrão de uma ferramenta de linha de comando; troca-se pelo argumento.
+    p.add_argument("--pasta", default="/tmp/recorte")  # nosec B108
     p.add_argument("--json", action="store_true")
     args = p.parse_args()
 
     if args.recortar:
-        alvo = Path(args.saida or "/tmp/recorte/limpo.png")
+        # 🔒 bandit B108 (revisado): só o padrão de uma ferramenta de linha de comando; troca-se pelo argumento.
+        alvo = Path(args.saida or "/tmp/recorte/limpo.png")  # nosec B108
         r = recortar(Path(args.recortar), alvo)
         print(json.dumps(r, ensure_ascii=False, indent=2) if args.json
               else f"[recorte] {'✅' if r['ok'] else '❌'} {r['motivo']}")

@@ -363,12 +363,16 @@ def escolher(registros: list, papel: str = "card"):
 
 # ── entrada e saída ──────────────────────────────────────────────────────
 def _id(url: str) -> str:
-    return hashlib.sha1(url.encode("utf-8")).hexdigest()[:14]
+    # 🔒 bandit B324 (revisado): não é segurança — nome curto de arquivo a partir da URL.
+    return hashlib.sha1(url.encode("utf-8")).hexdigest()[:14]  # nosec B324
 
 
 def baixar(url, tempo=25):
+    # 🔒 bandit B310: `urlopen` também abriria `file://`. Só http/https.
+    if not str(url).startswith(("https://", "http://")):
+        raise ValueError(f"URL com esquema inesperado: {str(url)[:40]!r}")
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    with urllib.request.urlopen(req, timeout=tempo) as r:
+    with urllib.request.urlopen(req, timeout=tempo) as r:  # nosec B310
         return Image.open(io.BytesIO(r.read())).convert("RGB")
 
 

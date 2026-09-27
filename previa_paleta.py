@@ -55,7 +55,8 @@ HANDLES = {
 
 def _fonte(familia: str, peso: str, tam: int):
     """A fonte de verdade, ou None. Nunca inventa substituta em silêncio."""
-    for pasta in (BRAND, Path("/tmp/jarvis-fontes")):
+    # 🔒 bandit B108 (revisado): só LEITURA de fonte baixada numa sessão anterior.
+    for pasta in (BRAND, Path("/tmp/jarvis-fontes")):  # nosec B108
         alvo = pasta / f"{familia}-{peso}.ttf"
         if alvo.exists():
             try:
@@ -214,10 +215,12 @@ def main() -> int:
     gancho = a.gancho.replace("\\n", "\n") if a.gancho else None
     if a.nicho:
         im = quadro(a.nicho, gancho)
-        saida = Path(a.saida or f"/tmp/previa_{a.nicho}.png")
+        # 🔒 bandit B108 (revisado): só o padrão de uma ferramenta de linha de comando; troca-se pelo argumento.
+        saida = Path(a.saida or f"/tmp/previa_{a.nicho}.png")  # nosec B108
     else:
         im = folha(list(_FUNDOS.keys()), gancho)
-        saida = Path(a.saida or "/tmp/previa_paleta.png")
+        # 🔒 bandit B108 (revisado): só o padrão de uma ferramenta de linha de comando; troca-se pelo argumento.
+        saida = Path(a.saida or "/tmp/previa_paleta.png")  # nosec B108
     saida.parent.mkdir(parents=True, exist_ok=True)
     im.save(saida)
 

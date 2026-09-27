@@ -266,7 +266,8 @@ def _baixar_imagem(url: str) -> bytes:
         return b""
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=20) as r:
+        # 🔒 bandit B310 (revisado): o esquema é conferido acima (só http/https).
+        with urllib.request.urlopen(req, timeout=20) as r:  # nosec B310
             b = r.read(3_000_000)
         return b if len(b) > 500 else b""
     except Exception:

@@ -110,7 +110,8 @@ def sha_de_blob(dados: bytes) -> str:
     aplica os filtros configurados (CRLF, clean/smudge) e o resultado passaria
     a depender do .gitattributes de cada lado. Este é só o conteúdo.
     """
-    return hashlib.sha1(b"blob %d\0" % len(dados) + dados).hexdigest()
+    # 🔒 bandit B324 (revisado): não é segurança — é o hash de blob do git, que por definição é SHA-1.
+    return hashlib.sha1(b"blob %d\0" % len(dados) + dados).hexdigest()  # nosec B324
 
 
 def cabecalho_de_caminho(dados: bytes) -> str:

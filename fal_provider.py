@@ -187,7 +187,11 @@ class FalProvider(BaseProvider):
                             f.write(chunk)
         else:
             import urllib.request
-            urllib.request.urlretrieve(url_video, str(destino))
+            # 🔒 bandit B310: a URL vem da resposta do provedor; `urlretrieve`
+            # também abriria `file://`. Só http/https.
+            if not str(url_video).startswith(("https://", "http://")):
+                raise ValueError(f"URL de vídeo com esquema inesperado: {str(url_video)[:40]!r}")
+            urllib.request.urlretrieve(url_video, str(destino))  # nosec B310
 
         tamanho = destino.stat().st_size
         if tamanho < 1024:

@@ -1730,7 +1730,8 @@ def main() -> int:
     p = argparse.ArgumentParser(description="Slides do carrossel em HTML/CSS")
     p.add_argument("--exemplo", metavar="NICHO")
     p.add_argument("--plano", metavar="JSON")
-    p.add_argument("--saida", default="/tmp/slides")
+    # 🔒 bandit B108 (revisado): só o padrão de uma ferramenta de linha de comando; troca-se pelo argumento.
+    p.add_argument("--saida", default="/tmp/slides")  # nosec B108
     a = p.parse_args()
 
     if a.plano:

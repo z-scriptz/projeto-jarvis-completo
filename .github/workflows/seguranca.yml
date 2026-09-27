@@ -1,0 +1,80 @@
+# seguranca.yml -- a inspeção de segurança do Jarvis, a cada push.
+#
+# 📌 O mesmo portão da actrova-cloud e do escopo-runtime (26/09), adaptado ao
+# repositório que mais encosta em coisa sensível: VPS, cookies, contas.
+#
+#   · segredos no histórico INTEIRO (gitleaks, binário com hash fixo)
+#   · arquivos que nunca podem estar no git (.env, chaves, cookies, sessões
+#     do Telegram, credenciais, documentos de cliente)
+#   · padrões perigosos no Python (bandit), do nível MÉDIO para cima
+#
+# ⚠️ O QUE FICA DE FORA, E POR QUÊ:
+#   · auditoria de dependências (pip-audit): o `requirements.txt` não fixa
+#     versões. Aqui ela auditaria as versões mais novas do dia, não as que a
+#     VPS tem instaladas — um verde afirmaria mais do que mediu. Na VPS:
+#     `/root/jarvis/.venv/bin/pip-audit`, com o pip-audit instalado nela.
+#   · os `teste_*.py` no bandit: eles usam `exec` para extrair funções do
+#     próprio código e testá-las isoladas — padrão de teste, não de produção.
+#   · achados BAIXOS do bandit (545 em 27/09, quase todos `try/except: pass`
+#     e subprocesso sem shell): medidos, não bloqueiam. Os 39 médios e altos
+#     foram revisados um a um; os reais corrigidos, os falsos anotados com o
+#     motivo na linha de cima.
+name: seguranca
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: seguranca-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  seguranca:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0          # o histórico inteiro: segredo apagado ainda está no git
+
+      # ⚠️ Versão E hash fixos, conferidos contra o arquivo de checksums da
+      # release em 26/09/2026. Um binário diferente não roda.
+      - name: Segredos no histórico (gitleaks)
+        env:
+          VERSAO: "8.30.1"
+          SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+        run: |
+          curl -sSfLo /tmp/gitleaks.tgz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${VERSAO}/gitleaks_${VERSAO}_linux_x64.tar.gz"
+          echo "${SHA256}  /tmp/gitleaks.tgz" | sha256sum -c -
+          tar xzf /tmp/gitleaks.tgz -C /tmp gitleaks
+          # --redact: nem um segredo achado aparece no log do CI.
+          /tmp/gitleaks git . --redact --no-banner --exit-code 1
+
+      # `contas.json` fica versionado por decisão do Dre (26/09): só IDs e o
+      # NOME da variável do token, nenhuma credencial.
+      - name: Arquivos que nunca podem estar no git
+        shell: bash
+        run: |
+          proibidos=$(git ls-files | grep -iE '(^|/)\.env($|\.)|\.pem$|\.key$|(^|/)id_(rsa|ed25519)|cookies?\.(txt|json)$|\.session(-journal)?$|(^|/)shared/credentials/|(^|/)shared/tiktok_tokens\.json$|(^|/)agendador_config\.json$|(^|/)(dados_reais|execucoes)/' || true)
+          if [ -n "$proibidos" ]; then
+            echo "::error::arquivos sensíveis versionados:"; echo "$proibidos"; exit 1
+          fi
+          echo "nenhum arquivo sensível versionado"
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      # ⚠️ "nosec encountered" em algumas linhas é aviso conhecido do bandit; a
+      # supressão vale, e o resultado é zero.
+      - name: Padrões perigosos no Python (bandit, médio+)
+        run: |
+          pip install bandit==1.9.4
+          bandit -r . -ll -q -x "./.git,./__pycache__,./teste_*.py"

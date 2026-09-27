@@ -260,7 +260,8 @@ ALVO_L, ALVO_A = 1080, 1350
 
 
 def _digestao(caminho) -> str:
-    return hashlib.sha1(Path(caminho).read_bytes()).hexdigest()
+    # 🔒 bandit B324 (revisado): não é segurança — impressão digital do arquivo para deduplicar.
+    return hashlib.sha1(Path(caminho).read_bytes()).hexdigest()  # nosec B324
 
 
 def importar(nicho: str, origens: list, formato: str = "") -> int:
@@ -587,7 +588,8 @@ def _do_pexels(nicho: str, quantos: int) -> int:
             if not url or url in vistos:
                 continue
             vistos.add(url)
-            nome = hashlib.sha1(url.encode()).hexdigest()[:10]
+            # 🔒 bandit B324 (revisado): não é segurança — nome curto de arquivo a partir da URL.
+            nome = hashlib.sha1(url.encode()).hexdigest()[:10]  # nosec B324
             destino = pasta / f"pexels_{nome}.jpg"
             if destino.exists():
                 continue
@@ -2001,7 +2003,8 @@ def gerar(nicho: str, quantos: int = 6, seco: bool = False) -> int:
     feitos = 0
     for i in range(quantos):
         p = prompt_do_nicho(nicho, i)
-        nome = hashlib.sha1(f"{nicho}{i}{random.random()}".encode()).hexdigest()[:10]
+        # 🔒 bandit B324 (revisado): não é segurança — nome de arquivo aleatório.
+        nome = hashlib.sha1(f"{nicho}{i}{random.random()}".encode()).hexdigest()[:10]  # nosec B324
         destino = pasta / f"{nome}.jpg"
         print(f"  {i+1}/{quantos} …", end=" ", flush=True)
         if seco:

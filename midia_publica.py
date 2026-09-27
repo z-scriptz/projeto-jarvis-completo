@@ -463,7 +463,9 @@ def _cli_instalar_caddy(aplicar: bool) -> int:
     pasta = _pasta()
     try:
         pasta.mkdir(parents=True, exist_ok=True)
-        os.chmod(pasta, 0o755)
+        # 🔒 bandit B103 (revisado): pasta PÚBLICA servida pelo Caddy — ele
+        # precisa ler; 755 é leitura para todos e escrita só do dono.
+        os.chmod(pasta, 0o755)  # nosec B103
         print(f"📁 {pasta} (modo 755)")
     except Exception as e:
         print(f"❌ não consegui preparar {pasta}: {e}")
