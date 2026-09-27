@@ -47,7 +47,11 @@ def checa(desc, cond, extra=""):
         print(f"   ❌ {desc}" + (f"\n      {extra}" if extra else ""))
 
 
-SEGREDO = "AIzaSyPALAVRASECRETAxxxxxxxxxxxxxxxxxxxxx"
+# ⚠️ FALSO, e montado em tempo de execução: o literal inteiro casava com o
+# padrão de chave do Google (`AIza` + 35 caracteres, buscado como trecho), e
+# um detector de segredos o acusaria como vazamento real. O formato continua
+# realista — é isso que o teste exercita —, só não existe mais no arquivo.
+SEGREDO = "AI" + "za" + "SyPALAVRASECRETA" + "x" * 21
 # ⚠️ o NOME é montado: se o literal existisse aqui, o próprio arquivo de teste
 # seria a "prova" de que a variável é usada — e o auditor a chamaria de viva.
 MORTA = "VARIAVEL" + "_QUE_NINGUEM" + "_LE"
